@@ -245,7 +245,7 @@ The owner wants everything after sign-in to follow the same convention as the ho
 **The band at the top.**
 
 - _Public pages and the sign-in page:_ `SiteHeader` from `app/landing/Site.tsx`. The amber band, the lockup at the left in one colour (`<Wordmark tone="one" />`), one quiet outlined "Sign in" at the right; on the sign-in page itself, nothing at the right. It stays at the top of the window and gains a 2px ink rule once the page has moved 96px.
-- _Signed in:_ the band is paper, not amber: amber is for what is live, and a person who works in the product all day must not have the loudest colour over every screen. The lockup in two colours (`<Wordmark />`) at the top of the navigation, a 2px ink rule under the top bar, the organisation's name beside it in `title-medium`. Navigation is the shell's existing rail from 600px and bar under it; the current destination is marked by a 2px ink rule beside or under its label and `aria-current`, not by a filled pill.
+- _Signed in:_ the same amber band, `SiteHeader` itself: the owner chose it on 2026-11-11 ("copy that and replicate that theme and style everywhere"), over the paper band these notes first proposed. The lockup at the left in one colour, the organisation's name at the right in `title-medium`, and the same 2px ink rule once the page has moved 96px. Navigation is a column of text links beside the page from 600px and a bar of them along the bottom under it; the current destination is marked by a 2px ink rule beside or under its label and `aria-current`, not by a filled pill.
 
 **Headings.** A page has one `h1`: `headline-large`, and `display-small` from 600px, in the condensed width, set tight. It says what the page is ("Members", "Wednesday 11 November"), never a greeting. A section's heading is `headline-medium` with a 2px ink rule above it and 40px of space above the rule. A heading inside a sheet is `label-large`. Nothing is in capitals, and no heading has an icon.
 
@@ -268,7 +268,7 @@ The owner wants everything after sign-in to follow the same convention as the ho
 
 **The amber band, and where it is allowed.**
 
-1. The top band, the hero and the closing band of a public page, and the top band of the sign-in page.
+1. The top band, the hero and the closing band of a public page, and the top band of the sign-in page and of every signed-in page.
 2. The one thing that is running: the running timer's row or bar, in `primary-container`, with its text in `on-primary-fixed`.
 3. Today's column in the current week.
 4. The arrowhead on a start control.

@@ -40,8 +40,19 @@ export function Ledger({ heading, note, on = "surface", children }: LedgerProps)
 }
 
 /** The rows, in the order they happened or are ranked. Its children are `LedgerRow`s. */
-export function LedgerRows({ children }: { children: ReactNode }) {
-	return <ol className="divide-y divide-outline-variant px-4 @sm:px-5">{children}</ol>;
+export function LedgerRows({
+	label,
+	children,
+}: {
+	/** The list's name, where the sheet's heading line is not enough to find it by. */
+	label?: string;
+	children: ReactNode;
+}) {
+	return (
+		<ol aria-label={label} className="divide-y divide-outline-variant px-4 @sm:px-5">
+			{children}
+		</ol>
+	);
 }
 
 export interface LedgerRowProps {
@@ -56,10 +67,12 @@ export interface LedgerRowProps {
 	 * the detail where there is not: an entry's times.
 	 */
 	aside?: ReactNode;
+	/** What can be done to the row, at its end: one text button, or a menu. */
+	action?: ReactNode;
 	className?: string;
 }
 
-export function LedgerRow({ title, detail, value, aside, className }: LedgerRowProps) {
+export function LedgerRow({ title, detail, value, aside, action, className }: LedgerRowProps) {
 	return (
 		<li className={cx("flex flex-wrap items-baseline gap-x-4 py-3", className)}>
 			<span className="min-w-0 flex-1">
@@ -72,6 +85,7 @@ export function LedgerRow({ title, detail, value, aside, className }: LedgerRowP
 					{aside}
 				</span>
 			)}
+			{action && <span className="flex shrink-0 items-center gap-2 self-center">{action}</span>}
 		</li>
 	);
 }

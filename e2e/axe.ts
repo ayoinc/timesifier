@@ -26,8 +26,16 @@ export async function problems(
 	unmeasurable: string[] = [],
 	drawings: string[] = [],
 ): Promise<string[]> {
-	// A colour measured part-way through a fade is not the colour shown.
-	await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+	// A colour measured part-way through a fade is not the colour shown. An
+	// animation on the scroll's timeline (the band settling) is no fade: it holds
+	// still while the page does, and never finishes.
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() => document.getAnimations().filter((each) => each.timeline === document.timeline).length,
+			),
+		)
+		.toBe(0);
 	let scan = new AxeBuilder({ page }).withTags(WCAG_22_AA);
 	for (const drawing of drawings) scan = scan.exclude(drawing);
 	const results = await scan.analyze();

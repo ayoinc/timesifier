@@ -35,7 +35,7 @@ import {
 // not theirs. The people here are new, and so are their organisations: the
 // organisation the shell's tests run in is never changed.
 
-const NOT_FOUND = "The requested page could not be found.";
+const NOT_FOUND = "There is no page at this address, or it is not yours to open.";
 
 test.describe("a person who has just signed in for the first time", () => {
 	test.use({ storageState: SIGNED_OUT });

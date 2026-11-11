@@ -5,8 +5,7 @@ import * as z from "zod";
 
 import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
 import { Button } from "~/components/Button";
-import { IconButton } from "~/components/IconButton";
-import { MoreVertIcon } from "~/components/icons/MoreVertIcon";
+import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { TextField } from "~/components/TextField";
@@ -28,7 +27,7 @@ import { allows, InvitedRole, mayRemove, Role, rolesToGive } from "~/organisatio
 import { useTimeZone } from "~/routes/auth/AccountSettings";
 import { APP_PATH, destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-import { PageHeading } from "~/shell/PageHeading";
+import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/members";
 import { FormSheet } from "./FormSheet";
@@ -165,8 +164,6 @@ type Invitation = NonNullable<Route.ComponentProps["loaderData"]["invitations"]>
 /** The sheets of this page. One is open at a time. */
 type Task = "invite" | "role" | "remove" | "cancel" | "leave";
 
-const ROW = "flex items-center gap-4 rounded-medium bg-surface-container px-4 py-3";
-
 export default function Members({ loaderData }: Route.ComponentProps) {
 	const { members, invitations, canInvite, canCancel } = loaderData;
 	const organisation = useOrganisation();
@@ -189,116 +186,126 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 					{destination("settings").label}
 				</Link>
 			</p>
-			<div className="mt-2">
+			<div className="mt-4">
 				<PageHeading>{TITLE}</PageHeading>
 			</div>
-			<p className="mt-2 text-body-large text-on-surface-variant">
-				The people in {organisation.name} and what each of them may do.
-			</p>
+			<PageLead>The people in {organisation.name} and what each of them may do.</PageLead>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
-			<p role="status" className="mt-2 text-body-medium text-on-surface-variant empty:hidden">
+			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
 			</p>
 
-			{canInvite && (
-				<div className="mt-6">
-					<Button onPress={() => setTask("invite")}>Invite a person</Button>
+			<div className="max-w-200">
+				{canInvite && (
+					<div className="mt-10">
+						<Button onPress={() => setTask("invite")}>Invite a person</Button>
+					</div>
+				)}
+
+				<div className="mt-10">
+					<Ledger heading="Members" note={members.length}>
+						<LedgerRows label="Members">
+							{members.map((each) => (
+								<LedgerRow
+									key={each.id}
+									title={
+										<span className="wrap-anywhere">
+											{each.name}
+											{each.isYou && <span className="text-on-surface-variant"> (you)</span>}
+										</span>
+									}
+									detail={
+										each.name !== each.email && <span className="wrap-anywhere">{each.email}</span>
+									}
+									value={
+										<span className="text-label-large text-on-surface-variant">
+											{ROLE_LABELS[each.role]}
+										</span>
+									}
+									action={
+										(each.rolesToGive.length > 0 || each.canRemove) && (
+											<MenuTrigger>
+												<Button variant="text" aria-label={`Actions for ${each.name}`}>
+													Actions
+												</Button>
+												<Menu
+													onAction={(chosen) => {
+														setMember(each);
+														setTask(chosen === "role" ? "role" : "remove");
+													}}
+												>
+													{each.rolesToGive.length > 0 ? (
+														<MenuItem id="role">Change role</MenuItem>
+													) : null}
+													{each.canRemove ? (
+														<MenuItem id="remove">Remove from organisation</MenuItem>
+													) : null}
+												</Menu>
+											</MenuTrigger>
+										)
+									}
+								/>
+							))}
+						</LedgerRows>
+					</Ledger>
 				</div>
-			)}
-
-			<ul aria-label="Members" className="mt-6 flex flex-col gap-2">
-				{members.map((each) => (
-					<li key={each.id} className={ROW}>
-						<div className="min-w-0 flex-1">
-							<p className="wrap-anywhere text-body-large">
-								{each.name}
-								{each.isYou && <span className="text-on-surface-variant"> (you)</span>}
-							</p>
-							{each.name !== each.email && (
-								<p className="wrap-anywhere text-body-medium text-on-surface-variant">
-									{each.email}
-								</p>
-							)}
-						</div>
-						<p className="text-label-large text-on-surface-variant">{ROLE_LABELS[each.role]}</p>
-						{(each.rolesToGive.length > 0 || each.canRemove) && (
-							<MenuTrigger>
-								<IconButton label={`Actions for ${each.name}`}>
-									<MoreVertIcon />
-								</IconButton>
-								<Menu
-									onAction={(chosen) => {
-										setMember(each);
-										setTask(chosen === "role" ? "role" : "remove");
-									}}
-								>
-									{each.rolesToGive.length > 0 ? <MenuItem id="role">Change role</MenuItem> : null}
-									{each.canRemove ? (
-										<MenuItem id="remove">Remove from organisation</MenuItem>
-									) : null}
-								</Menu>
-							</MenuTrigger>
-						)}
-					</li>
-				))}
-			</ul>
-			{alone && (
-				<p className="mt-4 text-body-medium text-on-surface-variant">
-					You are the only one here. Invite a person and they get an email with a link to join. The
-					link works once and expires after {INVITATION_DAYS} days.
-				</p>
-			)}
-
-			{invitations && invitations.length > 0 && (
-				<section aria-labelledby="invitations" className="mt-8">
-					<h2 id="invitations" className="text-title-large">
-						Invitations
-					</h2>
-					<p className="mt-2 text-body-medium text-on-surface-variant">
-						Sent and not yet accepted.
+				{alone && (
+					<p className="mt-4 max-w-160 text-body-medium text-on-surface-variant">
+						You are the only one here. Invite a person and they get an email with a link to join.
+						The link works once and expires after {INVITATION_DAYS} days.
 					</p>
-					<ul aria-labelledby="invitations" className="mt-4 flex flex-col gap-2">
-						{invitations.map((each) => (
-							<li key={each.id} className={ROW}>
-								<div className="min-w-0 flex-1">
-									<p className="wrap-anywhere text-body-large">{each.email}</p>
-									<p className="text-body-medium text-on-surface-variant">
-										Invited as {AS_ROLE[each.role]}. Expires{" "}
-										{expires.format(new Date(each.expiresAt))}.
-									</p>
-								</div>
-								{canCancel && (
-									<Button
-										variant="text"
-										aria-label={`Cancel the invitation to ${each.email}`}
-										onPress={() => {
-											setInvitation(each);
-											setTask("cancel");
-										}}
-									>
-										Cancel
-									</Button>
-								)}
-							</li>
-						))}
-					</ul>
-				</section>
-			)}
+				)}
 
-			<section aria-labelledby="leave" className="mt-8">
-				<h2 id="leave" className="text-title-large">
-					Leave organisation
-				</h2>
-				<p className="mt-2 text-body-medium text-on-surface-variant">
-					You stop being a member of {organisation.name} and can no longer open it. Your account
-					stays.
-				</p>
-				<div className="mt-4">
+				{invitations && invitations.length > 0 && (
+					<Section id="invitations" heading="Invitations" lead="Sent and not yet accepted.">
+						<Ledger heading="Not yet accepted" note={invitations.length}>
+							<LedgerRows label="Invitations">
+								{invitations.map((each) => (
+									<LedgerRow
+										key={each.id}
+										title={<span className="wrap-anywhere">{each.email}</span>}
+										detail={
+											<>
+												Invited as {AS_ROLE[each.role]}. Expires{" "}
+												{expires.format(new Date(each.expiresAt))}.
+											</>
+										}
+										action={
+											canCancel && (
+												<Button
+													variant="text"
+													aria-label={`Cancel the invitation to ${each.email}`}
+													onPress={() => {
+														setInvitation(each);
+														setTask("cancel");
+													}}
+												>
+													Cancel
+												</Button>
+											)
+										}
+									/>
+								))}
+							</LedgerRows>
+						</Ledger>
+					</Section>
+				)}
+
+				<Section
+					id="leave"
+					heading="Leave organisation"
+					lead={
+						<>
+							You stop being a member of {organisation.name} and can no longer open it. Your account
+							stays.
+						</>
+					}
+				>
 					<Button variant="outlined" onPress={() => setTask("leave")}>
 						Leave organisation
 					</Button>
-				</div>
-			</section>
+				</Section>
+			</div>
 
 			<FormSheet
 				title="Invite a person"

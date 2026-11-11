@@ -7,6 +7,7 @@ import {
 	Scripts,
 	ScrollRestoration,
 	type ShouldRevalidateFunctionArgs,
+	useLocation,
 	useRouteLoaderData,
 } from "react-router";
 
@@ -14,8 +15,12 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import condensedFont from "./fonts/sofia-sans-condensed-latin-wght-normal.woff2?url";
 import plainFont from "./fonts/sofia-sans-latin-wght-normal.woff2?url";
+import { MAIN_ID, SiteHeader } from "./landing/Site";
 import { readColorScheme } from "./shell/color-scheme.server";
+import { APP_PATH } from "./shell/destinations";
+import { TEXT_LINK } from "./shell/links";
 import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
+import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "./shell/Outside";
 import { THEME_COLOUR } from "./styles/theme-colour";
 
 // Fonts are self-hosted: app.css imports the font files through styles/tokens.css,
@@ -116,28 +121,45 @@ export default function App() {
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-	let message = "Oops!";
+	const { pathname } = useLocation();
+	let heading = "Something went wrong";
 	let details = "An unexpected error occurred.";
 	let stack: string | undefined;
 
 	if (isRouteErrorResponse(error)) {
-		message = error.status === 404 ? "404" : "Error";
-		details =
-			error.status === 404 ? "The requested page could not be found." : error.statusText || details;
+		if (error.status === 404) {
+			heading = "Page not found";
+			details = NOT_FOUND;
+		} else details = error.statusText || details;
 	} else if (import.meta.env.DEV && error && error instanceof Error) {
 		details = error.message;
 		stack = error.stack;
 	}
 
+	// The sign-in page's frame: the band with the lockup alone, a heading, one
+	// sentence, and one way out (docs/design/signed-in-error.svg).
 	return (
-		<main className="pt-16 p-4 container mx-auto">
-			<h1>{message}</h1>
-			<p>{details}</p>
-			{stack && (
-				<pre className="w-full p-4 overflow-x-auto">
-					<code>{stack}</code>
-				</pre>
-			)}
-		</main>
+		<div className={OUTSIDE_FRAME}>
+			<SiteHeader current={pathname} end={null} />
+			<main id={MAIN_ID} className={OUTSIDE_MAIN}>
+				<div className={OUTSIDE_COLUMN}>
+					<h1 className="text-headline-large text-balance medium:text-display-small">{heading}</h1>
+					<p className="mt-4 text-body-large text-on-surface-variant">{details}</p>
+					<p className="mt-10">
+						<a href={APP_PATH} className={TEXT_LINK}>
+							Your organisations
+						</a>
+					</p>
+					{stack && (
+						<pre className="mt-10 w-full overflow-x-auto text-body-small">
+							<code>{stack}</code>
+						</pre>
+					)}
+				</div>
+			</main>
+		</div>
 	);
 }
+
+/** What the page at an address that is nobody's, or not yours, says. */
+const NOT_FOUND = "There is no page at this address, or it is not yours to open.";

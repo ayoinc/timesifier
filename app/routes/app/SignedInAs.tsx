@@ -1,6 +1,6 @@
 import { useState } from "react";
-
 import { Button } from "~/components/Button";
+import { PAGE } from "~/landing/Site";
 import { type Notice, NoticeLine, problem, useOneAtATime } from "~/routes/auth/AuthPage";
 import { leaveFor, signOut } from "~/routes/auth/client";
 import { signInLink } from "~/routes/auth/paths";
@@ -39,14 +39,16 @@ export function SignedInAs({ email, wayOut, next = APP_PATH }: SignedInAsProps) 
 	}
 
 	return (
-		<footer className="mt-auto flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
-			<p className="wrap-anywhere text-body-medium text-on-surface-variant">
-				Signed in as <strong className="text-on-surface">{email}</strong>
-			</p>
-			<NoticeLine notice={notice} />
-			<Button variant="text" onPress={leave}>
-				{wayOut}
-			</Button>
+		<footer className={`${PAGE} mt-auto`}>
+			<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4 pb-12">
+				<p className="wrap-anywhere text-body-medium text-on-surface-variant">
+					Signed in as <strong className="text-on-surface">{email}</strong>
+				</p>
+				<NoticeLine notice={notice} />
+				<Button variant="text" onPress={leave}>
+					{wayOut}
+				</Button>
+			</div>
 		</footer>
 	);
 }

@@ -26,24 +26,21 @@ export const ORGANISATION_PARAM = "organisation";
 export const WELCOME_PARAM = "welcome";
 
 const LIST = [
-	{ id: "today", label: "Today", segment: "", icon: "today" },
-	{ id: "reports", label: "Reports", segment: "reports", icon: "bar_chart" },
-	{ id: "projects", label: "Projects", segment: "projects", icon: "folder" },
-	{ id: "settings", label: "Settings", segment: "settings", icon: "settings" },
+	{ id: "today", label: "Today", segment: "" },
+	{ id: "reports", label: "Reports", segment: "reports" },
+	{ id: "projects", label: "Projects", segment: "projects" },
+	{ id: "settings", label: "Settings", segment: "settings" },
 ] as const;
 
 export type DestinationId = (typeof LIST)[number]["id"];
-/** The Material Symbol a destination is drawn with; the navigation holds the drawings. */
-export type DestinationIcon = (typeof LIST)[number]["icon"];
 
 export interface Destination {
 	/** Also the name of its route module: `routes/app/<id>.tsx`. */
 	id: DestinationId;
-	/** The text under its icon. Its page's heading and title say the same. */
+	/** Its link's words. Its page's heading and title say the same. */
 	label: string;
 	/** What follows the organisation in its address; empty for the destination the organisation's own address shows. */
 	segment: string;
-	icon: DestinationIcon;
 }
 
 /** In the order they are shown: a later one is "forward" of an earlier one. */

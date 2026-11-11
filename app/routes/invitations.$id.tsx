@@ -3,6 +3,7 @@ import * as z from "zod";
 
 import { getSession } from "~/auth/auth.server";
 import { Button } from "~/components/Button";
+import { SiteHeader } from "~/landing/Site";
 import { parseRequest } from "~/lib/validate";
 import {
 	acceptInvitation,
@@ -15,8 +16,8 @@ import { TOO_MANY_ATTEMPTS } from "~/organisations/problems";
 import { invitationPath, signInPath } from "~/routes/auth/paths";
 import { APP_PATH, organisationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-import { OUTSIDE_FRAME, ProductName } from "~/shell/Outside";
-import { PageHeading } from "~/shell/PageHeading";
+import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
+import { PageHeading, PageLead } from "~/shell/PageHeading";
 import type { Route } from "./+types/invitations.$id";
 import { SignedInAs } from "./app/SignedInAs";
 
@@ -107,8 +108,6 @@ export async function action({ request, params }: Route.ActionArgs) {
 		: gone(accepted, email);
 }
 
-const LEAD = "text-body-large text-on-surface-variant";
-
 export default function InvitationPage({ loaderData, params }: Route.ComponentProps) {
 	const { invitation } = loaderData;
 	const busy = useNavigation().state !== "idle";
@@ -116,18 +115,20 @@ export default function InvitationPage({ loaderData, params }: Route.ComponentPr
 	if (!invitation) {
 		return (
 			<div className={OUTSIDE_FRAME}>
-				<ProductName />
-				<main className="flex flex-col gap-6">
-					<PageHeading>{GONE_TITLE}</PageHeading>
-					<p className={LEAD}>
-						It may have been used or cancelled, it may have expired, or it may have been sent to
-						another address. Ask the person who invited you to send a new one.
-					</p>
-					<p>
-						<Link to={APP_PATH} className={TEXT_LINK}>
-							Go to Timesifier
-						</Link>
-					</p>
+				<SiteHeader current={invitationPath(params.id)} end={null} />
+				<main className={OUTSIDE_MAIN}>
+					<div className={OUTSIDE_COLUMN}>
+						<PageHeading>{GONE_TITLE}</PageHeading>
+						<PageLead>
+							It may have been used or cancelled, it may have expired, or it may have been sent to
+							another address. Ask the person who invited you to send a new one.
+						</PageLead>
+						<p className="mt-10">
+							<Link to={APP_PATH} className={TEXT_LINK}>
+								Go to Timesifier
+							</Link>
+						</p>
+					</div>
 				</main>
 				{/* An invitation sent to another address is the commonest reason to be
 				    here: the way out leads back to this page, signed in as somebody else. */}
@@ -143,28 +144,30 @@ export default function InvitationPage({ loaderData, params }: Route.ComponentPr
 	const { organisation, role, inviter } = invitation;
 	return (
 		<div className={OUTSIDE_FRAME}>
-			<ProductName />
-			<main className="flex flex-col gap-6">
-				<PageHeading>Join {organisation.name}?</PageHeading>
-				<p className={LEAD}>
-					{inviter.name}
-					{inviter.email && ` (${inviter.email})`} invited you to join {organisation.name} as{" "}
-					{AS_ROLE[role]}.
-				</p>
-				<Form
-					method="post"
-					className="flex flex-wrap gap-2"
-					onSubmit={(event) => {
-						if (busy) event.preventDefault();
-					}}
-				>
-					<Button type="submit" name="intent" value="join">
-						Join
-					</Button>
-					<Button type="submit" name="intent" value="decline" variant="text">
-						Decline
-					</Button>
-				</Form>
+			<SiteHeader current={invitationPath(params.id)} end={null} />
+			<main className={OUTSIDE_MAIN}>
+				<div className={OUTSIDE_COLUMN}>
+					<PageHeading>Join {organisation.name}?</PageHeading>
+					<PageLead>
+						{inviter.name}
+						{inviter.email && ` (${inviter.email})`} invited you to join {organisation.name} as{" "}
+						{AS_ROLE[role]}.
+					</PageLead>
+					<Form
+						method="post"
+						className="mt-10 flex flex-wrap gap-2"
+						onSubmit={(event) => {
+							if (busy) event.preventDefault();
+						}}
+					>
+						<Button type="submit" name="intent" value="join">
+							Join
+						</Button>
+						<Button type="submit" name="intent" value="decline" variant="text">
+							Decline
+						</Button>
+					</Form>
+				</div>
 			</main>
 		</div>
 	);
