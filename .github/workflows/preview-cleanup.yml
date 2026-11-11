@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# The same group as the pull request's ci run. Starting the clean-up cancels a
+# preview that is still being created, so it cannot appear after the delete.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   delete:
     name: delete preview

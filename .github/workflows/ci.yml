@@ -132,12 +132,20 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy to production
+        id: deploy
         # The version message is the commit id and the first line of its message.
+        # Each version also gets an address on workers.dev, named after the first
+        # part of its id; the smoke test checks that address serves nothing.
         run: |
-          pnpm exec wrangler deploy --message "${GITHUB_SHA::7} ${COMMIT_MESSAGE%%$'\n'*}"
+          set -o pipefail
+          pnpm exec wrangler deploy --message "${GITHUB_SHA::7} ${COMMIT_MESSAGE%%$'\n'*}" | tee deploy.log
+          version="$(sed -n 's/^Current Version ID: //p' deploy.log)"
+          echo "version_host=${version%%-*}-timesifier.ayoinc.workers.dev" >> "$GITHUB_OUTPUT"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
       - name: Smoke test
-        run: ./scripts/smoke.sh https://timesifier.com --www
+        run: ./scripts/smoke.sh https://timesifier.com --production "$VERSION_HOST"
+        env:
+          VERSION_HOST: ${{ steps.deploy.outputs.version_host }}

@@ -1,6 +1,6 @@
 import { createRequestHandler, RouterContextProvider } from "react-router";
 
-import { canonicalRedirect } from "./canonical-host";
+import { canonicalHost } from "./canonical-host";
 import { createNonce, nonceContext } from "./nonce";
 import { rejectCrossOrigin } from "./origin-check";
 import { withSecurityHeaders } from "./security-headers";
@@ -18,10 +18,10 @@ function handleWithFramework(request: Request, nonce: string): Promise<Response>
 
 export default {
 	// Keep this a short sequence of named steps; each step is one line.
-	async fetch(request) {
+	async fetch(request, env) {
 		const nonce = createNonce();
 		const response =
-			canonicalRedirect(request) ??
+			canonicalHost(request, env.ENVIRONMENT) ??
 			rejectCrossOrigin(request) ??
 			(await handleWithFramework(request, nonce));
 		return withSecurityHeaders(response, nonce);

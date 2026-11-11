@@ -27,6 +27,21 @@ Blocked on one criterion; the rest is merged.
 - [x] A throwaway pull request with a failing test shows a failed check; it is then closed. _Pull request #3: `checks` failed in 35 s; closed and its branch deleted._
 - [ ] `main` is protected: the check must pass before merging. _Blocked: GitHub answered "Upgrade to GitHub Pro or make this repository public to enable this feature." The owner decides. Until then, TS-003 deploys only after `checks` passes in the same workflow run._
 
+### TS-026 · Close the findings of the foundation security review
+
+An independent review of the merged foundation on 2026-11-11 found three medium and eleven low findings, none high. Its report is summarised in `docs/security.md`, "Known gaps and accepted risks". The last two criteria need this change to be live and are ticked in the next pull request.
+
+- [x] A raw SQL filter with a top-level OR cannot read, change or delete another organisation's rows (test). _`test/db/scope.test.ts`: "keeps a raw SQL condition with a top-level OR inside the organisation". With the parentheses removed from `app/db/scope.ts` it fails; restored, it passes._
+- [x] An update or delete through the scope names its rows: a missing condition is refused, and every row of the organisation takes `everyRow` (test). _`test/db/scope.test.ts`: "refuses an update or delete whose filter produces no condition". `test/db/scope.typecheck.ts` shows a call without a filter does not compile._
+- [x] Tables with an organisation id can be imported only by the data layer: the linter refuses it elsewhere, and a test fails when such a table is missing from the scope or exported (test). _A file under `app/routes/` importing `~/db/schema` fails `biome check` with `lint/style/noRestrictedImports`. `test/db/scope.test.ts`: "covers every table that has an organisation id, and exports none of them"._
+- [x] In production the Worker answers only on `timesifier.com`: `www` is redirected and any other host, including the workers.dev address of a version, gets 404; previews and local hosts are served (test). _`test/canonical-host.test.ts` (12 cases) and, through the Worker, `test/browser-policy.test.ts`: "answers 404 on the workers.dev address Cloudflare gives each production version"._
+- [x] A request body over the limit is answered 413 and is not read past the limit; a form field named `__proto__` does not change the parsed object's prototype (tests). _`app/lib/validate.test.ts`: "answers 413 for a body that declares more than the limit, and never reads it", "answers 413 for a streamed body once it passes the limit, and stops reading", "treats a form field called **proto** as an ordinary field"._
+- [x] A response that is not HTML carries a policy under which nothing loads, and a WebSocket handshake from a foreign origin is rejected with 403 (tests). _`test/browser-policy.test.ts`: "sends HSTS, nosniff and a policy under which nothing loads on a response that is not HTML", "rejects a WebSocket handshake from a foreign Origin, and lets one from our own through"._
+- [x] Closing a pull request cancels a preview that is still being created. _`.github/workflows/preview-cleanup.yml` runs in the same concurrency group as the pull request's `ci` run, with `cancel-in-progress: true`. Not rehearsed._
+- [x] Every finding that is accepted rather than fixed is written in `docs/security.md` with the reason and what would close it. _Section "Known gaps and accepted risks": six rows._
+- [ ] After the deploy, the new version's workers.dev address answers 404 and the smoke test checks it on every deploy.
+- [ ] On the live site a static asset carries the "nothing loads" policy, and plain HTTP is redirected to HTTPS.
+
 ## Ready (limit 3)
 
 _Empty._

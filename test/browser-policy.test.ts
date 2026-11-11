@@ -80,7 +80,7 @@ describe("browser policy headers", () => {
 		await expectBrowserPolicy(response);
 	});
 
-	it("sends HSTS and nosniff, and no page policy, on a response that is not HTML", async () => {
+	it("sends HSTS, nosniff and a policy under which nothing loads on a response that is not HTML", async () => {
 		const response = await worker.fetch(`${ORIGIN}/`, {
 			method: "POST",
 			headers: { Origin: "https://attacker.example" },
@@ -88,7 +88,9 @@ describe("browser policy headers", () => {
 		expect(response.headers.get("Content-Type")).toContain("text/plain");
 		expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=63072000");
 		expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
-		expect(response.headers.has("Content-Security-Policy")).toBe(false);
+		expect(response.headers.get("Content-Security-Policy")).toBe(
+			"default-src 'none'; frame-ancestors 'none'",
+		);
 	});
 
 	it("redirects www to the apex with HSTS, so the alias is never served over plain HTTP again", async () => {
@@ -98,6 +100,12 @@ describe("browser policy headers", () => {
 		expect(response.status).toBe(308);
 		expect(response.headers.get("Location")).toBe(`${ORIGIN}/reports?week=46`);
 		expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=63072000");
+	});
+
+	it("answers 404 on the workers.dev address Cloudflare gives each production version", async () => {
+		const response = await worker.fetch("https://41b1b1d9-timesifier.ayoinc.workers.dev/");
+		expect(response.status).toBe(404);
+		expect(await response.text()).not.toContain("Timesifier");
 	});
 });
 
@@ -156,5 +164,13 @@ describe("origin check on state-changing requests", () => {
 			headers: { Origin: "https://attacker.example", "Sec-Fetch-Site": "cross-site" },
 		});
 		expect(response.status).toBe(200);
+	});
+
+	it("rejects a WebSocket handshake from a foreign Origin, and lets one from our own through", async () => {
+		const handshake = (origin: string) =>
+			worker.fetch(url, { headers: { Upgrade: "websocket", Origin: origin } });
+
+		expect((await handshake("https://attacker.example")).status).toBe(403);
+		expect((await handshake(ORIGIN)).status).toBe(404);
 	});
 });

@@ -1,5 +1,7 @@
 # Headers for files served by Workers Static Assets, which answer before the
 # Worker runs. Responses the Worker produces get theirs in workers/security-headers.ts.
+# The policy applies when a file is opened on its own, not when a page loads it.
 /*
   X-Content-Type-Options: nosniff
   Strict-Transport-Security: max-age=63072000
+  Content-Security-Policy: default-src 'none'; frame-ancestors 'none'

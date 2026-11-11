@@ -46,7 +46,7 @@ Both remote databases were created on 2026-11-11 with `wrangler d1 create <name>
 
 ## Data rules
 
-- Every table that holds customer data has an `organisation_id`. Code reads and writes it only through the organisation-scoped data layer, `organisationScope` in `app/db/`. The scope sets the organisation of every row it writes and adds it to every statement, and it accepts only tables that have the column.
+- Every table that holds customer data has an `organisation_id`. Code reads and writes it only through the organisation-scoped data layer, `organisationScope` in `app/db/`. The scope sets the organisation of every row it writes and adds it to every statement, and it accepts only tables that have the column. An update or delete must name its rows with a filter, or pass `everyRow`. The linter refuses an import of the tables anywhere outside `app/db/` and `app/auth/`.
 - Ids are UUID version 7 text, generated in the application. Times are stored in UTC, as integers holding milliseconds since the Unix epoch, and shown in the person's time zone. The reasons are in `docs/decisions.md` entry 17.
 - Foreign keys are enforced: D1 checks them on every query and migration, as SQLite does with `PRAGMA foreign_keys = on`. A migration can defer the check to the end of its transaction with `PRAGMA defer_foreign_keys = on`, but cannot switch it off (<https://developers.cloudflare.com/d1/sql-api/foreign-keys/>).
 - The schema is `app/db/schema.ts`. A schema change is a SQL migration generated from it by `pnpm db:generate` and committed in `migrations/`; a test fails when the two disagree. Migrations are applied to remote databases by the pipeline only.
@@ -59,7 +59,7 @@ One workflow, `.github/workflows/ci.yml`, does all of it.
 1. A pull request runs install with a frozen lockfile, typecheck, lint, tests, build, a secret scan and a dependency audit.
 2. When those pass, the migrations are applied to the preview database, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
 3. Merging to `main` runs the same checks, then applies the migrations to the production database, then `wrangler deploy`, then the smoke test against production.
-4. The smoke test is `scripts/smoke.sh`: the home page must answer 200 and contain the product name, and `www` must redirect to the apex. A failure fails the workflow; it does not roll back by itself.
+4. The smoke test is `scripts/smoke.sh`: the home page must answer 200 and contain the product name. Against production it also requires `www` to redirect to the apex, plain HTTP to redirect to HTTPS, and the workers.dev address of the version just deployed to answer 404 (see `docs/security.md`, "One host in production"). A failure fails the workflow; it does not roll back by itself.
 5. Migrations are applied before the new code is live, so each one must work with the code already running: add a column in one release, stop using the old one in the next, remove it in a third. All previews share one database, so a migration on an open pull request reaches the other previews too.
 
 Production is deployed only by the pipeline. The one exception was the first deploy on 2026-11-11, made from the owner's machine, because a token limited to one Worker cannot create that Worker.

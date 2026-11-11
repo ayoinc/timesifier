@@ -17,14 +17,20 @@
 		{ "pattern": "timesifier.com", "custom_domain": true },
 		{ "pattern": "www.timesifier.com", "custom_domain": true }
 	],
+	// Tells the Worker it is production: it then answers only on timesifier.com.
+	// See workers/canonical-host.ts.
+	"vars": { "ENVIRONMENT": "production" },
 	// Each pull request gets a preview on workers.dev. Without this line a preview
-	// has no URL, because turning workers_dev off turns preview URLs off too.
+	// has no URL, because turning workers_dev off turns preview URLs off too. It
+	// also gives every production version a workers.dev address; the Worker
+	// answers 404 there.
 	"preview_urls": true,
 	// Previews do not inherit production settings; preview-safe bindings go here.
 	// https://developers.cloudflare.com/workers/previews/configuration/
 	// Every preview shares one database. wrangler.preview-migrations.jsonc names the
 	// same database, so the pipeline can migrate it; change the two together.
 	"previews": {
+		"vars": { "ENVIRONMENT": "preview" },
 		"d1_databases": [
 			{
 				"binding": "DB",

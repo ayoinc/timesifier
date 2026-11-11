@@ -4,7 +4,7 @@
  */
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { organisations, users } from "~/db/schema";
-import { type OrganisationScope, scopedAccessor } from "~/db/scope";
+import { everyRow, type OrganisationScope, scopedAccessor } from "~/db/scope";
 
 export function tablesWithoutAnOrganisationCannotBeScoped(db: DrizzleD1Database) {
 	// @ts-expect-error users has no organisation_id column
@@ -17,5 +17,12 @@ export async function theOrganisationComesOnlyFromTheScope(scope: OrganisationSc
 	// @ts-expect-error an insert cannot name an organisation
 	await scope.memberships.insert({ userId: "user-id", organisationId: "another-organisation" });
 	// @ts-expect-error an update cannot move a row to an organisation
-	await scope.memberships.update({ organisationId: "another-organisation" });
+	await scope.memberships.update({ organisationId: "another-organisation" }, everyRow);
+}
+
+export async function updatesAndDeletesNameTheirRows(scope: OrganisationScope) {
+	// @ts-expect-error an update needs a filter, or everyRow
+	await scope.memberships.update({ role: "admin" });
+	// @ts-expect-error a delete needs a filter, or everyRow
+	await scope.memberships.delete();
 }
