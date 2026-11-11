@@ -225,6 +225,21 @@ Decided while building TS-006. It refines entry 10, which named the View Transit
 
 Two things found while building it, both now rules in `docs/design-system.md`: a boundary whose class is not `none` starts a transition on every render that reaches it, so boundaries are `none` except on a change of destination; and an element taking part in a running transition cannot be pressed, so the navigation stays out of it.
 
+### 22. A sign-in code is used in the browser that asked for it
+
+Decided on card TS-027, after the security review of authentication.
+
+The answer to a request for a code sets a cookie, `__Host-timesifier.sign_in_code`, whose value is an expiry and an HMAC under `BETTER_AUTH_SECRET` of the address and that expiry. A request to sign in with a code is refused, with the answer a wrong code gets and before the code's attempts are touched, unless it carries the cookie made for that address. The consequence a person can notice: a code read on a phone cannot be typed into a laptop that did not ask for it, and a code asked for in one browser does not work in another.
+
+| Option                                      | Evidence                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A code works only in the browser that asked | A stranger's guesses never reach the code, so they cannot use up its three attempts. Before this, one client sending a wrong guess every six seconds stayed inside the rate limit and spent every code a person asked for within 18 seconds, for as long as it liked (the review's finding 2; `test/auth/email-code.test.ts`, "refuses a stranger's guesses", failed with 403 where it now gets 200). |
+| A code works on any device (what was built) | Convenient: read the mail anywhere, type the code anywhere. But the sign-in request then has to accept a guess from anybody who knows the address, and Better Auth 1.7.19 counts attempts per address, not per requester (`plugins/email-otp/routes.mjs`, `atomicVerifyOTP`).                                                                                                                         |
+| Turnstile on the sign-in request as well    | Raises the cost of each guess and does not stop the lock-out: three solved challenges still spend a code.                                                                                                                                                                                                                                                                                             |
+| A separate code for each requester          | Would also stop one person's request replacing another's code. The plugin keeps one live code per address and offers no other shape; it would mean writing the email-code flow ourselves.                                                                                                                                                                                                             |
+
+What it does not close, and why passkeys are the remedy, is in `docs/security.md`, "Known gaps". The cookie holds no address and is `HttpOnly`; the proof in it counts for the five minutes a code lasts, and the browser keeps it for an hour so that a late code is answered "expired" and not "wrong". The length of a code, eight digits, is one constant, `SIGN_IN_CODE_LENGTH` in `app/auth/code.ts`, read by the server and by the sign-in page.
+
 ## To verify when the code is scaffolded
 
 These facts move fast. TS-001 records the exact versions in `docs/architecture.md`.
