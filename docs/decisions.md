@@ -32,6 +32,7 @@ Entries 1 to 21 were decided on 2026-11-11; later entries carry their own date. 
 | 25  | Time entries        | One running entry for a person in an organisation; a project is required                                                           | Owner    | Settled                                        |
 | 26  | Time zone           | An IANA name stored on the person; an entry belongs to the local day it starts in                                                  | Owner    | Settled                                        |
 | 27  | Lock-out by code    | Codes counted apart for browsers that have signed in as the address; their code is theirs alone (narrows the gap of 23, amends 22) | Owner    | Settled                                        |
+| 29  | Teams               | Our own tables unless the teams card shows Better Auth's built-in teams fit; settled on TS-038                                     | Owner    | Open until TS-038                              |
 
 Numbers 24 and 28 are kept for entries that arrive with their cards: the visual direction (TS-030), and whether `style` attributes stay banned (the owner's, before TS-012b).
 
@@ -353,3 +354,17 @@ What was built. When a code signs a person in, the browser is given a cookie, `_
 - While a known browser's code waits, for five minutes at most, the same person asking from a new browser is sent nothing and is not told.
 
 Signing out everywhere does not clear the proof: it signs nobody in, the person who has signed out is the one who needs it next, and a request from one browser cannot reach a cookie in another.
+
+### 29. Teams: not Better Auth's built-in teams, unless the teams card shows they fit
+
+Recorded on 2026-11-11, when the owner said the product has teams and managers. It is settled on card TS-038, before that card builds anything.
+
+- **Where things stand.** An organisation has owners, admins and members, and no teams. TS-009 built no teams because none of its criteria asked for them. Better Auth's organization plugin has a teams feature, and `app/auth/organisations.server.ts` does not turn it on.
+- **The starting position.** Teams are tables of our own, reached through `organisationScope` like every other table with an `organisation_id`. They become Better Auth's built-in teams only if TS-038 shows that those fit.
+- **What TS-038 must show either way.** A manager is a role held for one team. In the installed Better Auth (1.7.19) a team's member row holds a team and a person and no role, and a person's role is one value for the whole organisation. So the built-in teams do not hold "manager of this team" as they ship. TS-038 says where that role is stored and how the server reads it on every request.
+- **What does not change.** The organisation of a request comes from the request (entry 20), and a role is read from the database on every request.
+
+| Option                                 | Evidence                                                                                                                                                                                  |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Our own tables (the starting position) | The scope and its tests already keep one organisation's rows from another. The role for one team is a column we define.                                                                   |
+| Better Auth's built-in teams           | Endpoints for making a team and adding a person come with the plugin. Each would join the list in `app/auth/endpoints.ts`, and the role for one team would still need a place of its own. |

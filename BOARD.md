@@ -2,7 +2,7 @@
 
 How the board works, and what Ready and Done mean, is in `docs/ways-of-working.md`. The columns are listed nearest to done first. Only the integrator edits this file; a criterion is ticked only with its evidence beside it.
 
-**The path.** The owner added two cards on 2026-11-11, and they come first: TS-036, one way in, and TS-037, the signed-in pages in the landing page's direction. After them the next three cards are TS-011a, TS-012a and TS-013, in that order. No card outside this path is pulled until a person can sign in for the first time, run a timer and see it in the week view in production. Three more things are named here so that nobody has to guess: the cards already in progress below finish; TS-022a is Done before TS-012a is pulled, because that is when the first data worth recovering arrives; and TS-032 is Done before TS-030 is deployed, because anyone may make an account.
+**The path.** The owner added two cards on 2026-11-11, and they come first: TS-036, one way in, and TS-037, the signed-in pages in the landing page's direction. After them the next three cards are TS-011a, TS-012a and TS-013, in that order. No card outside this path is pulled until a person can sign in for the first time, run a timer and see it in the week view in production. Three more things are named here so that nobody has to guess: the cards already in progress below finish; TS-022a is Done before TS-012a is pulled, because that is when the first data worth recovering arrives; and TS-032 is Done before TS-030 is deployed, because anyone may make an account. The cards for teams and managers, the month and year views, leave, the team calendar and policies (TS-038 to TS-042), which the owner asked for on 2026-11-11, wait behind this path.
 
 ## In progress (limit 1 per builder)
 
@@ -35,6 +35,7 @@ Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the arch
 - [ ] Done cards are in `docs/board-done.md`, and the board keeps one line for each.
 - [ ] TS-036 and TS-037, which the owner asked for on 2026-11-11, are on the board with their criteria.
 - [ ] `docs/ways-of-working.md` describes the goldfish review of a brief.
+- [ ] `docs/product.md` describes the product as the owner described it on 2026-11-11, and TS-038 to TS-042 are in Backlog with their criteria.
 - [ ] `pnpm format` and `pnpm lint` exit 0.
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
@@ -344,6 +345,8 @@ Not Ready. One decision is open, and it is the owner's: whether `style` attribut
 
 Depends on: TS-013. The date range waits on the same decision as TS-012b.
 
+This is where "administrators can look at their time" (the owner, 2026-11-11) is built: the fourth criterion below. TS-038 adds the manager, who sees their team's.
+
 - [ ] A report covers a chosen range of days in the viewer's time zone, grouped by project, client or day.
 - [ ] An entry is counted in the local day it starts in, and a running entry is left out (test).
 - [ ] Report totals equal the sum of the underlying entries for the same range (property test).
@@ -359,6 +362,35 @@ Depends on: TS-014a.
 - [ ] A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` (test).
 - [ ] The response is streamed in pages keyed on `id`, and nothing is stored (test with more entries than one page).
 - [ ] A member exports their own entries; an owner or admin exports every member's (test). The export contains only the caller's organisation (test).
+
+### TS-038 · Teams and managers
+
+Depends on: TS-009 (Done) and TS-014b, because what a manager gains is a report and an export of their team. Decision 29 is settled on this card before anything is built.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: who creates a team and names its manager (proposed: an owner or admin, never the manager); and whether creating teams should be split into a card of its own that comes before reports.
+
+- [ ] A team belongs to one organisation: the scope of one organisation returns none of another's teams (test).
+- [ ] A member of an organisation is in none, one or several of its teams. Adding a person who is not a member of the organisation is refused (test).
+- [ ] `manager` is a role a person holds for one team, between admin and member. The permission table in `docs/security.md`, "Roles", gains its rows, and a test covers every cell, as `test/organisations/permissions.test.ts` does today.
+- [ ] A manager sees and exports the entries of the members of the teams they manage, and nobody else's (test with two teams). An owner or admin still sees and exports everyone's, and a member only their own.
+- [ ] A manager cannot change another person's entry (test).
+- [ ] Taking a person out of a team, or ending their time as its manager, takes effect on their next request (test).
+
+### TS-039 · Month and year views
+
+Depends on: TS-013.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: in the month view, whether a week that crosses the end of the month shows the whole week's total or only its days in that month (proposed: only its days in the month, so that the weeks add up to the month).
+
+- [ ] The month view shows one calendar month in the person's time zone: a total for each day, each week from Monday, each project, and one for the month (test).
+- [ ] The year view shows one calendar year: a total for each month, each project, and one for the year (test).
+- [ ] For random sets of entries, the month's total equals the sum of its day totals and the sum of its project totals; the year's total equals the sum of its month totals and the sum of its project totals; and a month's total in the year view equals the month view's total for that month (property test).
+- [ ] An entry belongs whole to the local day it starts in (decision 26): one from 23:30 on the last day of a month to 00:30 is counted in the first month only (test).
+- [ ] With two members in one organisation, neither view shows the other's entries or counts them in a total (test).
 
 ### TS-020 · Audit log
 
@@ -406,9 +438,54 @@ Not Ready: the key the address is encrypted with and how it is replaced, the def
 
 Depends on: TS-016.
 
+The owner, 2026-11-11: a focus rhythm in the Pomodoro manner, stretches of work and breaks. Open for the owner: how long a stretch and a break are, whether a person can change them, and whether a break is planned like a block or only timed. The criterion for the rhythm is written when the answer is.
+
 - [ ] A person can plan a focus block on a day; it appears in Today and Week.
 - [ ] A block that overlaps a calendar event shows the text "This block overlaps" followed by the event's title before it is saved, and it can still be saved (test).
 - [ ] At the end of the day the view shows planned focus time beside the time actually tracked during those blocks; the two figures are covered by a test.
+
+### TS-040 · Leave
+
+Depends on: TS-038.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: the kinds of leave, and whether leave is counted in days, half days or hours; and who decides a request from a person who is in no team, or who is the only owner.
+
+- [ ] A person can ask for time off from a first day to a last day, in their time zone. A last day before the first is refused (test).
+- [ ] A request waits until a manager of a team the person is in, an owner or an admin approves or refuses it. A member who manages none of the person's teams cannot decide it (a test for every cell of this card's role table).
+- [ ] A request that has been approved or refused cannot be decided a second time (test).
+- [ ] Approved leave is shown beside worked time in the person's day and week views, and no total of worked time includes it (test).
+- [ ] A person sees their own requests, a manager their team's, an owner or admin everyone's, and a member nobody else's (a test for every cell).
+- [ ] A request of one organisation is never shown or decided in another (test).
+
+### TS-041 · The team calendar
+
+Depends on: TS-040 and TS-013. It does not need TS-016: events read from an outside calendar are that card's.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: whether a member sees when the others in their team are on leave, or only the manager does.
+
+- [ ] A person's calendar shows, for a chosen week or month in their time zone, their tracked entries and their approved leave, each on the local day it belongs to (test).
+- [ ] A team's calendar shows the same for every member of the team, to a manager of that team and to an owner or admin (a test for every cell of this card's role table).
+- [ ] A manager's calendar shows nobody from a team they do not manage (test with two teams).
+- [ ] The hours shown for a person's day on the calendar equal that day's total in their week view (property test).
+- [ ] The calendar can be moved through with the keyboard alone, and axe with WCAG 2.2 AA tags reports no violations (browser test).
+
+### TS-042 · Policies
+
+Depends on: TS-040.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: how leave accrues (a fixed number of days a year, or earned month by month); and whether a policy is one for the organisation or may differ by team.
+
+- [ ] An owner or admin sets the organisation's working week: the days worked and the hours in each. A manager or a member cannot (a test for every cell of this card's role table).
+- [ ] An owner or admin sets how leave accrues. For random policies and requests, a person's balance on any day equals what has accrued by that day less the approved leave taken (property test).
+- [ ] The policy says which requests for leave need approval. A request that needs none is approved when it is made, and one that needs it waits (test).
+- [ ] A change to a policy applies from the day it is made, and no request already decided changes (test).
+- [ ] The policy of one organisation is never read or changed from another (test).
 
 ### TS-018 · Weekly summary
 
