@@ -18,6 +18,9 @@ const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
 
 test.use({ storageState: SIGNED_OUT });
+// Times are typed as a person in the UK types them, on a 24-hour clock: a
+// browser in another locale shows AM and PM, which the keystrokes do not fill.
+test.use({ locale: "en-GB" });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
 
 test.beforeEach(async ({ context, baseURL }) => {
@@ -307,13 +310,13 @@ const PARTLY_SCROLLED_AWAY = "elmPartiallyObscured";
 async function gridProblems(page: Page): Promise<string[]> {
 	const grid = page.locator("table").locator("..");
 	const scrolls = await grid.evaluate((element) => element.scrollWidth > element.clientWidth);
-	if (!scrolls) return problems(page, [EMPTY_INPUT]);
+	if (!scrolls) return problems(page, [EMPTY_INPUT, DIGIT_CHANGING]);
 	const found: string[] = [];
 	for (const end of ["start", "end"] as const) {
 		await grid.evaluate((element, to) => {
 			element.scrollLeft = to === "start" ? 0 : element.scrollWidth;
 		}, end);
-		found.push(...(await problems(page, [EMPTY_INPUT, PARTLY_SCROLLED_AWAY])));
+		found.push(...(await problems(page, [EMPTY_INPUT, PARTLY_SCROLLED_AWAY, DIGIT_CHANGING])));
 	}
 	return found;
 }
@@ -331,7 +334,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 
 				await page.getByRole("button", { name: "Start timer", exact: true }).click();
 				await expect(navTimer(page)).toBeVisible();
-				expect(await problems(page, [EMPTY_INPUT])).toEqual([]);
+				expect(await problems(page, [EMPTY_INPUT, DIGIT_CHANGING])).toEqual([]);
 
 				// The running entry gives the week a row; an hour typed into another of its days fills it.
 				await openShell(page, `${organisationPath(slug)}?view=week`);

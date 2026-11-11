@@ -13,6 +13,12 @@ const WCAG_22_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 export const EMPTY_INPUT = "emptyValue";
 /** Text of the page that an open overlay lies across. */
 export const UNDER_AN_OVERLAY = "bgOverlap";
+/**
+ * A running timer's digit while it changes: for that moment it holds less than
+ * one character, and axe will not measure it. The timer's other digits, the
+ * same colour on the same surface, are measured.
+ */
+export const DIGIT_CHANGING = "shortTextContent";
 
 /**
  * Scans the page and returns what is wrong with it, one line per element:
