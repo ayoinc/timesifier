@@ -37,8 +37,9 @@ import {
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
 import { sendEmail } from "./email.server";
-import { isOffered } from "./endpoints";
+import { endpointPath, isOffered } from "./endpoints";
 import { allowedHosts, isOurHost } from "./hosts";
+import { errorName, logLibraryLine } from "./log.server";
 import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.server";
 import { redirectRules } from "./redirects.server";
 import { signInCodeRules } from "./sign-in-code.server";
@@ -82,10 +83,13 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 		// environment's own, and those hosts are the only origins trusted.
 		baseURL: { allowedHosts: allowedHosts(ENVIRONMENT) },
 
-		// Better Auth has a page of its own for errors, at `/error`, which the
-		// mount does not offer. Whatever would send a browser there sends it to
-		// the sign-in page instead.
-		onAPIError: { errorURL: "/sign-in" },
+		// An error that is not an answer is thrown out of the handler, to
+		// `handleAuthRequest`. Left to itself the library logs such an error whole.
+		// Better Auth also has a page of its own for errors, at `/error`, which
+		// the mount does not offer: whatever would send a browser there sends it
+		// to the sign-in page instead.
+		onAPIError: { throw: true, errorURL: "/sign-in" },
+		logger: { log: logLibraryLine },
 
 		database: drizzleAdapter(drizzle(DB), {
 			provider: "sqlite",
@@ -218,12 +222,27 @@ export function registeredEndpoints(): string[] {
  * the request, each a 404. One is for a host that is not this environment's
  * own, so no cookie is set for such a host and none names it in a passkey.
  * The other is for any method and path that `endpoints.ts` does not list.
+ *
+ * An error nobody expected, a statement D1 refused for one, is answered 500
+ * and logged as its name and the endpoint's path: the path has no query
+ * string, and the name has none of what the statement was writing.
  */
 export async function handleAuthRequest(request: Request): Promise<Response> {
 	if (!isOurHost(request, env.ENVIRONMENT) || !isOffered(request)) {
 		return new Response("Not Found", { status: 404 });
 	}
-	return auth().handler(request);
+	// Outside the `try`: a missing secret is a fault in the deployment, and its
+	// message, which names the secret and holds no value, belongs in the log.
+	const { handler } = auth();
+	try {
+		return await handler(request);
+	} catch (error) {
+		console.error(`auth: ${errorName(error)} at ${endpointPath(request)}`);
+		return Response.json(
+			{ code: "INTERNAL_SERVER_ERROR", message: "Something went wrong" },
+			{ status: 500 },
+		);
+	}
 }
 
 /** A signed-in person and the session their request carried. */
@@ -234,7 +253,10 @@ export type SignedIn = { user: User; session: Session };
  * session that is still valid or was made to a host that is not ours. Reads
  * the database every time, so an ended session is gone on the next request.
  *
- * This is what a route guard calls.
+ * This is what a route guard calls. When the session cannot be read at all it
+ * throws an error that says so and nothing more. Better Auth's own error for
+ * this carries the failed statement, and with it the session's token, into
+ * whatever logs it; here that is React Router.
  */
 export async function getSession(request: Request): Promise<SignedIn | null> {
 	if (!isOurHost(request, env.ENVIRONMENT)) return null;
@@ -242,5 +264,10 @@ export async function getSession(request: Request): Promise<SignedIn | null> {
 	// it from the request's address; a `Request` built in code may not have it.
 	const headers = new Headers(request.headers);
 	headers.set("Host", new URL(request.url).host);
-	return auth().api.getSession({ headers });
+	const { api } = auth();
+	try {
+		return await api.getSession({ headers });
+	} catch (error) {
+		throw new Error(`The session could not be read (${errorName(error)})`);
+	}
 }

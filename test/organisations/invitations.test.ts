@@ -416,13 +416,11 @@ describe("inviting a person", () => {
 		await accept(grace.cookie, invitation.id);
 		await accept(grace.cookie, invitation.id);
 		await vi.waitFor(() =>
-			expect(logs.flatMap((log) => log.mock.calls).join("\n")).toContain(
-				"recipient at example.com",
-			),
+			expect(logs.flatMap((log) => log.mock.calls).join("\n")).toContain("email: not sent"),
 		);
 
 		const written = logs.flatMap((log) => log.mock.calls).join("\n");
-		for (const secret of ["grace@example.com", "ada@example.com", invitation.id]) {
+		for (const secret of ["grace@example.com", "ada@example.com", "example.com", invitation.id]) {
 			expect(written).not.toContain(secret);
 		}
 		for (const { cookie } of [ada, grace]) {
