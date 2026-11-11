@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
-import { Outlet, useLocation } from "react-router";
+import { Outlet, useLocation, useNavigationType } from "react-router";
 
 import { destinationIndex } from "~/shell/destinations";
 import { Navigation } from "~/shell/Navigation";
@@ -21,9 +21,12 @@ export default function Shell() {
 
 	// After a move to another page the keyboard focus goes to that page's heading.
 	// A layout effect, so it happens as the page changes and not after the
-	// transition has played. The first page of a visit is left alone: a full page
-	// load does not take the focus.
-	const arrivedAt = useRef(pathname);
+	// transition has played. A page the browser loaded whole is left alone: a full
+	// page load does not take the focus. Such a page arrives as "POP", so the
+	// focus starts caught up with it; a page reached by a link from outside the
+	// shell does not, and gets the focus like any other move.
+	const loadedWhole = useNavigationType() === "POP";
+	const arrivedAt = useRef(loadedWhole ? pathname : null);
 	useLayoutEffect(() => {
 		if (arrivedAt.current === pathname) return;
 		arrivedAt.current = pathname;

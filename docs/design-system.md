@@ -204,8 +204,8 @@ React's `<ViewTransition>` (React 19.3) starts the browser's view transition whe
 
 - The first Tab stop is "Skip to main content", off the top edge until it has the focus. It moves the focus to the `main` element.
 - Landmarks: one `navigation` named "Main" and one `main`. There is no top bar, so there is no `banner`.
-- After a move between pages the focus is on the new page's `h1`, and the title has changed. Every page in the shell renders its heading with `PageHeading`, which can take the focus from script and is not a Tab stop. A screen reader announces the new page, and Tab carries on from its top.
-- A full page load leaves the focus alone.
+- After a move between pages the focus is on the new page's `h1`, and the title has changed. Every page in the shell renders its heading with `PageHeading`, which can take the focus from script and is not a Tab stop. A screen reader announces the new page, and Tab carries on from its top. The same happens on arriving in the shell by a link from a page outside it.
+- A page the browser loads whole leaves the focus alone.
 
 ### Colour scheme
 

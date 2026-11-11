@@ -164,6 +164,15 @@ test.describe("without script", () => {
 	});
 });
 
+test("arriving from the home page by its link puts the focus on the heading", async ({ page }) => {
+	await openShell(page, "/", "main");
+	await page.getByRole("link", { name: "Open Timesifier" }).click();
+
+	await expect(page).toHaveURL(first.path);
+	await expect(page.getByRole("heading", { level: 1, name: first.label })).toBeFocused();
+	await expectDestinations(page, first);
+});
+
 for (const viewport of [COMPACT, MEDIUM]) {
 	test.describe(`in a window ${viewport.width}px wide`, () => {
 		test.use({ viewport });

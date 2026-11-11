@@ -103,13 +103,23 @@ async function viewTransitions(page: Page): Promise<Part[][]> {
 	return page.evaluate(() => window.__viewTransitions ?? []);
 }
 
-/** Presses a destination, waits for its page and returns the one transition that brought it. */
-async function travel(page: Page, destination: Destination): Promise<Part[]> {
+/**
+ * Moves to a destination, waits for its page and returns the one transition that
+ * brought it. The move is a press on the destination unless `move` makes another.
+ */
+async function travel(
+	page: Page,
+	destination: Destination,
+	move?: () => Promise<unknown>,
+): Promise<Part[]> {
 	const before = (await viewTransitions(page)).length;
-	await page
-		.getByRole("navigation", { name: "Main" })
-		.getByRole("link", { name: destination.label, exact: true })
-		.click();
+	if (move) await move();
+	else {
+		await page
+			.getByRole("navigation", { name: "Main" })
+			.getByRole("link", { name: destination.label, exact: true })
+			.click();
+	}
 	await expect(
 		page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 	).toBeFocused();
@@ -227,6 +237,23 @@ for (const { viewport, axis, leave, arrive } of [
 			const to = offsetOf(indicator.transformTo);
 			expect(to[axis]).toBeGreaterThan(from[axis]);
 			expect(to[other]).toBe(from[other]);
+		});
+
+		test("the browser's Back and Forward move the content as a press on a destination does", async ({
+			page,
+		}) => {
+			await watchViewTransitions(page);
+			await openShell(page, first.path);
+			const pressed = part(await travel(page, last), arrive);
+
+			// Back is a move to an earlier destination, Forward to a later one.
+			const back = part(await travel(page, first, () => page.goBack()), arrive);
+			expect(back.from[axis]).toBe(-pressed.from[axis]);
+			await expect(page).toHaveURL(first.path);
+
+			const forward = part(await travel(page, last, () => page.goForward()), arrive);
+			expect(forward.from[axis]).toBe(pressed.from[axis]);
+			await expect(page).toHaveURL(last.path);
 		});
 
 		test("a second press during a transition interrupts it", async ({ page, context }) => {

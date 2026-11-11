@@ -57,18 +57,18 @@ export async function openGallery(page: Page, path = "/design") {
 }
 
 /**
- * Opens a page of the application shell and waits until React has taken over
- * the page. Before that a press on a destination is an ordinary link: the
- * browser loads the page whole, with no transition and no move of the focus.
- * The sign is the record React keeps on each element it has hydrated; nothing a
- * person can see changes at that moment.
+ * Opens a page whose links React Router handles and waits until React has taken
+ * over the page. Before that a press on a link is an ordinary one: the browser
+ * loads the next page whole, with no transition and no move of the focus. The
+ * sign is the record React keeps on each element it has hydrated, read from the
+ * first link in `within`; nothing a person can see changes at that moment.
  */
-export async function openShell(page: Page, path: string) {
+export async function openShell(page: Page, path: string, within = "nav") {
 	await page.goto(path);
-	await page.waitForFunction(() => {
-		const link = document.querySelector("nav a");
+	await page.waitForFunction((container) => {
+		const link = document.querySelector(`${container} a`);
 		return link !== null && Object.keys(link).some((key) => key.startsWith("__reactFiber"));
-	});
+	}, within);
 }
 
 export { expect };
