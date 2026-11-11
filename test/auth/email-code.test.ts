@@ -424,8 +424,12 @@ describe("what is not offered", () => {
 	);
 
 	it.each([
-		["a name", { name: "A name of a stranger's choosing" }],
 		["an image", { image: "https://elsewhere.example/tracker.png" }],
+		["a name longer than the sign-up page allows", { name: "x".repeat(101) }],
+		["a name of two lines", { name: "Ada\nLovelace" }],
+		["a name that reverses the direction of text", { name: "Ada \u202Eecalevol" }],
+		["a name that is not text", { name: { first: "Ada" } }],
+		["an empty name", { name: "" }],
 	])("takes %s from nobody, not even for a new account", async (_name, extra) => {
 		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const otp = await mailbox.codeFor(EMAIL);
@@ -433,7 +437,19 @@ describe("what is not offered", () => {
 		const response = await post("/sign-in/email-otp", { email: EMAIL, otp, ...extra }, browser);
 
 		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
 		expect(await countRows("users")).toBe(0);
+	});
+
+	it("takes the name a person gives when they sign up, as the sign-up page sends it", async () => {
+		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
+		const otp = await mailbox.codeFor(EMAIL);
+		const name = "Ada Lovelace";
+
+		const response = await post("/sign-in/email-otp", { email: EMAIL, otp, name }, browser);
+
+		expect(response.status).toBe(200);
+		expect(await env.DB.prepare("select name from users").first("name")).toBe(name);
 	});
 
 	it("answers 415 to a body that is not JSON", async () => {

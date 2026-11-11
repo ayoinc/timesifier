@@ -4,8 +4,8 @@
  * and before the plugin sees the request.
  *
  * - A request carries exactly the fields listed here. The plugin would also
- *   issue a code of three other kinds, and take a name and an image for a new
- *   account.
+ *   issue a code of three other kinds, and take an image for a new account and
+ *   a name of any length and any JSON type.
  * - An address is sent at most five codes in any hour, whoever asks. A code
  *   allows three guesses, so without this the guesses against one address are
  *   three times however many codes can be asked for.
@@ -29,11 +29,28 @@ const ASK_PATH = "/email-otp/send-verification-otp";
 const USE_PATH = "/sign-in/email-otp";
 
 /**
+ * The name a person gives when they sign up, which the plugin stores when the
+ * code creates their account: one line of text, of the length the sign-up
+ * page allows, with no control character and none that reverses the direction
+ * of text, because pages show it to other members of an organisation.
+ */
+const PersonName = z
+	.string()
+	.min(1)
+	.max(100)
+	.regex(/^[^\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]+$/u);
+
+/**
  * What each request may carry: these keys and no other, and the one kind of
- * code. What the values must be is the plugin's to say, in its own words.
+ * code. What an address and a code must be is the plugin's to say, in its own
+ * words.
  */
 const Asking = z.strictObject({ email: z.unknown(), type: z.literal("sign-in") });
-const Using = z.strictObject({ email: z.unknown(), otp: z.unknown() });
+const Using = z.strictObject({
+	email: z.unknown(),
+	otp: z.unknown(),
+	name: PersonName.optional(),
+});
 
 const CODES_PER_ADDRESS: Cap = { max: 5, seconds: 60 * 60 };
 
