@@ -104,6 +104,34 @@ export async function seedMembership(organisationId: string, userId: string, rol
 	return id;
 }
 
+/**
+ * A team of the organisation with these members, each already a member of
+ * the organisation, and `managers` among them as its managers (TS-038).
+ */
+export async function seedTeam(
+	organisationId: string,
+	name: string,
+	{ members = [], managers = [] }: { members?: string[]; managers?: string[] },
+) {
+	const id = uuidv7();
+	const now = Date.now();
+	const places = [
+		...members.map((userId) => ({ userId, isManager: 0 })),
+		...managers.map((userId) => ({ userId, isManager: 1 })),
+	];
+	await env.DB.batch([
+		env.DB.prepare(
+			"insert into teams (id, organisation_id, name, name_key, created_at, updated_at) values (?, ?, ?, ?, ?, ?)",
+		).bind(id, organisationId, name, name.toLowerCase(), now, now),
+		...places.map(({ userId, isManager }) =>
+			env.DB.prepare(
+				"insert into team_members (id, organisation_id, team_id, user_id, is_manager, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?)",
+			).bind(uuidv7(), organisationId, id, userId, isManager, now, now),
+		),
+	]);
+	return id;
+}
+
 /** A person with a verified address who holds `role` and has never signed in. */
 export async function seedMember(organisationId: string, role: Role, email: string) {
 	const userId = uuidv7();

@@ -1,6 +1,12 @@
 import type { Page } from "@playwright/test";
 
-import { destinations, membersPath, NEW_ORGANISATION_PATH } from "../app/shell/destinations";
+import {
+	accountPath,
+	destinations,
+	invitationsPath,
+	membersPath,
+	NEW_ORGANISATION_PATH,
+} from "../app/shell/destinations";
 
 import { openAuthPage } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
@@ -89,6 +95,8 @@ test.describe("every other page", () => {
 			destinations.map(({ id, label }) => [`${label}, in an organisation`, () => homePath(id)]),
 		),
 		"the members of an organisation": () => membersPath(homeOrganisation().slug),
+		"the invitations of an organisation": () => invitationsPath(homeOrganisation().slug),
+		"My account": () => accountPath(homeOrganisation().slug),
 		"/design": () => "/design",
 	};
 	for (const [name, path] of Object.entries(pages)) {

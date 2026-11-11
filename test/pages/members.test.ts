@@ -8,16 +8,24 @@ import {
 	type Role,
 	roleOf,
 	seedMembership,
+	seedTeam,
 	value,
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 
-// The members page, /app/<slug>/settings/members: who is in the organisation,
-// the invitations that are waiting, and the actions a role allows. The page
-// leaves out what a role may not do; the server refuses it all the same, and
-// each refusal here is made by posting the very form the page would post.
+// The members and invitations of an organisation, pages of Team at
+// /app/<slug>/team/members and /app/<slug>/team/invitations, and leaving it,
+// on My account at /app/<slug>/account: who is in the organisation, the
+// invitations that are waiting, and the actions a role allows. Team is shown to
+// owners, admins and managers; a member is not shown it and gets 404 there
+// (test/pages/destinations.test.ts). The pages leave out what a role may not
+// do; the server refuses it all the same, and each refusal here is made by
+// posting the very form the page would post, by a manager who holds the role
+// of a member.
 
-const MEMBERS = "/app/acme/settings/members";
+const MEMBERS = "/app/acme/team/members";
+const INVITATIONS = "/app/acme/team/invitations";
+const ACCOUNT = "/app/acme/account";
 const NOT_ALLOWED = "Your role in this organisation does not allow that.";
 const NEEDS_AN_OWNER =
 	"An organisation needs at least one owner. Make another member an owner first.";
@@ -47,12 +55,27 @@ async function memberOfAcme(role: Role, email: string): Promise<MemberOfAcme> {
 	return { ...who, memberId: await seedMembership(acme.id, who.user.id, role) };
 }
 
+/** A person who holds the role of a member in Acme and manages a team of it, so is shown Team. */
+async function managerOfAcme(email: string): Promise<MemberOfAcme> {
+	const who = await memberOfAcme("member", email);
+	await seedTeam(acme.id, `Team of ${email}`, { managers: [who.user.id] });
+	return who;
+}
+
 const memberIdOf = (who: Person) =>
 	value<string>("select id from memberships where user_id = ?", who.user.id).then(String);
 
-/** A form sent by script, as the page's sheets send theirs: the status and what the action said. */
+/** The page whose form takes each intent. */
+const PAGE_FOR: Record<string, string> = {
+	invite: INVITATIONS,
+	cancel: INVITATIONS,
+	leave: ACCOUNT,
+};
+
+/** A form sent by script, as the page's sheets send theirs, to the page that takes it: the status and what the action said. */
 async function ask(who: Person, fields: Record<string, string>) {
-	const response = await submit(MEMBERS, fields, who, { byScript: true });
+	const page = (fields.intent && PAGE_FOR[fields.intent]) ?? MEMBERS;
+	const response = await submit(page, fields, who, { byScript: true });
 	return { status: response.status, said: await response.text() };
 }
 
@@ -68,11 +91,17 @@ describe("what the page shows", () => {
 		expect(text).toContain("ada@example.com (you)");
 		expect(text).toContain("Owner");
 		expect(text).toContain(
-			"You are the only one here. Invite a person and they get an email with a link to join. The link works once and expires after 7 days.",
+			"You are the only one here. People join by invitation, from Invitations",
 		);
-		expect(html).toMatch(/<button[^>]*>Invite a person<\/button>/);
-		// Nothing is waiting, so there is no list of invitations to show.
-		expect(html).not.toContain(">Invitations</h2>");
+		expect(html).toMatch(/<a[^>]*href="\/app\/acme\/team\/invitations"[^>]*>Invitations<\/a>/);
+
+		const invitations = await pageBody(await open(INVITATIONS, ada));
+		expect(textOf(invitations)).toContain(
+			"A person joins Acme by an invitation sent to their email address. Its link works once and expires after 7 days.",
+		);
+		expect(invitations).toMatch(/<button[^>]*>Invite a person<\/button>/);
+		// Nothing is waiting, so the list says so.
+		expect(textOf(invitations)).toContain("No invitation is waiting.");
 	});
 
 	it("each member by name, or by address when they have given none: never an empty place", async () => {
@@ -106,9 +135,10 @@ describe("what the page shows", () => {
 		expect(html).toContain('aria-label="Actions for grace@example.com"');
 		expect(html).toContain('aria-label="Actions for linus@example.com"');
 		expect(html).not.toContain('aria-label="Actions for ada@example.com"');
-		expect(html).toContain(">Invitations</h2>");
-		expect(textOf(html)).toContain("hedy@example.com Invited as an admin. Expires");
-		expect(html).toContain('aria-label="Cancel the invitation to hedy@example.com"');
+
+		const invitations = await pageBody(await open(INVITATIONS, ada));
+		expect(textOf(invitations)).toContain("hedy@example.com Invited as an admin. Expires");
+		expect(invitations).toContain('aria-label="Cancel the invitation to hedy@example.com"');
 	});
 
 	it("to an admin: actions for members and admins, and none for an owner", async () => {
@@ -119,12 +149,14 @@ describe("what the page shows", () => {
 
 		expect(html).toContain('aria-label="Actions for linus@example.com"');
 		expect(html).not.toContain('aria-label="Actions for ada@example.com"');
-		expect(html).toMatch(/<button[^>]*>Invite a person<\/button>/);
+		expect(await pageBody(await open(INVITATIONS, grace))).toMatch(
+			/<button[^>]*>Invite a person<\/button>/,
+		);
 	});
 
-	it("to a member: everyone and their roles, and no control but leaving", async () => {
+	it("to a manager who is a member: everyone and their roles, and no control", async () => {
 		await memberOfAcme("admin", "grace@example.com");
-		const linus = await memberOfAcme("member", "linus@example.com");
+		const linus = await managerOfAcme("linus@example.com");
 		await invite(ada.cookie, acme.id, "hedy@example.com");
 
 		const html = await pageBody(await open(MEMBERS, linus));
@@ -134,12 +166,24 @@ describe("what the page shows", () => {
 		expect(text).toContain("grace@example.com Admin");
 		expect(text).toContain("linus@example.com (you) Member");
 		expect(html).not.toContain("Actions for");
-		expect(text).not.toContain("Invite a person");
+		expect(text).not.toContain("People join by invitation");
+		expect(html.match(/<main[\s\S]*<\/main>/)?.[0]).not.toMatch(/<button\b/);
+
 		// The invitations are the owners' and admins' to see.
-		expect(html).not.toContain(">Invitations</h2>");
-		expect(text).not.toContain("hedy@example.com");
-		expect(html.match(/<button\b[^>]*>/g)).toHaveLength(1);
-		expect(html).toMatch(/<button[^>]*>Leave organisation<\/button>/);
+		const invitations = textOf(await pageBody(await open(INVITATIONS, linus)));
+		expect(invitations).toContain("Owners and admins invite people to Acme.");
+		expect(invitations).not.toContain("Invite a person");
+		expect(invitations).not.toContain("hedy@example.com");
+	});
+
+	it("leaving is on My account, for every role", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+
+		for (const who of [ada, linus]) {
+			expect(await pageBody(await open(ACCOUNT, who))).toMatch(
+				/<button[^>]*>Leave organisation<\/button>/,
+			);
+		}
 	});
 
 	it("only the invitations that can still be accepted", async () => {
@@ -156,7 +200,7 @@ describe("what the page shows", () => {
 			env.DB.prepare("update invitations set status = 'canceled' where id = ?").bind(cancelled.id),
 		]);
 
-		const text = textOf(await pageBody(await open(MEMBERS, ada)));
+		const text = textOf(await pageBody(await open(INVITATIONS, ada)));
 
 		expect(text).toContain("waiting@example.com");
 		for (const gone of ["used", "expired", "cancelled"]) {
@@ -183,14 +227,14 @@ describe("inviting", () => {
 			await vi.waitFor(() =>
 				expect(mailbox.sent().some(({ to }) => to === "bob@example.com")).toBe(true),
 			);
-			expect(textOf(await pageBody(await open(MEMBERS, who)))).toContain(
+			expect(textOf(await pageBody(await open(INVITATIONS, who)))).toContain(
 				"bob@example.com Invited as a member.",
 			);
 		},
 	);
 
-	it("a member who posts the form the page does not show them is refused by the server", async () => {
-		const linus = await memberOfAcme("member", "linus@example.com");
+	it("a manager who is a member and posts the form the page does not show them is refused by the server", async () => {
+		const linus = await managerOfAcme("linus@example.com");
 
 		const response = await ask(linus, {
 			intent: "invite",
@@ -297,8 +341,8 @@ describe("cancelling an invitation", () => {
 		expect((await open(`/invitations/${id}`, bob)).status).toBe(410);
 	});
 
-	it("a member is refused by the server", async () => {
-		const linus = await memberOfAcme("member", "linus@example.com");
+	it("a manager who is a member is refused by the server", async () => {
+		const linus = await managerOfAcme("linus@example.com");
 		const { id } = await invite(ada.cookie, acme.id, "bob@example.com");
 
 		const response = await ask(linus, { intent: "cancel", invitationId: id });
@@ -358,9 +402,9 @@ describe("changing a role", () => {
 		expect(await roleOf(await memberIdOf(ada))).toBe("owner");
 	});
 
-	it("a member who posts the form the page does not show them is refused by the server", async () => {
+	it("a manager who is a member and posts the form the page does not show them is refused by the server", async () => {
 		const grace = await memberOfAcme("member", "grace@example.com");
-		const linus = await memberOfAcme("member", "linus@example.com");
+		const linus = await managerOfAcme("linus@example.com");
 
 		const response = await ask(linus, { intent: "role", memberId: grace.memberId, role: "admin" });
 		const own = await ask(linus, { intent: "role", memberId: linus.memberId, role: "owner" });
@@ -400,19 +444,19 @@ describe("removing a member", () => {
 	it("an admin removes a member, who then gets 404 for the organisation", async () => {
 		const grace = await memberOfAcme("admin", "grace@example.com");
 		const linus = await memberOfAcme("member", "linus@example.com");
-		expect((await open(MEMBERS, linus)).status).toBe(200);
+		expect((await open(ACCOUNT, linus)).status).toBe(200);
 
 		const response = await ask(grace, { intent: "remove", memberId: linus.memberId });
 
 		expect(response.status).toBe(200);
 		expect(response.said).toContain("Member removed.");
 		expect(await membersOfAcme()).toBe(2);
-		expect((await open(MEMBERS, linus)).status).toBe(404);
+		expect((await open(ACCOUNT, linus)).status).toBe(404);
 	});
 
-	it("a member who posts the form the page does not show them is refused by the server", async () => {
+	it("a manager who is a member and posts the form the page does not show them is refused by the server", async () => {
 		const grace = await memberOfAcme("member", "grace@example.com");
-		const linus = await memberOfAcme("member", "linus@example.com");
+		const linus = await managerOfAcme("linus@example.com");
 
 		const response = await ask(linus, { intent: "remove", memberId: grace.memberId });
 
@@ -446,12 +490,12 @@ describe("leaving", () => {
 	it("a member leaves, is sent to /app, and the organisation is 404 to them", async () => {
 		const linus = await memberOfAcme("member", "linus@example.com");
 
-		const response = await submit(MEMBERS, { intent: "leave" }, linus);
+		const response = await submit(ACCOUNT, { intent: "leave" }, linus);
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get("Location")).toBe("/app");
 		expect(await membersOfAcme()).toBe(1);
-		expect((await open(MEMBERS, linus)).status).toBe(404);
+		expect((await open(ACCOUNT, linus)).status).toBe(404);
 	});
 
 	it("the last owner cannot leave, and is told why", async () => {
@@ -470,7 +514,7 @@ describe("leaving", () => {
 	it("an owner leaves once another member is an owner", async () => {
 		await memberOfAcme("owner", "grace@example.com");
 
-		const response = await submit(MEMBERS, { intent: "leave" }, ada);
+		const response = await submit(ACCOUNT, { intent: "leave" }, ada);
 
 		expect(response.status).toBe(302);
 		expect(await value("select count(*) from memberships where user_id = ?", ada.user.id)).toBe(0);
@@ -480,7 +524,7 @@ describe("leaving", () => {
 		const linus = await memberOfAcme("member", "linus@example.com");
 		const initech = await createOrganisation(linus.cookie, "Initech");
 
-		await submit(MEMBERS, { intent: "leave", organizationId: initech.id }, linus);
+		await submit(ACCOUNT, { intent: "leave", organizationId: initech.id }, linus);
 
 		expect(await value("select count(*) from memberships where user_id = ?", linus.user.id)).toBe(
 			1,

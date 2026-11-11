@@ -19,5 +19,7 @@ export {
 	type OrganisationScope,
 	organisationScope,
 	type ScopedAccessor,
+	type ScopedStatement,
+	type SelectOptions,
 } from "./scope";
 export { uuidv7 } from "./uuidv7";

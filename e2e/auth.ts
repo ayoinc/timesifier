@@ -6,12 +6,12 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { SIGN_IN_CODE_LENGTH } from "../app/auth/code";
 import { APP_PATH, NEW_ORGANISATION_PATH } from "../app/shell/destinations";
 import { expect, openShell } from "./fixtures";
-import { openOutsideOrganisation, openSettings } from "./organisation";
+import { openAccount, openOutsideOrganisation } from "./organisation";
 
 // What the browser tests of signing in and signing out share.
 
 export interface Person {
-	/** No page asks it on the way in: a test that needs it sets it in Settings (`setName`). */
+	/** No page asks it on the way in: a test that needs it sets it on My account (`setName`). */
 	name: string;
 	email: string;
 }
@@ -146,11 +146,11 @@ export async function signIn(page: Page, email: string, path = "/sign-in") {
 }
 
 /**
- * Gives the signed-in person a name, where a person does: in Settings, which is
- * in an organisation. For a person with exactly one; the page is left on its Settings.
+ * Gives the signed-in person a name, where a person does: on My account, which
+ * is in an organisation. For a person with exactly one; the page is left on My account.
  */
 export async function setName(page: Page, name: string) {
-	await openSettings(page);
+	await openAccount(page);
 	await page.getByRole("button", { name: /^(Add|Change) name$/ }).click();
 	const sheet = page.getByRole("dialog", { name: "Your name" });
 	await sheet.getByLabel("Name").fill(name);
@@ -167,9 +167,9 @@ export const ARRIVAL = NEW_ORGANISATION_PATH;
 
 /**
  * Signs out and arrives at the sign-in page. A person with an organisation
- * signs out from its Settings; a person with none, from the page that would
+ * signs out from its My account; a person with none, from the page that would
  * create one, which is where `/app` sends them and where the way out is called
- * "Use a different email". "Sign out everywhere" is in Settings alone, so a
+ * "Use a different email". "Sign out everywhere" is on My account alone, so a
  * person with no organisation gets one first.
  */
 export async function signOut(page: Page, button: "Sign out" | "Sign out everywhere" = "Sign out") {
@@ -178,7 +178,7 @@ export async function signOut(page: Page, button: "Sign out" | "Sign out everywh
 		await openOutsideOrganisation(page, NEW_ORGANISATION_PATH);
 		await page.getByRole("button", { name: "Use a different email" }).click();
 	} else {
-		await openSettings(page);
+		await openAccount(page);
 		await page.getByRole("button", { name: button, exact: true }).click();
 	}
 	await expect(page).toHaveURL("/sign-in");

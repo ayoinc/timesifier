@@ -161,8 +161,13 @@ describe("the Turnstile addition to the policy", () => {
 			"/app/acme",
 			"/app/acme/reports",
 			"/app/acme/projects",
+			"/app/acme/clients",
+			"/app/acme/team",
+			"/app/acme/team/members",
+			"/app/acme/team/invitations",
+			"/app/acme/approvals",
 			"/app/acme/settings",
-			"/app/acme/settings/members",
+			"/app/acme/account",
 		]) {
 			const response = await worker.fetch(`${ORIGIN}${path}`, { headers: { Cookie: cookie } });
 			expect(response.status, path).toBe(200);

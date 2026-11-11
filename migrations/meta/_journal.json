@@ -36,6 +36,13 @@
 			"when": 1794382317155,
 			"tag": "0005_remove_passkeys",
 			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "6",
+			"when": 1794412575253,
+			"tag": "0006_heading_features",
+			"breakpoints": true
 		}
 	]
 }

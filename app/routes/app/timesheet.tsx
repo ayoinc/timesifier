@@ -4,14 +4,14 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { membershipContext } from "~/organisations/membership.server";
 import { useTimeZone } from "~/routes/auth/AccountSettings";
 import { DoneMark } from "~/routes/auth/AuthPage";
-import { destination, membersPath, WELCOME_PARAM } from "~/shell/destinations";
+import { destination, invitationsPath, WELCOME_PARAM } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
 
-import type { Route } from "./+types/today";
+import type { Route } from "./+types/timesheet";
 import { useOrganisation } from "./useOrganisation";
 
-const { label } = destination("today");
+const { label } = destination("timesheet");
 
 export function meta() {
 	return [{ title: `${label} · Timesifier` }];
@@ -27,7 +27,7 @@ export function loader({ url, context }: Route.LoaderArgs) {
 	return { welcome: url.searchParams.has(WELCOME_PARAM) && role === "owner" };
 }
 
-export default function Today({ loaderData }: Route.ComponentProps) {
+export default function Timesheet({ loaderData }: Route.ComponentProps) {
 	const organisation = useOrganisation();
 	// The moment is marked once. The mark comes off the address at once, so that
 	// reloading the page or coming back to it does not mark it again, and the
@@ -56,7 +56,7 @@ export default function Today({ loaderData }: Route.ComponentProps) {
 						<p className="text-title-medium">{organisation.name} is ready</p>
 						<p className="mt-1 text-body-large text-on-surface-variant">
 							You are its owner. When you want company,{" "}
-							<Link to={membersPath(organisation.slug)} className={TEXT_LINK}>
+							<Link to={invitationsPath(organisation.slug)} className={TEXT_LINK}>
 								invite the people you work with
 							</Link>
 							.

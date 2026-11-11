@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
 import {
+	Link,
 	Outlet,
 	useLocation,
 	useNavigationType,
@@ -10,7 +11,12 @@ import {
 import { cx } from "~/components/cx";
 import { PAGE, SiteHeader } from "~/landing/Site";
 import { requireSession, signedInContext } from "~/routes/auth/session.server";
-import { destinationIndex, NEW_ORGANISATION_PATH, ORGANISATION_PARAM } from "~/shell/destinations";
+import {
+	accountPath,
+	destinationIndex,
+	NEW_ORGANISATION_PATH,
+	ORGANISATION_PARAM,
+} from "~/shell/destinations";
 import { Navigation } from "~/shell/Navigation";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { finishRunningTransition, TRANSITION, useTravel } from "~/shell/transitions";
@@ -76,9 +82,12 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 		return () => window.removeEventListener("popstate", finishRunningTransition);
 	}, []);
 
-	// The organisation's name stands in the band, at the other end from the product's.
-	const organisationName =
-		useRouteLoaderData<typeof organisationLoader>("routes/app/organisation")?.name;
+	// The organisation's name stands in the band, at the other end from the
+	// product's, and beside it the way to the person's own account.
+	const organisationData = useRouteLoaderData<typeof organisationLoader>("routes/app/organisation");
+	const onAccount =
+		organisationData !== undefined &&
+		pathname.replace(/\/+$/, "") === accountPath(organisationData.slug);
 
 	return (
 		<div className={cx(OUTSIDE_FRAME, organisation && "max-medium:pb-16")}>
@@ -98,14 +107,27 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 				</a>
 			)}
 
-			{/* The public pages' band: the lockup, which leads home, and the
-			    organisation's name. Outside an organisation it holds the lockup alone,
-			    as on the sign-in page. */}
+			{/* The public pages' band: the lockup, which leads home, the
+			    organisation's name and My account. Outside an organisation it holds
+			    the lockup alone, as on the sign-in page. */}
 			<SiteHeader
 				current={pathname}
 				end={
-					organisationName ? (
-						<p className="min-w-0 truncate text-title-medium">{organisationName}</p>
+					organisationData ? (
+						<div className="flex min-w-0 items-center gap-6">
+							<p className="min-w-0 truncate text-title-medium">{organisationData.name}</p>
+							<Link
+								to={accountPath(organisationData.slug)}
+								aria-current={onAccount ? "page" : undefined}
+								onClick={finishRunningTransition}
+								className={cx(
+									"inline-block shrink-0 rounded-extra-small py-2 text-label-large underline-offset-4 outline-none hover:underline focus-visible:focus-indicator",
+									onAccount && "underline",
+								)}
+							>
+								My account
+							</Link>
+						</div>
 					) : null
 				}
 			/>
@@ -118,7 +140,11 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 				    the current destination is the one part that travels (Navigation.tsx). */}
 				{organisation && (
 					<ViewTransition default="none">
-						<Navigation organisation={organisation} activeIndex={index} />
+						<Navigation
+							organisation={organisation}
+							visible={organisationData?.destinations ?? []}
+							activeIndex={index}
+						/>
 					</ViewTransition>
 				)}
 

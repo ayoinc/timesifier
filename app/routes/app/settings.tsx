@@ -1,42 +1,27 @@
 import { useState } from "react";
-import { Link, redirect, replace, useFetcher, useRouteLoaderData } from "react-router";
+import { redirect } from "react-router";
 import * as z from "zod";
 
-import { changeName } from "~/auth/auth.server";
-import { PERSON_NAME_MAX, PersonName } from "~/auth/person-name";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
-import { Radio, RadioGroup } from "~/components/Radio";
 import { TextField } from "~/components/TextField";
 import { parseRequest } from "~/lib/validate";
-import {
-	deleteOrganisation,
-	listOrganisations,
-	renameOrganisation,
-} from "~/organisations/api.server";
+import { deleteOrganisation, renameOrganisation } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { NAME_MAX_LENGTH, Name, nameProblem } from "~/organisations/name";
 import { declined, done, refused } from "~/organisations/outcome.server";
 import { AS_ROLE } from "~/organisations/people";
-import { SOMETHING_WENT_WRONG } from "~/organisations/problems";
 import { allows } from "~/organisations/roles";
-import type { loader as rootLoader } from "~/root";
-import { SignOut } from "~/routes/auth/AccountSettings";
-import {
-	type ColorSchemeChoice,
-	colorSchemeCookie,
-	colorSchemeForm,
-} from "~/shell/color-scheme.server";
-import { APP_PATH, destination, membersPath, NEW_ORGANISATION_PATH } from "~/shell/destinations";
-import { TEXT_LINK } from "~/shell/links";
+import { APP_PATH, destination } from "~/shell/destinations";
 import { PageHeading, Section } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/settings";
 import { FormSheet } from "./FormSheet";
 
-// Settings holds two things and says which is which: the organisation on
-// screen, which its owners and admins manage for everyone in it, and the
-// person's own account, which is the same in every organisation they belong to.
+// Workspace settings: the organisation on screen, which its owners and admins
+// manage for everyone in it (docs/navigation.md, "Workspace settings"). Only
+// they are shown it; anybody else gets 404 here (app/shell/destinations.ts).
+// The person's own account is on My account.
 
 const { label } = destination("settings");
 
@@ -44,14 +29,9 @@ export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
-/**
- * The organisation and what the person's role lets them do to it, then the
- * person: their name and their address. The checks on the
- * layouts have already run.
- */
-export async function loader({ request, context }: Route.LoaderArgs) {
-	const { organisation, role, user } = context.get(membershipContext);
-	const organisations = await listOrganisations(request);
+/** The organisation and what the person's role lets them do to it. The checks on the layouts have already run. */
+export function loader({ context }: Route.LoaderArgs) {
+	const { organisation, role } = context.get(membershipContext);
 	return {
 		organisation: {
 			name: organisation.name,
@@ -59,56 +39,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			canRename: allows(role, { organization: ["update"] }),
 			canDelete: allows(role, { organization: ["delete"] }),
 		},
-		// Whether there is another organisation to switch to.
-		hasOthers: organisations.ok && organisations.data.length > 1,
-		person: { name: user.name?.trim() || null, email: user.email },
 	};
 }
 
-/**
- * Each thing this page can ask for. A form says which with its `intent`; the
- * colour-scheme form has none and is told by its one field.
- */
-const form = z.union([
-	z.discriminatedUnion("intent", [
-		// A person's name is trimmed here and then held to the one rule for it.
-		z.object({ intent: z.literal("name"), name: z.string().trim().pipe(PersonName) }),
-		z.object({ intent: z.literal("rename"), name: Name }),
-		// What the person typed to confirm. It is compared with the name; it is never used as one.
-		z.object({ intent: z.literal("delete"), confirmation: z.string().max(200) }),
-	]),
-	colorSchemeForm,
+/** Each thing this page can ask for. A form says which with its `intent`. */
+const form = z.discriminatedUnion("intent", [
+	z.object({ intent: z.literal("rename"), name: Name }),
+	// What the person typed to confirm. It is compared with the name; it is never used as one.
+	z.object({ intent: z.literal("delete"), confirmation: z.string().max(200) }),
 ]);
 
 /**
- * Two of these are the person's own: the colour scheme and their name. Two are
- * the organisation's: its name and its deletion, which the server allows by
- * role. The organisation acted on is the one in the address, as the layout
- * read it; no form names one.
+ * The organisation's name and its deletion, which the server allows by role.
+ * The organisation acted on is the one in the address, as the layout read it;
+ * no form names one.
  */
-export async function action({ request, url, context }: Route.ActionArgs) {
+export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-
-	// Stores the chosen colour scheme in its cookie and sends the browser back
-	// to this page. The page it then loads
-	// is rendered by the root loader from the new cookie: with script, React
-	// Router follows the redirect and loads the data without leaving the page;
-	// without, the browser loads the page again. `url` is this page's address
-	// even when script sent the form to its data address.
-	if (!("intent" in input)) {
-		return replace(url.pathname, {
-			status: 303,
-			headers: { "Set-Cookie": colorSchemeCookie(input.scheme) },
-		});
-	}
-
 	const { organisation } = context.get(membershipContext);
 	switch (input.intent) {
-		case "name":
-			return (await changeName(request, input.name))
-				? done(`Your name is now ${input.name}.`)
-				: declined(SOMETHING_WENT_WRONG, 500);
-
 		case "rename": {
 			const renamed = await renameOrganisation(request, organisation.id, input.name);
 			return renamed.ok ? done(`The organisation is now called ${input.name}.`) : refused(renamed);
@@ -124,18 +73,11 @@ export async function action({ request, url, context }: Route.ActionArgs) {
 	}
 }
 
-/** Light first: it is what a person who has chosen nothing has. */
-const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
-	{ value: "light", label: "Light" },
-	{ value: "dark", label: "Dark" },
-	{ value: "system", label: "Match my device" },
-];
-
 /** The sheets of this page. One is open at a time. */
-type Task = "rename" | "delete" | "name";
+type Task = "rename" | "delete";
 
-export default function Settings({ loaderData, params }: Route.ComponentProps) {
-	const { organisation, person, hasOthers } = loaderData;
+export default function Settings({ loaderData }: Route.ComponentProps) {
+	const { organisation } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
@@ -149,8 +91,8 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 			</p>
 
 			<Section
-				id="organisation"
-				heading="Organisation"
+				id="general"
+				heading="General"
 				lead={
 					<>
 						Shared by everyone in {organisation.name}. You are {AS_ROLE[organisation.role]}.
@@ -172,53 +114,6 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 						/>
 					</LedgerRows>
 				</Ledger>
-
-				<ul className="mt-6 flex flex-col items-start gap-3">
-					<li>
-						<Link to={membersPath(params.organisation)} className={TEXT_LINK}>
-							Members and invitations
-						</Link>
-					</li>
-					{hasOthers && (
-						<li>
-							<Link to={APP_PATH} className={TEXT_LINK}>
-								Switch organisation
-							</Link>
-						</li>
-					)}
-					<li>
-						<Link to={NEW_ORGANISATION_PATH} className={TEXT_LINK}>
-							Create another organisation
-						</Link>
-					</li>
-				</ul>
-			</Section>
-
-			<Section
-				id="account"
-				heading="Your account"
-				lead="Yours alone. These are the same in every organisation you belong to."
-				className="max-w-200"
-			>
-				<Ledger heading="Your name">
-					<LedgerRows>
-						<LedgerRow
-							title={
-								<span className="wrap-anywhere">
-									{person.name ?? `Not set. People see your address, ${person.email}.`}
-								</span>
-							}
-							action={
-								<Button variant="text" onPress={() => setTask("name")}>
-									{person.name ? "Change name" : "Add name"}
-								</Button>
-							}
-						/>
-					</LedgerRows>
-				</Ledger>
-
-				<Appearance />
-				<SignOut email={person.email} />
 			</Section>
 
 			{/* Deletion is last, under its own rule. */}
@@ -284,61 +179,6 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 					}
 				/>
 			</FormSheet>
-
-			<FormSheet
-				title="Your name"
-				intent="name"
-				submitLabel="Save"
-				isOpen={task === "name"}
-				onClose={close}
-				onDone={setSaid}
-			>
-				<p>Shown to the people in your organisations, in place of your email address.</p>
-				<TextField
-					label="Name"
-					name="name"
-					defaultValue={person.name ?? ""}
-					autoComplete="name"
-					autoFocus
-					isRequired
-					maxLength={PERSON_NAME_MAX}
-					validate={nameProblem}
-				/>
-			</FormSheet>
 		</>
-	);
-}
-
-/** The colour scheme: a choice saved as it is made. */
-function Appearance() {
-	const stored = useRouteLoaderData<typeof rootLoader>("root")?.colorScheme ?? "light";
-	const fetcher = useFetcher();
-	// The choice being saved shows as chosen at once; the page follows when the server answers.
-	const chosen = fetcher.formData?.get("scheme")?.toString() ?? stored;
-
-	return (
-		<section aria-labelledby="appearance" className="mt-8">
-			<h3 id="appearance" className="text-title-medium">
-				Appearance
-			</h3>
-			<fetcher.Form method="post" className="mt-2 flex flex-col items-start gap-2">
-				<RadioGroup
-					label="Colour scheme"
-					name="scheme"
-					value={chosen}
-					onChange={(scheme) => fetcher.submit({ scheme }, { method: "post" })}
-				>
-					{SCHEMES.map((scheme) => (
-						<Radio key={scheme.value} value={scheme.value}>
-							{scheme.label}
-						</Radio>
-					))}
-				</RadioGroup>
-				{/* With script a choice is saved as it is made. Without, this button submits the form. */}
-				<noscript>
-					<Button type="submit">Save</Button>
-				</noscript>
-			</fetcher.Form>
-		</section>
 	);
 }

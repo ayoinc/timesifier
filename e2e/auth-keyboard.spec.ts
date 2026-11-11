@@ -13,10 +13,10 @@ import {
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { expect, test } from "./fixtures";
-import { openSettings } from "./organisation";
+import { openAccount } from "./organisation";
 
 // Design rule 15: everything works by keyboard, with a visible focus indicator.
-// The sign-in page and the account part of Settings are walked here with the
+// The sign-in page and My account are walked here with the
 // keyboard alone: no pointer touches the page after it has loaded.
 
 test.use({ storageState: SIGNED_OUT });
@@ -129,10 +129,10 @@ test("going back a view, with the keyboard alone, returns to the field that was 
 	await expect(page.getByLabel("Email")).toHaveValue(person.email);
 });
 
-test("signing out from Settings, with the keyboard alone", async ({ page }) => {
+test("signing out from My account, with the keyboard alone", async ({ page }) => {
 	await signIn(page, newPerson().email);
 	await expect(page).toHaveURL(ARRIVAL);
-	await openSettings(page);
+	await openAccount(page);
 
 	// The two ways out follow each other in the tab order, and each shows the focus.
 	const out = page.getByRole("button", { name: "Sign out", exact: true });

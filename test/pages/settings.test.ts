@@ -10,11 +10,14 @@ import {
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 
-// Settings of an organisation, /app/<slug>/settings: the organisation's name
-// and its deletion, which the server allows by role, and the person's own
-// name. Every form is posted the way the page posts it.
+// Workspace settings of an organisation, /app/<slug>/settings: the
+// organisation's name and its deletion, which the server allows by role, and
+// which only owners and admins are shown. And My account, /app/<slug>/account:
+// the person's own name and colour scheme, which every role opens. Every form
+// is posted the way the page posts it.
 
 const SETTINGS = "/app/acme/settings";
+const ACCOUNT = "/app/acme/account";
 
 let mailbox: Mailbox;
 let ada: Person;
@@ -49,15 +52,13 @@ const organisationName = () =>
 	value<string>("select name from organisations where id = ?", acme.id);
 
 describe("what the page shows", () => {
-	it("to an owner: the name, Rename, the members, and Delete organisation", async () => {
+	it("to an owner: the name, Rename, and Delete organisation", async () => {
 		const html = await pageBody(await open(SETTINGS, ada));
 		const text = textOf(html);
 
+		expect(html).toContain(">Workspace settings</h1>");
 		expect(text).toContain("Shared by everyone in Acme. You are an owner.");
 		expect(html).toMatch(/<button[^>]*>Rename<\/button>/);
-		expect(html).toMatch(
-			/<a[^>]*href="\/app\/acme\/settings\/members"[^>]*>Members and invitations<\/a>/,
-		);
 		expect(html).toMatch(/<button[^>]*>Delete organisation<\/button>/);
 	});
 
@@ -71,34 +72,31 @@ describe("what the page shows", () => {
 		expect(textOf(html)).not.toContain("Delete organisation");
 	});
 
-	it("to a member: the name, and neither control", async () => {
-		const html = await pageBody(
-			await open(SETTINGS, await memberOfAcme("member", "linus@example.com")),
-		);
-		const text = textOf(html);
+	it("to a member: nothing, the same 404 as an organisation that is not theirs", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
 
-		expect(text).toContain("Shared by everyone in Acme. You are a member.");
-		expect(html).not.toMatch(/<button[^>]*>Rename<\/button>/);
-		expect(text).not.toContain("Delete organisation");
-		expect(text).toContain("Members and invitations");
+		expect((await open(SETTINGS, linus)).status).toBe(404);
+		expect((await open(ACCOUNT, linus)).status).toBe(200);
 	});
 
-	it("says which settings are the organisation's and which are the person's own", async () => {
-		const html = await pageBody(await open(SETTINGS, ada));
+	it("keeps the organisation's settings and the person's own on separate pages", async () => {
+		const settings = await pageBody(await open(SETTINGS, ada));
+		const account = await pageBody(await open(ACCOUNT, ada));
 
-		const organisation = html.indexOf(">Organisation</h2>");
-		const account = html.indexOf(">Your account</h2>");
-		expect(organisation).toBeGreaterThan(-1);
-		expect(account).toBeGreaterThan(organisation);
+		expect(settings).toContain(">General</h2>");
+		expect(settings).not.toContain(">Your account</h2>");
+		expect(account).toContain(">My account</h1>");
+		const yours = account.indexOf(">Your account</h2>");
+		expect(yours).toBeGreaterThan(-1);
 		// The colour scheme and both ways out are under the person's heading.
 		for (const heading of ["Appearance", "Sign out", "Sign out everywhere"]) {
-			expect(html.indexOf(`>${heading}</h3>`), heading).toBeGreaterThan(account);
+			expect(account.indexOf(`>${heading}</h3>`), heading).toBeGreaterThan(yours);
 		}
-		expect(html.indexOf(">Delete organisation</h3>")).toBeLessThan(account);
+		expect(textOf(account)).not.toContain("Delete organisation");
 	});
 
 	it("shows the person by their address until they have given a name", async () => {
-		expect(textOf(await pageBody(await open(SETTINGS, ada)))).toContain(
+		expect(textOf(await pageBody(await open(ACCOUNT, ada)))).toContain(
 			"Not set. People see your address, ada@example.com.",
 		);
 	});
@@ -123,15 +121,14 @@ describe("renaming the organisation", () => {
 		);
 	});
 
-	it("a member who posts the form the page does not show them is refused by the server", async () => {
+	it("a member who posts the form of a page they are not shown gets 404, and nothing changes", async () => {
 		const linus = await memberOfAcme("member", "linus@example.com");
 
-		const response = await outcome(
-			await submit(SETTINGS, { intent: "rename", name: "Linus Ltd" }, linus, { byScript: true }),
-		);
+		const response = await submit(SETTINGS, { intent: "rename", name: "Linus Ltd" }, linus, {
+			byScript: true,
+		});
 
-		expect(response.status).toBe(403);
-		expect(response.said).toContain("Your role in this organisation does not allow that.");
+		expect(response.status).toBe(404);
 		expect(await organisationName()).toBe("Acme");
 	});
 
@@ -180,36 +177,45 @@ describe("deleting the organisation", () => {
 		expect(await value("select count(*) from organisations")).toBe(1);
 	});
 
-	it.each(["admin", "member"] as const)(
-		"an %s who types its name is refused by the server",
-		async (role) => {
-			const who = await memberOfAcme(role, "grace@example.com");
+	it("an admin who types its name is refused by the server", async () => {
+		const grace = await memberOfAcme("admin", "grace@example.com");
 
-			const response = await outcome(
-				await submit(SETTINGS, { intent: "delete", confirmation: "Acme" }, who, { byScript: true }),
-			);
+		const response = await outcome(
+			await submit(SETTINGS, { intent: "delete", confirmation: "Acme" }, grace, { byScript: true }),
+		);
 
-			expect(response.status).toBe(403);
-			expect(response.said).toContain("Your role in this organisation does not allow that.");
-			expect(await value("select count(*) from organisations")).toBe(1);
-			expect(await value("select count(*) from memberships")).toBe(2);
-		},
-	);
+		expect(response.status).toBe(403);
+		expect(response.said).toContain("Your role in this organisation does not allow that.");
+		expect(await value("select count(*) from organisations")).toBe(1);
+		expect(await value("select count(*) from memberships")).toBe(2);
+	});
+
+	it("a member who types its name gets 404, and nothing is deleted", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+
+		const response = await submit(SETTINGS, { intent: "delete", confirmation: "Acme" }, linus, {
+			byScript: true,
+		});
+
+		expect(response.status).toBe(404);
+		expect(await value("select count(*) from organisations")).toBe(1);
+		expect(await value("select count(*) from memberships")).toBe(2);
+	});
 });
 
 describe("a person's name", () => {
 	/** Everything the database holds about Ada. */
 	const stored = () => row("select * from users where id = ?", ada.user.id);
 
-	it("is changed by the action, trimmed, and shown in Settings", async () => {
+	it("is changed by the action, trimmed, and shown on My account", async () => {
 		const response = await outcome(
-			await submit(SETTINGS, { intent: "name", name: "  Ada Lovelace " }, ada, { byScript: true }),
+			await submit(ACCOUNT, { intent: "name", name: "  Ada Lovelace " }, ada, { byScript: true }),
 		);
 
 		expect(response.status).toBe(200);
 		expect(response.said).toContain("Your name is now Ada Lovelace.");
 		expect((await stored())?.name).toBe("Ada Lovelace");
-		const text = textOf(await pageBody(await open(SETTINGS, ada)));
+		const text = textOf(await pageBody(await open(ACCOUNT, ada)));
 		expect(text).toContain("Ada Lovelace");
 		expect(text).not.toContain("Not set.");
 	});
@@ -219,7 +225,7 @@ describe("a person's name", () => {
 		const sessions = await value("select count(*) from sessions where user_id = ?", ada.user.id);
 
 		const response = await submit(
-			SETTINGS,
+			ACCOUNT,
 			{
 				intent: "name",
 				name: "Ada",
@@ -258,7 +264,7 @@ describe("a person's name", () => {
 	it("changes the name of the person signed in, and of nobody else", async () => {
 		const grace = await memberOfAcme("admin", "grace@example.com");
 
-		await submit(SETTINGS, { intent: "name", name: "Grace Hopper" }, grace, { byScript: true });
+		await submit(ACCOUNT, { intent: "name", name: "Grace Hopper" }, grace, { byScript: true });
 
 		expect(await value("select name from users where id = ?", grace.user.id)).toBe("Grace Hopper");
 		expect((await stored())?.name).toBe("");
@@ -271,7 +277,7 @@ describe("a person's name", () => {
 		["a line break", "Ada\nLovelace"],
 		["a character that reverses the text", "Ada \u202E ecalevoL"],
 	])("refuses a name that is %s with 400 and changes nothing", async (_case, name) => {
-		const response = await submit(SETTINGS, { intent: "name", name }, ada, { byScript: true });
+		const response = await submit(ACCOUNT, { intent: "name", name }, ada, { byScript: true });
 
 		expect(response.status).toBe(400);
 		expect((await stored())?.name).toBe("");
@@ -280,27 +286,27 @@ describe("a person's name", () => {
 	it("takes a name of exactly 100 characters", async () => {
 		const name = "a".repeat(100);
 
-		const response = await submit(SETTINGS, { intent: "name", name }, ada, { byScript: true });
+		const response = await submit(ACCOUNT, { intent: "name", name }, ada, { byScript: true });
 
 		expect(response.status).toBe(200);
 		expect((await stored())?.name).toBe(name);
 	});
 
 	it("keeps the session working after the change", async () => {
-		await submit(SETTINGS, { intent: "name", name: "Ada" }, ada, { byScript: true });
+		await submit(ACCOUNT, { intent: "name", name: "Ada" }, ada, { byScript: true });
 
-		const page = await open(SETTINGS, ada);
+		const page = await open(ACCOUNT, ada);
 		expect(page.status).toBe(200);
 		expect(textOf(await pageBody(page))).toContain("You are signed in as ada@example.com");
 	});
 });
 
-describe("the colour scheme, which Settings had before it had an organisation", () => {
+describe("the colour scheme, which My account holds in an organisation", () => {
 	it("is still stored by the form the page posts", async () => {
-		const response = await submit(SETTINGS, { scheme: "dark" }, ada);
+		const response = await submit(ACCOUNT, { scheme: "dark" }, ada);
 
 		expect(response.status).toBe(303);
-		expect(response.headers.get("Location")).toBe(SETTINGS);
+		expect(response.headers.get("Location")).toBe(ACCOUNT);
 		expect(response.headers.getSetCookie()).toEqual([
 			"__Host-color-scheme=dark; Max-Age=31536000; Path=/; Secure; SameSite=Lax",
 		]);
