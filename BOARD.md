@@ -4,11 +4,11 @@ How the board works, and what Ready and Done mean, is in `docs/ways-of-working.m
 
 ## In progress (limit 1)
 
-*Empty.*
+_Empty._
 
 ## Review (limit 2)
 
-*Empty.*
+_Empty._
 
 ## Ready (limit 3)
 
@@ -252,7 +252,7 @@ Depends on: TS-006.
 
 ## Done
 
-*Empty.*
+_Empty._
 
 ## Later
 

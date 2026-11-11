@@ -6,14 +6,14 @@ Kanban: work is pulled one card at a time, and a card is finished when its accep
 
 `BOARD.md` has these columns, in the order work flows.
 
-| Column | Meaning | Limit |
-|---|---|---|
-| Backlog | Refined cards, in priority order | None |
-| Ready | The next cards to pull; dependencies are done | 3 |
-| In progress | Being worked on | 1 |
-| Review | Criteria met, waiting for the owner to check the evidence | 2 |
-| Done | Merged and, once TS-003 exists, deployed | None |
-| Later | Ideas that have no acceptance criteria yet | None |
+| Column      | Meaning                                                   | Limit |
+| ----------- | --------------------------------------------------------- | ----- |
+| Backlog     | Refined cards, in priority order                          | None  |
+| Ready       | The next cards to pull; dependencies are done             | 3     |
+| In progress | Being worked on                                           | 1     |
+| Review      | Criteria met, waiting for the owner to check the evidence | 2     |
+| Done        | Merged and, once TS-003 exists, deployed                  | None  |
+| Later       | Ideas that have no acceptance criteria yet                | None  |
 
 Finish the card in progress before pulling the next. If a card is blocked, write the blocker on the card and fix the blocker first.
 

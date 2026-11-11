@@ -1,0 +1,19 @@
+/**
+ * Wrangler configuration.
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ * Bindings are added by the cards that need them; see docs/architecture.md.
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "timesifier",
+	"main": "./workers/app.ts",
+	// Selected by create-cloudflare on the day the project was scaffolded.
+	"compatibility_date": "2026-11-09",
+	"compatibility_flags": ["nodejs_compat"],
+	"observability": {
+		"enabled": true,
+		"logs": { "enabled": true, "head_sampling_rate": 1 },
+		"traces": { "enabled": true, "head_sampling_rate": 0.1 }
+	},
+	"upload_source_maps": true
+}

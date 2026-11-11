@@ -20,27 +20,27 @@ flowchart LR
 
 ## Parts
 
-| Part | Cloudflare product | Used for | Arrives with |
-|---|---|---|---|
-| Application | Workers, React Router v8, Cloudflare Vite plugin | Pages, loaders, actions | TS-001 |
-| Static files | Workers Static Assets | Scripts, styles, images | TS-001 |
-| Database | D1 with Drizzle and SQL migrations | Users, organisations, time entries, everything durable | TS-007 |
-| Authentication | Better Auth in the Worker, data in D1 | Passkeys, email sign-in, sessions, organisations, roles | TS-008 |
-| Bot protection | Turnstile | Sign-up | TS-008 |
-| Email | Cloudflare email sending, from its own subdomain | Verification and summaries | TS-008 |
-| AI | Workers AI behind AI Gateway | Category suggestions | TS-015 |
-| Background work | Queues, Workflows, Cron Triggers | Weekly summaries, batches | TS-018 |
-| Files | R2 | Data exports | TS-021 |
-| Real-time | Durable Objects | Only when a feature needs live coordination | Not planned yet |
-| Observability | Workers Logs and Traces | Structured logs, traces, alerts | TS-001, TS-022 |
+| Part            | Cloudflare product                               | Used for                                                | Arrives with    |
+| --------------- | ------------------------------------------------ | ------------------------------------------------------- | --------------- |
+| Application     | Workers, React Router v8, Cloudflare Vite plugin | Pages, loaders, actions                                 | TS-001          |
+| Static files    | Workers Static Assets                            | Scripts, styles, images                                 | TS-001          |
+| Database        | D1 with Drizzle and SQL migrations               | Users, organisations, time entries, everything durable  | TS-007          |
+| Authentication  | Better Auth in the Worker, data in D1            | Passkeys, email sign-in, sessions, organisations, roles | TS-008          |
+| Bot protection  | Turnstile                                        | Sign-up                                                 | TS-008          |
+| Email           | Cloudflare email sending, from its own subdomain | Verification and summaries                              | TS-008          |
+| AI              | Workers AI behind AI Gateway                     | Category suggestions                                    | TS-015          |
+| Background work | Queues, Workflows, Cron Triggers                 | Weekly summaries, batches                               | TS-018          |
+| Files           | R2                                               | Data exports                                            | TS-021          |
+| Real-time       | Durable Objects                                  | Only when a feature needs live coordination             | Not planned yet |
+| Observability   | Workers Logs and Traces                          | Structured logs, traces, alerts                         | TS-001, TS-022  |
 
 ## Environments
 
-| Environment | Where | Data |
-|---|---|---|
-| Local | `pnpm dev`, running in the Workers runtime | Local D1 file, secrets in `.dev.vars` |
-| Preview | A preview URL per pull request | Preview D1 database |
-| Production | `https://timesifier.com` | Production D1 database |
+| Environment | Where                                      | Data                                  |
+| ----------- | ------------------------------------------ | ------------------------------------- |
+| Local       | `pnpm dev`, running in the Workers runtime | Local D1 file, secrets in `.dev.vars` |
+| Preview     | A preview URL per pull request             | Preview D1 database                   |
+| Production  | `https://timesifier.com`                   | Production D1 database                |
 
 ## Data rules
 
@@ -62,25 +62,32 @@ flowchart LR
 
 The zone carries **live email configuration** that the application must leave alone:
 
-| Name | What is there |
-|---|---|
-| `timesifier.com` | MX to Microsoft 365, SPF, a Microsoft verification record, DMARC `p=none` |
-| `autodiscover` | Outlook autodiscover |
-| `*._domainkey`, `send`, `send.updates`, `plunk`, `resend._domainkey*` | DKIM and bounce records for Amazon SES, Resend, Plunk and iCloud mail |
-| `trade` | Cloudflare email routing and sending records with DMARC `p=reject` |
-| Two `_…` CNAMEs | AWS certificate validation |
+| Name                                                                  | What is there                                                             |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `timesifier.com`                                                      | MX to Microsoft 365, SPF, a Microsoft verification record, DMARC `p=none` |
+| `autodiscover`                                                        | Outlook autodiscover                                                      |
+| `*._domainkey`, `send`, `send.updates`, `plunk`, `resend._domainkey*` | DKIM and bounce records for Amazon SES, Resend, Plunk and iCloud mail     |
+| `trade`                                                               | Cloudflare email routing and sending records with DMARC `p=reject`        |
+| Two `_…` CNAMEs                                                       | AWS certificate validation                                                |
 
 The application adds only the Worker custom domains for the apex and `www`, and later one dedicated subdomain for its own outgoing email. TS-003 exports the zone before and after and compares the two.
 
 ## Versions
 
-Filled in by TS-001 from the scaffolded project.
+Read from the lockfile on 2026-11-11. The lockfile is the source of truth; update this table when a major version changes.
 
-| Tool | Version |
-|---|---|
-| Node | |
-| pnpm | |
-| Wrangler | |
-| React Router | |
-| Cloudflare Vite plugin | |
-| `compatibility_date` | |
+| Tool                     | Version    |
+| ------------------------ | ---------- |
+| Node                     | 26         |
+| pnpm                     | 12.18.0    |
+| Wrangler                 | 4.159.0    |
+| React Router             | 8.5.1      |
+| React                    | 19.3.1     |
+| Cloudflare Vite plugin   | 1.68.0     |
+| Vite                     | 8.3.7      |
+| Tailwind CSS             | 4.3.5      |
+| Vitest                   | 4.1.12     |
+| Cloudflare Vitest plugin | 1.6.1      |
+| Biome                    | 2.6.6      |
+| TypeScript               | 5.9.3      |
+| `compatibility_date`     | 2026-11-09 |
