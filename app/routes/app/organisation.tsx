@@ -1,5 +1,6 @@
 import { Outlet } from "react-router";
 
+import { pendingApprovalsOf } from "~/approvals/approvals.server";
 import {
 	membershipContext,
 	notFound,
@@ -64,7 +65,7 @@ export const middleware: Route.MiddlewareFunction[] = [requireOrganisation, requ
  * server. Having a loader here also means every move between the
  * organisation's pages asks the server, and so passes the checks above.
  */
-export function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { organisation, role } = membership;
 	return {
@@ -72,6 +73,8 @@ export function loader({ context }: Route.LoaderArgs) {
 		slug: organisation.slug,
 		role,
 		destinations: visibleDestinations(viewerOf(membership)),
+		/** The periods waiting for this person's decision, for the Approvals link (TS-047). */
+		pendingApprovals: await pendingApprovalsOf(membership),
 	};
 }
 

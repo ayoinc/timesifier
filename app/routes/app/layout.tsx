@@ -144,6 +144,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 							organisation={organisation}
 							visible={organisationData?.destinations ?? []}
 							activeIndex={index}
+							counts={{ approvals: organisationData?.pendingApprovals ?? 0 }}
 						/>
 					</ViewTransition>
 				)}

@@ -168,7 +168,10 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(listed).toHaveCount(1);
 		await expect(listed).toContainText([`${ada.name} (you)`]);
 		await expect(page.getByText("You are the only one here.")).toBeVisible();
-		await page.getByRole("main").getByRole("link", { name: "Invitations" }).click();
+		await page
+			.getByRole("list", { name: "Team pages" })
+			.getByRole("link", { name: "Invitations" })
+			.click();
 		await expect(page).toHaveURL(invitations);
 		await expect(page.getByRole("heading", { level: 1, name: "Invitations" })).toBeFocused();
 		await expect(page.getByText("No invitation is waiting.")).toBeVisible();

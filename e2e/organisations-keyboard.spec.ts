@@ -92,7 +92,11 @@ for (const viewport of [
 			await expectFocusShown(actions);
 
 			// On to the invitations, by the link under the members.
-			const toInvitations = page.getByRole("main").getByRole("link", { name: "Invitations" });
+			// The tab above the heading has the same name; this is the last of the two.
+			const toInvitations = page
+				.getByRole("main")
+				.getByRole("link", { name: "Invitations" })
+				.last();
 			await tabTo(page, toInvitations);
 			await page.keyboard.press("Enter");
 			await expect(page).toHaveURL(invitationsPath(slug));
@@ -131,8 +135,8 @@ for (const viewport of [
 			await expect(cancelling).toBeHidden();
 			await expectFocusShown(cancel);
 
-			// Back to Team by the link above the heading.
-			const back = page.getByRole("main").getByRole("link", { name: "Team" });
+			// Back to Team by its This week tab, above the heading.
+			const back = page.getByRole("main").getByRole("link", { name: "This week" });
 			await back.focus();
 			await expectFocusShown(back);
 			await page.keyboard.press("Enter");

@@ -38,6 +38,10 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	// A role is one of three words; this is none of them.
 	"routes/app/members": () =>
 		formFromAMember("/app/acme/team/members", "intent=role&memberId=m1&role=emperor"),
+	// A team's change is one of six; this is none of them.
+	"routes/app/team": () => formFromAMember("/app/acme/team", "intent=dissolve&teamId=t1"),
+	// A decision is one of four; this is none of them.
+	"routes/app/approvals": () => formFromAMember("/app/acme/approvals", "intent=reject&periodId=p1"),
 	// An invitation gives the role of a member or an admin; this is neither.
 	"routes/app/invitations": () =>
 		formFromAMember("/app/acme/team/invitations", "intent=invite&email=bob@example.com&role=owner"),

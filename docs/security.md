@@ -167,6 +167,8 @@ Every role creates, renames, archives and restores projects; nobody deletes a pr
 
 `app/organisations/access.ts` holds the rules inside the destinations, and `accessOf` reads what they take on every request. A person sees, adds and changes their own entries and submits their own periods. An owner or admin sees everyone's time, decides everyone's periods and alone reopens an approved one. A manager sees the time of the members of the teams they manage and decides their periods, never their own. Nobody changes another person's entries (decision 25). A submitted or approved period locks the entries that start on its days (`app/periods/`). A list or report passes the people it may hold to SQL (`timeScopeOf`); it never filters afterwards.
 
+Teams (TS-038) are made, renamed and deleted, filled and given managers by an owner or admin alone, on Team > Teams; a manager sees the teams they manage there and changes nothing, and the server refuses their form with 403. Only a member of the organisation can be put in one of its teams. A person taken out of a team, or no longer its manager, loses what it gave them on their next request, because `accessOf` reads the teams on every request. Approvals (TS-047) changes a period only through `statusAfter`, and writes the period and its `period_events` row in one batch, with who decided and when.
+
 ### The gate in front of the plugin
 
 Every request to `/organization/*` passes one check of ours before the plugin sees it (`organisationRules` in `app/auth/organisations.server.ts`):

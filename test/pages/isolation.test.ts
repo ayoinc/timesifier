@@ -93,11 +93,13 @@ describe("the list of an organisation's routes", () => {
 	it("has routes with an action, so a POST is covered too", () => {
 		expect(withAction.map(({ id }) => id).sort()).toEqual([
 			"routes/app/account",
+			"routes/app/approvals",
 			"routes/app/clients",
 			"routes/app/invitations",
 			"routes/app/members",
 			"routes/app/projects",
 			"routes/app/settings",
+			"routes/app/team",
 		]);
 	});
 });
@@ -144,6 +146,8 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/account": { intent: "leave" },
 		"routes/app/projects": { intent: "create", name: "Taken over" },
 		"routes/app/clients": { intent: "create", name: "Taken over" },
+		"routes/app/team": { intent: "create", name: "Taken over" },
+		"routes/app/approvals": { intent: "approve-all", startsOn: "2026-01-05" },
 	};
 
 	it.each(withAction)(
@@ -166,6 +170,7 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from invitations")).toBe(0);
 			expect(await value("select count(*) from projects")).toBe(0);
 			expect(await value("select count(*) from clients")).toBe(0);
+			expect(await value("select count(*) from teams")).toBe(0);
 		},
 	);
 

@@ -12,9 +12,10 @@ import { done, refused, unavailable } from "~/organisations/outcome.server";
 import { AS_ROLE, nameOrEmail, ROLE_LABELS } from "~/organisations/people";
 import { NEEDS_AN_OWNER, NOT_ALLOWED } from "~/organisations/problems";
 import { allows, mayRemove, Role, rolesToGive } from "~/organisations/roles";
-import { destination, destinationPath, invitationsPath } from "~/shell/destinations";
+import { invitationsPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { TeamTabs } from "~/teams/TeamTabs";
 
 import type { Route } from "./+types/members";
 import { FormSheet } from "./FormSheet";
@@ -114,12 +115,8 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 
 	return (
 		<>
-			<p>
-				<Link to={destinationPath(organisation.slug, "team")} className={TEXT_LINK}>
-					{destination("team").label}
-				</Link>
-			</p>
-			<div className="mt-4">
+			<TeamTabs slug={organisation.slug} current="members" />
+			<div className="mt-10">
 				<PageHeading>{TITLE}</PageHeading>
 			</div>
 			<PageLead>The people in {organisation.name} and what each of them may do.</PageLead>
