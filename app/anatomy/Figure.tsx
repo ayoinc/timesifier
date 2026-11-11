@@ -100,16 +100,19 @@ export function Leader({ number, from: [x, y], to, size = "wide", children }: Le
 		<g>
 			<path d={`M${x} ${y}L${x} ${to}`} className="fill-none stroke-on-surface stroke-1" />
 			<circle cx={x} cy={y} r={dot} className="fill-on-surface stroke-surface stroke-1" />
-			<circle cx={x} cy={centre} r={r} className="fill-on-surface" />
-			<text
-				x={x}
-				y={centre}
-				textAnchor="middle"
-				dominantBaseline="central"
-				className={cx("fill-surface tabular-nums", type)}
-			>
-				{number}
-			</text>
+			{/* The number stands on its disc, in a group of their own; the words stand on the page. */}
+			<g>
+				<circle cx={x} cy={centre} r={r} className="fill-on-surface" />
+				<text
+					x={x}
+					y={centre}
+					textAnchor="middle"
+					dominantBaseline="central"
+					className={cx("fill-surface tabular-nums", type)}
+				>
+					{number}
+				</text>
+			</g>
 			{children && (
 				<text
 					x={rises ? x + r + 8 : x - r - 8}
