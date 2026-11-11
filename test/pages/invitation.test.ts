@@ -43,12 +43,15 @@ async function invited(role: "admin" | "member" = "member") {
 }
 
 /**
- * What a response says, apart from the address it was asked for, which a page
- * may repeat and the person asking already has. Two invitations can then be
- * compared.
+ * What a response says, apart from what the person asking already has and a
+ * page may repeat: the address it was asked for and, under "Signed in as",
+ * their own email address. Two invitations can then be compared.
  */
-async function said(response: Response, id: string): Promise<string> {
-	return (await pageBody(response)).replaceAll(`/invitations/${id}`, "/invitations/~");
+async function said(response: Response, id: string, who: Person): Promise<string> {
+	return (await pageBody(response))
+		.replaceAll(`/invitations/${id}`, "/invitations/~")
+		.replaceAll(encodeURIComponent(`/invitations/${id}`), "/invitations/~")
+		.replaceAll(who.user.email, "~");
 }
 
 describe("the link in the email", () => {
@@ -323,7 +326,7 @@ describe("an invitation that cannot be accepted", () => {
 		const id = "00000000-0000-7000-8000-000000000000";
 		const response = await open(`/invitations/${id}`, stranger);
 		expect(response.status).toBe(410);
-		return said(response, id);
+		return said(response, id, stranger);
 	}
 
 	it.each(cases)("$name: status 410 and the one page", async ({ arrange }) => {
@@ -332,14 +335,19 @@ describe("an invitation that cannot be accepted", () => {
 		const response = await open(`/invitations/${id}`, who);
 
 		expect(response.status).toBe(410);
-		const body = await said(response, id);
+		const whole = await pageBody(response.clone());
+		const body = await said(response, id, who);
 		expect(body).toBe(await reference());
-		const text = textOf(body);
+		const text = textOf(whole);
 		expect(text).toContain(GONE);
-		// Nothing of the invitation: not the organisation, not who sent it, not the role.
+		// Nothing of the invitation: not the organisation, not who sent it, not the
+		// role, not who it was for. The one address on the page is the reader's own.
 		expect(body).not.toContain("Acme");
 		expect(body).not.toContain("ada@example.com");
 		expect(body).not.toContain("bob@example.com");
+		// Whose session this is, and the way back for a person who meant another address.
+		expect(text).toContain(`Signed in as ${who.user.email}`);
+		expect(text).toContain("Use a different email");
 		// A way on.
 		expect(body).toMatch(/<a[^>]*href="\/app"[^>]*>Go to Timesifier<\/a>/);
 	});
@@ -352,9 +360,10 @@ describe("an invitation that cannot be accepted", () => {
 			const response = await openData(`/invitations/${id}`, who);
 
 			expect(response.status).toBe(410);
-			const body = await response.text();
+			const body = (await response.text()).replaceAll(who.user.email, "~");
 			expect(body).not.toContain("Acme");
 			expect(body).not.toContain("ada@example.com");
+			expect(body).not.toContain("bob@example.com");
 		},
 	);
 
@@ -378,7 +387,7 @@ describe("an invitation that cannot be accepted", () => {
 		for (const id of ["x", "1%27%20or%201=1", "a".repeat(200)]) {
 			const response = await open(`/invitations/${id}`, stranger);
 			expect(response.status, id).toBe(410);
-			expect(await said(response, id), id).toBe(expected);
+			expect(await said(response, id, stranger), id).toBe(expected);
 		}
 	});
 });

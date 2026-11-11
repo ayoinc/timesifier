@@ -30,7 +30,7 @@ function widgetFrames(page: Page) {
 test.describe("the pages that send a code", () => {
 	test.use({ storageState: SIGNED_OUT });
 
-	for (const path of ["/sign-in", "/sign-up"]) {
+	for (const path of ["/sign-in"]) {
 		test(`${path} may load Turnstile's script and its frame, and nothing else new`, async ({
 			page,
 		}) => {

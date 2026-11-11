@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures";
 
 test.use({ storageState: SIGNED_OUT });
 
-const PAGES = ["/", "/privacy", "/terms"] as const;
+const PAGES = ["/", "/privacy", "/terms", "/sign-in"] as const;
 
 for (const path of PAGES) {
 	test(`every link on ${path} leads to a page or a place that exists`, async ({

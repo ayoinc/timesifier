@@ -92,7 +92,7 @@ describe("the list of routes under /app", () => {
 
 	it("leaves out the pages a person uses without a session", () => {
 		const ids = underApp.map((route) => route.id);
-		for (const open of ["root", "routes/home", "routes/sign-in", "routes/sign-up"]) {
+		for (const open of ["root", "routes/home", "routes/sign-in"]) {
 			expect(Object.keys(routes)).toContain(open);
 			expect(ids).not.toContain(open);
 		}
@@ -180,16 +180,16 @@ describe("with a session", () => {
 	});
 });
 
-describe("the sign-in and sign-up pages", () => {
-	it.each(["/sign-in", "/sign-up"])("%s is served to a person without a session", async (path) => {
-		const response = await ask(path);
+describe("the sign-in page", () => {
+	it("is served to a person without a session", async () => {
+		const response = await ask("/sign-in");
 		expect(response.status).toBe(200);
 		expect(response.headers.get("Content-Type")).toContain("text/html");
 	});
 
-	it.each(["/sign-in", "/sign-up"])("%s sends a signed-in person on to /app", async (path) => {
+	it("sends a signed-in person on to /app", async () => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");
-		const response = await ask(path, {}, cookie);
+		const response = await ask("/sign-in", {}, cookie);
 		expect(response.status).toBe(302);
 		expect(response.headers.get("Location")).toBe(APP_PATH);
 	});

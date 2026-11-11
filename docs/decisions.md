@@ -385,3 +385,30 @@ Recorded on 2026-11-11, when the owner said the product has teams and managers. 
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Our own tables (the starting position) | The scope and its tests already keep one organisation's rows from another. The role for one team is a column we define.                                                                   |
 | Better Auth's built-in teams           | Endpoints for making a team and adding a person come with the plugin. Each would join the list in `app/auth/endpoints.ts`, and the role for one team would still need a place of its own. |
+
+### 30. One way in: one page signs in a person who is new and a person coming back
+
+Decided by the owner on 2026-11-11, on card TS-036: "We don't really need create accounts per se. We just need a word like get started or something like start tracking. When you click that, that's automatically taking us to a login page." It amends entry 23, which kept `/sign-up` as a page of its own; where entries 8, 22, 23 and 27 speak of signing up, or of a sign-up page, they describe what was built then.
+
+`/sign-in` is the one page a person uses without a session: an email address, then the code sent to it. The email-code plugin makes the account of an address the first time a code proves it, so the page never asks which of the two a person is and never says. No name is asked on the way in, and `POST /sign-in/email-otp` no longer takes one; a person sets a name in Settings. `/sign-up` is answered by the Worker with a 302 to `/sign-in`, keeping a safe `next`.
+
+| Option                                                   | Evidence                                                                                                                                                                                                                                |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One page, an address and a code (chosen)                 | One fewer page and one fewer field. A returning person cannot choose the wrong page. The page and the server say the same to every address, so neither tells anybody whether an address has an account.                                 |
+| Two pages (was built)                                    | The name was taken with the account. A person who had an account and opened the page for new people was signed in by it anyway, so the second page told nobody apart; it only asked returning people for a name they had already given. |
+| One page, and a third view that asks a new person's name | Asked for by the first draft of the card and dropped: the page would have to learn from the server that the address was new, which is the one thing the server does not say, and the owner asked for fewer steps.                       |
+
+**What it costs.** A person is shown by their email address until they give a name, in the members list and in an invitation they send. And signing in with the wrong one of two addresses makes a second, empty account without a word; the pages such an account lands on say who is signed in and offer the way back (`docs/security.md`, "One way in").
+
+### 31. Light is the default colour scheme
+
+Decided by the owner on 2026-11-11, on seeing both schemes: "the light mode is way better, it looks more beautiful." It amends criterion 4 of card TS-006, under which a page followed the device until a person chose.
+
+A person who has chosen nothing gets the light scheme on every page, whatever their device prefers. Settings offers Light, Dark and "Match my device"; the cookie `__Host-color-scheme` holds the choice, and `system` is a value it can hold, where before the absence of the cookie meant it.
+
+| Option                                   | Evidence                                                                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Light unless the person chooses (chosen) | Every visitor's first sight of the product is the one the owner chose. The server needs no hint from the browser to render it, so there is still no flash and no inline script. |
+| Follow the device (was built)            | What a person who set their device to dark expects of most software. Half of first visits would see the scheme the owner thinks the weaker. It stays available, as a choice.    |
+
+**What it costs.** A person whose device is set to dark gets a light page until they find the choice in Settings, and a person who is not signed in has no Settings: the public pages and the sign-in page are light for everybody who has not chosen. Dark is held to the same contrast tests and stays in the accessibility scans.

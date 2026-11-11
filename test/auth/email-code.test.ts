@@ -449,13 +449,10 @@ describe("what is not offered", () => {
 
 	it.each([
 		["an image", { image: "https://elsewhere.example/tracker.png" }],
-		["a name longer than the sign-up page allows", { name: "x".repeat(101) }],
-		["a name of two lines", { name: "Ada\nLovelace" }],
-		["a name that reverses the direction of text", { name: "Ada \u202Eecalevol" }],
+		// No page asks a name on the way in, so the server takes none (card TS-036).
+		["a name", { name: "Ada Lovelace" }],
 		["a name that is not text", { name: { first: "Ada" } }],
 		["an empty name", { name: "" }],
-		["a name of spaces alone", { name: "   " }],
-		["a name with a space at its end", { name: "Ada " }],
 	])("takes %s from nobody, not even for a new account", async (_name, extra) => {
 		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const otp = await mailbox.codeFor(EMAIL);
@@ -467,15 +464,14 @@ describe("what is not offered", () => {
 		expect(await countRows("users")).toBe(0);
 	});
 
-	it("takes the name a person gives when they sign up, as the sign-up page sends it", async () => {
+	it("makes the account of a new address without a name: the person is shown by their address", async () => {
 		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const otp = await mailbox.codeFor(EMAIL);
-		const name = "Ada Lovelace";
 
-		const response = await post("/sign-in/email-otp", { email: EMAIL, otp, name }, browser);
+		const response = await post("/sign-in/email-otp", { email: EMAIL, otp }, browser);
 
 		expect(response.status).toBe(200);
-		expect(await env.DB.prepare("select name from users").first("name")).toBe(name);
+		expect(await env.DB.prepare("select name from users").first("name")).toBe("");
 	});
 
 	it("answers 415 to a body that is not JSON", async () => {

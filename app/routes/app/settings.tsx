@@ -88,8 +88,8 @@ const form = z.union([
 export async function action({ request, url, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
 
-	// Stores the chosen colour scheme in its cookie, or deletes the cookie for
-	// "system", and sends the browser back to this page. The page it then loads
+	// Stores the chosen colour scheme in its cookie and sends the browser back
+	// to this page. The page it then loads
 	// is rendered by the root loader from the new cookie: with script, React
 	// Router follows the redirect and loads the data without leaving the page;
 	// without, the browser loads the page again. `url` is this page's address
@@ -123,10 +123,11 @@ export async function action({ request, url, context }: Route.ActionArgs) {
 	}
 }
 
+/** Light first: it is what a person who has chosen nothing has. */
 const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
-	{ value: "system", label: "System" },
 	{ value: "light", label: "Light" },
 	{ value: "dark", label: "Dark" },
+	{ value: "system", label: "Match my device" },
 ];
 
 /** A fact with the control that changes it beside it. */
@@ -303,7 +304,7 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 
 /** The colour scheme: a choice saved as it is made. */
 function Appearance() {
-	const stored = useRouteLoaderData<typeof rootLoader>("root")?.colorScheme ?? "system";
+	const stored = useRouteLoaderData<typeof rootLoader>("root")?.colorScheme ?? "light";
 	const fetcher = useFetcher();
 	// The choice being saved shows as chosen at once; the page follows when the server answers.
 	const chosen = fetcher.formData?.get("scheme")?.toString() ?? stored;
