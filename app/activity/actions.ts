@@ -1,0 +1,108 @@
+import * as z from "zod";
+
+/**
+ * The names the activity log records (TS-064): what was done, to what, and
+ * through which door. Every action any card records is listed here, so the
+ * log's page reads one list. An action is `<subject>.<step>`; the subject
+ * names the kind of thing in `subject_type`.
+ */
+
+/** Every step the activity log records, by the kind of thing it was taken on. */
+export const ActivityAction = z.enum([
+	"time_entry.started",
+	"time_entry.stopped",
+	"time_entry.created",
+	"time_entry.updated",
+	"time_entry.deleted",
+	"period.submitted",
+	"period.withdrawn",
+	"period.approved",
+	"period.returned",
+	"period.reopened",
+	"project.created",
+	"project.renamed",
+	"project.archived",
+	"project.restored",
+	"project.client_changed",
+	"client.created",
+	"client.renamed",
+	"client.archived",
+	"client.restored",
+	"membership.role_changed",
+	"membership.removed",
+	"invitation.created",
+	"invitation.cancelled",
+	"team.created",
+	"team.renamed",
+	"team.deleted",
+	"team.member_added",
+	"team.member_removed",
+	"team.manager_changed",
+	"task.created",
+	"task.updated",
+	"task.archived",
+	"task.restored",
+	"rate.created",
+	"rate.updated",
+	"rate.deleted",
+	"budget.created",
+	"budget.updated",
+	"budget.deleted",
+	"expense.created",
+	"expense.updated",
+	"expense.deleted",
+	"invoice.created",
+	"invoice.updated",
+	"invoice.sent",
+	"invoice.voided",
+	"invoice.deleted",
+	"estimate.created",
+	"estimate.updated",
+	"estimate.sent",
+	"estimate.accepted",
+	"estimate.declined",
+	"estimate.deleted",
+	"payment.recorded",
+	"payment.deleted",
+	"leave.requested",
+	"leave.approved",
+	"leave.declined",
+	"leave.cancelled",
+	"lock_date.changed",
+	"api_token.created",
+	"api_token.revoked",
+	"webhook.created",
+	"webhook.updated",
+	"webhook.deleted",
+	"import.imported",
+	"import.reverted",
+]);
+export type ActivityAction = z.infer<typeof ActivityAction>;
+
+/** The kinds of thing an action is taken on, as `subject_type` holds them. */
+export const SubjectType = z.enum([
+	"time_entry",
+	"period",
+	"project",
+	"client",
+	"membership",
+	"invitation",
+	"team",
+	"task",
+	"rate",
+	"budget",
+	"expense",
+	"invoice",
+	"estimate",
+	"payment",
+	"leave",
+	"organisation",
+	"api_token",
+	"webhook",
+	"import",
+]);
+export type SubjectType = z.infer<typeof SubjectType>;
+
+/** Through which door an action came: a page, the API, an import, or the system on its own. */
+export const ActivitySource = z.enum(["web", "api", "import", "system"]);
+export type ActivitySource = z.infer<typeof ActivitySource>;

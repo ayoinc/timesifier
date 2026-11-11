@@ -1,5 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 
+import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
 import {
 	type PeriodDays,
@@ -11,9 +12,9 @@ import {
 
 /**
  * A person submitting their own period, and withdrawing it before anybody has
- * decided it (TS-046). The status and the event that records the step are
- * written in one batch, so a period never changes without its record. Who may
- * approve, return or reopen it is TS-047's.
+ * decided it (TS-046). The status, the event that records the step and its
+ * row in the activity log are written in one batch, so a period never changes
+ * without its record. Who may approve, return or reopen it is TS-047's.
  */
 
 /** Why a submission or a withdrawal was not made. */
@@ -74,6 +75,13 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 		actorId: userId,
 		comment: null,
 	});
+	const recorded = recordStatement(
+		scope,
+		userId,
+		"period.submitted",
+		{ type: "period", id, ownerId: userId },
+		changes({ status }, { status: "submitted" }, ["status"]),
+	);
 	if (row) {
 		await scope.batch([
 			scope.periods.statements.update(
@@ -81,6 +89,7 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 				(p) => and(eq(p.id, id), eq(p.status, row.status)),
 			),
 			event,
+			recorded,
 		]);
 	} else {
 		await scope.batch([
@@ -93,6 +102,7 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 				submittedAt: at,
 			}),
 			event,
+			recorded,
 		]);
 	}
 	return { ok: true as const, period };
@@ -117,6 +127,13 @@ export async function withdrawPeriod(
 			actorId: userId,
 			comment: null,
 		}),
+		recordStatement(
+			scope,
+			userId,
+			"period.withdrawn",
+			{ type: "period", id: row.id, ownerId: userId },
+			changes({ status: row.status }, { status: "withdrawn" }, ["status"]),
+		),
 	]);
 	return { ok: true as const };
 }

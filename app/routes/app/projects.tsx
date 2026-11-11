@@ -12,7 +12,7 @@ import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
-import { isAdministrator, timeScopeOf } from "~/organisations/access";
+import { timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound, viewerOf } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -65,16 +65,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const givesClients = canSee(viewerOf(membership), "clients");
 	const query = searchIn(new URL(request.url).searchParams);
 	const access = await accessOf(membership);
+	const whose = timeScopeOf(access);
 	const [projects, hours, clients] = await Promise.all([
 		listProjects(scope, { query, byClient: showsClients }),
-		projectHours(scope, timeScopeOf(access), Date.now()),
+		projectHours(scope, whose, Date.now()),
 		givesClients ? activeClients(scope) : [],
 	]);
-	const hoursOf: HoursOf = isAdministrator(access.role)
-		? "everyone"
-		: access.managed.size > 0
-			? "teams"
-			: "own";
+	const hoursOf: HoursOf = whose.everyone ? "everyone" : access.managed.size > 0 ? "teams" : "own";
 	return {
 		projects: projects.map((project) => ({
 			...project,
@@ -135,25 +132,28 @@ export async function action({ request, context }: Route.ActionArgs) {
 			}
 			if (input.intent === "create") {
 				return answer(
-					await createProject(scope, { name: input.name, clientId }),
+					await createProject(scope, membership.user.id, { name: input.name, clientId }),
 					(name) => `Project created: ${name}.`,
 				);
 			}
 			return answer(
-				await changeProject(scope, input.projectId, { name: input.name, clientId }),
+				await changeProject(scope, membership.user.id, input.projectId, {
+					name: input.name,
+					clientId,
+				}),
 				(name) => `Project saved: ${name}.`,
 			);
 		}
 
 		case "archive":
 			return answer(
-				await setProjectArchived(scope, input.projectId, true),
+				await setProjectArchived(scope, membership.user.id, input.projectId, true),
 				(name) => `${name} is archived. It is under Archived, and the timer no longer offers it.`,
 			);
 
 		case "restore":
 			return answer(
-				await setProjectArchived(scope, input.projectId, false),
+				await setProjectArchived(scope, membership.user.id, input.projectId, false),
 				(name) => `${name} is restored. The timer offers it again.`,
 			);
 	}

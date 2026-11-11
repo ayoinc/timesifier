@@ -4,7 +4,7 @@ import * as z from "zod";
 import { uuidv7 } from "~/db";
 import { get, type Mailbox, post, signIn } from "../auth/harness";
 
-export type Role = "owner" | "admin" | "member";
+export type Role = "owner" | "admin" | "finance" | "member";
 
 const DAY = 24 * 60 * 60 * 1000;
 export const SEVEN_DAYS = 7 * DAY;

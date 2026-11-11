@@ -1,10 +1,14 @@
+import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { useState } from "react";
 import { Link } from "react-router";
 import * as z from "zod";
 
+import { changes, record } from "~/activity/activity.server";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
 import { changeRole, listMembers, removeMember } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -68,24 +72,45 @@ const form = z.discriminatedUnion("intent", [
 /**
  * Asks the server for one of them, in the organisation the layout read from
  * the address; no form names an organisation. The server allows or refuses by
- * the person's role, and what it refuses comes back as a sentence.
+ * the person's role, and what it refuses comes back as a sentence. A change it
+ * makes is recorded in the activity log, about the member it was made to.
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation, role } = context.get(membershipContext);
+	const { organisation, role, user } = context.get(membershipContext);
 	const { id } = organisation;
+	const scope = organisationScope(env.DB, id);
+	const [member] = await scope.memberships.select((m) => eq(m.id, input.memberId), { limit: 1 });
+	const subject = { type: "membership", id: input.memberId, ownerId: member?.userId } as const;
 
 	switch (input.intent) {
 		case "role": {
 			const changed = await changeRole(request, id, { memberId: input.memberId, role: input.role });
-			return changed.ok
-				? done(`Role changed. They are now ${AS_ROLE[input.role]}.`)
-				: refused(changed);
+			if (!changed.ok) return refused(changed);
+			if (member && member.role !== input.role) {
+				await record(
+					scope,
+					user.id,
+					"membership.role_changed",
+					subject,
+					changes(member, { role: input.role }, ["role"]),
+				);
+			}
+			return done(`Role changed. They are now ${AS_ROLE[input.role]}.`);
 		}
 
 		case "remove": {
 			const removed = await removeMember(request, id, input.memberId);
-			if (removed.ok) return done("Member removed. They can no longer open this organisation.");
+			if (removed.ok) {
+				await record(
+					scope,
+					user.id,
+					"membership.removed",
+					subject,
+					changes(member ?? null, null, ["role"]),
+				);
+				return done("Member removed. They can no longer open this organisation.");
+			}
 			// The server has one answer here for two refusals: an owner removed by
 			// somebody who is not one, and the last owner removed by anybody. Its
 			// code speaks of leaving, which this is not.

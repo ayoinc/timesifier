@@ -1,4 +1,6 @@
+import { AS_ROLE } from "~/organisations/people";
 import type { Email } from "./email.server";
+
 import { compose } from "./email-frame";
 
 /** How long an invitation works: exactly seven days. */
@@ -10,7 +12,7 @@ type Invitation = {
 	organisationName: string;
 	/** The verified address of the member who sent it. */
 	inviterEmail: string;
-	role: "admin" | "member";
+	role: "admin" | "finance" | "member";
 };
 
 /**
@@ -30,7 +32,7 @@ export function invitationEmail({
 	inviterEmail,
 	role,
 }: Invitation): Omit<Email, "to"> {
-	const as = role === "admin" ? "an admin" : "a member";
+	const as = AS_ROLE[role];
 
 	return compose({
 		subject: "You are invited to join an organisation on Timesifier",

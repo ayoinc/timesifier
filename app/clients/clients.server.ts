@@ -1,6 +1,7 @@
 import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
-import type { OrganisationScope } from "~/db";
+import { changes, record, recordStatement } from "~/activity/activity.server";
+import { type OrganisationScope, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import { nameHas } from "~/projects/search.server";
 
@@ -9,7 +10,8 @@ import { nameHas } from "~/projects/search.server";
  * the list on Clients and give a project a client or none; everybody else
  * reads a project's client by its name (docs/navigation.md). A client is
  * archived, never deleted: an archived client is offered to no project, and
- * the projects that have it keep it.
+ * the projects that have it keep it. Every change is recorded in the activity
+ * log as the act of `actor`, the person who made it.
  */
 
 export const CLIENT_NAME_TAKEN = "A client with this name already exists.";
@@ -62,13 +64,27 @@ async function nameTaken(scope: OrganisationScope, key: string, except?: string)
 }
 
 /** Adds a client with the name typed. */
-export async function createClient(scope: OrganisationScope, typed: string): Promise<ClientResult> {
+export async function createClient(
+	scope: OrganisationScope,
+	actor: string,
+	typed: string,
+): Promise<ClientResult> {
 	const name = recordName(typed);
 	if (name === null) return { ok: false, problem: RECORD_NAME_PROBLEM };
 	const key = nameKey(name);
 	if (await nameTaken(scope, key)) return { ok: false, problem: CLIENT_NAME_TAKEN };
+	const id = uuidv7();
 	try {
-		await scope.clients.insert({ name, nameKey: key });
+		await scope.batch([
+			scope.clients.statements.insert({ id, name, nameKey: key }),
+			recordStatement(
+				scope,
+				actor,
+				"client.created",
+				{ type: "client", id },
+				changes(null, { name }, ["name"]),
+			),
+		]);
 	} catch (error) {
 		if (isNameClash(error)) return { ok: false, problem: CLIENT_NAME_TAKEN };
 		throw error;
@@ -79,6 +95,7 @@ export async function createClient(scope: OrganisationScope, typed: string): Pro
 /** Gives the client `id` the name typed. Its own name in other letters is no clash. */
 export async function renameClient(
 	scope: OrganisationScope,
+	actor: string,
 	id: string,
 	typed: string,
 ): Promise<ClientResult> {
@@ -90,7 +107,20 @@ export async function renameClient(
 	const key = nameKey(name);
 	if (await nameTaken(scope, key, id)) return { ok: false, problem: CLIENT_NAME_TAKEN };
 	try {
-		const [renamed] = await scope.clients.update({ name, nameKey: key }, (c) => eq(c.id, id));
+		const [[renamed]] = await scope.batch([
+			scope.clients.statements.update({ name, nameKey: key }, (c) => eq(c.id, id)),
+			...(name === client.name
+				? []
+				: [
+						recordStatement(
+							scope,
+							actor,
+							"client.renamed",
+							{ type: "client", id },
+							changes(client, { name }, ["name"]),
+						),
+					]),
+		]);
 		return renamed ? { ok: true, name } : null;
 	} catch (error) {
 		if (isNameClash(error)) return { ok: false, problem: CLIENT_NAME_TAKEN };
@@ -101,11 +131,17 @@ export async function renameClient(
 /** Archives the client `id`, or restores it with `archived` false. Its projects are not touched. */
 export async function setClientArchived(
 	scope: OrganisationScope,
+	actor: string,
 	id: string,
 	archived: boolean,
 ): Promise<ClientResult> {
 	const [changed] = await scope.clients.update({ archivedAt: archived ? new Date() : null }, (c) =>
 		eq(c.id, id),
 	);
-	return changed ? { ok: true, name: changed.name } : null;
+	if (!changed) return null;
+	await record(scope, actor, archived ? "client.archived" : "client.restored", {
+		type: "client",
+		id,
+	});
+	return { ok: true, name: changed.name };
 }

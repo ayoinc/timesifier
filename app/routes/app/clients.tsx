@@ -81,23 +81,27 @@ const form = z.discriminatedUnion("intent", [
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const scope = organisationScope(env.DB, context.get(membershipContext).organisation.id);
+	const { organisation, user } = context.get(membershipContext);
+	const scope = organisationScope(env.DB, organisation.id);
 	switch (input.intent) {
 		case "create":
-			return answer(await createClient(scope, input.name), (name) => `Client created: ${name}.`);
+			return answer(
+				await createClient(scope, user.id, input.name),
+				(name) => `Client created: ${name}.`,
+			);
 		case "rename":
 			return answer(
-				await renameClient(scope, input.clientId, input.name),
+				await renameClient(scope, user.id, input.clientId, input.name),
 				(name) => `Client renamed: ${name}.`,
 			);
 		case "archive":
 			return answer(
-				await setClientArchived(scope, input.clientId, true),
+				await setClientArchived(scope, user.id, input.clientId, true),
 				(name) => `${name} is archived. Its projects keep it, and no other project is offered it.`,
 			);
 		case "restore":
 			return answer(
-				await setClientArchived(scope, input.clientId, false),
+				await setClientArchived(scope, user.id, input.clientId, false),
 				(name) => `${name} is restored. Projects can be given it again.`,
 			);
 	}

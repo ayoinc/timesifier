@@ -21,6 +21,23 @@ Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the arch
 - [ ] `docs/product.md` describes the product as the owner described it on 2026-11-11, and TS-038 to TS-042 are in Backlog with their criteria.
 - [ ] `pnpm format` and `pnpm lint` exit 0.
 
+### TS-064 · Foundation for the business features
+
+Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the business cards share, from `docs/research/harvest-b2b.md` (cards B3 to B22, here TS-065 to TS-084) and the owner's decisions of 2026-11-11, and builds no feature beyond an empty destination. TS-053 is its precedent. Migration `0008_business` was generated from `app/db/schema.ts` after TS-061 (migration `0007_leave`) merged.
+
+- [x] The destinations by heading and role: Track (Timesheet, Time off, Expenses), Organize (Team, Clients, Projects, Tasks), Bill (Invoices, Estimates), Review (Approvals, Reports, Dashboards, Activity log), then Integrations and Workspace settings; a heading only with a link under it; links without Time off 4 for a member, 8 for a manager, 9 for Finance, 14 for an owner or admin (`test/pages/destinations.test.ts`).
+- [x] A destination a person may not see answers the same 404 as another organisation's, for every new destination (`test/pages/destinations.test.ts`, `test/pages/isolation.test.ts`).
+- [x] The navigation under 600px: Timesheet, Time off, Expenses, Projects and More, each an equal share of the bar and at least 48px tall; More a native popover under the person's headings, marked current when the page is inside it and showing the pending count; a lone item sits in the bar; "Track time" a floating button, one strip only while a timer runs, not on Timesheet (audit W03, W11; browser test).
+- [x] The Finance role: given by an owner or admin, with a member's plugin permissions; and the employee or contractor flag on a membership (`app/organisations/roles.ts`, `test/organisations/permissions.test.ts`).
+- [x] The access rules: `isFinance`, `maySeeRates`, `mayManageRates`, `mayInvoice`, `mayManageTasks`, `mayManageIntegrations`, `maySeeExpensesOf`, `mayChangeExpensesOf`, `activityScopeOf`, and `timeScopeOf` giving Finance everyone (`app/organisations/access.ts`, with tests).
+- [x] The schema of every business card in `app/db/schema.ts`, every new table in `tenantTables` with composite references inside the organisation (`test/db/business-tables.test.ts`, once `0008` exists).
+- [x] The shared rules with their tests: `app/money`, `app/rates`, `app/billing`, `app/budgets`, `app/locks`, `app/integrations`.
+- [x] The activity writer, `app/activity/activity.server.ts`, called from the existing writes for entries, periods, projects, clients and members; it copies no description; records kept 730 days.
+- [x] Each new destination has its heading and an empty state until its card replaces it.
+- [x] `docs/navigation.md`, `docs/security.md`, `docs/architecture.md` and `docs/harvest-comparison.md` describe the destinations, roles, tables and what is taken from Harvest.
+- [x] Migration `0008_business`, generated after TS-061 merged, with the trigger that refuses an UPDATE of `activity_records` added by hand. It drops and renames nothing: `time_entries` gains its three columns in place, so the CI migration check passes; applied by hand to a database holding an entry, it keeps the entry, and a new organisation still gets its leave defaults from `organisations_leave_defaults`.
+- [ ] typecheck, lint, tests and the shell's browser tests pass in the pipeline.
+
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
 ### TS-063 · The profile menu
@@ -408,6 +425,8 @@ In priority order. Before a feature card enters Ready it gains "Routes", "Tables
 
 The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11, rearranged the same day after a check against Harvest). Cards TS-045 to TS-052 come from it; each gets routes, tables, a role table and a goldfish review when it comes up. The "Flows" section of that file names the card that builds each step.
 
+Cards TS-064 to TS-089 come from `docs/research/harvest-b2b.md`, observed in Harvest's application with rea on 2026-11-11. Its cards B3 to B22 are TS-065 to TS-084, kept in this build order: TS-065 B22, TS-066 B4, TS-067 B5, TS-068 B8, TS-069 B7, TS-070 B9, TS-071 B6, TS-072 B17, TS-073 B10, TS-074 B11, TS-075 B16, TS-076 B19, TS-077 B12, TS-078 B13, TS-079 B15, TS-080 B18, TS-081 B20, TS-082 B14, TS-083 B21, TS-084 B3. B1 and B2 are in TS-061 with TS-040 and TS-042. TS-085 to TS-089 are what the owner asked for that the research leaves out. The owner's decisions: a Finance role (from TS-064), a lock date, rates seen only by owners, admins and Finance, never managers, an activity log kept 730 days, and invoicing before import. The tables of every card are in TS-064's schema.
+
 ### TS-056 · Timesheet as Harvest has it: Track time, the week's days, submit from the day, getting started
 
 Depends on: TS-012a, TS-013, TS-046, TS-052. From `docs/harvest-comparison.md`, observed in Harvest's application with rea on 2026-11-11.
@@ -635,6 +654,231 @@ Settled by the owner on 2026-11-11, on TS-061: everyone may be told that a colle
 - [ ] A manager's calendar shows nobody from a team they do not manage (test with two teams).
 - [ ] The hours shown for a person's day on the calendar equal that day's total in their week view (property test).
 - [ ] The calendar can be moved through with the keyboard alone, and axe with WCAG 2.2 AA tags reports no violations (browser test).
+
+### TS-065 · B22 · Deadline and lock date
+
+Depends on: TS-064, TS-046, TS-047.
+
+- [ ] An owner or admin sets a timesheet deadline (weekly on a day and time, or monthly on a date, in the organisation's time zone) (test).
+- [ ] An owner or admin sets a lock date up to today. No entry, expense or leave on or before it can be created, edited or deleted by anyone, owner included, until the lock date is moved back, which is recorded in the activity log (test per role, Finance included).
+- [ ] Optional auto-lock: N days after each deadline, the lock date moves forward to the deadline. It never moves backward (test with a fake clock).
+- [ ] Optional auto-submit at lock: every unsubmitted period up to the lock date becomes submitted, recorded as "submitted by the system" (test).
+
+### TS-066 · B4 · Tasks and billable time
+
+Depends on: TS-064, TS-011a, TS-012a, TS-012b.
+
+- [ ] An owner or admin keeps the organisation's task list: name, billable by default, common (added to new projects); archive and restore. A manager, Finance or a member cannot change it (role table).
+- [ ] Each project has its tasks. For each project, a task is billable or not. A new project starts with the common tasks (test).
+- [ ] A time entry has a task from its project's list. Entries made before this card get a task called "General", added to each existing project by the migration (migration test).
+- [ ] An entry is billable when its task is billable on its project. Changing that flag re-rates past entries, as Harvest's bulk action "Set tasks billable" says. Each report shows billable and non-billable hours and their sum (tests).
+- [ ] An archived task cannot be chosen for a new entry, and its past entries keep it (test).
+
+### TS-067 · B5 · Project types and billable rates
+
+Depends on: TS-064, TS-066.
+
+- [ ] A project is Hourly (time and materials), Fixed fee (with an amount) or Non-billable. Non-billable makes all its tasks non-billable (test).
+- [ ] An hourly or fixed-fee project bills by one of: project rate, person rate (person default, or a project override) or task rate (task default, or a project override) (test per mode).
+- [ ] Every rate (project, person default, person-on-project, task-on-project) is stored with an effective-from date. An entry is priced at the rate in force on its own local date, so a rate change never re-prices earlier entries (property test; better than Harvest).
+- [ ] An entry's billable amount is hours × rate, rounded to the currency's minor unit only at totals. A report total equals the sum of its rows to the penny (property test).
+- [ ] An entry with no rate shows "Missing rate", as Harvest does, and counts 0 in totals. The project page lists those entries (test).
+- [ ] The organisation has a currency. A client may override it, and a project may override its client. All amounts carry their currency, and totals are never summed across currencies; a report shows one total per currency (test).
+- [ ] Only owners, admins and Finance see rates and amounts, and set rates (`maySeeRates`, `mayManageRates`); a manager never does (owner's decision; role table).
+
+### TS-068 · B8 · Utilisation report
+
+Depends on: TS-064, TS-061 (B1), TS-066, TS-014a.
+
+- [ ] Reports shows, per person and per team for a range: capacity, logged, billable logged, utilisation and billable utilisation (billable ÷ capacity) (test with known fixtures).
+- [ ] Leave reduces capacity as in TS-084. Utilisation for a person on leave all week shows "—" (test).
+
+### TS-069 · B7 · Project budgets and alerts
+
+Depends on: TS-064, TS-066, TS-067, TS-049.
+
+- [ ] A project has no budget, or a budget in total hours, hours per task, hours per person, total fees or fees per task, optionally resetting each calendar month in the organisation's time zone (test per kind, including a reset at midnight local).
+- [ ] The project page shows spent, remaining and % for the budget's current period. Spent is the sum of entries (hours, or billable amount per TS-067) in that period (property test). A budget in fees is shown only to those who see rates.
+- [ ] The organisation chooses whether non-billable hours count against hour budgets (test).
+- [ ] When spent first crosses the project's alert % (default 80) in a period, each manager of the project and each owner and admin gets one notification (TS-049) and at most one email. Crossing again in the same period sends nothing (test).
+- [ ] When "warn when over" is on, a person tracking to an over-budget project sees "This project is over budget" on the Track time sheet, and the entry still saves (test).
+
+### TS-070 · B9 · Expenses
+
+Depends on: TS-064, TS-011a, TS-046, TS-047.
+
+- [ ] An owner or admin keeps expense categories (name, optional unit price and unit); archive and restore. Changing a unit price applies to expenses dated from the change (test).
+- [ ] A person records an expense: date, project, category, amount or quantity, note, billable (defaulting from the project), "reimburse me". Amounts are stored in minor units of the project's currency (test).
+- [ ] A receipt (PDF, PNG or JPEG, up to 10 MB) is stored in R2 under an organisation-scoped key. It is served only to people who may see the expense; anyone else gets 404, including people in another organisation (test).
+- [ ] Expenses in a period are submitted, withdrawn, approved and returned with the period's time, and are locked with it and by the lock date (test).
+- [ ] A person sees and changes their own expenses; a manager sees their teams' people's, an owner, admin or Finance everyone's, and only the person changes them (`maySeeExpensesOf`, `mayChangeExpensesOf`; role table).
+- [ ] Reports include an Expenses view and CSV by person, project and category, with billable and reimbursable totals (test).
+- [ ] Out of scope, said on the card: paying reimbursements.
+
+### TS-071 · B6 · Cost rates and profitability
+
+Depends on: TS-064, TS-067 (TS-070 for expense costs).
+
+- [ ] An owner, admin or Finance gives each person a cost rate per hour with an effective-from date, in the organisation currency (test).
+- [ ] The project page and a Profitability report show, for a range: revenue, cost and profit, with margin. Revenue is the billable amount for hourly projects, or the fee spread evenly over the project's start-to-end days for fixed fee. Cost is hours × cost rate plus expenses (TS-070) (tests with fixtures in Harvest's own worked examples).
+- [ ] Only owners, admins and Finance see cost and profit; never a manager (role table).
+
+### TS-072 · B17 · Activity log
+
+Depends on: TS-064, TS-020, TS-046. It extends TS-020, which keeps the security events; TS-064 lays the writer and the table.
+
+- [ ] Creating, editing (with the changed fields' old and new values), deleting, starting and stopping a timer on a time entry, and every period action each write a record with actor, owner of the entry, organisation and source (web, import, API) (test per action).
+- [ ] Projects, clients, rates, budgets, leave decisions, the lock date, and (with TS-073) invoices, payments and sends write records (test per kind).
+- [ ] Review > Activity log shows records for a range, filtered by kind, project, "performed by" and "owned by", with CSV. Owners, admins and Finance see all; a manager sees records about their teams' people and their own; a member sees the history of their own entries, on the entry (`activityScopeOf`; role table).
+- [ ] Entry text (descriptions) is never copied into a record, as TS-020 says. Edits record that the description changed, not what it said (test).
+- [ ] Records are kept 730 days, as `docs/security.md` says, then deleted by TS-033's daily job; no record can be changed (test).
+
+### TS-073 · B10 · Invoices from tracked time and expenses (draft and issue)
+
+Depends on: TS-064, TS-067, TS-070, TS-011b, TS-046.
+
+- [ ] Owners, admins and Finance only (`mayInvoice`; role table). Choose a client, a date range and its projects. The preview lists uninvoiced billable entries and billable expenses. Entries in periods that are not approved are flagged, not hidden (test).
+- [ ] Hours are grouped by project, task or person, or one line per entry. For every grouping, the invoice subtotal equals the sum of the included entries' billable amounts (property test across groupings).
+- [ ] A fixed-fee project adds one line for its fee or a chosen part of it (test).
+- [ ] Saving creates a draft with the next number in the organisation's sequence. Numbers are unique per organisation and never reused, even after a draft is deleted (test, including two drafts saved at once).
+- [ ] Included entries and expenses are marked as invoiced on this invoice. Deleting the draft or one of its lines returns them to uninvoiced (test). An invoiced entry cannot be edited or deleted by anyone until it is released (test).
+- [ ] Lines can be edited and free lines added. Free lines change the total but never the invoiced state of any entry (test).
+- [ ] An Uninvoiced view lists, per client and project, uninvoiced hours, expenses and amount for a range (test that it equals the billable total minus what is invoiced).
+- [ ] An invoice has exactly one currency, the projects' currency. Mixing projects in different currencies is refused (test).
+
+### TS-074 · B11 · Sending, tax, payments and receivables
+
+Depends on: TS-064, TS-073, TS-043 (the email ceiling).
+
+- [ ] Organisation invoice settings: legal name, address, tax registration number, default payment terms (on receipt, Net 15/30/45/60, custom days), default notes, and up to two taxes (simple or compound). Per invoice: PO number, discount %, and per-line choice of taxes (tests with UK VAT 20% and a compound case).
+- [ ] Totals are computed in integer minor units with one documented rounding rule (round half up per tax line). Subtotal − discount + tax = total for random invoices (property test).
+- [ ] Issuing turns draft into open and fixes the number, the issue date and the due date. An open invoice's lines cannot change; it can only be voided, which releases its entries, or credited (test).
+- [ ] A PDF of the invoice is produced on the Worker, and its numbers equal the screen's (test comparing extracted text).
+- [ ] Send by email to the client's billing contacts, with the PDF and a template subject and body holding the invoice variables. Every send is logged on the invoice's history (test against the email adapter).
+- [ ] Record a payment (date, amount, note); partial payments leave a balance; the payment can be deleted; part or all can be written off. Status is open, partly paid, paid or written off, from the payments (property test: balance = total − payments − write-offs ≥ 0).
+- [ ] Reports: Invoiced, Payments received, and Receivables by age (current, 1–30, 31–60, 61–90, 90+ days overdue in the organisation's time zone), with CSV, for those who see rates (test).
+- [ ] Optional late reminder per organisation: N days after due, then every M days, stopped by payment (test with a fake clock).
+
+### TS-075 · B16 · Finance role: its column in every role test, and its pages
+
+Depends on: TS-064, TS-073. The role itself exists from TS-064 (owner's decision); this card proves it everywhere.
+
+- [ ] Finance sees all time and expenses (read-only), all rates, all invoices, estimates and payments, every report, Dashboards and the Activity log. It cannot manage members, teams, leave policies, tasks, Integrations or workspace settings, and decides no period unless it manages a team (a test for every cell of the extended role table).
+- [ ] Every existing route's role test gains a Finance column (test inventory).
+- [ ] Each page Finance is shown works for Finance end to end: Invoices, Estimates, Clients, Reports, Dashboards, Activity log (browser test signed in as Finance).
+
+### TS-076 · B19 · Import time from a CSV, and revert it
+
+Depends on: TS-064, TS-066, TS-014b. After invoicing, by the owner's decision.
+
+- [ ] An owner or admin uploads a CSV with Harvest's 8 columns (Harvest's own "Export all time" is accepted as is). Each row is matched to a member by email or name. Missing clients, projects and tasks are created. Unmatched people are listed with their rows and nothing from them is imported (test with a fixture of Harvest's export).
+- [ ] A preview shows the rows to import and the rows to skip, with reasons, before anything is written (test).
+- [ ] Each import has an id. "Revert" deletes exactly that import's entries unless one is in an approved, locked or invoiced period, in which case it refuses and names those entries (test).
+- [ ] Rows already present (same person, date, project, task, hours and notes) are skipped (test).
+- [ ] Clients and projects import from a CSV on their own pages (test).
+- [ ] TS-014b, amended: an owner or admin can export all of the organisation's time, and with TS-073 all invoices as one ZIP of PDFs (test).
+
+### TS-077 · B12 · Estimates
+
+Depends on: TS-064, TS-074.
+
+- [ ] An owner, admin or Finance creates an estimate: client, number, issue date, subject, lines, tax, discount, notes, currency. The arithmetic is shared with TS-074 (test).
+- [ ] Send it by email with a secret link. The client accepts or declines on the link without signing in, and the status and time are recorded once. A second click changes nothing. An owner, admin or Finance can record the decision or revert it (test).
+- [ ] An accepted estimate becomes a draft invoice with the same lines (test). Turning an estimate into a project is out of scope, as in Harvest.
+
+### TS-078 · B13 · Recurring invoices and retainers
+
+Depends on: TS-064, TS-074.
+
+- [ ] A recurring template (client, lines or "this client's uninvoiced time", frequency monthly, quarterly or yearly, first issue date, end) creates a draft, or an issued and sent invoice, on each date. The 31st becomes the month's last day (test with a fake clock).
+- [ ] A retainer per client, or per client and project: a funds invoice adds to it when paid, and a time invoice may draw from it up to its balance. The balance never goes below 0 (property test).
+
+### TS-079 · B15 · Contractors
+
+Depends on: TS-064, TS-071.
+
+- [ ] An owner or admin marks a member as employee or contractor (test).
+- [ ] A Contractors report lists each contractor's unrounded hours and cost for a range, including people who left the organisation if they tracked in it, with CSV. Owners, admins and Finance only (role table).
+
+### TS-080 · B18 · Saved and shared reports
+
+Depends on: TS-064, TS-014a, TS-014b.
+
+- [ ] Any report view (range kind, filters, grouping) can be saved under a name. Reopening it reruns it against today's data, with a relative range such as "last month" moving with the date (test with a fake clock).
+- [ ] The owner of a saved report shares it with named people as view or edit. A recipient sees only the rows their own role allows, never the sharer's scope (test: a member opening an admin's shared report sees only their own hours).
+- [ ] Out of scope: a custom-metric builder. Dashboards are TS-086.
+
+### TS-081 · B20 · Public API with organisation tokens
+
+Depends on: TS-064, TS-020, TS-072 (for "via API").
+
+- [ ] An owner or admin creates and revokes API tokens on Integrations. A token is shown once, starts `tsf_`, is stored as a keyed hash, carries the scopes chosen at creation and shows when it was last used (test).
+- [ ] Read endpoints for projects, clients, tasks, time entries and leave, and write endpoints for time entries, obey the same role rules as the pages (shared role-table test). Writes appear in the activity log "via API" (test).
+- [ ] A rate limit per token. Exceeding it returns 429 with Retry-After (test).
+
+### TS-082 · B14 · Client view and online payment
+
+Depends on: TS-064, TS-074. Later than TS-073 to TS-078.
+
+- [ ] A per-client secret link, revocable, shows that client's open invoices and recent payments, and nothing of any other client (test).
+- [ ] Stripe Checkout on an open invoice. A verified webhook records the payment once, even if delivered twice (idempotency test).
+- [ ] UBL 2.1 XML export of an issued invoice validates against the PEPPOL BIS 3.0 schema (test). Peppol sending is out of scope.
+
+### TS-083 · B21 · Xero connection
+
+Depends on: TS-064, TS-074, TS-088. A connector card per provider follows the same shape.
+
+- [ ] An owner or admin connects Xero by OAuth. Issuing an invoice in Timesifier creates the same invoice (contact, lines, tax, currency, number) in Xero once, and a retry never duplicates it (idempotency test against a recorded fixture).
+- [ ] A payment recorded in Xero is read back and recorded on the Timesifier invoice (test).
+
+### TS-084 · B3 · Leave in reports and capacity
+
+Depends on: TS-064, TS-061 (TS-042, B1), TS-014a.
+
+- [ ] Reports has a Leave view: allowance, taken, booked, pending and remaining per person and type for the leave year, with a CSV export of one row per person per type (test that the CSV totals equal the screen).
+- [ ] A person's expected hours for a week are their capacity (B1) less approved leave and holidays in that week. Team's week (TS-045) shows "Expected", "Leave" and "Logged" (test with a 3-day leave in a 5-day week giving 2/5 of capacity).
+- [ ] The research's ICS feed of approved leave is built by TS-089, which also carries entries.
+
+### TS-085 · Tags
+
+Depends on: TS-064, TS-014a, TS-070. Asked for by the owner; not in the research.
+
+- [ ] An owner or admin keeps the organisation's tags: create, rename, archive, restore; names unique in the organisation (test).
+- [ ] A person puts tags on their own entries and expenses; an owner or admin puts them on projects (role table).
+- [ ] Reports filter by tag, in the address, and a project's tags count for its entries (test that a filtered total equals the sum of the tagged rows).
+- [ ] An archived tag cannot be added, and stays on what has it (test).
+
+### TS-086 · Dashboards
+
+Depends on: TS-064, TS-067, TS-068, TS-069, TS-071. Asked for by the owner; the research left dashboards out.
+
+- [ ] Review > Dashboards shows owners, admins, Finance and team managers panels for a range: utilisation, billable utilisation, hours by project and the budgets nearest their limit, each over the people the viewer may see (`timeScopeOf`; test).
+- [ ] Panels with money, revenue, cost, profit, uninvoiced and receivables, are shown only to those who see rates; a manager never sees them (role table).
+- [ ] Each panel's figure equals the report it links to (test).
+
+### TS-087 · Webhooks
+
+Depends on: TS-064, TS-081, TS-072. Asked for by the owner.
+
+- [ ] An owner or admin adds a webhook on Integrations: an `https` address and the events it receives (entries, periods, expenses, invoices, payments) (test).
+- [ ] Each delivery is signed `t=…,v1=…` with HMAC-SHA-256 under a secret derived from `BETTER_AUTH_SECRET`, the webhook's id and its version, shown once and never stored; rotating raises the version and the old secret stops working (test).
+- [ ] A failed delivery is retried with backoff; after repeated failures the webhook is switched off and its owner told; its last status and failures are shown (test with a fake clock).
+- [ ] A delivery holds what the reader's role would see through the API, and no entry description unless the scope allows it (test).
+
+### TS-088 · Xero CSV export of invoices
+
+Depends on: TS-064, TS-074. Asked for by the owner; before TS-083's connection.
+
+- [ ] An owner, admin or Finance downloads issued invoices for a range as a CSV in Xero's sales-invoice import format: contact, number, dates, lines, tax, currency (test against a fixture Xero accepts).
+- [ ] Totals in the file equal the invoices' to the penny, one currency per invoice (test).
+
+### TS-089 · Calendar feed
+
+Depends on: TS-064, TS-061, TS-012a. Asked for by the owner; carries B3's ICS feed.
+
+- [ ] A person subscribes to an ICS feed of their approved time off and their entries; a manager to one per team they manage, of approved leave only (role table).
+- [ ] The feed's address is secret, stored as a keyed hash, and revocable; revoking it makes the old address answer 404 (test).
+- [ ] Entries appear on the local day they start, in the person's time zone, and descriptions only on the person's own feed (test).
 
 ### TS-018 · Weekly summary
 

@@ -258,7 +258,7 @@ describe("the timer in the navigation (TS-051)", () => {
 			expect(timer, path).toContain("Site");
 			expect(timer, path).toContain("1:05:05");
 			expect(nav, path).toMatch(/<button[^>]*aria-label="Stop timer for Site"[^>]*>Stop<\/button>/);
-			expect(nav, path).not.toContain("Start timer");
+			expect(nav, path).not.toContain("Track time");
 		}
 	});
 
@@ -732,11 +732,11 @@ describe("Track time (TS-056)", () => {
 		expect(main).not.toContain(">Start timer</button>");
 	});
 
-	it("is where Start timer in the navigation leads: today's Day view, at Track time", async () => {
+	it("is where Track time in the navigation leads: today's Day view, at Track time", async () => {
 		clockAt(T0);
 		const html = await pageBody(await open("/app/acme/projects", ada));
 		const nav = /<nav aria-label="Main"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? "";
-		expect(nav).toMatch(/<a[^>]*href="\/app\/acme#timer"[^>]*>[\s\S]*?Start timer/);
+		expect(nav).toMatch(/<a[^>]*href="\/app\/acme#timer"[^>]*>[\s\S]*?Track time/);
 		expect(await mainOf(PAGE)).toMatch(/<section id="timer"[\s\S]*?>Track time<\/button>/);
 	});
 

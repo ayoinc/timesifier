@@ -1,7 +1,8 @@
 import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
+import { changes, record, recordStatement } from "~/activity/activity.server";
 import { findActiveClient } from "~/clients/clients.server";
-import type { OrganisationScope } from "~/db";
+import { type OrganisationScope, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import type { TimeScope } from "~/organisations/access";
 
@@ -12,7 +13,8 @@ import { among, nameHas } from "./search.server";
  * the timer chooses from the active ones (TS-012a), Projects lists and keeps
  * them (TS-011a), reports name them (TS-014a). Every role sees and manages
  * every project. A project is archived, never deleted, so an entry always has
- * its project (decision 25).
+ * its project (decision 25). Every change is recorded in the activity log as
+ * the act of `actor`, the person who made it.
  */
 
 export const PROJECT_NAME_TAKEN = "A project with this name already exists.";
@@ -120,6 +122,7 @@ export interface ProjectInput {
 /** Adds a project with the name typed, and the client given, which is active. */
 export async function createProject(
 	scope: OrganisationScope,
+	actor: string,
 	{ name: typed, clientId = null }: ProjectInput,
 ): Promise<ProjectResult> {
 	const name = recordName(typed);
@@ -129,8 +132,18 @@ export async function createProject(
 	if (clientId !== null && !(await findActiveClient(scope, clientId))) {
 		return { ok: false, problem: CLIENT_NOT_OFFERED };
 	}
+	const id = uuidv7();
 	try {
-		await scope.projects.insert({ name, nameKey: key, clientId });
+		await scope.batch([
+			scope.projects.statements.insert({ id, name, nameKey: key, clientId }),
+			recordStatement(
+				scope,
+				actor,
+				"project.created",
+				{ type: "project", id },
+				changes(null, { name, clientId }, ["name", "clientId"]),
+			),
+		]);
 	} catch (error) {
 		if (isNameClash(error)) return { ok: false, problem: PROJECT_NAME_TAKEN };
 		throw error;
@@ -141,10 +154,12 @@ export async function createProject(
 /**
  * Gives the project `id` the name typed, and the client given. Its own name in
  * other letters is no clash. An archived client is never given, but a project
- * that already has one keeps it.
+ * that already has one keeps it. A new name and a new client are each
+ * recorded; a save that changes neither records nothing.
  */
 export async function changeProject(
 	scope: OrganisationScope,
+	actor: string,
 	id: string,
 	{ name: typed, clientId }: ProjectInput,
 ): Promise<ProjectResult> {
@@ -159,11 +174,36 @@ export async function changeProject(
 	if (!keepsClient && clientId !== null && !(await findActiveClient(scope, clientId))) {
 		return { ok: false, problem: CLIENT_NOT_OFFERED };
 	}
+	const subject = { type: "project", id } as const;
 	try {
-		const [changed] = await scope.projects.update(
-			keepsClient ? { name, nameKey: key } : { name, nameKey: key, clientId },
-			(p) => eq(p.id, id),
-		);
+		const [[changed]] = await scope.batch([
+			scope.projects.statements.update(
+				keepsClient ? { name, nameKey: key } : { name, nameKey: key, clientId },
+				(p) => eq(p.id, id),
+			),
+			...(name === project.name
+				? []
+				: [
+						recordStatement(
+							scope,
+							actor,
+							"project.renamed",
+							subject,
+							changes(project, { name }, ["name"]),
+						),
+					]),
+			...(keepsClient
+				? []
+				: [
+						recordStatement(
+							scope,
+							actor,
+							"project.client_changed",
+							subject,
+							changes(project, { clientId }, ["clientId"]),
+						),
+					]),
+		]);
 		return changed ? { ok: true, name } : null;
 	} catch (error) {
 		if (isNameClash(error)) return { ok: false, problem: PROJECT_NAME_TAKEN };
@@ -174,11 +214,17 @@ export async function changeProject(
 /** Archives the project `id`, or restores it with `archived` false. Its entries are not touched. */
 export async function setProjectArchived(
 	scope: OrganisationScope,
+	actor: string,
 	id: string,
 	archived: boolean,
 ): Promise<ProjectResult> {
 	const [changed] = await scope.projects.update({ archivedAt: archived ? new Date() : null }, (p) =>
 		eq(p.id, id),
 	);
-	return changed ? { ok: true, name: changed.name } : null;
+	if (!changed) return null;
+	await record(scope, actor, archived ? "project.archived" : "project.restored", {
+		type: "project",
+		id,
+	});
+	return { ok: true, name: changed.name };
 }

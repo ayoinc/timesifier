@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 
-import type { OrganisationScope } from "~/db";
+import { changes, record, recordStatement } from "~/activity/activity.server";
+import { type OrganisationScope, uuidv7 } from "~/db";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
 
@@ -12,7 +13,8 @@ import { dayOf } from "./calendar";
  * the partial unique index on `time_entries` holds whatever the code does.
  * Starting while one runs stops it and starts the next in one D1 batch, so the
  * end of one is the start of the other and neither happens alone. Times are
- * the server's clock; a time the browser claims is never used.
+ * the server's clock; a time the browser claims is never used. Each start and
+ * stop is recorded in the activity log, by the person whose entry it is.
  */
 
 /** The entry of `userId` that is running in the organisation, or null. */
@@ -54,19 +56,43 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	if ((await lockedDays(scope, userId, days)).size > 0) {
 		return { ok: false as const, reason: "locked" as NotStarted };
 	}
-
 	const at = new Date(now);
+	const id = uuidv7();
+	const entry = { type: "time_entry", ownerId: userId } as const;
 	const [stopped, [started]] = await scope.batch([
 		scope.timeEntries.statements.update({ endedAt: at }, (e) =>
 			and(eq(e.userId, userId), isNull(e.endedAt)),
 		),
 		scope.timeEntries.statements.insert({
+			id,
 			userId,
 			projectId,
 			description,
 			startedAt: at,
 			endedAt: null,
 		}),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.started",
+			{ ...entry, id },
+			changes(null, { projectId, description, startedAt: at }, [
+				"projectId",
+				"description",
+				"startedAt",
+			]),
+		),
+		...(running
+			? [
+					recordStatement(
+						scope,
+						userId,
+						"time_entry.stopped",
+						{ ...entry, id: running.id },
+						changes({ endedAt: null }, { endedAt: at }, ["endedAt"]),
+					),
+				]
+			: []),
 	]);
 	if (!started) throw new Error("The new entry was not returned.");
 	return { ok: true as const, started, stopped: stopped[0] ?? null };
@@ -77,5 +103,13 @@ export async function stopTimer(scope: OrganisationScope, userId: string, now: n
 	const [stopped] = await scope.timeEntries.update({ endedAt: new Date(now) }, (e) =>
 		and(eq(e.userId, userId), isNull(e.endedAt)),
 	);
-	return stopped ?? null;
+	if (!stopped) return null;
+	await record(
+		scope,
+		userId,
+		"time_entry.stopped",
+		{ type: "time_entry", id: stopped.id, ownerId: userId },
+		changes({ endedAt: null }, { endedAt: stopped.endedAt }, ["endedAt"]),
+	);
+	return stopped;
 }

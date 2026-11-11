@@ -134,12 +134,15 @@ export async function listOpenInvitations(
 	return { ok: true, data: open };
 }
 
+/** Sends an invitation, and returns the invitation's id. */
 export function inviteMember(
 	request: Request,
 	organizationId: string,
 	invitation: { email: string; role: z.output<typeof InvitedRole> },
 ) {
-	return ask(request, "invite-member", z.unknown(), { body: { organizationId, ...invitation } });
+	return ask(request, "invite-member", z.object({ id: z.string() }), {
+		body: { organizationId, ...invitation },
+	});
 }
 
 export function cancelInvitation(request: Request, organizationId: string, invitationId: string) {

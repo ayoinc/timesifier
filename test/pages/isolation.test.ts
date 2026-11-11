@@ -71,14 +71,21 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the eight destinations, the pages of Team, the export of Reports, My account and the moved address", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, the export of Reports, My account and the moved address", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
 				"/app/acme",
 				"/app/acme/time-off",
+				"/app/acme/expenses",
 				"/app/acme/projects",
 				"/app/acme/clients",
+				"/app/acme/tasks",
+				"/app/acme/invoices",
+				"/app/acme/estimates",
+				"/app/acme/dashboards",
+				"/app/acme/activity",
+				"/app/acme/integrations",
 				"/app/acme/team",
 				"/app/acme/team/members",
 				"/app/acme/team/invitations",

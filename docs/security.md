@@ -137,46 +137,53 @@ Better Auth's organization plugin keeps organisations, memberships and invitatio
 
 ### Roles
 
-A member of an organisation is an owner, an admin or a member. The roles and what each may do are in `app/organisations/roles.ts`, which the plugin checks on the server for every request; nothing a browser sends decides it.
+A member of an organisation is an owner, an admin, Finance or a member. The roles and what each may do are in `app/organisations/roles.ts`, which the plugin checks on the server for every request; nothing a browser sends decides it. Finance (TS-064) has exactly a member's plugin permissions: what sets it apart is what it is shown inside the organisation, below.
 
-| Action                                               | owner                      | admin                | member |
-| ---------------------------------------------------- | -------------------------- | -------------------- | ------ |
-| See the organisation and its members                 | yes                        | yes                  | yes    |
-| Rename the organisation                              | yes                        | yes                  | no     |
-| Delete the organisation                              | yes                        | no                   | no     |
-| Invite a person                                      | yes                        | yes                  | no     |
-| Cancel an invitation                                 | yes                        | yes                  | no     |
-| Change a member's role between admin and member      | yes                        | yes                  | no     |
-| Make another person owner, or change an owner's role | yes                        | no                   | no     |
-| Remove a member                                      | yes                        | yes, except an owner | no     |
-| Leave the organisation                               | yes, unless the last owner | yes                  | yes    |
+| Action                                                   | owner                      | admin                | finance | member |
+| -------------------------------------------------------- | -------------------------- | -------------------- | ------- | ------ |
+| See the organisation and its members                     | yes                        | yes                  | yes     | yes    |
+| Rename the organisation                                  | yes                        | yes                  | no      | no     |
+| Delete the organisation                                  | yes                        | no                   | no      | no     |
+| Invite a person                                          | yes                        | yes                  | no      | no     |
+| Cancel an invitation                                     | yes                        | yes                  | no      | no     |
+| Change a member's role between admin, Finance and member | yes                        | yes                  | no      | no     |
+| Make another person owner, or change an owner's role     | yes                        | no                   | no      | no     |
+| Remove a member                                          | yes                        | yes, except an owner | no      | no     |
+| Leave the organisation                                   | yes, unless the last owner | yes                  | yes     | yes    |
 
-An organisation always has at least one owner: the last owner cannot leave, be removed or be demoted. A member holds exactly one role; a request that names a list of roles, or a role that is not one of the three, gets 400. Pending invitations are shown only to those who may invite, because an invitation's id is its link.
+An organisation always has at least one owner: the last owner cannot leave, be removed or be demoted. A member holds exactly one role; a request that names a list of roles, or a role that is not one of the four, gets 400. An owner or admin gives Finance by inviting a person as Finance or by changing a member's role to it. Whether a person is an employee or a contractor is `memberships.is_contractor`, set by an owner or admin (TS-079); it grants nothing. Pending invitations are shown only to those who may invite, because an invitation's id is its link.
 
-`test/organisations/permissions.test.ts` holds a copy of this table and has a trial through the real endpoint for each of its 27 cells; it fails when a cell has no trial or a trial contradicts its cell. Change the table here, in the test and in `roles.ts` together.
+`test/organisations/permissions.test.ts` holds a copy of this table and has a trial through the real endpoint for each of its 36 cells; it fails when a cell has no trial or a trial contradicts its cell. Change the table here, in the test and in `roles.ts` together.
 
 ### Destinations by role
 
-Which destinations a person is shown is `canSee` in `app/shell/destinations.ts`, from `docs/navigation.md`. A manager is a person who manages at least one team (`team_members.is_manager`), read from the database on every request like the role.
+Which destinations a person is shown is `canSee` in `app/shell/destinations.ts`, from `docs/navigation.md`. A manager is a person of any role who manages at least one team (`team_members.is_manager`), read from the database on every request like the role; a Finance person who manages a team is shown what a manager is shown as well.
 
-| Destination        | owner | admin | manager | member |
-| ------------------ | ----- | ----- | ------- | ------ |
-| Timesheet          | yes   | yes   | yes     | yes    |
-| Time off           | yes   | yes   | yes     | yes    |
-| Projects           | yes   | yes   | yes     | yes    |
-| Clients            | yes   | yes   | no      | no     |
-| Team               | yes   | yes   | yes     | no     |
-| Approvals          | yes   | yes   | yes     | no     |
-| Reports            | yes   | yes   | yes     | yes    |
-| Workspace settings | yes   | yes   | no      | no     |
+| Destination        | owner | admin | finance | manager | member |
+| ------------------ | ----- | ----- | ------- | ------- | ------ |
+| Timesheet          | yes   | yes   | yes     | yes     | yes    |
+| Time off           | yes   | yes   | yes     | yes     | yes    |
+| Expenses           | yes   | yes   | yes     | yes     | yes    |
+| Team               | yes   | yes   | no      | yes     | no     |
+| Clients            | yes   | yes   | yes     | no      | no     |
+| Projects           | yes   | yes   | yes     | yes     | yes    |
+| Tasks              | yes   | yes   | no      | no      | no     |
+| Invoices           | yes   | yes   | yes     | no      | no     |
+| Estimates          | yes   | yes   | yes     | no      | no     |
+| Approvals          | yes   | yes   | no      | yes     | no     |
+| Reports            | yes   | yes   | yes     | yes     | yes    |
+| Dashboards         | yes   | yes   | yes     | yes     | no     |
+| Activity log       | yes   | yes   | yes     | yes     | no     |
+| Integrations       | yes   | yes   | no      | no      | no     |
+| Workspace settings | yes   | yes   | no      | no      | no     |
 
-Clients is hidden from everyone while the organisation has `clients_enabled` off. A destination a person is not shown answers 404 at its address and at every address below it, for a page, a data request and a form alike: the organisation layout's second `middleware` reads the destination from the pattern of the route that matched, so no spelling of an address reaches a page by another route, and the 404 is the one a stranger gets (`test/pages/destinations.test.ts`). My account, at `/app/<slug>/account`, is every member's. Time off is every member's too; its Requests tab (`?show=requests`) is for those shown Approvals, and anybody else asking for it gets their own time off.
+Clients is hidden from everyone while the organisation has `clients_enabled` off. A destination a person is not shown answers 404 at its address and at every address below it, for a page, a data request and a form alike: the organisation layout's second `middleware` reads the destination from the pattern of the route that matched, so no spelling of an address reaches a page by another route, and the 404 is the one a stranger gets (`test/pages/destinations.test.ts`). My account, at `/app/<slug>/account`, is every member's. Time off (TS-061) is every member's too; its Requests tab (`?show=requests`) is for those shown Approvals, and anybody else asking for it, Finance included, gets their own time off. Finance sees that a person is off but not the kind of their leave (`maySeeLeaveKindOf`: the person, owners, admins and the managers of their teams), and decides no leave.
 
-Every role creates, renames, archives and restores projects; nobody deletes a project or a client (TS-011a). Only those shown Clients, owners and admins while it is on, manage clients and give a project its client: the Projects action answers 403 to anyone else who sends a client, and a client that is archived or of another organisation is never given (TS-011b). The general settings, the default time zone, the week start and the Clients switch, are an owner's or an admin's (TS-048), and so is the policy for leave: the working week, the kinds of leave, their allowances and whether they need approval, and the public holidays (TS-061, `mayManageLeavePolicy`): nobody else is shown Workspace settings, and its action checks the role again; an action naming a project or client of another organisation answers 404 and changes nothing (`test/pages/projects.test.ts`, `test/pages/clients.test.ts`).
+Every role creates, renames, archives and restores projects; nobody deletes a project or a client (TS-011a). Owners and admins, while Clients is on, manage clients and give a project its client: the Projects action answers 403 to anyone else who sends a client, and a client that is archived or of another organisation is never given (TS-011b). Finance is shown Clients, to invoice them, and changes them only as a card that builds it says. The general settings, the default time zone, the week start and the Clients switch, are an owner's or an admin's (TS-048), and so is the policy for leave: the working week, the kinds of leave, their allowances and whether they need approval, and the public holidays (TS-061, `mayManageLeavePolicy`): nobody else is shown Workspace settings, and its action checks the role again; an action naming a project or client of another organisation answers 404 and changes nothing (`test/pages/projects.test.ts`, `test/pages/clients.test.ts`).
 
 ### Whose time
 
-`app/organisations/access.ts` holds the rules inside the destinations, and `accessOf` reads what they take on every request. A person sees, adds and changes their own entries and submits their own periods. An owner or admin sees everyone's time, decides everyone's periods and alone reopens an approved one. A manager sees the time of the members of the teams they manage and decides their periods, never their own. Nobody changes another person's entries (decision 25). A submitted or approved period locks the entries that start on its days (`app/periods/`). A list or report passes the people it may hold to SQL (`timeScopeOf`); it never filters afterwards.
+`app/organisations/access.ts` holds the rules inside the destinations, and `accessOf` reads what they take on every request. A person sees, adds and changes their own entries and submits their own periods. An owner or admin sees everyone's time, decides everyone's periods and alone reopens an approved one. Finance sees everyone's time and expenses, read-only, and decides nothing: no period, unless they manage a team, and then as a manager. A manager sees the time of the members of the teams they manage and decides their periods, never their own. Nobody changes another person's entries (decision 25), and expenses follow the same rule: `maySeeExpensesOf` gives the people of `timeScopeOf`, `mayChangeExpensesOf` the person alone. A list or report passes the people it may hold to SQL (`timeScopeOf`); it never filters afterwards.
 
 Teams (TS-038) are made, renamed and deleted, filled and given managers by an owner or admin alone, on Team > Teams; a manager sees the teams they manage there and changes nothing, and the server refuses their form with 403. Only a member of the organisation can be put in one of its teams. A person taken out of a team, or no longer its manager, loses what it gave them on their next request, because `accessOf` reads the teams on every request. Approvals (TS-047) changes a period only through `statusAfter`, and writes the period and its `period_events` row in one batch, with who decided and when.
 
@@ -184,7 +191,31 @@ Leave (TS-061) follows the same lines, in `mayDecideLeaveOf`, `mayCancelLeaveOf`
 
 A report and its export (`app/reports/reports.server.ts`) read the people of `timeScopeOf` as one JSON parameter, so a manager of many people stays inside D1's limit on bound parameters. A report narrowed to one person names them in its address; a person the viewer may not see, or who is not a member, gets the same 404 as another organisation's address. A cell of the export that a spreadsheet would read as a formula, one that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, is prefixed with `'` (`app/reports/csv.ts`).
 
-Each project's hours on Projects (TS-057, `projectHours` in `app/projects/projects.server.ts`) are added up in SQL over the people of `timeScopeOf`, passed the same way, so every role sees every project but only the time it may see: an owner or admin everyone's, a manager their own and their teams' people's, a member their own; the page's sentence says which. They are one statement, `organisationScope`'s `sum`, which keeps the organisation's condition outside the caller's filter as `select` does. The words searched for on Projects and Clients are bound as one parameter and matched with `instr`, so `%` and `_` are letters.
+Each project's hours on Projects (TS-057, `projectHours` in `app/projects/projects.server.ts`) are added up in SQL over the people of `timeScopeOf`, passed the same way, so every role sees every project but only the time it may see: an owner, admin or Finance everyone's, a manager their own and their teams' people's, a member their own; the page's sentence says which. They are one statement, `organisationScope`'s `sum`, which keeps the organisation's condition outside the caller's filter as `select` does. The words searched for on Projects and Clients are bound as one parameter and matched with `instr`, so `%` and `_` are letters.
+
+### Rates and money
+
+Rates and the amounts made from them, billable and cost rates, billable amounts, budgets in fees, profitability, invoices, estimates and payments, are seen and set by owners, admins and Finance alone (`maySeeRates`, `mayManageRates`, `mayInvoice`), never by a manager: the owner decided so on 2026-11-11, against Harvest's rate permission for managers. A page or report that holds money checks `maySeeRates` on the server and leaves the money out of what it sends; a column is not hidden in the browser. A budget in hours is shown to whoever sees the project; a budget in fees only to those who see rates. Tasks are an owner's or admin's (`mayManageTasks`), and so are API tokens and webhooks (`mayManageIntegrations`).
+
+### Locks
+
+An entry, an expense or a day of leave is locked, and refused to everyone who would create, change or delete it, for any of three reasons, which `app/locks/locks.ts` names: it is on or before the organisation's lock date (`organisations.locked_through`), which binds everyone, the owner included, until an owner or admin moves the date back (TS-065); it starts in a period that is submitted or approved (TS-046); or it is on an invoice line (`invoice_line_sources`), until the line or the draft is deleted or the invoice voided (TS-073). A lock is worked out on every write from those rows and never stored.
+
+### API tokens
+
+An owner or admin creates a token on Integrations (TS-081). It is shown once, when it is made, and starts `tsf_`; the database holds a keyed hash of it under `BETTER_AUTH_SECRET` with the purpose `api-token` (`app/auth/keyed-hash.server.ts`, `app/integrations/tokens.server.ts`), and lists show only its first 8 characters. A token carries the scopes chosen when it was made, records when it was last used, may have an expiry, and is revoked at once by an owner or admin; a revoked or expired token gets 401. A request with a token obeys the same role rules as the pages.
+
+### Webhook secrets
+
+A webhook's secret is derived from `BETTER_AUTH_SECRET`, the webhook's id and its version, shown once and never stored; the row keeps only a hash of it (`webhooks.secret_hash`). Each delivery carries a header `t=<unix seconds>,v1=<signature>`, where the signature is HMAC-SHA-256 under the secret of the timestamp and the body, so a receiver can refuse a replay. Rotating the secret raises `secret_version`, after which deliveries are signed with the new secret alone (TS-087).
+
+### Activity log
+
+`activity_records` is only added to: the application has no update or delete of it apart from the retention job, and migration `0008` holds a trigger that refuses any UPDATE. Each record names the actor (null for the system), the source (`web`, `api`, `import` or `system`), the action, the subject, the person whose record it is about (`owner_id`) and the fields before and after (`app/activity/activity.server.ts`). Descriptions and notes are never copied: a changed description is recorded as changed, not as what it said. Who sees which records is `activityScopeOf`: owners, admins and Finance everyone's, a manager their own and their teams' people's, a member their own. Records are kept 730 days (`ACTIVITY_RETENTION_DAYS`), then deleted by TS-033's daily job. TS-020's security events are a separate table with their own retention.
+
+### Receipts
+
+An expense's receipt is stored in R2 under a key scoped to the organisation, `org/<organisation id>/receipts/<expense id>`, built on the server from the expense's row and never taken from a request. It is served through the Worker only to a person who may see the expense (`maySeeExpensesOf`); anyone else, in this organisation or another, gets the same 404 (TS-070).
 
 ### The gate in front of the plugin
 
