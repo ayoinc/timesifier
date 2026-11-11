@@ -1,28 +1,36 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 
 import { destinationPath } from "../app/shell/destinations";
-import { SIGNED_IN } from "./auth-state";
+import { newPerson, ownAddress, signIn } from "./auth";
+import { SIGNED_OUT } from "./auth-state";
 import { problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
-import { createOrganisation, homeOrganisation } from "./organisation";
+import { createOrganisation } from "./organisation";
 
 // Reports (TS-014a) and the export as CSV (TS-014b) in the browser: a report
 // chosen with the keyboard alone, the file it downloads, and no WCAG 2.2 A or AA
 // violation at either window size in either scheme. Whose time a report holds,
 // role by role, is tested through the Worker (test/pages/reports.test.ts).
 //
-// The owner of the setup project's organisation makes one of their own here, so
-// the entries below change nothing another test looks at. Entries are written
-// straight to the local D1 the server reads, as no page here makes them.
+// A new person signs in and makes an organisation of their own here, so the
+// entries below change nothing another test looks at, and the shared owner
+// keeps the one organisation other tests expect. Entries are written straight
+// to the local D1 the server reads, as no page here makes them.
 
 /** Monday 5 to Sunday 11 October 2026, a week in the past. */
 const FIRST = "2026-10-05";
 const LAST = "2026-10-11";
 
 let slug: string;
+
+/** The new person's session, which every test in this file uses. */
+const OWN_SESSION = join(tmpdir(), `timesifier-reports-${randomUUID()}.json`);
+test.use({ storageState: OWN_SESSION });
 
 /** Runs SQL against the local D1 of the server under test. */
 function execute(sql: string) {
@@ -35,12 +43,15 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async ({ browser, baseURL }) => {
 	test.setTimeout(120_000);
-	const context = await browser.newContext({ baseURL, storageState: SIGNED_IN });
+	const context = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
+	await ownAddress(context, baseURL);
 	const page = await context.newPage();
+	const { email } = newPerson();
+	await signIn(page, email);
 	({ slug } = await createOrganisation(page));
+	await context.storageState({ path: OWN_SESSION });
 	await context.close();
 
-	const { email } = homeOrganisation().owner;
 	const [client, website, internal] = [randomUUID(), randomUUID(), randomUUID()];
 	const org = `(select id from organisations where slug = '${slug}')`;
 	const user = `(select id from users where email = '${email}')`;
