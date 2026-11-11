@@ -65,6 +65,46 @@ Looked up on Mobbin on 11 November 2026, for structure, hierarchy, density and t
 | [Toggl Track, accepting an invitation](https://mobbin.com/flows/b2df1053-3a88-44cb-b77f-851292c77db6)       | Arriving straight in the tool, on an empty week, after one screen.                                        | Confetti and a checklist for joining.                                          |
 | [Linear, home hero](https://mobbin.com/sites/sections/40a46191-a57a-4bab-9a92-94fc14cad817)                 | One sentence, one button, the real product cut off by the fold.                                           | The dark gradient glow.                                                        |
 
+## For the product screens
+
+References and guidance for the signed-in screens, which are built in the owner's own sessions and not on this card. Nothing here is a design: it says what shipped time trackers do that is worth following, in this product's language of ruled lines, tabular figures, and yellow for what is live. The screens were looked up on Mobbin on 11 November 2026.
+
+### Today and the timer
+
+- [Toggl Track, timer running](https://mobbin.com/screens/f3f12f0a-4fed-4d07-aec9-bbc35a8f4c7f): the description, the project, the elapsed time and the stop control are one bar across the top of the page, and the strip of days under it gives each day its total.
+- [Harvest, day view of the timesheet](https://mobbin.com/screens/faa70ee1-66ce-4ca0-a18e-972a631e4942): the heading is the day ("Today: Thursday 18 May"), one large control starts tracking, the week's seven days sit above the entries with their totals and the week's total, and a new entry chooses its project from a list grouped by client.
+- [Harvest, timer settings](https://mobbin.com/screens/f3e9cb9d-1800-498a-b5cc-61515c8c9997): an entry is either a duration or a start and an end, time is shown as hours and minutes, and detailed views are never rounded.
+- [Bonsai, starting time tracking](https://mobbin.com/flows/d421b6de-84fd-4668-8279-10eb9613a5cf): the three states in order, ready, running, logged.
+
+**Structure.** One column. The timer is the first thing on the page and the only filled control; under it, the day's entries, newest first; under them, the day's total. The week strip is how a person moves between days. A list, not a calendar grid: the grid is Toggl's default and it hides the totals.
+
+**Hierarchy.** The elapsed time is the largest thing on the page, in the condensed width. Then each entry's duration, right-aligned in one column. The note is body text; the project and the times are secondary. Only the running row is yellow.
+
+**Density.** An entry is one row of two lines, 56 to 64px tall, ruled off from the next. Ten entries fit a laptop screen without scrolling. Editing happens in the row or in a sheet, never on another page.
+
+### Projects
+
+- [Toggl Track, projects](https://mobbin.com/screens/fb6b254e-8a0a-4ecf-9aba-e2c21e9d6400): a table of project, client, timeframe and time spent against the estimate as a thin bar with its figures ("19:42 of 160 h"), with filters as chips above it.
+- [Harvest, projects](https://mobbin.com/screens/fae467a6-1c45-4a54-acad-989d7a8b286c): the same table grouped under each client's name, with budget, spent, a bar and what remains as a figure and a percentage.
+- [Harvest, one project](https://mobbin.com/screens/f86b014a-8836-4eaa-94b7-ab4ac2cb718c): hours per week as bars, then four figures: total hours split into billable and not, and what is left of the budget.
+
+**Structure.** A ruled table grouped by client, the client's name as a row of its own. One "New project" action above it. A project opens to its own page: its figures first, then its entries.
+
+**Hierarchy.** The project's name, then the hours as a figure. The bar is support for the figure and never replaces it; it is ink on a pale track, as in the week report on the home page, and turns to the error colour only when a budget is passed.
+
+**Density.** One line a project, 48px, with at most four columns on a wide window: name, client or team, hours, bar. On a phone the columns fold to the name, the hours and the bar. No avatars, no coloured dots for projects, no per-row menu until there are three things to put in it.
+
+### Weekly report
+
+- [Toggl Track, reports summary](https://mobbin.com/screens/6512caea-44a6-4120-af89-29a83eff45c0): the week is chosen at the top left ("This week · W20"), four totals follow, then hours by day as bars, then a table of projects with duration and share.
+- [Harvest, detailed time report](https://mobbin.com/screens/f1c84f2b-a306-4a83-800b-b7dfa3ad73b9): one large total, then every entry as a ruled row with its hours right-aligned, and an export.
+
+**Structure.** The week and its total at the top; the timetable of projects by days, as drawn on the home page; under it, the entries behind any cell a person chooses. Export is an action on the page, and what it exports is exactly what is on the page.
+
+**Hierarchy.** The week's total is the largest figure, then the row totals, then the cells. Today's column is yellow in the current week and nothing is in any other.
+
+**Density.** A row a project, a column a day, hours and minutes to the minute. No donut and no pie: a share is a second column of figures if it is wanted. Every total on the page is the sum of what is shown under it, and a test holds it so, as `test/landing-example.test.ts` does for the example.
+
 ## What follows from this in the product
 
-The shell, the sign-in pages and every component take the same tokens, so they already have the type, the colours and the corners: a filled button in the application is the same ink-and-yellow button as the one on the home page. Still to do, on later cards: the Today page drawn as the day sheet shown on the home page; the week report as the ruled table; and a pass over the shell's surfaces, which are still laid out as a default Material application.
+The shell, the sign-in pages and every component take the same tokens, so they already have the type, the colours and the corners: a filled button in the application is the same ink-and-yellow button as the one on the home page. The signed-in screens are the owner's to design and build; "For the product screens" above is what this card leaves them. One thing in the shell is still off the direction: its surfaces are laid out as a default Material application.
