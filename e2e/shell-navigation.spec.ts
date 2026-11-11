@@ -169,7 +169,7 @@ test("a signed-in person who follows Sign in on the home page arrives in their o
 	page,
 }) => {
 	await page.goto("/");
-	await page.getByRole("main").getByRole("link", { name: "Sign in" }).click();
+	await page.getByRole("banner").getByRole("link", { name: "Sign in" }).click();
 
 	await expect(page).toHaveURL(homePath(first.id));
 	await expect(page.getByRole("heading", { level: 1, name: first.label })).toBeVisible();
