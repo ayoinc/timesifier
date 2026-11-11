@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { canonicalHost } from "../workers/canonical-host";
 
+const PRODUCTION = { ENVIRONMENT: "production", APP_HOST: "timesifier.com" };
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
 describe("canonical host in production", () => {
-	it("sends www to the same path and query on the apex", () => {
+	it("sends www to the same path and query on the deployment's host", () => {
 		const response = canonicalHost(
 			new Request("https://www.timesifier.com/reports?week=46"),
-			"production",
+			PRODUCTION,
 		);
 
 		expect(response?.status).toBe(308);
@@ -15,7 +21,7 @@ describe("canonical host in production", () => {
 	it.each(["https://timesifier.com/", "http://localhost:5173/", "http://127.0.0.1:4173/"])(
 		"serves %s",
 		(url) => {
-			expect(canonicalHost(new Request(url), "production")).toBeNull();
+			expect(canonicalHost(new Request(url), PRODUCTION)).toBeNull();
 		},
 	);
 
@@ -23,19 +29,63 @@ describe("canonical host in production", () => {
 		// The address Cloudflare gives each uploaded version of the Worker.
 		"https://41b1b1d9-timesifier.ayoinc.workers.dev/",
 		"https://timesifier.ayoinc.workers.dev/",
-		// A host that merely ends with the apex or the alias is neither.
+		// A host that merely ends with the host or the alias is neither.
 		"https://notwww.timesifier.com/",
 		"https://timesifier.com.attacker.example/",
 	])("answers 404 on %s", (url) => {
-		expect(canonicalHost(new Request(url), "production")?.status).toBe(404);
+		expect(canonicalHost(new Request(url), PRODUCTION)?.status).toBe(404);
 	});
 
 	it("treats a missing or unknown environment as production", () => {
 		const versionUrl = "https://41b1b1d9-timesifier.ayoinc.workers.dev/";
+		const { APP_HOST } = PRODUCTION;
 
-		expect(canonicalHost(new Request(versionUrl), undefined)?.status).toBe(404);
-		expect(canonicalHost(new Request(versionUrl), "staging")?.status).toBe(404);
+		expect(canonicalHost(new Request(versionUrl), { APP_HOST })?.status).toBe(404);
+		expect(
+			canonicalHost(new Request(versionUrl), { APP_HOST, ENVIRONMENT: "staging" })?.status,
+		).toBe(404);
 	});
+
+	it("is the host the deployment names, whatever that is", () => {
+		const elsewhere = { ENVIRONMENT: "production", APP_HOST: "time.example.org" };
+
+		expect(canonicalHost(new Request("https://time.example.org/"), elsewhere)).toBeNull();
+		expect(canonicalHost(new Request("https://timesifier.com/"), elsewhere)?.status).toBe(404);
+		expect(
+			canonicalHost(new Request("https://www.time.example.org/a"), elsewhere)?.headers.get(
+				"Location",
+			),
+		).toBe("https://time.example.org/a");
+	});
+});
+
+describe("canonical host where the deployment names no host", () => {
+	it.each([
+		["no APP_HOST", { ENVIRONMENT: "production" }, "deployment: APP_HOST is not set"],
+		["an empty APP_HOST", { APP_HOST: "" }, "deployment: APP_HOST is not set"],
+		// Each of these would otherwise be compared with, or redirected to, as a host.
+		["a pattern", { APP_HOST: "*.workers.dev" }, "deployment: APP_HOST is not valid"],
+		["a URL", { APP_HOST: "https://timesifier.com" }, "deployment: APP_HOST is not valid"],
+		["a host and a port", { APP_HOST: "timesifier.com:8443" }, "deployment: APP_HOST is not valid"],
+		["one label", { APP_HOST: "localhost" }, "deployment: APP_HOST is not valid"],
+	])(
+		"serves nothing with %s: 500 on every host, and the log names the setting",
+		(_name, env, line) => {
+			const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+			for (const url of [
+				"https://timesifier.com/",
+				"https://www.timesifier.com/",
+				"https://41b1b1d9-timesifier.ayoinc.workers.dev/",
+				"https://attacker.example/",
+			]) {
+				const response = canonicalHost(new Request(url), env);
+				expect(response?.status, url).toBe(500);
+				expect(response?.headers.has("Location"), url).toBe(false);
+			}
+			expect(logged.mock.calls).toEqual([[line], [line], [line], [line]]);
+		},
+	);
 });
 
 describe("canonical host in a preview", () => {
@@ -44,6 +94,6 @@ describe("canonical host in a preview", () => {
 		// A preview's own per-deployment address.
 		"https://f09cd1cb-timesifier.ayoinc.workers.dev/",
 	])("serves %s", (url) => {
-		expect(canonicalHost(new Request(url), "preview")).toBeNull();
+		expect(canonicalHost(new Request(url), { ENVIRONMENT: "preview" })).toBeNull();
 	});
 });

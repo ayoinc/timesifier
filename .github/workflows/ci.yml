@@ -83,6 +83,19 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Before anything is built: a setting that is missing fails the job here,
+      # by name. docs/security.md, "Secrets".
+      - name: Check this deployment's settings and write them into the Wrangler configuration
+        run: node scripts/deploy-config.ts --write
+        env:
+          APP_HOST: ${{ vars.APP_HOST }}
+          WORKERS_DEV_SUBDOMAIN: ${{ vars.WORKERS_DEV_SUBDOMAIN }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+          D1_PREVIEW_DATABASE_ID: ${{ vars.D1_PREVIEW_DATABASE_ID }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          CLOUDFLARE_API_TOKEN_IS_SET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          CLOUDFLARE_ACCOUNT_ID_IS_SET: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
       - run: pnpm build
       - name: Apply migrations to the preview database
         run: pnpm exec wrangler d1 migrations apply PREVIEW_DB --remote --config wrangler.preview-migrations.jsonc
@@ -131,6 +144,20 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Before anything is built or migrated: a setting that is missing fails the
+      # job here, by name. docs/security.md, "Secrets".
+      - name: Check this deployment's settings and write them into the Wrangler configuration
+        id: settings
+        run: node scripts/deploy-config.ts --write
+        env:
+          APP_HOST: ${{ vars.APP_HOST }}
+          WORKERS_DEV_SUBDOMAIN: ${{ vars.WORKERS_DEV_SUBDOMAIN }}
+          D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+          D1_PREVIEW_DATABASE_ID: ${{ vars.D1_PREVIEW_DATABASE_ID }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          CLOUDFLARE_API_TOKEN_IS_SET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          CLOUDFLARE_ACCOUNT_ID_IS_SET: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
       - run: pnpm build
       # Migrations go first, so each one must work with the code already live:
       # add in one release, stop using in the next, remove in a third.
@@ -148,12 +175,14 @@ jobs:
           set -o pipefail
           pnpm exec wrangler deploy --message "${GITHUB_SHA::7} ${COMMIT_MESSAGE%%$'\n'*}" | tee deploy.log
           version="$(sed -n 's/^Current Version ID: //p' deploy.log)"
-          echo "version_host=${version%%-*}-timesifier.ayoinc.workers.dev" >> "$GITHUB_OUTPUT"
+          echo "version_host=${version%%-*}${HOST_SUFFIX}" >> "$GITHUB_OUTPUT"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          HOST_SUFFIX: ${{ steps.settings.outputs.host_suffix }}
       - name: Smoke test
-        run: ./scripts/smoke.sh https://timesifier.com --production "$VERSION_HOST"
+        run: ./scripts/smoke.sh "$ORIGIN" --production "$VERSION_HOST"
         env:
+          ORIGIN: ${{ steps.settings.outputs.origin }}
           VERSION_HOST: ${{ steps.deploy.outputs.version_host }}

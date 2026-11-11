@@ -342,7 +342,7 @@ export function organisationPlugins() {
 			},
 			async sendInvitationEmail({ id, email, role, organization, inviter }, request) {
 				// `handleAuthRequest` lets through only requests to our own hosts.
-				if (!request || !isOurHost(request, env.ENVIRONMENT)) {
+				if (!request || !isOurHost(request, env)) {
 					throw new Error("An invitation's link needs the request the invitation was made in.");
 				}
 				const message = invitationEmail({

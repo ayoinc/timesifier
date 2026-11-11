@@ -23,12 +23,11 @@ const IN_WEBKIT_TOO =
 const SETUP = /auth\.setup\.ts/;
 
 // What the server under test is given. None of it is a secret: the first signs
-// cookies for this run only, and the Turnstile pair is Cloudflare's published
-// test keys, which pass every check.
+// cookies for this run only, and the second is Cloudflare's published Turnstile
+// test secret, which passes every check.
 // https://developers.cloudflare.com/turnstile/troubleshooting/testing/
 // Where the checkout has a `.dev.vars`, Wrangler reads the two secrets from it
 // instead; it must hold the same Turnstile secret, as `.dev.vars.example` says.
-const TURNSTILE_SITE_KEY = "1x00000000000000000000AA";
 const SERVER_ENV = {
 	DESIGN_ROUTE: "1",
 	BETTER_AUTH_SECRET: "browser-tests-only-m4Qx8Zr2Lk7Vt1Nc5Hd9Wb3Yp6Sg0Jf",
@@ -36,18 +35,15 @@ const SERVER_ENV = {
 };
 
 // The steps that bring the server up, in order:
-// 1. build, which copies the secrets above into build/server/.dev.vars;
-// 2. give the build the two `vars` a test server needs. They are not secrets, so
-//    the build does not copy them, and `vite preview` reads no other file: the
-//    test site key, and an ENVIRONMENT that is not production's, so that
-//    authentication trusts localhost and not timesifier.com;
-// 3. create the local D1 database from the migrations, where it does not exist;
-// 4. serve. Wrangler's local EMAIL binding sends nothing: it writes each message
+// 1. build, which copies the secrets above into build/server/.dev.vars and the
+//    `vars` of wrangler.jsonc into the build's own configuration. Those are a
+//    developer's machine's: an ENVIRONMENT of `development`, so authentication
+//    trusts localhost and nothing else, and Turnstile's published test site key;
+// 2. create the local D1 database from the migrations, where it does not exist;
+// 3. serve. Wrangler's local EMAIL binding sends nothing: it writes each message
 //    under .wrangler/tmp/email/, where e2e/auth.ts reads the sign-in codes.
 const START_SERVER = [
 	"pnpm exec react-router build",
-	`echo TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY} >> build/server/.dev.vars`,
-	"echo ENVIRONMENT=development >> build/server/.dev.vars",
 	"pnpm db:migrate:local",
 	`pnpm exec vite preview --port ${PORT} --strictPort`,
 ].join(" && ");

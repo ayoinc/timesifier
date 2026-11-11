@@ -26,8 +26,9 @@ import { accounts, organisations, rateLimits, sessions, users, uuidv7, verificat
 // The two tenant tables are absent from `~/db` on purpose. Better Auth is the
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
+import { required, setting } from "~/lib/deployment";
 import { SIGN_IN_CODE_LENGTH } from "./code";
-import { sendEmail } from "./email.server";
+import { sendEmail, sender } from "./email.server";
 import { endpointPath, isOffered } from "./endpoints";
 import { allowedHosts, isOurHost } from "./hosts";
 import { keyedHash } from "./keyed-hash.server";
@@ -61,25 +62,35 @@ const UNUSED_PATHS = [
 ];
 
 /**
- * What the instance is built from. The generated type gives `ENVIRONMENT`
- * production's value alone; a preview and a developer's machine set others.
+ * What the instance is built from: the database, and each setting of the
+ * deployment that Better Auth is configured with (docs/security.md, "Secrets").
  */
-type Bindings = Pick<Env, "DB" | "BETTER_AUTH_SECRET" | "TURNSTILE_SECRET_KEY"> & {
-	ENVIRONMENT: string | undefined;
+type Bindings = Pick<Env, "DB"> & {
+	[Name in
+		| "BETTER_AUTH_SECRET"
+		| "TURNSTILE_SECRET_KEY"
+		| "ENVIRONMENT"
+		| "APP_HOST"
+		| "PREVIEW_HOST_SUFFIX"
+		| "EMAIL_FROM"]: string | undefined;
 };
 
-function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT }: Bindings) {
+function createAuth(bindings: Bindings) {
+	const { DB } = bindings;
 	// Better Auth falls back to a published default secret outside production
 	// mode, and nothing sets production mode in a Worker. Refuse to start instead.
-	if (!BETTER_AUTH_SECRET) throw new Error("BETTER_AUTH_SECRET is not set");
-	if (!TURNSTILE_SECRET_KEY) throw new Error("TURNSTILE_SECRET_KEY is not set");
+	const BETTER_AUTH_SECRET = required(bindings, "BETTER_AUTH_SECRET");
+	const TURNSTILE_SECRET_KEY = required(bindings, "TURNSTILE_SECRET_KEY");
+	// Nor where mail can be sent and the deployment does not say who it is from:
+	// no sign-in code would ever arrive.
+	sender();
 
 	return betterAuth({
 		appName: "Timesifier",
 		secret: BETTER_AUTH_SECRET,
 		// The address is taken from the request only when its host is one of this
 		// environment's own, and those hosts are the only origins trusted.
-		baseURL: { allowedHosts: allowedHosts(ENVIRONMENT) },
+		baseURL: { allowedHosts: allowedHosts(bindings) },
 
 		// An error that is not an answer is thrown out of the handler, to
 		// `handleAuthRequest`. Left to itself the library logs such an error whole.
@@ -188,9 +199,12 @@ function builtFrom<Source extends Record<string, unknown>, Result>(
 const auth = builtFrom(
 	(): Bindings => ({
 		DB: env.DB,
-		BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
-		TURNSTILE_SECRET_KEY: env.TURNSTILE_SECRET_KEY,
-		ENVIRONMENT: env.ENVIRONMENT,
+		BETTER_AUTH_SECRET: setting(env, "BETTER_AUTH_SECRET"),
+		TURNSTILE_SECRET_KEY: setting(env, "TURNSTILE_SECRET_KEY"),
+		ENVIRONMENT: setting(env, "ENVIRONMENT"),
+		APP_HOST: setting(env, "APP_HOST"),
+		PREVIEW_HOST_SUFFIX: setting(env, "PREVIEW_HOST_SUFFIX"),
+		EMAIL_FROM: setting(env, "EMAIL_FROM"),
 	}),
 	createAuth,
 );
@@ -220,11 +234,11 @@ export function registeredEndpoints(): string[] {
  * string, and the name has none of what the statement was writing.
  */
 export async function handleAuthRequest(request: Request): Promise<Response> {
-	if (!isOurHost(request, env.ENVIRONMENT) || !isOffered(request)) {
+	if (!isOurHost(request, env) || !isOffered(request)) {
 		return new Response("Not Found", { status: 404 });
 	}
-	// Outside the `try`: a missing secret is a fault in the deployment, and its
-	// message, which names the secret and holds no value, belongs in the log.
+	// Outside the `try`: a missing setting is a fault in the deployment, and its
+	// message, which names the setting and holds no value, belongs in the log.
 	const { handler } = auth();
 	try {
 		return await handler(request);
@@ -251,7 +265,7 @@ export type SignedIn = { user: User; session: Session };
  * whatever logs it; here that is React Router.
  */
 export async function getSession(request: Request): Promise<SignedIn | null> {
-	if (!isOurHost(request, env.ENVIRONMENT)) return null;
+	if (!isOurHost(request, env)) return null;
 	// Better Auth takes the host from the `Host` header here. The platform sets
 	// it from the request's address; a `Request` built in code may not have it.
 	const headers = new Headers(request.headers);

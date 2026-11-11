@@ -3,6 +3,9 @@ import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vitest/config";
 
 // Tests run inside the Workers runtime against the bindings in wrangler.jsonc.
+// That file is a developer's machine's; the tests check what ships, so they are
+// given the settings of a deployment of their own. None reaches anything: the
+// hosts are only ever the address of a `Request` handed to the Worker.
 export default defineConfig({
 	plugins: [
 		cloudflareTest(async () => ({
@@ -19,6 +22,12 @@ export default defineConfig({
 					// https://developers.cloudflare.com/turnstile/troubleshooting/testing/
 					TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
 					TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+					// The deployment under test: production, on the first host. Tests that
+					// set ENVIRONMENT to `preview` use the suffix. app/auth/hosts.ts.
+					ENVIRONMENT: "production",
+					APP_HOST: "timesifier.com",
+					PREVIEW_HOST_SUFFIX: "-timesifier.ayoinc.workers.dev",
+					EMAIL_FROM: "no-reply@mail.timesifier.com",
 				},
 			},
 		})),

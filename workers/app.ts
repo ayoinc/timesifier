@@ -21,7 +21,7 @@ export default {
 	async fetch(request, env) {
 		const nonce = createNonce();
 		const response =
-			canonicalHost(request, env.ENVIRONMENT) ??
+			canonicalHost(request, env) ??
 			rejectCrossOrigin(request) ??
 			(await handleWithFramework(request, nonce));
 		return withSecurityHeaders(response, nonce);
