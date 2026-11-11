@@ -179,6 +179,8 @@ Every role creates, renames, archives and restores projects; nobody deletes a pr
 
 Teams (TS-038) are made, renamed and deleted, filled and given managers by an owner or admin alone, on Team > Teams; a manager sees the teams they manage there and changes nothing, and the server refuses their form with 403. Only a member of the organisation can be put in one of its teams. A person taken out of a team, or no longer its manager, loses what it gave them on their next request, because `accessOf` reads the teams on every request. Approvals (TS-047) changes a period only through `statusAfter`, and writes the period and its `period_events` row in one batch, with who decided and when.
 
+A report and its export (`app/reports/reports.server.ts`) read the people of `timeScopeOf` as one JSON parameter, so a manager of many people stays inside D1's limit on bound parameters. A report narrowed to one person names them in its address; a person the viewer may not see, or who is not a member, gets the same 404 as another organisation's address. A cell of the export that a spreadsheet would read as a formula, one that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, is prefixed with `'` (`app/reports/csv.ts`).
+
 ### The gate in front of the plugin
 
 Every request to `/organization/*` passes one check of ours before the plugin sees it (`organisationRules` in `app/auth/organisations.server.ts`):

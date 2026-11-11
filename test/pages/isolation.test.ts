@@ -71,7 +71,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the seven destinations, the pages of Team, My account and the moved address", () => {
+	it("holds the layout, the seven destinations, the pages of Team, the export of Reports, My account and the moved address", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -83,6 +83,7 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/team/invitations",
 				"/app/acme/approvals",
 				"/app/acme/reports",
+				"/app/acme/reports/export",
 				"/app/acme/settings",
 				"/app/acme/account",
 				"/app/acme/settings/members",
@@ -117,7 +118,11 @@ describe("a member of one organisation asking for another organisation's address
 		expect(nobodys.status).toBe(404);
 		const body = await said(theirs, THEIRS);
 		expect(body).toBe(await said(nobodys, NOBODYS));
-		expect(body).toContain("There is no page at this address, or it is not yours to open.");
+		// A resource route, a file to download, answers with the same 404 as
+		// nobody's address and draws no page.
+		if (route.hasPage) {
+			expect(body).toContain("There is no page at this address, or it is not yours to open.");
+		}
 		expect(body).not.toContain("Acme");
 	});
 

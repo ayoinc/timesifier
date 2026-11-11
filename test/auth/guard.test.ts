@@ -147,8 +147,11 @@ describe("with a session", () => {
 	// `/app` itself shows a page only to a person with several organisations;
 	// test/pages/app.test.ts follows where it sends everybody else.
 	// An address that has moved answers with a redirect to its new place;
-	// test/pages/destinations.test.ts follows it.
-	const pages = underApp.filter((route) => route.address !== APP_PATH && !isMoved(route));
+	// test/pages/destinations.test.ts follows it. A resource route, a file to
+	// download, is served as that file.
+	const served = underApp.filter((route) => route.address !== APP_PATH && !isMoved(route));
+	const pages = served.filter((route) => route.hasPage);
+	const files = served.filter((route) => !route.hasPage);
 
 	it.each(pages)("$id: $address is served", async ({ address }) => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");
@@ -158,6 +161,15 @@ describe("with a session", () => {
 		expect(page.status).toBe(200);
 		expect(page.headers.get("Content-Type")).toContain("text/html");
 		expect((await ask(`${address}.data`, {}, cookie)).status).toBe(200);
+	});
+
+	it.each(files)("$id: $address is served as a file, not a page", async ({ address }) => {
+		const { cookie } = await signIn(mailbox, "ada@example.com");
+		expect((await createOrganisation(cookie, "Acme")).slug).toBe(ORGANISATION);
+
+		const file = await ask(address, {}, cookie);
+		expect(file.status).toBe(200);
+		expect(file.headers.get("Content-Type")).not.toContain("text/html");
 	});
 
 	it("/app sends a person with one organisation on to it", async () => {

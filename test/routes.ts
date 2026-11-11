@@ -11,6 +11,8 @@ export type RouteUnderTest = {
 	/** The route's full address, with a stand-in for each parameter. */
 	address: string;
 	hasAction: boolean;
+	/** Whether it draws a page. A resource route, such as a file to download, does not. */
+	hasPage: boolean;
 	/** Whether it is the page shown at its parent's own address. A form for it is posted with `?index`. */
 	isIndex: boolean;
 	/** The ids of the routes it is nested in, outermost first. */
@@ -46,6 +48,7 @@ export const allRoutes: RouteUnderTest[] = Object.values(routes)
 		id: route.id,
 		address: `/${addressOf(route.id)}`,
 		hasAction: route.module.action !== undefined,
+		hasPage: route.module.default !== undefined,
 		isIndex: route.index === true,
 		ancestors: ancestorsOf(route.id),
 	}));

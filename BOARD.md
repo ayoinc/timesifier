@@ -130,6 +130,28 @@ Builder: an AI session on branch `ts-054-people`. `app/routes/app/approvals.tsx`
 - [x] Not submitted lists the people who have not submitted a closed period (test). _`test/pages/approvals.test.ts`, first test._
 - Decided by the owner on 2026-11-11: approval is always on for now. Whether an owner or admin can turn it off for the organisation, as Harvest allows, waits for a customer who asks. The evidence is in `docs/navigation.md`, "Gaps the flows show".
 
+### TS-014a · Reports
+
+Builder: an AI session on branch `ts-054-reports`, one of the four slices built on TS-053. In review: the pull request against `main`. This is where "administrators can look at their time" (the owner, 2026-11-11) is built, and the manager's reach that TS-038 names is the foundation's `timeScopeOf`. The brief for the heading features (2026-11-11) changed three things this card first said: the days are counted in the organisation's time zone, not the viewer's, so everyone who reads a report reads the same days; an entry that crosses midnight is cut there and counted on each day; and a running entry is counted up to the time of the request instead of being left out (decision 26, "Reports and exports"). The date range needed no decision 28: its two days are the browser's own date fields, which write no `style` attribute.
+
+- [x] A report covers a chosen range of days, this week, last week, this month or a custom range of up to 366 days, in the organisation's time zone, grouped by project, client or day, with its total. The range, the grouping and the person travel in the address (`test/reports/report.test.ts`, "the report an address asks for" and "the days of a range"; `e2e/reports.spec.ts`, chosen and shown with the keyboard alone).
+- [x] An entry is cut at each local midnight of the organisation's zone and counted on each day of the range it has time in; a running entry is counted up to now (`test/reports/report.test.ts`, "an entry in a report"; `test/pages/reports.test.ts`, "cuts an entry at midnight", "counts its days in the organisation's zone" and "counts a running entry up to now").
+- [x] Report totals equal the sum of the underlying entries for the same range, in every grouping (property test over 60 seeded sets of entries in six zones, clock changes included: "a property of every report").
+- [x] A member sees their own entries, a manager their own and their teams' people's, an owner or admin everyone's, and each may narrow the report to one person they may see. Naming anybody else is the 404 of another organisation (`test/pages/reports.test.ts`, "whose time a report holds", a test for each role).
+- [x] The report contains only the caller's organisation ("holds nothing of another organisation"), and its two routes are in the cross-organisation 404 test (`test/pages/isolation.test.ts`).
+- [x] The page works from the keyboard and has no WCAG 2.2 A or AA violation at 390 and 1280 px in either scheme, with entries and with none (`e2e/reports.spec.ts`).
+
+### TS-014b · CSV export
+
+Builder: the same session and branch as TS-014a. In review with it.
+
+- [x] The export, at `reports/export` with the report's own query, has one row for each entry on each day of the range it has time in: the rows the page lists, so its durations add up to the page's total. Its columns, in this order: `entry_id`, `person`, `project`, `client`, `description`, `started_at`, `ended_at`, `duration_seconds`. Times are in UTC, in ISO 8601 with `Z`; a running entry's last row has no end (`test/reports/report.test.ts`, "a row of the CSV"; `test/pages/reports.test.ts`; `e2e/reports.spec.ts`, the download).
+- [x] The file parses back to the same values with an RFC 4180 parser (property test over 100 seeded files of descriptions with commas, quotes, line breaks and characters outside ASCII: "a property of every export").
+- [x] A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` (`test/reports/report.test.ts`, "a cell of the CSV"; `test/pages/reports.test.ts`, "cannot start a spreadsheet formula").
+- [x] The response is streamed in pages of 200 entries keyed on `id`, and nothing is stored (`test/pages/reports.test.ts`, "holds every entry, page after page", with 451 entries).
+- [x] A member exports their own entries, a manager their teams', an owner or admin every member's, and the export contains only the caller's organisation (`test/pages/reports.test.ts`).
+- [x] The file is UTF-8 with a byte order mark, so Excel reads it as UTF-8, sent as `text/csv; charset=utf-8` and named `timesifier-<slug>-<first day>-to-<last day>.csv` (`test/pages/reports.test.ts`, "is a UTF-8 CSV attachment"; `e2e/reports.spec.ts`).
+
 ### TS-030 · A home page, a privacy page, a terms page, and the visual direction
 
 Built by an AI session on branch `ts-030-landing`; not yet deployed. The owner's verdict on what was first deployed: it works, but it does not look like a designed product. This card writes the direction the product follows in `docs/design-direction.md`, changes the tokens to carry it, and replaces the three-line home page. It also takes the home-page criterion that TS-025 held. Because sign-up stays open to the public (the owner, 2026-11-11), the privacy page and the terms page ship with it. It is in Review because three criteria wait for the owner, two wait for a later card, and one waits for the deploy; what is left is said on each open criterion.
@@ -456,28 +478,6 @@ Not Ready. One decision is open, and it is the owner's: whether `style` attribut
 - [ ] An owner or admin can see another member's entries and cannot change them (a test for every cell of this card's role table).
 - [ ] An entry can be added from the keyboard alone, without the pointer (browser test).
 - [ ] A day and a time typed by a person are read in the person's time zone (decision 26); a time that does not exist on that day, in the hour a clock change skips, is rejected (test).
-
-### TS-014a · Reports
-
-Depends on: TS-013. The date range waits on the same decision as TS-012b.
-
-This is where "administrators can look at their time" (the owner, 2026-11-11) is built: the fourth criterion below. TS-038 adds the manager, who sees their team's.
-
-- [ ] A report covers a chosen range of days in the viewer's time zone, grouped by project, client or day.
-- [ ] An entry is counted in the local day it starts in, and a running entry is left out (test).
-- [ ] Report totals equal the sum of the underlying entries for the same range (property test).
-- [ ] A member sees their own entries. An owner or admin can also see every member's, and a report for one member (a test for every cell of this card's role table).
-- [ ] The report contains only the caller's organisation (test), and its route is in the cross-organisation 404 test.
-
-### TS-014b · CSV export
-
-Depends on: TS-014a.
-
-- [ ] The export of a report has one row for each entry and these columns in this order: `entry_id`, `person`, `project`, `client`, `description`, `started_at`, `ended_at`, `duration_seconds`. Times are in UTC, in ISO 8601 with `Z`.
-- [ ] The file parses back to the same values with an RFC 4180 parser (property test over descriptions with commas, quotes and line breaks).
-- [ ] A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` (test).
-- [ ] The response is streamed in pages keyed on `id`, and nothing is stored (test with more entries than one page).
-- [ ] A member exports their own entries; an owner or admin exports every member's (test). The export contains only the caller's organisation (test).
 
 ### TS-039 · Month and year views
 
