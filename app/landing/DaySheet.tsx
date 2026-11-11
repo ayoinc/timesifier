@@ -2,7 +2,7 @@ import { Digits } from "~/components/Digits";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { TimerMark } from "~/components/TimerMark";
 
-import { clock, duration, length, RUNNING, stopwatch } from "./example-week";
+import { clock, duration, EXAMPLE_NOTE, length, RUNNING, stopwatch } from "./example-week";
 import { useRunningDay } from "./RunningDay";
 
 /**
@@ -16,7 +16,7 @@ export function DaySheet() {
 
 	return (
 		<figure className="flex flex-col gap-3">
-			<Ledger heading={`Today, ${day.date}`} note="Example" on="sheet">
+			<Ledger heading={`Today, ${day.date}`} note={EXAMPLE_NOTE} on="sheet">
 				<div className="flex items-center gap-4 bg-primary-container px-4 py-4 text-on-primary-fixed @sm:px-5">
 					<div className="min-w-0 flex-1">
 						<p className="text-label-medium text-on-primary-fixed-variant tabular-nums">{status}</p>
@@ -67,7 +67,7 @@ export function DaySheet() {
 				/>
 			</Ledger>
 			<figcaption className="text-body-small text-on-sheet-variant">
-				A day in Timesifier: one timer, the entries it made, and their total.
+				A day as Timesifier will keep it: one timer, the entries it made, and their total.
 			</figcaption>
 		</figure>
 	);

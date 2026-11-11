@@ -2,7 +2,15 @@ import { useEffect, useRef } from "react";
 
 import { cx } from "~/components/cx";
 
-import { DAYS, dayTotals, duration, longestProject, week, weekTotal } from "./example-week";
+import {
+	DAYS,
+	dayTotals,
+	duration,
+	EXAMPLE_NOTE,
+	longestProject,
+	week,
+	weekTotal,
+} from "./example-week";
 
 const DAY_COLUMN = "px-3 py-3 text-end max-medium:hidden";
 const TIME = "text-title-large tabular-nums";
@@ -95,7 +103,7 @@ export function WeekReport() {
 	return (
 		<table ref={table} className="week-report w-full border-collapse text-body-large">
 			<caption className="pb-4 text-start text-label-large text-on-surface-variant">
-				An example week: hours and minutes by project and day.
+				{EXAMPLE_NOTE}: a week, in hours and minutes by project and day.
 			</caption>
 			<thead>
 				<tr className="border-y-2 border-on-surface text-label-large">

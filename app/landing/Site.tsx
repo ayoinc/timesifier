@@ -21,6 +21,14 @@ export const PRIVACY_EMAIL = "privacy@timesifier.com";
 
 export const MAIN_ID = "main";
 
+/**
+ * The words of the one primary action on the public pages. It opens the sign-in
+ * page, where today a person signs in and sets up their organisation, so it
+ * promises no more than that. It becomes "Start tracking" on the day the timer
+ * ships (docs/design-direction.md, "One way in").
+ */
+export const PRIMARY_ACTION = "Get started";
+
 /** Where the product lives. A preview of a page shared elsewhere has to name its image in full. */
 const ORIGIN = "https://timesifier.com";
 
@@ -166,7 +174,8 @@ export function SiteFooter({ current, children }: SiteFooterProps) {
 					<Wordmark />
 				</p>
 				<p className="mt-2 max-w-80 text-on-surface-variant">
-					Time tracking for people and small teams who bill or account for their hours.
+					A time tracker for people and small teams who bill or account for their hours. In
+					development.
 				</p>
 			</div>
 			<nav aria-label="Notices" className="medium:col-span-3">
@@ -184,10 +193,7 @@ export function SiteFooter({ current, children }: SiteFooterProps) {
 					))}
 				</ul>
 			</nav>
-			<div className="text-on-surface-variant medium:col-span-4">
-				{children}
-				<p className={children ? "mt-2" : undefined}>© 2026 Timesifier</p>
-			</div>
+			{children && <div className="text-on-surface-variant medium:col-span-4">{children}</div>}
 		</footer>
 	);
 }

@@ -1,7 +1,7 @@
 import type { Locator, Page, Route } from "@playwright/test";
 
 import { SIGNED_OUT } from "./auth-state";
-import { problems } from "./axe";
+import { drawnContrast, problems } from "./axe";
 import { expect, test } from "./fixtures";
 import { movement, watchForMovement } from "./motion";
 
@@ -14,7 +14,7 @@ const COMPACT = { width: 390, height: 844 };
 const WIDE = { width: 1280, height: 800 };
 
 const primaryAction = (page: Page) =>
-	page.getByRole("main").getByRole("link", { name: "Start tracking" }).first();
+	page.getByRole("main").getByRole("link", { name: "Get started" }).first();
 /** The way back in for someone who has been before: one quiet link in the band at the top. */
 const signIn = (page: Page) => page.getByRole("banner").getByRole("link", { name: "Sign in" });
 /** The picture of the product: the figure that holds no photograph. */
@@ -65,7 +65,11 @@ for (const viewport of [COMPACT, WIDE]) {
 						colorScheme,
 					);
 
-					expect(await problems(page)).toEqual([]);
+					// The drawing's own text is measured below: axe cannot see what an SVG's text lies on.
+					expect(await problems(page, [], ["figure.anatomy svg"])).toEqual([]);
+					const drawn = await drawnContrast(anatomy(page));
+					expect(drawn.length).toBeGreaterThan(6);
+					for (const { text, ratio } of drawn) expect(ratio, text).toBeGreaterThanOrEqual(4.5);
 				});
 			});
 
@@ -140,13 +144,34 @@ test("there is one way in: the primary action at the top and at the end, and Sig
 }) => {
 	await page.goto("/");
 
-	const actions = page.getByRole("main").getByRole("link", { name: "Start tracking" });
+	const actions = page.getByRole("main").getByRole("link", { name: "Get started" });
 	await expect(actions).toHaveCount(2);
 	const addresses = new Set([
 		...(await actions.evaluateAll((links) => links.map((link) => link.getAttribute("href")))),
 		await signIn(page).getAttribute("href"),
 	]);
 	expect([...addresses]).toEqual(["/sign-in"]);
+});
+
+test("every drawing that shows a time carries the word that says it is an example", async ({
+	page,
+}) => {
+	await page.goto("/");
+
+	// Each time on the page, 0:25 or 1:54:32, with the drawing it stands in.
+	const unlabelled = await page.getByRole("main").evaluate((main) => {
+		const times: string[] = [];
+		const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+		for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+			const text = node.textContent ?? "";
+			if (!/\b\d{1,2}:\d{2}\b/.test(text)) continue;
+			const drawing = node.parentElement?.closest("figure, table");
+			if (!(drawing?.textContent ?? "").includes("Example")) times.push(text.trim());
+		}
+		return times;
+	});
+
+	expect(unlabelled).toEqual([]);
 });
 
 test("every image has its size, a description, and comes from our own host", async ({
@@ -262,7 +287,7 @@ test.describe("without script", () => {
 		await expect(productVisual(page).getByRole("button")).toHaveCount(0);
 	});
 
-	test("the anatomy of an hour is whole wherever the page stands", async ({ page }) => {
+	test("the anatomy of a working day is whole wherever the page stands", async ({ page }) => {
 		await page.goto("/");
 
 		await expect(anatomy(page)).toBeAttached();
@@ -302,8 +327,8 @@ async function loggedSeconds(page: Page): Promise<number> {
 const stop = (page: Page) => productVisual(page).getByRole("button", { name: "Stop the timer" });
 const start = (page: Page) => productVisual(page).getByRole("button", { name: "Start the timer" });
 
-/** The drawing of the anatomy of an hour that this window shows. */
-const anatomy = (page: Page) => page.getByRole("img", { name: "The anatomy of an hour" });
+/** The drawing of the anatomy of a working day that this window shows. */
+const anatomy = (page: Page) => page.getByRole("img", { name: "The anatomy of a working day" });
 /** How visible the least visible numbered part of the drawing is: 1 when all of it is there. */
 const faintestPart = (page: Page) =>
 	anatomy(page).evaluate((drawing) =>
@@ -329,6 +354,26 @@ test.describe("the clock", () => {
 		await page.goto("/");
 		await expect(stop(page)).toBeVisible();
 		await page.clock.pauseAt(new Date(OPENED.getTime() + 10_500));
+	}
+
+	/**
+	 * Lets that much time pass on the page at once, as it does for a page that was
+	 * asleep: whatever was waiting on the clock wakes once, at the end. Before it,
+	 * the page is given the turns it needs to finish what its last tick started:
+	 * the next tick is set from an effect, a moment after the digits change.
+	 */
+	async function pass(page: Page, milliseconds: number) {
+		for (let turn = 0; turn < 3; turn += 1) {
+			await page.evaluate(
+				() =>
+					new Promise<void>((resolve) => {
+						const { port1, port2 } = new MessageChannel();
+						port1.onmessage = () => resolve();
+						port2.postMessage(null);
+					}),
+			);
+		}
+		await page.clock.fastForward(milliseconds);
 	}
 
 	test("the sheet is the visitor's own today, and its timer started a believable while ago", async ({
@@ -362,7 +407,7 @@ test.describe("the clock", () => {
 			[58_000, 60],
 			[3_600_000, 3660],
 		] as const) {
-			await page.clock.runFor(wait);
+			await pass(page, wait);
 			await expect.poll(() => shownElapsed(page)).toBe(first + gained);
 			expect(await shownTotal(page)).toBe(logged + first + gained);
 			expect(await loggedSeconds(page)).toBe(logged);
@@ -378,13 +423,13 @@ test.describe("the clock", () => {
 		const held = await shownElapsed(page);
 		const total = await shownTotal(page);
 
-		await page.clock.runFor(90_000);
+		await pass(page, 90_000);
 		expect(await shownElapsed(page)).toBe(held);
 		expect(await shownTotal(page)).toBe(total);
 
 		await start(page).click();
 		await expect(stop(page)).toBeVisible();
-		await page.clock.runFor(3000);
+		await pass(page, 3000);
 		await expect.poll(() => shownElapsed(page)).toBe(held + 3);
 		expect(await shownTotal(page)).toBe(total + 3);
 	});
@@ -409,9 +454,12 @@ test.describe("the clock", () => {
 		).toBe(0);
 	});
 
-	test("the anatomy of an hour reads the same clock as the timer", async ({ page }) => {
+	test("the anatomy of a working day reads the same clock as the timer", async ({ page }) => {
 		await open(page);
-		await page.clock.runFor(4000);
+		await pass(page, 4000);
+		const first = await shownElapsed(page);
+		await pass(page, 1000);
+		await expect.poll(() => shownElapsed(page)).toBe(first + 1);
 		const elapsed = await drawn(productVisual(page).getByRole("timer"));
 
 		// The window on the drawing's timer shows the running entry to the second.
@@ -437,7 +485,9 @@ for (const viewport of [COMPACT, WIDE]) {
 			expect(await layout(page)).toEqual(before);
 		});
 
-		test("the anatomy of an hour has a name, and says in words what it draws", async ({ page }) => {
+		test("the anatomy of a working day has a name, and says in words what it draws", async ({
+			page,
+		}) => {
 			await page.goto("/");
 			await anatomy(page).scrollIntoViewIfNeeded();
 
@@ -451,13 +501,13 @@ for (const viewport of [COMPACT, WIDE]) {
 			// Its description is the list of its numbered parts, each with a sentence.
 			const description = await anatomy(page).getAttribute("aria-describedby");
 			const parts = page.locator(`[id="${description}"]`).getByRole("listitem");
-			await expect(parts).toHaveCount(6);
+			await expect(parts).toHaveCount(7);
 			for (const part of await parts.allInnerTexts()) {
 				expect(part.split(/\s+/).length).toBeGreaterThan(8);
 			}
 		});
 
-		test("the anatomy of an hour is put together as it is scrolled into the window", async ({
+		test("the anatomy of a working day is put together as it is scrolled into the window", async ({
 			page,
 		}) => {
 			await page.goto("/");

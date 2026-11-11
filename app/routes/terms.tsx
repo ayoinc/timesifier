@@ -26,8 +26,8 @@ export default function Terms() {
 		>
 			<DocumentSection id="what" title="What Timesifier is">
 				<p>
-					Timesifier is a web application for keeping track of time, for one person or a small team.
-					It is an early version. Today you can sign in with your email address, create an
+					Timesifier is a web application that will keep track of time, for one person or a small
+					team. It is an early version. Today you can sign in with your email address, create an
 					organisation and invite people into it. The timer, the projects and the weekly report that
 					the home page shows are being built, and are not in the product yet.
 				</p>
@@ -74,8 +74,9 @@ export default function Terms() {
 				</p>
 				<Rows>
 					<Row term="Sign-in codes">
-						An address is sent at most five codes in an hour. A code works once, for five minutes,
-						and stops working after three wrong attempts.
+						An address is sent at most five codes in an hour to browsers that have signed in as it
+						before, and five to all others. A code works once, for five minutes, and stops working
+						after three wrong attempts.
 					</Row>
 					<Row term="Invitations">
 						One person can send at most twenty invitations in 24 hours. An invitation works once,

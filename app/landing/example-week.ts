@@ -3,6 +3,12 @@
 // page is added up from them here, so a total can never disagree with what is
 // shown above it (docs/design-direction.md, "Round the number").
 
+/**
+ * The word every drawing of this example carries, so that nobody takes a picture
+ * of what the product will do for a record of what somebody did.
+ */
+export const EXAMPLE_NOTE = "Example";
+
 export const DAYS = [
 	{ name: "Monday", short: "Mon", date: 9 },
 	{ name: "Tuesday", short: "Tue", date: 10 },

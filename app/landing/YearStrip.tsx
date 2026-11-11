@@ -1,5 +1,6 @@
 import { cx } from "~/components/cx";
 
+import { EXAMPLE_NOTE } from "./example-week";
 import { useRunningDay } from "./RunningDay";
 
 const MONTHS = [
@@ -25,11 +26,13 @@ const ROOM = { 4: "grow-4", 5: "grow-5" } as const;
  * the last and largest of the scales the page counts in. Seconds on the timer,
  * minutes and hours on the day, days in the week, and the week here, in its month
  * and its year. The weeks behind are filled and the ones ahead are open. It is
- * the visitor's own year once the clock runs, and the example's before.
+ * the visitor's own year once the clock runs, and the example's before, when it
+ * is labelled as one.
  */
 export function YearStrip() {
 	const {
 		week: { year, week, months },
+		toggle,
 	} = useRunningDay();
 	const weeks = months.reduce((total, each) => total + each, 0);
 	let before = 0;
@@ -70,7 +73,11 @@ export function YearStrip() {
 				})}
 			</div>
 			<figcaption className="mt-3 flex items-baseline justify-between gap-4 border-t-2 border-on-sheet pt-3 text-label-large">
-				<span>{year}, in weeks</span>
+				<span>
+					{year}, in weeks
+					{/* Until the clock runs this is the example's week, and says so. */}
+					{!toggle && <span className="ps-3 text-on-sheet-variant">{EXAMPLE_NOTE}</span>}
+				</span>
 				<span className="tabular-nums">
 					Week {week} of {weeks}
 				</span>

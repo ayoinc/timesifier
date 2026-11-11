@@ -28,7 +28,7 @@ import {
 	WEEK_RAIL_HOURS,
 	WENT_RAIL_HOURS,
 } from "./day-anatomy";
-import { duration, RHYTHM, stopwatch, weekTotal } from "./example-week";
+import { duration, EXAMPLE_NOTE, RHYTHM, stopwatch, weekTotal } from "./example-week";
 import { useRunningDay } from "./RunningDay";
 
 // The anatomy of a working day: how a day of focused stretches and breaks
@@ -585,7 +585,7 @@ const STEPS = [
 	},
 	{
 		name: "The day, added up",
-		says: "The same strips, closed up end to end. The day’s total is where they reach on the scale: nobody adds it up.",
+		says: "The same strips, closed up end to end. The day’s total is where they reach on the scale: you can check it by eye.",
 	},
 	{
 		name: "The week",
@@ -613,13 +613,14 @@ export function DayAnatomy() {
 		>
 			<div className="border-t-2 border-on-surface pt-3 large:col-span-12">
 				<p className="flex items-baseline justify-between gap-4 text-label-large">
-					<span className="text-on-surface-variant">Figure 1</span>
 					<span>{TITLE}</span>
+					<span className="text-on-surface-variant">{EXAMPLE_NOTE}</span>
 				</p>
 				<p className="mt-3 max-w-160 text-body-medium text-on-surface-variant">
 					The morning drawn here is worked in the rhythm of the Pomodoro Technique, Francesco
 					Cirillo’s method: {RHYTHM.stretch} minutes of work, a short break, and a longer break
-					after every fourth stretch. The rhythm is the person’s. The timer records what they did.
+					after every fourth stretch. The rhythm is the person’s. The timer will record what they
+					did.
 				</p>
 			</div>
 			<div className="anatomy-drawing min-w-0 large:col-span-8">
@@ -627,6 +628,7 @@ export function DayAnatomy() {
 				<Drawing size="compact" className="max-w-136 expanded:hidden" {...drawing} />
 			</div>
 			<figcaption className="min-w-0 large:col-span-4">
+				<p className="pb-3 text-label-large">How it will work</p>
 				<ol
 					id={steps}
 					className="grid gap-x-8 border-t border-outline-variant medium:grid-cols-2 expanded:grid-cols-3 large:grid-cols-1"

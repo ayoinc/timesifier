@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Digits } from "~/components/Digits";
 import { TimerMark } from "~/components/TimerMark";
 
-import { clock, duration, length, RUNNING, stopwatch } from "./example-week";
+import { clock, duration, EXAMPLE_NOTE, length, RUNNING, stopwatch } from "./example-week";
 import { useRunningDay } from "./RunningDay";
 
 function State({ name, children }: { name: string; children: ReactNode }) {
@@ -26,7 +26,11 @@ export function TimerStates() {
 	const { entry } = RUNNING;
 
 	return (
-		<div className="@container">
+		<figure className="@container">
+			<p className="flex items-baseline justify-between gap-4 pb-3 text-label-large">
+				<span>How the timer will work</span>
+				<span className="text-on-surface-variant">{EXAMPLE_NOTE}</span>
+			</p>
 			<ol className="timer-steps divide-y divide-outline-variant border-y-2 border-on-surface">
 				<State name="Ready">
 					<span className="min-w-0 flex-1 ps-3 text-body-large text-on-surface-variant">
@@ -61,6 +65,6 @@ export function TimerStates() {
 					<span className="pe-3 text-title-large tabular-nums">{duration(length(entry))}</span>
 				</State>
 			</ol>
-		</div>
+		</figure>
 	);
 }

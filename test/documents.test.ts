@@ -1,13 +1,11 @@
 import { exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { PRIVACY_EMAIL, PRIVACY_PATH, TERMS_PATH } from "~/landing/Site";
-import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
 
-import { CODE_COOKIE, ORIGIN, SESSION_COOKIE } from "./auth/harness";
+import { ORIGIN } from "./auth/harness";
 
 // The privacy notice and the terms, as the server sends them to anybody: no
-// session, no script. What the notice says about cookies is held to the names
-// the application really sets.
+// session, no script. What they claim is held to the facts in test/claims.test.ts.
 
 async function page(path: string): Promise<string> {
 	const response = await exports.default.fetch(`${ORIGIN}${path}`);
@@ -35,11 +33,4 @@ it("the home page links to both", async () => {
 	const html = await page("/");
 	expect(html).toContain(`href="${PRIVACY_PATH}"`);
 	expect(html).toContain(`href="${TERMS_PATH}"`);
-});
-
-it("the privacy notice names every cookie the application sets", async () => {
-	const html = await page(PRIVACY_PATH);
-	for (const cookie of [SESSION_COOKIE, CODE_COOKIE, COLOR_SCHEME_COOKIE]) {
-		expect(html, cookie).toContain(cookie);
-	}
 });
