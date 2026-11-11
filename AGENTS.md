@@ -23,5 +23,6 @@ A productivity and time platform on Cloudflare Workers. The documents and the bo
 - Customer data is reached through the organisation-scoped data layer.
 - Components take colour, size and motion from design tokens.
 - Secrets live in `.dev.vars` locally and in Wrangler secrets when deployed.
+- Nothing that belongs to one deployment is committed: no domain, database id, key or address. The Worker reads it from a variable, the pipeline from a repository variable, and `docs/security.md`, "Secrets", lists each one. A value that is missing fails the request or the deploy; it never has a default.
 - `timesifier.com` carries live email records for other services. DNS changes are limited to the Worker's custom domains and the application's one email subdomain.
 - Cloudflare's APIs change quickly: check the current documentation before using one, and trust the installed versions over memory.

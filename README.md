@@ -21,7 +21,7 @@ The scaffold is live at <https://timesifier.com> and the foundation is being bui
 
 ## Quick start
 
-Needs Node 26 and pnpm 12.
+Needs Node 26 and pnpm 12; the exact versions the pipeline uses are in `.node-version` and in `packageManager` in `package.json`.
 
 ```sh
 pnpm install
@@ -58,15 +58,17 @@ pnpm check:tokens  # fail if a file under app/ holds a hex colour or an arbitrar
 
 ## Signing in locally
 
-Sign-in needs three values in `.dev.vars` and the local database:
+Sign-in needs two secrets in `.dev.vars` and the local database:
 
 ```sh
-cp .dev.vars.example .dev.vars && chmod 600 .dev.vars   # then fill in the three values as the file explains
+cp .dev.vars.example .dev.vars && chmod 600 .dev.vars   # then fill in the two values as the file explains
 pnpm db:migrate:local
 ```
 
 - `BETTER_AUTH_SECRET`: any random value, for example from `openssl rand -base64 32`.
-- `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY`: Cloudflare's published test keys, which pass every check. They are written in `.dev.vars.example`.
+- `TURNSTILE_SECRET_KEY`: Cloudflare's published test secret, which passes every check. It is written in `.dev.vars.example`.
+
+Everything else the Worker reads is a variable with a local value in `wrangler.jsonc`: it trusts `localhost` and nothing else, shows Turnstile's test widget, and names databases that do not exist remotely. The repository names no production or preview resource, so no command in this file can reach one from a clone.
 
 Local email is not sent. When the application emails a sign-in code, Wrangler prints the sender, recipient and subject in the terminal running `pnpm dev` and writes the message to a file under `.wrangler/tmp/email/`; the code is in that file. Tests replace the sender and need neither `.dev.vars` nor a mailbox, but the Turnstile tests call Cloudflare's `siteverify` and so need the network.
 
@@ -90,3 +92,44 @@ After `pnpm db:generate`, run `pnpm format` (it tidies the snapshot files drizzl
 ## Delivery
 
 Every pull request is checked and gets a preview URL as a comment. Merging to `main` deploys to production; nothing is deployed from a laptop. The steps, the pipeline's token and the rollback command are in `docs/architecture.md`.
+
+## Deploying your own
+
+The repository holds nothing of the deployment at `timesifier.com`: no domain, database id, key or address. A deployment is a Cloudflare account, a fork, and the settings below. `docs/security.md`, "Secrets", says what reads each one and what happens without it.
+
+You need a Cloudflare account with your domain on it as a zone, Workers with a `workers.dev` subdomain, and Wrangler signed in (`pnpm exec wrangler login`). Then, in a clone of your fork:
+
+1. **Two databases.** Each command prints the id you need in step 6.
+
+   ```sh
+   pnpm exec wrangler d1 create timesifier --jurisdiction eu
+   pnpm exec wrangler d1 create timesifier-preview --jurisdiction eu
+   ```
+
+2. **A Turnstile widget** for your host, in the Cloudflare dashboard under Turnstile. It gives a site key, which is public, and a secret key.
+3. **A sending domain** in Cloudflare Email Service, for example `mail.<your domain>`, and one address on it to send from.
+4. **The Worker's secrets.** The first command offers to create the Worker `timesifier`; accept. Each asks for the value and stores it at Cloudflare.
+
+   ```sh
+   openssl rand -base64 32 | pnpm exec wrangler secret put BETTER_AUTH_SECRET
+   pnpm exec wrangler secret put TURNSTILE_SECRET_KEY                          # the widget's secret key
+   openssl rand -base64 32 | pnpm exec wrangler preview base-config secret put BETTER_AUTH_SECRET
+   ```
+
+5. **A token for the pipeline**, in the dashboard under Manage Account, Account API tokens, with the three scopes listed in `docs/architecture.md`, "The pipeline's token", for your Worker and your zone.
+6. **The repository's settings** in GitHub, under Settings, Secrets and variables, Actions.
+
+   | Kind     | Name                     | Value                                                            |
+   | -------- | ------------------------ | ---------------------------------------------------------------- |
+   | Secret   | `CLOUDFLARE_API_TOKEN`   | The token from step 5                                            |
+   | Secret   | `CLOUDFLARE_ACCOUNT_ID`  | Your account id                                                  |
+   | Variable | `APP_HOST`               | The host to serve on, such as `app.example.org`; `www.` is added |
+   | Variable | `WORKERS_DEV_SUBDOMAIN`  | The `<name>` in your account's `<name>.workers.dev`              |
+   | Variable | `D1_DATABASE_ID`         | The id of `timesifier` from step 1                               |
+   | Variable | `D1_PREVIEW_DATABASE_ID` | The id of `timesifier-preview` from step 1                       |
+   | Variable | `TURNSTILE_SITE_KEY`     | The widget's site key from step 2                                |
+   | Variable | `EMAIL_FROM`             | The address from step 3, alone: `no-reply@mail.example.org`      |
+
+7. **Deploy.** Push to `main`, or open a pull request for a preview. The job checks the settings before it builds anything, and fails with the name of each one that is missing or malformed. Then it migrates the database, deploys, and runs the smoke test against your host.
+
+To check the settings without deploying, run the same check with the values in the environment: `node scripts/deploy-config.ts` prints what is missing and changes nothing. With `--write` it rewrites `wrangler.jsonc` for one deployment, which is what the pipeline does in its own checkout; never commit that.
