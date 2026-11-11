@@ -49,6 +49,16 @@ describe("the workflows", () => {
 		}
 	});
 
+	it("run every job on one named image version, never on a label that moves", () => {
+		const images = workflows.flatMap(({ text }) =>
+			[...text.matchAll(/^\s*runs-on: (.+)$/gm)].map(([, image]) => image),
+		);
+
+		expect(images.length).toBeGreaterThan(0);
+		expect(new Set(images).size).toBe(1);
+		expect(images[0]).toMatch(/^ubuntu-\d+\.\d+$/);
+	});
+
 	it("take Node's version from .node-version and name none themselves", () => {
 		for (const { file, text } of workflows) {
 			expect(text, file).not.toMatch(/node-version:/);

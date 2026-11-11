@@ -127,16 +127,7 @@ Rehearsed on 2026-11-11: at 02:36:49 UTC production was rolled back from version
 
 `timesifier.com` is a zone in the owner's Cloudflare account. Before 2026-11-11 it held 27 DNS records and served no website: the apex and `www` had no address records. TS-003 attached both names to the Worker as custom domains. `www` redirects to the apex with status 308.
 
-The zone carries **live email configuration** and one other service that the application must leave alone:
-
-| Name                                                                  | What is there                                                             |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `timesifier.com`                                                      | MX to Microsoft 365, SPF, a Microsoft verification record, DMARC `p=none` |
-| `autodiscover`                                                        | Outlook autodiscover                                                      |
-| `*._domainkey`, `send`, `send.updates`, `plunk`, `resend._domainkey*` | DKIM and bounce records for Amazon SES, Resend, Plunk and iCloud mail     |
-| `trade`                                                               | Cloudflare email routing and sending records with DMARC `p=reject`        |
-| Two `_…` CNAMEs                                                       | AWS certificate validation                                                |
-| `paperclip`                                                           | Another Worker of the owner's, on its own custom domain                   |
+The zone also carries the owner's other mail and services, which the deploy never touches; the record-by-record listings are kept outside the repository.
 
 The application adds only the Worker custom domains for the apex and `www`, and later one dedicated subdomain for its own outgoing email. TS-003 checked the zone after the first deploy: of its 29 records, the only two created or changed that day were the Worker records for the apex and `www`.
 
@@ -167,3 +158,4 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 | React Aria Components    | 1.22.1     |
 | Playwright               | 1.65.0     |
 | `compatibility_date`     | 2026-11-09 |
+| Runner image, Ubuntu     | 24.04      |
