@@ -103,15 +103,15 @@ The owner's instruction: the mindset of Benji Taylor's essay ["Family Values"](h
 4. **No dead or needless link.** Every link leads to a page or a place that exists and says something, and no two navigations on a page repeat each other. `e2e/public-links.spec.ts` follows every link on the public pages.
 5. **Plain words, true today.** A sentence says what the product does now, or says "will". "Nothing on the page is untrue", below.
 
-| Screen              | The one primary action                                           | What stays out until it is needed                                 |
-| ------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Public pages        | "Get started", at the top and at the end, to the sign-in page    | A second call to action, a pricing table, a newsletter field      |
+| Screen              | The one primary action                                           | What stays out until it is needed                                     |
+| ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Public pages        | "Get started", at the top and at the end, to the sign-in page    | A second call to action, a pricing table, a newsletter field          |
 | Sign in             | Continue: the address, then the code sent to it                  | A name on the way in; any other way to sign in; a page for new people |
-| Today and the timer | Start, which becomes Stop: one control                           | Manual entry and editing, until asked for                         |
-| Projects            | New project                                                      | Archiving, budgets and filters, until a project has them          |
-| The week            | None: it is a reading page                                       | The entries behind a cell, until the cell is chosen               |
-| Reports             | Export what is on the page                                       | Any chart that is not the figures themselves                      |
-| Settings            | The form being edited saves; deleting is never the filled button | Danger, until the person scrolls to it                            |
+| Today and the timer | Start, which becomes Stop: one control                           | Manual entry and editing, until asked for                             |
+| Projects            | New project                                                      | Archiving, budgets and filters, until a project has them              |
+| The week            | None: it is a reading page                                       | The entries behind a cell, until the cell is chosen                   |
+| Reports             | Export what is on the page                                       | Any chart that is not the figures themselves                          |
+| Settings            | The form being edited saves; deleting is never the filled button | Danger, until the person scrolls to it                                |
 
 ### Fluidity
 
@@ -155,16 +155,16 @@ The action reads **"Get started"** (`PRIMARY_ACTION` in `app/landing/Site.tsx`).
 
 **The sign-in page** (card TS-036) is the next page of the same product: the public pages' band, with nothing at its right because this page is the way in, their column and their foot. It has two views and each has one filled action.
 
-| Where                       | Words                                                                                                                                                 |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Title                       | Sign in · Timesifier                                                                                                                                  |
-| First view, heading         | Enter your email                                                                                                                                      |
-| First view, lead            | We will email you a code. If you are new here, the same code sets you up.                                                                             |
-| Second view, heading        | Check your email                                                                                                                                      |
-| Second view, lead           | Where to look, where the code works and for how long, and: "We send at most five codes an hour to one address."                                       |
-| The action, on both views   | Continue                                                                                                                                              |
-| Under the second view's action, ruled off | Send a new code; Use a different email                                                                                                  |
-| The check failed            | We could not confirm this browser. Wait a moment and press Continue again.                                                                            |
+| Where                                     | Words                                                                                                           |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Title                                     | Sign in · Timesifier                                                                                            |
+| First view, heading                       | Enter your email                                                                                                |
+| First view, lead                          | We will email you a code. If you are new here, the same code sets you up.                                       |
+| Second view, heading                      | Check your email                                                                                                |
+| Second view, lead                         | Where to look, where the code works and for how long, and: "We send at most five codes an hour to one address." |
+| The action, on both views                 | Continue                                                                                                        |
+| Under the second view's action, ruled off | Send a new code; Use a different email                                                                          |
+| The check failed                          | We could not confirm this browser. Wait a moment and press Continue again.                                      |
 
 The page asks an address and a code and nothing else: no name, which a person gives in Settings. It never says whether an address has an account, because the server does not. A code that was asked for is still there after a reload or a trip to the mailbox. One page for everybody means that signing in with the wrong one of two addresses makes a second, empty account, so the two pages such an account lands on (creating an organisation, and an invitation that is not this account's) say "Signed in as" with the address and offer "Use a different email".
 

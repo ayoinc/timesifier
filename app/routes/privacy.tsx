@@ -198,12 +198,12 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 				</Rows>
 				<p>
 					Two things are kept in your browser that are not cookies, both in the tab you are using
-					and nowhere else. The first is how far down each page you had scrolled, so that going
-					back returns you to the same place. The second is kept when you ask for a sign-in code:
-					your email address and the time, for {CODE_LIFETIME_SECONDS / 60} minutes, so that you
-					can leave for your mail, come back and type the code. Neither is sent to {host} or
-					anywhere else. The second is removed when you sign in, and when the{" "}
-					{CODE_LIFETIME_SECONDS / 60} minutes have passed.
+					and nowhere else. The first is how far down each page you had scrolled, so that going back
+					returns you to the same place. The second is kept when you ask for a sign-in code: your
+					email address and the time, for {CODE_LIFETIME_SECONDS / 60} minutes, so that you can
+					leave for your mail, come back and type the code. Neither is sent to {host} or anywhere
+					else. The second is removed when you sign in, and when the {CODE_LIFETIME_SECONDS / 60}{" "}
+					minutes have passed.
 				</p>
 			</DocumentSection>
 

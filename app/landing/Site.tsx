@@ -127,7 +127,8 @@ const HEADER_LINK =
  * the page where it has any, and the one way in. The sign-in page is that way
  * in, so on it the band holds the name alone. It stays at the top of the window,
  * and settles as the page leaves the top: the name draws in a little and a rule
- * appears under the band (public.css).
+ * appears under the band (public.css). On the sign-in page it does not settle:
+ * that page is short, its views change in place, and the band takes no part.
  */
 export function SiteHeader({ current, sections = [] }: SiteHeaderProps) {
 	const signIn = current !== SIGN_IN_PATH;
@@ -139,7 +140,7 @@ export function SiteHeader({ current, sections = [] }: SiteHeaderProps) {
 				<a
 					href="/"
 					aria-current={current === "/" ? "page" : undefined}
-					className="site-name inline-flex min-h-9.5 items-center rounded-extra-small outline-none focus-visible:focus-indicator"
+					className={`${signIn ? "site-name " : ""}inline-flex min-h-9.5 items-center rounded-extra-small outline-none focus-visible:focus-indicator`}
 				>
 					<Wordmark tone="one" />
 				</a>
@@ -169,7 +170,7 @@ export function SiteHeader({ current, sections = [] }: SiteHeaderProps) {
 			</div>
 			<span
 				aria-hidden="true"
-				className="site-header-rule absolute inset-x-0 bottom-0 h-0.5 bg-on-sheet opacity-0"
+				className={`${signIn ? "site-header-rule " : ""}absolute inset-x-0 bottom-0 h-0.5 bg-on-sheet opacity-0`}
 			/>
 		</header>
 	);

@@ -237,10 +237,11 @@ test.describe("a robot check that fails", () => {
 		test("pressing Continue again, as the page says, runs the check again and goes on", async ({
 			page,
 		}) => {
-			// Cloudflare's script does not arrive the first time it is asked for.
+			// Cloudflare's script does not arrive when the page loads, nor when the press
+			// asks for it again (a check that failed before a press is run again silently).
 			let asked = 0;
 			await page.route(`**${SCRIPT}*`, (route) =>
-				++asked === 1 ? route.fulfill({ status: 503, body: "" }) : route.continue(),
+				++asked <= 2 ? route.fulfill({ status: 503, body: "" }) : route.continue(),
 			);
 			const person = newPerson();
 			await openAuthPage(page);
@@ -250,7 +251,7 @@ test.describe("a robot check that fails", () => {
 
 			await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 			await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
-			expect(asked).toBe(2);
+			expect(asked).toBe(3);
 		});
 	});
 });
