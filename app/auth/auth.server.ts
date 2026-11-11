@@ -6,10 +6,11 @@
  * `handleAuthRequest` answers; server code reads the signed-in person with
  * `getSession`.
  *
- * A person proves an email address with a six-digit code sent to it, which
+ * A person proves an email address with an eight-digit code sent to it, which
  * signs them in and, the first time, creates their account. Once signed in
  * they can add a passkey and use it from then on, with the code as the
- * fallback. There are no passwords.
+ * fallback. There are no passwords. `sign-in-code.server.ts` holds the rules
+ * around the code that the library does not.
  *
  * The same instance holds organisations, memberships and invitations, which
  * `organisations.server.ts` configures.
@@ -36,6 +37,7 @@ import {
 // The two tenant tables are absent from `~/db` on purpose. Better Auth is the
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
+import { SIGN_IN_CODE_LENGTH } from "./code";
 import { sendEmail } from "./email.server";
 import { endpointPath, isOffered } from "./endpoints";
 import { allowedHosts, isOurHost } from "./hosts";
@@ -48,6 +50,11 @@ import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
 
 /** Attempts one client may make on one sign-in path in `window` seconds; the next is answered 429. */
 const SIGN_IN_LIMIT = { window: 60, max: 10 };
+/**
+ * The same for asking for a code, which sends an email each time: three, the
+ * email-code plugin's own default.
+ */
+const ASKING_LIMIT = { window: 60, max: 3 };
 
 /**
  * Every path of the email-code plugin that the flows above do not use. The
@@ -118,7 +125,7 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 			// Counted in D1: a Worker's memory is neither shared between isolates nor kept.
 			storage: "database",
 			customRules: {
-				"/email-otp/send-verification-otp": SIGN_IN_LIMIT,
+				"/email-otp/send-verification-otp": ASKING_LIMIT,
 				"/sign-in/email-otp": SIGN_IN_LIMIT,
 				"/passkey/verify-authentication": SIGN_IN_LIMIT,
 				...ORGANISATION_RATE_LIMITS,
@@ -157,6 +164,7 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 				// whoever read the table would have every live code. With the key, a
 				// copy of the database signs nobody in without the secret as well.
 				storeOTP: { hash: (code) => keyedHash(BETTER_AUTH_SECRET, "sign-in-code", code) },
+				otpLength: SIGN_IN_CODE_LENGTH,
 				expiresIn: CODE_LIFETIME_SECONDS,
 				async sendVerificationOTP({ email, otp, type }) {
 					if (type !== "sign-in") return;
@@ -169,7 +177,7 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 			passkey({ rpName: "Timesifier" }),
 			...organisationPlugins(),
 			redirectRules,
-			signInCodeRules(),
+			signInCodeRules({ DB, secret: BETTER_AUTH_SECRET }),
 		],
 	});
 }

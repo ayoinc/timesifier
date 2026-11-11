@@ -79,7 +79,7 @@ describe("sending email", () => {
 
 		expect(response?.status).toBe(200);
 		expect(mailbox.send).not.toHaveBeenCalled();
-		expect(await countRows("verifications"), "the code is still created").toBe(1);
+		expect(await countRows("codes"), "the code is still created").toBe(1);
 		expect(lines).toEqual(["email: not sent, this environment has no EMAIL binding"]);
 	});
 

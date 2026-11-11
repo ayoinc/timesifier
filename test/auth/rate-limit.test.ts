@@ -13,7 +13,6 @@ const attempts: Record<
 		post("/sign-in/email-otp", { email: EMAIL, otp: "000000" }, { client, headers }),
 	"signing in with a passkey": (client, headers) =>
 		post("/passkey/verify-authentication", { response: {} }, { client, headers }),
-	"asking for an email code": (client, headers) => requestCode(EMAIL, { client, headers }),
 };
 
 async function statusesOf(count: number, attempt: () => Promise<Response>): Promise<number[]> {
@@ -43,6 +42,13 @@ describe("the sign-in rate limit", () => {
 			expect(statuses[10]).toBe(429);
 		},
 	);
+
+	it("asking for an email code: the 4th request in a minute from one client is answered 429, the first three are served", async () => {
+		const statuses = await statusesOf(4, () => requestCode(EMAIL, { client: "203.0.113.7" }));
+
+		expect(statuses).toEqual([200, 200, 200, 429]);
+		expect((await requestCode(EMAIL, { client: "203.0.113.8" })).status).toBe(200);
+	});
 
 	it("counts each client on its own", async () => {
 		const attempt = attempts["signing in with an email code"];

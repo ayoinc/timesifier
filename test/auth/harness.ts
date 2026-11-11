@@ -1,6 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { expect, type MockInstance, onTestFinished, vi } from "vitest";
 import * as z from "zod";
+import { SIGN_IN_CODE_LENGTH } from "~/auth/code";
 
 export const ORIGIN = "https://timesifier.com";
 
@@ -16,6 +17,15 @@ export const TURNSTILE_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
 export const TURNSTILE_SECRET_THAT_FAILS = "2x0000000000000000000000000000000AA";
 
 export const SESSION_COOKIE = "__Host-timesifier.session_token";
+
+/** A sign-in code where it stands alone in a message. */
+const CODE = new RegExp(`\\b\\d{${SIGN_IN_CODE_LENGTH}}\\b`);
+
+/** A code of the right length that is not `code`. */
+export function wrongCode(code: string): string {
+	const zeros = "0".repeat(SIGN_IN_CODE_LENGTH);
+	return code === zeros ? `${zeros.slice(1)}1` : zeros;
+}
 
 type RequestOptions = {
 	/** The address the request is made to. Defaults to production's. */
@@ -80,7 +90,7 @@ export interface Mailbox {
 	send: MockInstance<SendEmail["send"]>;
 	/** Every message handed to the binding, oldest first. */
 	sent(): z.infer<typeof SentEmail>[];
-	/** The six-digit code in the latest message to `email`. */
+	/** The code in the latest message to `email`. */
 	codeFor(email: string): Promise<string>;
 }
 
@@ -100,7 +110,7 @@ export function captureEmail(): Mailbox {
 				const message = sent()
 					.filter(({ to }) => to === email)
 					.at(-1);
-				const code = message?.text.match(/\b\d{6}\b/)?.[0];
+				const code = message?.text.match(CODE)?.[0];
 				if (!code) throw new Error("no code has been sent to that address");
 				return code;
 			});
@@ -119,13 +129,22 @@ export function sessionCookie(response: Response): string {
 
 const SignedIn = z.object({ user: z.object({ id: z.string(), email: z.string() }) });
 
-/** The whole email journey: ask for a code, read it from the message, sign in with it. */
+let journeys = 0;
+
+/**
+ * The whole email journey: ask for a code, read it from the message, sign in with it.
+ *
+ * Each journey comes from a client address of its own (TEST-NET-2, RFC 5737)
+ * unless the test names one: a client may ask for three codes a minute, and a
+ * test that signs four people in is not one client asking four times.
+ */
 export async function signIn(mailbox: Mailbox, email: string, options: RequestOptions = {}) {
-	expect((await requestCode(email, options)).status).toBe(200);
+	const from = { ...options, client: options.client ?? `198.51.100.${(journeys++ % 250) + 1}` };
+	expect((await requestCode(email, from)).status).toBe(200);
 	const response = await post(
 		"/sign-in/email-otp",
 		{ email, otp: await mailbox.codeFor(email) },
-		options,
+		from,
 	);
 	expect(response.status).toBe(200);
 	const { user } = SignedIn.parse(await response.clone().json());
@@ -158,9 +177,16 @@ export function setBinding(name: keyof Env, value: unknown): void {
 	});
 }
 
+const COUNTED = {
+	users: "users",
+	sessions: "sessions",
+	passkeys: "passkeys",
+	// `verifications` also holds the rows that count the codes sent to an
+	// address (app/auth/quota.server.ts); a code's row is named after its kind.
+	codes: "verifications where identifier like '%-otp-%'",
+};
+
 /** Counts rows straight from D1, to show what a request did or did not store. */
-export async function countRows(
-	table: "users" | "sessions" | "verifications" | "passkeys",
-): Promise<number> {
-	return (await env.DB.prepare(`select count(*) as n from ${table}`).first<number>("n")) ?? 0;
+export async function countRows(of: keyof typeof COUNTED): Promise<number> {
+	return (await env.DB.prepare(`select count(*) as n from ${COUNTED[of]}`).first<number>("n")) ?? 0;
 }
