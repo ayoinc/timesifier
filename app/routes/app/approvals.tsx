@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { data, Form, Link, redirect } from "react-router";
 import * as z from "zod";
 
 import {
@@ -11,9 +11,19 @@ import {
 	decide,
 	pendingPeriods,
 } from "~/approvals/approvals.server";
+import {
+	APPROVAL_GROUP_LABELS,
+	APPROVAL_GROUPS,
+	type ApprovalsQuery,
+	byProject,
+	parseApprovalsQuery,
+	STATUS_LABELS,
+	STATUSES,
+	withoutTab,
+} from "~/approvals/choices";
 import { Button } from "~/components/Button";
-import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
-import { Tab, TabList, TabPanel, Tabs } from "~/components/Tabs";
+import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
+import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
@@ -27,7 +37,8 @@ import { destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
 import { viewedPeriod } from "~/teams/viewed-period.server";
-import { periodLabel, WEEK_PARAM } from "~/teams/words";
+import { timeByProject } from "~/teams/week.server";
+import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { Day } from "~/time/calendar";
 
 import type { Route } from "./+types/approvals";
@@ -40,6 +51,11 @@ import { useOrganisation } from "./useOrganisation";
 // and gets 404 (app/shell/destinations.ts). A period is approved, alone or
 // with every other pending one of the same week, or returned with a comment;
 // an owner or admin reopens an approved one with a reason.
+//
+// The page shows the period's timesheets in one status, `?status=`, grouped by
+// person or by project, `?group=`, with the time logged in the period and its
+// total (TS-058; app/approvals/choices.ts). The tabs it had before are a
+// status now, and their addresses (`?tab=`) are sent to it.
 
 const { label } = destination("approvals");
 
@@ -47,9 +63,29 @@ export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
+/** The rest of an address of Approvals that keeps `query`'s view: the values that are not the default. */
+function viewSearch(query: ApprovalsQuery): string {
+	return [
+		query.status === "pending" ? "" : `&status=${query.status}`,
+		query.group === "person" ? "" : `&group=${query.group}`,
+	].join("");
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { organisation } = membership;
+	const url = new URL(request.url);
+	const moved = withoutTab(url.searchParams);
+	if (moved) {
+		const search = moved.toString();
+		throw redirect(
+			`${destinationPath(organisation.slug, "approvals")}${search === "" ? "" : `?${search}`}`,
+			301,
+		);
+	}
+	const query = parseApprovalsQuery(url.searchParams);
+	if (!query) throw data("Bad Request", { status: 400 });
+
 	const access = await accessOf(membership);
 	const scope = organisationScope(env.DB, organisation.id);
 	const people = await decidablePeople(scope, organisation, access);
@@ -58,8 +94,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	// With no week asked for, last week: the one most people have just
 	// submitted. It does not follow what is pending, so a decision that empties
 	// it leaves the page where it is; other weeks waiting are linked above.
-	const viewed = await viewedPeriod(membership, new URL(request.url), -1);
-	const approvals = await approvalsFor(scope, people, viewed.period, viewed.today);
+	const now = Date.now();
+	const viewed = await viewedPeriod(membership, url, -1, now);
+	const [approvals, time] = await Promise.all([
+		approvalsFor(scope, people, viewed.period, viewed.today),
+		timeByProject(scope, people, viewed.period, now),
+	]);
 	const date = new Intl.DateTimeFormat("en-GB", {
 		day: "numeric",
 		month: "long",
@@ -68,8 +108,63 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		hourCycle: "h23",
 		timeZone: viewed.zone,
 	});
-	const pick = ({ id, name }: { id: string; name: string }) => ({ id, name });
+	const secondsOf = (personId: string) =>
+		time.reduce((sum, each) => (each.userId === personId ? sum + each.seconds : sum), 0);
+	const approved = approvals.decided.filter((p) => p.status === "approved");
+	const returned = approvals.decided.filter((p) => p.status === "returned");
+
+	// The timesheets in the status asked for, each with the time in it and
+	// what can be done with it.
+	type Row = {
+		id: string;
+		person: { id: string; name: string };
+		seconds: number;
+		detail: string;
+		comment: string | null;
+		periodId: string | null;
+	};
+	const row = (
+		person: { id: string; name: string },
+		detail: string,
+		periodId: string | null = null,
+		comment: string | null = null,
+	): Row => ({
+		id: periodId ?? person.id,
+		person: { id: person.id, name: person.name },
+		seconds: secondsOf(person.id),
+		detail,
+		comment,
+		periodId,
+	});
+	const decided = (p: (typeof approvals.decided)[number]) =>
+		row(
+			p.person,
+			`${p.status === "approved" ? "Approved" : "Returned"} by ${p.decidedBy}, ${date.format(p.decidedAt)}`,
+			p.id,
+			p.comment,
+		);
+	let rows: Row[] | null;
+	switch (query.status) {
+		case "pending":
+			rows = approvals.pending.map((p) =>
+				row(p.person, `Submitted ${date.format(p.submittedAt)}`, p.id),
+			);
+			break;
+		case "approved":
+			rows = approved.map(decided);
+			break;
+		case "returned":
+			rows = returned.map(decided);
+			break;
+		case "not-submitted":
+			// Null while the period is open: who has not submitted it is known once it has closed.
+			rows = approvals.notSubmitted?.map((p) => row(p, "Not submitted")) ?? null;
+			break;
+	}
+
 	return {
+		query,
+		keep: viewSearch(query),
 		week: { label: periodLabel(viewed.period), ...viewed },
 		canReopen: mayReopenPeriods(access),
 		elsewhere: waiting
@@ -79,20 +174,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				count: w.count,
 				label: periodLabel(periodContaining(w.startsOn, organisation.weekStartsOn)),
 			})),
-		pending: approvals.pending.map((p) => ({
-			id: p.id,
-			person: pick(p.person),
-			submittedAt: date.format(p.submittedAt),
-		})),
-		notSubmitted: approvals.notSubmitted?.map(pick) ?? null,
-		decided: approvals.decided.map((p) => ({
-			id: p.id,
-			person: pick(p.person),
-			status: p.status,
-			decidedBy: p.decidedBy,
-			decidedAt: date.format(p.decidedAt),
-			comment: p.comment,
-		})),
+		counts: {
+			pending: approvals.pending.length,
+			approved: approved.length,
+			returned: returned.length,
+			"not-submitted": approvals.notSubmitted?.length ?? null,
+		},
+		rows,
+		projects:
+			rows !== null && query.group === "project"
+				? byProject(
+						rows.map((r) => r.person),
+						time,
+					).map((group) => ({ ...group, hours: hours(group.seconds) }))
+				: [],
+		total: hours(rows?.reduce((sum, r) => sum + r.seconds, 0) ?? 0),
 	};
 }
 
@@ -168,12 +264,19 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 type Loaded = Route.ComponentProps["loaderData"];
-const TABS = ["pending", "not-submitted", "decided"] as const;
 type Target = { id: string; name: string };
+
+/** What a status with nothing in it says, for the week shown. */
+const NOTHING: Record<(typeof STATUSES)[number], string> = {
+	pending: "Nothing is waiting for you this week.",
+	approved: "Nothing has been approved for this week.",
+	returned: "Nothing has been returned for this week.",
+	"not-submitted": "Everyone has submitted this week.",
+};
 
 export default function Approvals({ loaderData }: Route.ComponentProps) {
 	const organisation = useOrganisation();
-	const { week, pending, notSubmitted, decided, canReopen, elsewhere } = loaderData;
+	const { query, keep, week, rows, projects, total, counts, canReopen, elsewhere } = loaderData;
 	const [task, setTask] = useState<"approve" | "all" | "return" | "reopen" | null>(null);
 	const [target, setTarget] = useState<Target | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -183,9 +286,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 		setTask(next);
 	};
 	const here = destinationPath(organisation.slug, "approvals");
-	// `?tab=decided` or `?tab=not-submitted` opens on that tab, so a link can point at it.
-	const [search] = useSearchParams();
-	const tab = TABS.find((each) => each === search.get("tab")) ?? "pending";
+	const status = STATUS_LABELS[query.status];
 
 	return (
 		<>
@@ -195,11 +296,11 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 				{said}
 			</p>
 			<p className="mt-6 flex max-w-200 items-center justify-between gap-4 text-body-large">
-				<Link to={`${here}?${WEEK_PARAM}=${week.previous}`} className={TEXT_LINK}>
+				<Link to={`${here}?${WEEK_PARAM}=${week.previous}${keep}`} className={TEXT_LINK}>
 					← Previous week
 				</Link>
 				{week.next ? (
-					<Link to={`${here}?${WEEK_PARAM}=${week.next}`} className={TEXT_LINK}>
+					<Link to={`${here}?${WEEK_PARAM}=${week.next}${keep}`} className={TEXT_LINK}>
 						Next week →
 					</Link>
 				) : (
@@ -212,7 +313,10 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 					{elsewhere.map((w, index) => (
 						<span key={w.startsOn}>
 							{index > 0 && ", "}
-							<Link to={`${here}?${WEEK_PARAM}=${w.startsOn}`} className={TEXT_LINK}>
+							<Link
+								to={`${here}?${WEEK_PARAM}=${w.startsOn}${query.group === "person" ? "" : `&group=${query.group}`}`}
+								className={TEXT_LINK}
+							>
 								{w.label}
 							</Link>{" "}
 							({w.count})
@@ -222,87 +326,98 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 				</p>
 			)}
 
+			<ViewChoice key={`${query.status} ${query.group}`} {...loaderData} />
+
 			<div className="mt-6 max-w-200">
-				<Tabs defaultSelectedKey={tab}>
-					<TabList label="Timesheets">
-						<Tab id="pending">Pending ({pending.length})</Tab>
-						<Tab id="not-submitted">Not submitted{notSubmitted && ` (${notSubmitted.length})`}</Tab>
-						<Tab id="decided">Decided ({decided.length})</Tab>
-					</TabList>
-					<TabPanel id="pending">
-						<Pending
-							slug={organisation.slug}
-							startsOn={week.period.startsOn}
-							pending={pending}
-							onApprove={(on) => open("approve", on)}
-							onReturn={(on) => open("return", on)}
-							onApproveAll={() => open("all", null)}
-						/>
-					</TabPanel>
-					<TabPanel id="not-submitted">
-						{notSubmitted === null ? (
-							<EmptySheet heading="Not submitted">
-								This week has not ended yet. Who has not submitted it is listed once it has.
-							</EmptySheet>
-						) : notSubmitted.length === 0 ? (
-							<EmptySheet heading="Not submitted">Everyone has submitted this week.</EmptySheet>
-						) : (
-							<div className="mt-6">
-								<Ledger heading="Not submitted" note={notSubmitted.length}>
-									<LedgerRows label="Not submitted">
-										{notSubmitted.map((p) => (
-											<LedgerRow
-												key={p.id}
-												title={<span className="wrap-anywhere">{p.name}</span>}
-											/>
-										))}
-									</LedgerRows>
-								</Ledger>
-							</div>
-						)}
-					</TabPanel>
-					<TabPanel id="decided">
-						{decided.length === 0 ? (
-							<EmptySheet heading="Decided">Nothing has been decided for this week.</EmptySheet>
-						) : (
-							<div className="mt-6">
-								<Ledger heading="Decided" note={decided.length}>
-									<LedgerRows label="Decided">
-										{decided.map((p) => (
-											<LedgerRow
-												key={p.id}
-												title={<span className="wrap-anywhere">{p.person.name}</span>}
-												detail={
-													<>
-														{p.status === "approved" ? "Approved" : "Returned"} by {p.decidedBy},{" "}
-														{p.decidedAt}
-														{p.comment && (
-															<span className="block wrap-anywhere">“{p.comment}”</span>
-														)}
-													</>
-												}
-												action={
+				{query.status === "pending" && counts.pending > 1 && (
+					<div className="mb-4">
+						<Button onPress={() => open("all", null)}>Approve all {counts.pending}</Button>
+					</div>
+				)}
+				{rows === null ? (
+					<EmptySheet heading={status}>
+						This week has not ended yet. Who has not submitted it is listed once it has.
+					</EmptySheet>
+				) : rows.length === 0 ? (
+					<EmptySheet heading={status}>{NOTHING[query.status]}</EmptySheet>
+				) : (
+					<Ledger heading={status} note={`By ${query.group}`}>
+						{query.group === "person" ? (
+							<LedgerRows label={`${status}, by person`}>
+								{rows.map((p) => {
+									const on = { id: p.periodId ?? "", name: `${p.person.name}'s` };
+									return (
+										<LedgerRow
+											key={p.id}
+											title={
+												<Link
+													to={`${destinationPath(organisation.slug, "team")}?${WEEK_PARAM}=${week.period.startsOn}&person=${p.person.id}`}
+													className={`${TEXT_LINK} wrap-anywhere`}
+												>
+													{p.person.name}
+												</Link>
+											}
+											detail={
+												<>
+													{p.detail}
+													{p.comment && <span className="block wrap-anywhere">“{p.comment}”</span>}
+												</>
+											}
+											value={hours(p.seconds)}
+											action={
+												query.status === "pending" ? (
+													<span className="flex gap-1">
+														<Button
+															variant="text"
+															aria-label={`Approve ${p.person.name}'s timesheet`}
+															onPress={() => open("approve", on)}
+														>
+															Approve
+														</Button>
+														<Button
+															variant="text"
+															aria-label={`Return ${p.person.name}'s timesheet`}
+															onPress={() => open("return", on)}
+														>
+															Return
+														</Button>
+													</span>
+												) : (
 													canReopen &&
-													p.status === "approved" && (
+													query.status === "approved" && (
 														<Button
 															variant="text"
 															aria-label={`Reopen ${p.person.name}'s timesheet`}
-															onPress={() =>
-																open("reopen", { id: p.id, name: `${p.person.name}'s` })
-															}
+															onPress={() => open("reopen", on)}
 														>
 															Reopen
 														</Button>
 													)
-												}
-											/>
-										))}
-									</LedgerRows>
-								</Ledger>
-							</div>
+												)
+											}
+										/>
+									);
+								})}
+							</LedgerRows>
+						) : projects.length > 0 ? (
+							<LedgerRows label={`${status}, by project`}>
+								{projects.map((project) => (
+									<LedgerRow
+										key={project.id}
+										title={<span className="wrap-anywhere">{project.name}</span>}
+										detail={<span className="wrap-anywhere">{project.people.join(", ")}</span>}
+										value={project.hours}
+									/>
+								))}
+							</LedgerRows>
+						) : (
+							<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
+								No time was logged on any project in these timesheets.
+							</p>
 						)}
-					</TabPanel>
-				</Tabs>
+						<LedgerTotal label="Total" value={total} />
+					</Ledger>
+				)}
 			</div>
 
 			<FormSheet
@@ -318,7 +433,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
-				title={`Approve all ${pending.length} pending?`}
+				title={`Approve all ${counts.pending} pending?`}
 				intent="approve-all"
 				submitLabel="Approve all"
 				isOpen={task === "all"}
@@ -370,71 +485,38 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 	);
 }
 
-function Pending({
-	slug,
-	startsOn,
-	pending,
-	onApprove,
-	onReturn,
-	onApproveAll,
-}: {
-	/** The organisation, and the period, whose people's weeks the names open on Team. */
-	slug: string;
-	startsOn: string;
-	pending: Loaded["pending"];
-	onApprove: (on: Target) => void;
-	onReturn: (on: Target) => void;
-	onApproveAll: () => void;
-}) {
-	if (pending.length === 0) {
-		return <EmptySheet heading="Pending">Nothing is waiting for you this week.</EmptySheet>;
-	}
+/** The status and the grouping, chosen together; the week shown stays. */
+function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "week">) {
 	return (
-		<div className="mt-6">
-			{pending.length > 1 && (
-				<div className="mb-4">
-					<Button onPress={onApproveAll}>Approve all {pending.length}</Button>
-				</div>
-			)}
-			<Ledger heading="Pending" note={pending.length}>
-				<LedgerRows label="Pending">
-					{pending.map((p) => {
-						const on = { id: p.id, name: `${p.person.name}'s` };
-						return (
-							<LedgerRow
-								key={p.id}
-								title={
-									<Link
-										to={`${destinationPath(slug, "team")}?${WEEK_PARAM}=${startsOn}&person=${p.person.id}`}
-										className={`${TEXT_LINK} wrap-anywhere`}
-									>
-										{p.person.name}
-									</Link>
-								}
-								detail={`Submitted ${p.submittedAt}`}
-								action={
-									<span className="flex gap-1">
-										<Button
-											variant="text"
-											aria-label={`Approve ${p.person.name}'s timesheet`}
-											onPress={() => onApprove(on)}
-										>
-											Approve
-										</Button>
-										<Button
-											variant="text"
-											aria-label={`Return ${p.person.name}'s timesheet`}
-											onPress={() => onReturn(on)}
-										>
-											Return
-										</Button>
-									</span>
-								}
-							/>
-						);
+		<Form
+			method="get"
+			aria-label="Choose timesheets"
+			className="mt-8 flex max-w-200 flex-wrap items-end gap-6"
+		>
+			<input type="hidden" name={WEEK_PARAM} value={week.period.startsOn} />
+			<div className="min-w-0 flex-1 basis-56">
+				<Select
+					label="Status"
+					name="status"
+					options={STATUSES.map((id) => {
+						const count = counts[id];
+						return {
+							id,
+							label: count === null ? STATUS_LABELS[id] : `${STATUS_LABELS[id]} (${count})`,
+						};
 					})}
-				</LedgerRows>
-			</Ledger>
-		</div>
+					defaultValue={query.status}
+				/>
+			</div>
+			<div className="min-w-0 flex-1 basis-56">
+				<Select
+					label="Group by"
+					name="group"
+					options={APPROVAL_GROUPS.map((id) => ({ id, label: APPROVAL_GROUP_LABELS[id] }))}
+					defaultValue={query.group}
+				/>
+			</div>
+			<Button type="submit">Show</Button>
+		</Form>
 	);
 }

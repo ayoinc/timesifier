@@ -5,13 +5,19 @@
  * may compile code, which the Content Security Policy refuses and reports.
  */
 
-export const RANGES = ["this-week", "last-week", "this-month", "custom"] as const;
+/**
+ * `week` and `month` are the week or the calendar month holding the day in
+ * `from`: where Previous and Next take a report (TS-059).
+ */
+export const RANGES = ["this-week", "last-week", "this-month", "week", "month", "custom"] as const;
 export type Range = (typeof RANGES)[number];
 
 export const RANGE_LABELS: Record<Range, string> = {
 	"this-week": "This week",
 	"last-week": "Last week",
 	"this-month": "This month",
+	week: "Week",
+	month: "Month",
 	custom: "Custom range",
 };
 

@@ -84,6 +84,44 @@ export async function teamWeek(
 	}));
 }
 
+/** The time one person logged on one project in a period. */
+export interface ProjectTime {
+	userId: string;
+	projectId: string;
+	project: string;
+	seconds: number;
+}
+
+/**
+ * The time each of `people` logged in `period` on each project they logged it
+ * on: what Approvals adds up by person or by project (TS-058).
+ */
+export async function timeByProject(
+	scope: OrganisationScope,
+	people: readonly Person[],
+	period: PeriodDays,
+	now: number,
+): Promise<ProjectTime[]> {
+	const entries = await entriesIn(scope, people, period);
+	const sums = new Map<string, ProjectTime>();
+	for (const entry of entries) {
+		const key = `${entry.userId} ${entry.projectId}`;
+		const sum = sums.get(key) ?? {
+			userId: entry.userId,
+			projectId: entry.projectId,
+			project: "",
+			seconds: 0,
+		};
+		sum.seconds += secondsOf(entry, now);
+		sums.set(key, sum);
+	}
+	const projectIds = [...new Set(entries.map((e) => e.projectId))];
+	const projects =
+		projectIds.length === 0 ? [] : await scope.projects.select((p) => inArray(p.id, projectIds));
+	const names = new Map(projects.map((p) => [p.id, p.name]));
+	return [...sums.values()].map((sum) => ({ ...sum, project: names.get(sum.projectId) ?? "" }));
+}
+
 export interface EntryInWeek {
 	id: string;
 	project: string;

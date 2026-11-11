@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { useEffect, useState } from "react";
-import { Link, useFetcher } from "react-router";
+import { Form, Link, useFetcher } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
@@ -46,7 +46,8 @@ import { useOrganisation } from "./useOrganisation";
 // manage; a member is not shown it and gets 404 here (app/shell/destinations.ts).
 //
 // Its own address shows This week: each person's time in one period, with
-// arrows to earlier ones, and `?person=` opens one person's week to read.
+// arrows to earlier ones, the period's total above them and a filter by name in
+// `?q=` (TS-058), and `?person=` opens one person's week to read.
 // `?show=teams` shows the teams, which owners and admins create, rename and
 // delete, fill and give managers. Members and Invitations are pages of their own.
 
@@ -54,6 +55,8 @@ const { label } = destination("team");
 
 /** The query that opens one person's week. */
 const PERSON_PARAM = "person";
+/** The query that narrows This week to the people whose name or address holds it. */
+const FILTER_PARAM = "q";
 
 export function meta({ loaderData }: Route.MetaArgs) {
 	const title =
@@ -135,7 +138,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		};
 	}
 
-	return { view: "week" as const, week, people: await teamWeek(scope, people, viewed.period, now) };
+	// The filter narrows the people before anybody's time is read.
+	const filter = (url.searchParams.get(FILTER_PARAM) ?? "").trim().slice(0, RECORD_NAME_MAX_LENGTH);
+	const key = filter.toLocaleLowerCase("en");
+	const shown = people.filter(
+		(p) =>
+			p.name.toLocaleLowerCase("en").includes(key) || p.email.toLocaleLowerCase("en").includes(key),
+	);
+	return {
+		view: "week" as const,
+		week,
+		filter,
+		everyone: people.length,
+		people: await teamWeek(scope, shown, viewed.period, now),
+	};
 }
 
 const Id = z.string().min(1).max(64);
@@ -248,8 +264,9 @@ function PeriodArrows({ week, extra = "" }: { week: WeekData["week"]; extra?: st
 
 function ThisWeek({ data }: { data: WeekData }) {
 	const organisation = useOrganisation();
-	const { week, people } = data;
+	const { week, people, filter, everyone } = data;
 	const total = people.reduce((sum, p) => sum + p.seconds, 0);
+	const thisWeek = `?${WEEK_PARAM}=${week.period.startsOn}`;
 	return (
 		<>
 			<TeamTabs slug={organisation.slug} current="week" />
@@ -257,43 +274,89 @@ function ThisWeek({ data }: { data: WeekData }) {
 				<PageHeading>{label}</PageHeading>
 			</div>
 			<PageLead>Each person's time for the week of {week.label}.</PageLead>
-			<PeriodArrows week={week} />
-			{people.length === 0 ? (
+			<PeriodArrows
+				week={week}
+				extra={filter === "" ? "" : `&${FILTER_PARAM}=${encodeURIComponent(filter)}`}
+			/>
+			{everyone === 0 ? (
 				<EmptySheet heading={week.label}>
 					Nobody's time is yours to see yet. When a team you manage has members, they are listed
 					here.
 				</EmptySheet>
 			) : (
-				<div className="mt-6 max-w-200">
-					<Ledger
-						heading={week.label}
-						note={`${people.length} ${people.length === 1 ? "person" : "people"}`}
+				<>
+					{/* Keyed by the filter, so going back or forward shows the address's own. */}
+					<Form
+						key={filter}
+						method="get"
+						role="search"
+						aria-label="People"
+						className="mt-6 flex max-w-200 flex-wrap items-center gap-4"
 					>
-						<LedgerRows label="People">
-							{people.map((p) => (
-								<LedgerRow
-									key={p.id}
-									title={
-										<Link
-											to={`?${WEEK_PARAM}=${week.period.startsOn}&${PERSON_PARAM}=${p.id}`}
-											className={`${TEXT_LINK} wrap-anywhere`}
-										>
-											{p.name}
-										</Link>
-									}
-									detail={
-										<>
-											{statusLabel(p.status)}
-											{p.running && " · Timer running"}
-										</>
-									}
-									value={hours(p.seconds)}
-								/>
-							))}
-						</LedgerRows>
-						<LedgerTotal label="Week" value={hours(total)} />
-					</Ledger>
-				</div>
+						<input type="hidden" name={WEEK_PARAM} value={week.period.startsOn} />
+						<div className="min-w-0 flex-1 basis-60">
+							<TextField
+								label="Filter by name"
+								name={FILTER_PARAM}
+								type="search"
+								defaultValue={filter}
+								maxLength={RECORD_NAME_MAX_LENGTH}
+							/>
+						</div>
+						<Button type="submit" variant="tonal">
+							Filter
+						</Button>
+					</Form>
+					{/* The week's total, of the people listed under it. */}
+					<p className="mt-6 flex max-w-200 items-baseline justify-between gap-4">
+						<span className="text-label-large">
+							{filter === "" ? "Week's total" : `Total for “${filter}”`}
+						</span>
+						<span className="text-headline-medium tabular-nums">{hours(total)}</span>
+					</p>
+					{people.length === 0 ? (
+						<EmptySheet heading={week.label}>
+							Nobody's name or address holds “{filter}”.{" "}
+							<Link to={thisWeek} className={TEXT_LINK}>
+								Show everyone
+							</Link>
+						</EmptySheet>
+					) : (
+						<div className="mt-4 max-w-200">
+							<Ledger
+								heading={week.label}
+								note={
+									filter === ""
+										? `${everyone} ${everyone === 1 ? "person" : "people"}`
+										: `${people.length} of ${everyone}`
+								}
+							>
+								<LedgerRows label="People">
+									{people.map((p) => (
+										<LedgerRow
+											key={p.id}
+											title={
+												<Link
+													to={`${thisWeek}&${PERSON_PARAM}=${p.id}`}
+													className={`${TEXT_LINK} wrap-anywhere`}
+												>
+													{p.name}
+												</Link>
+											}
+											detail={
+												<>
+													{statusLabel(p.status)}
+													{p.running && " · Timer running"}
+												</>
+											}
+											value={hours(p.seconds)}
+										/>
+									))}
+								</LedgerRows>
+							</Ledger>
+						</div>
+					)}
+				</>
 			)}
 		</>
 	);

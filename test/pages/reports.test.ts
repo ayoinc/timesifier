@@ -188,6 +188,84 @@ describe("whose time a report holds", () => {
 	});
 });
 
+describe("Previous and Next beside the range (TS-059)", () => {
+	/** The addresses of Previous and Next on the report at `query`, as `who` sees it. */
+	async function steps(who: Person, query: string) {
+		const html = await pageBody(await open(`${REPORTS}?${query}`, who));
+		const step = (word: string) =>
+			new RegExp(`href="([^"]+)"[^>]*>(?:← )?${word} `)
+				.exec(html)?.[1]
+				?.replaceAll("&amp;", "&")
+				.slice(REPORTS.length + 1);
+		return { text: textOf(html), previous: step("Previous"), next: step("Next") };
+	}
+
+	it("moves a custom range by its number of days, keeping the grouping and the person", async () => {
+		const here = await steps(ada, `${WEEK}&group=day&person=${linus.user.id}`);
+		expect(here.text).toContain("Previous 7 days");
+		expect(here.previous).toBe(
+			`range=custom&from=2026-09-28&to=2026-10-04&group=day&person=${linus.user.id}`,
+		);
+		expect(here.next).toBe(
+			`range=custom&from=2026-10-12&to=2026-10-18&group=day&person=${linus.user.id}`,
+		);
+		// The report follows the address: Linus's Monday after the week.
+		expect(await pageTotal(ada, here.next ?? "")).toBe("1:00");
+		expect(await pageTotal(ada, here.previous ?? "")).toBe("0:00");
+	});
+
+	it("moves a week by a week", async () => {
+		const here = await steps(ada, "range=week&from=2026-10-07");
+		expect(here.text).toContain("5 – 11 October 2026");
+		expect(here.text).toContain("Next week");
+		expect(here.previous).toBe("range=week&from=2026-09-28&group=project");
+		expect(here.next).toBe("range=week&from=2026-10-12&group=project");
+		expect(await pageTotal(ada, "range=week&from=2026-10-07")).toBe("8:00");
+		expect(await pageTotal(ada, here.next ?? "")).toBe("1:00");
+	});
+
+	it("moves a month that ends on the 31st by a calendar month, to one of 30 days", async () => {
+		const october = await steps(ada, "range=month&from=2026-10-31");
+		expect(october.text).toContain("1 – 31 October 2026");
+		expect(october.text).toContain("Next month");
+		expect(october.previous).toBe("range=month&from=2026-09-01&group=project");
+		expect(october.next).toBe("range=month&from=2026-11-01&group=project");
+		expect(await pageTotal(ada, "range=month&from=2026-10-31")).toBe("9:00");
+
+		const november = await steps(ada, october.next ?? "");
+		expect(november.text).toContain("1 – 30 November 2026");
+		expect(november.previous).toBe("range=month&from=2026-10-01&group=project");
+	});
+
+	it("moves this week and this month from today", async () => {
+		const today = dayOf(Date.now(), "UTC");
+		const thisMonth = await steps(ada, "range=this-month");
+		const month = Number(today.slice(5, 7));
+		const before =
+			month === 1
+				? `${Number(today.slice(0, 4)) - 1}-12`
+				: `${today.slice(0, 4)}-${String(month - 1).padStart(2, "0")}`;
+		expect(thisMonth.previous).toBe(`range=month&from=${before}-01&group=project`);
+		const thisWeek = await steps(ada, "range=this-week");
+		expect(thisWeek.previous).toMatch(/^range=week&from=\d{4}-\d\d-\d\d&group=project$/);
+	});
+
+	it.each([
+		["an owner", () => ada, "1:00"],
+		["an admin", () => grace, "1:00"],
+		["a manager: their team's person", () => hedy, "1:00"],
+		["a member: their own", () => linus, "1:00"],
+		["a member with nothing in it", () => mallory, "0:00"],
+	])("holds, for %s, only the time they may see in the range stepped to", async (_, who, total) => {
+		const { next } = await steps(who(), WEEK);
+		expect(next).toBe("range=custom&from=2026-10-12&to=2026-10-18&group=project");
+		expect(await pageTotal(who(), next ?? "")).toBe(total);
+		// The export of the range stepped to holds the same.
+		const { rows } = await exported(who(), next ?? "");
+		expect(`${secondsOf(rows) / HOUR}:00`).toBe(total);
+	});
+});
+
 describe("a report", () => {
 	it("cuts an entry at midnight in the organisation's time zone", async () => {
 		const { rows } = await exported(linus, WEEK);
@@ -292,11 +370,11 @@ describe("the export", () => {
 		);
 		await track(ada, site, "2026-10-09T10:00:00Z", "2026-10-09T10:30:00Z", "@SUM(1)");
 		const { rows } = await exported(ada, `${WEEK}&person=${ada.user.id}`);
-		expect(rows.map((row) => row.description)).toEqual([
-			"Work",
-			`'=HYPERLINK("http://evil","Zoë, café")`,
-			"'@SUM(1)",
-		]);
+		// The export is in the order of the entries' ids, which two inserted in one
+		// millisecond may not keep; what is asserted is how each is written.
+		expect(rows.map((row) => row.description).sort()).toEqual(
+			["Work", `'=HYPERLINK("http://evil","Zoë, café")`, "'@SUM(1)"].sort(),
+		);
 	});
 
 	it("holds every entry, page after page", async () => {

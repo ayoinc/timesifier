@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GROUPS } from "~/reports/choices";
+import { GROUPS, type Range } from "~/reports/choices";
 import {
 	BYTE_ORDER_MARK,
 	CSV_COLUMNS,
@@ -10,7 +10,14 @@ import {
 	pieceCells,
 } from "~/reports/csv";
 import { dayLabel, hoursAndMinutes, rangeLabel } from "~/reports/format";
-import { parseReportQuery, type ReportDays, rangeDays } from "~/reports/query";
+import {
+	parseReportQuery,
+	type ReportDays,
+	rangeDays,
+	reportSearch,
+	type SteppedRange,
+	steppedRange,
+} from "~/reports/query";
 import { type Piece, piecesOf, type ReportEntry, totalsOf } from "~/reports/report";
 import { bounds } from "~/time/calendar";
 import { parseCsv } from "./csv";
@@ -137,6 +144,117 @@ describe("the days of a range", () => {
 			first: "2026-10-05",
 			last: "2026-10-07",
 		});
+	});
+});
+
+describe("a range stepped by Previous and Next (TS-059)", () => {
+	it("moves a week by a week, and names it by its first day", () => {
+		const week = { first: "2026-11-09", last: "2026-11-15" };
+		expect(steppedRange("this-week", week, -1)).toEqual({
+			range: "week",
+			days: { first: "2026-11-02", last: "2026-11-08" },
+		});
+		expect(steppedRange("last-week", week, 1)).toEqual({
+			range: "week",
+			days: { first: "2026-11-16", last: "2026-11-22" },
+		});
+		// Across the end of a year.
+		expect(steppedRange("week", { first: "2026-12-28", last: "2027-01-03" }, 1).days).toEqual({
+			first: "2027-01-04",
+			last: "2027-01-10",
+		});
+	});
+
+	it("moves a month by a calendar month, whatever the number of its days", () => {
+		// A month that ends on the 31st, to one of 30 days and back.
+		const october = { first: "2026-10-01", last: "2026-10-31" };
+		expect(steppedRange("month", october, 1)).toEqual({
+			range: "month",
+			days: { first: "2026-11-01", last: "2026-11-30" },
+		});
+		expect(steppedRange("month", { first: "2026-11-01", last: "2026-11-30" }, -1).days).toEqual(
+			october,
+		);
+		// January, which ends on the 31st, to February of a leap year and of a common one.
+		expect(steppedRange("month", { first: "2028-01-01", last: "2028-01-31" }, 1).days).toEqual({
+			first: "2028-02-01",
+			last: "2028-02-29",
+		});
+		expect(
+			steppedRange("this-month", { first: "2027-03-01", last: "2027-03-31" }, -1).days,
+		).toEqual({ first: "2027-02-01", last: "2027-02-28" });
+		// Across the end of a year, both ways.
+		expect(steppedRange("month", { first: "2026-12-01", last: "2026-12-31" }, 1).days).toEqual({
+			first: "2027-01-01",
+			last: "2027-01-31",
+		});
+		expect(steppedRange("month", { first: "2027-01-01", last: "2027-01-31" }, -1).days).toEqual({
+			first: "2026-12-01",
+			last: "2026-12-31",
+		});
+	});
+
+	it("moves a custom range by its number of days", () => {
+		expect(steppedRange("custom", { first: "2026-10-05", last: "2026-10-14" }, 1)).toEqual({
+			range: "custom",
+			days: { first: "2026-10-15", last: "2026-10-24" },
+		});
+		expect(steppedRange("custom", { first: "2026-10-05", last: "2026-10-14" }, -1).days).toEqual({
+			first: "2026-09-25",
+			last: "2026-10-04",
+		});
+		// One day, across the end of a month of 31.
+		expect(steppedRange("custom", { first: "2026-10-31", last: "2026-10-31" }, 1).days).toEqual({
+			first: "2026-11-01",
+			last: "2026-11-01",
+		});
+	});
+
+	it("comes back to the range it left, a step each way, from any range", () => {
+		const starts: [Range, ReportDays][] = [
+			["week", { first: "2026-02-23", last: "2026-03-01" }],
+			["month", { first: "2026-01-01", last: "2026-01-31" }],
+			["month", { first: "2024-02-01", last: "2024-02-29" }],
+			["custom", { first: "2026-03-29", last: "2026-04-02" }],
+		];
+		for (const [range, days] of starts) {
+			for (const step of [-1, 1] as const) {
+				const there = steppedRange(range, days, step);
+				expect(steppedRange(there.range, there.days, step === 1 ? -1 : 1).days).toEqual(days);
+			}
+		}
+	});
+
+	it("is an address that reads back as the range it names", () => {
+		const back = (stepped: SteppedRange) => {
+			const parsed = parseReportQuery(reportSearch({ ...stepped, group: "project" }));
+			if (!parsed) throw new Error("not a report");
+			return rangeDays(parsed, "2026-11-11", 1);
+		};
+		const week = steppedRange("this-week", { first: "2026-11-09", last: "2026-11-15" }, -1);
+		expect(back(week)).toEqual(week.days);
+		const month = steppedRange("this-month", { first: "2026-10-01", last: "2026-10-31" }, 1);
+		expect(back(month)).toEqual(month.days);
+		const custom = steppedRange("custom", { first: "2026-10-05", last: "2026-10-14" }, 1);
+		expect(back(custom)).toEqual(custom.days);
+	});
+
+	it("takes a week or a month named by any of its days as the whole of it", () => {
+		const parsed = (fields: Record<string, string>) => {
+			const each = query(fields);
+			if (!each) throw new Error("not a report");
+			return rangeDays(each, "2026-11-11", 1);
+		};
+		expect(parsed({ range: "week", from: "2026-11-12" })).toEqual({
+			first: "2026-11-09",
+			last: "2026-11-15",
+		});
+		expect(parsed({ range: "month", from: "2026-10-31" })).toEqual({
+			first: "2026-10-01",
+			last: "2026-10-31",
+		});
+		// With no day, the one holding today.
+		expect(parsed({ range: "month" })).toEqual({ first: "2026-11-01", last: "2026-11-30" });
 	});
 });
 

@@ -93,6 +93,24 @@ async function focusOn(page: Page, role: "button" | "link", name: string) {
 	await expect(target).toBeFocused();
 }
 
+/**
+ * Chooses `option` in the Select labelled `label` with the keyboard: the
+ * focus on its button, Enter opens the list, typing moves to the option and
+ * Enter takes it.
+ */
+async function choose(page: Page, label: string, option: string) {
+	const field = page.getByRole("main").getByRole("button", { name: new RegExp(` ${label}$`) });
+	await field.focus();
+	await expect(field).toBeFocused();
+	await page.keyboard.press("Enter");
+	const listbox = page.getByRole("listbox", { name: label });
+	await expect(listbox).toBeVisible();
+	await page.keyboard.type(option.slice(0, 3));
+	await expect(listbox.getByRole("option", { name: option })).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(listbox).toBeHidden();
+}
+
 for (const viewport of [
 	{ width: 390, height: 844 },
 	{ width: 1280, height: 800 },
@@ -112,8 +130,29 @@ for (const viewport of [
 			const team = destinationPath(slug, "team");
 
 			await openShell(page, `${team}?week=${WEEK}`);
-			await expectNoProblems(page, "Team");
+			// The filter field is empty: its text's contrast is measured once it has some.
+			await expectNoProblems(page, "Team", [EMPTY_INPUT]);
 			await expect(page.getByText("5 to 11 January 2026").first()).toBeVisible();
+			// The week's total stands above the people.
+			await expect(page.getByText(/^Week's total\s*7:30$/)).toBeVisible();
+
+			// A filter by name, kept in the address, narrows the people and the total.
+			const filter = page.getByRole("searchbox", { name: "Filter by name" });
+			await filter.focus();
+			await page.keyboard.type("nobody");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(`${team}?week=${WEEK}&q=nobody`);
+			await expect(page.getByText("Nobody's name or address holds “nobody”.")).toBeVisible();
+			await expectNoProblems(page, "Team");
+			await focusOn(page, "link", "Show everyone");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(`${team}?week=${WEEK}`);
+			await filter.focus();
+			await page.keyboard.type("grace");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(`${team}?week=${WEEK}&q=grace`);
+			await expect(page.getByText(/^Total for “grace”\s*7:30$/)).toBeVisible();
+			await expectNoProblems(page, "Team");
 
 			// Opening a person shows their week, to read.
 			await focusOn(page, "link", member.name);
@@ -146,7 +185,7 @@ for (const viewport of [
 			await expectNoProblems(page, "Teams");
 		});
 
-		test("Approvals: pending, approve with the keyboard, then decided and reopen", async ({
+		test("Approvals: pending, approve with the keyboard, then each status and grouping", async ({
 			page,
 		}) => {
 			const slug = await ownOrganisationWithAWeek(page);
@@ -180,9 +219,17 @@ for (const viewport of [
 				page.getByRole("navigation").getByRole("link", { name: "Approvals", exact: true }),
 			).toBeVisible();
 
-			// Decided: the owner reopens it with a reason.
-			await page.getByRole("tab", { name: /Decided/ }).click();
+			// The status and the grouping are chosen with the keyboard, and kept in the address.
+			await choose(page, "Status", "Approved (1)");
+			await focusOn(page, "button", "Show");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(
+				`${destinationPath(slug, "approvals")}?week=${WEEK}&status=approved&group=person`,
+			);
+			await expect(page.getByText(/^Total\s*7:30$/)).toBeVisible();
 			await expectNoProblems(page, "Approvals");
+
+			// The owner reopens it with a reason.
 			await focusOn(page, "button", `Reopen ${member.name}'s timesheet`);
 			await page.keyboard.press("Enter");
 			await expectNoProblemsInSheet(
@@ -196,7 +243,24 @@ for (const viewport of [
 				"Timesheet reopened. It is back with them to change.",
 			);
 
-			await page.getByRole("tab", { name: /Not submitted/ }).click();
+			await choose(page, "Status", "Returned (1)");
+			await choose(page, "Group by", "Project");
+			await focusOn(page, "button", "Show");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(
+				`${destinationPath(slug, "approvals")}?week=${WEEK}&status=returned&group=project`,
+			);
+			await expect(page.getByRole("list", { name: "Returned, by project" })).toContainText(
+				"Website",
+			);
+			await expect(page.getByText(/^Total\s*7:30$/)).toBeVisible();
+			await expectNoProblems(page, "Approvals");
+
+			// An address of the tabs Approvals had opens on its status.
+			await openShell(page, `${destinationPath(slug, "approvals")}?week=${WEEK}&tab=not-submitted`);
+			await expect(page).toHaveURL(
+				`${destinationPath(slug, "approvals")}?week=${WEEK}&status=not-submitted`,
+			);
 			await expectNoProblems(page, "Approvals");
 		});
 	});

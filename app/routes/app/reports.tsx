@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form } from "react-router";
+import { Form, Link } from "react-router";
 
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
@@ -14,8 +14,9 @@ import {
 	RANGES,
 	type Range,
 } from "~/reports/choices";
-import { clockIn, dayLabel, hoursAndMinutes, rangeLabel } from "~/reports/format";
+import { clockIn, dayLabel, hoursAndMinutes, rangeLabel, stepUnit } from "~/reports/format";
 import { reportExportPath } from "~/reports/paths";
+import { reportSearch, type Step, steppedRange } from "~/reports/query";
 import { byStart, totalsOf } from "~/reports/report";
 import { piecesOfReport, reportRequest } from "~/reports/reports.server";
 import { destination } from "~/shell/destinations";
@@ -27,7 +28,8 @@ import type { Route } from "./+types/reports";
 // Reports (TS-014a): the time in a range of days, grouped by project, client
 // or day, with each entry under it, and its export as CSV (TS-014b). Whose time
 // it holds is the viewer's to see: their own, their teams' as a manager,
-// everyone's as an owner or admin (app/reports/reports.server.ts).
+// everyone's as an owner or admin (app/reports/reports.server.ts). Previous and
+// Next beside the range move it by its own length (TS-059).
 
 const { label } = destination("reports");
 
@@ -49,13 +51,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 	// The address of the export: the report as the page reads it, written out
 	// in full, so the file holds the rows on this page.
-	const search = new URLSearchParams({ range: query.range });
-	if (query.range === "custom") {
-		search.set("from", days.first);
-		search.set("to", days.last);
-	}
-	search.set("group", grouping);
-	if (query.person !== undefined) search.set("person", query.person);
+	const kept = { group: grouping, person: query.person };
+	const search = reportSearch({ ...kept, range: query.range, days });
+	// The ranges before and after, as links that keep the grouping and the person.
+	const step = (by: Step) =>
+		`?${reportSearch({ ...kept, ...steppedRange(query.range, days, by) })}`;
 
 	const chosen = choices.find(({ id }) => id === query.person);
 	return {
@@ -78,6 +78,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					: "Your time.",
 		zone,
 		range: rangeLabel(days.first, days.last),
+		steps: { unit: stepUnit(query.range, days), previous: step(-1), next: step(1) },
 		groups: totals.groups.map((group) => ({
 			key: group.key,
 			label: grouping === "day" ? dayLabel(group.key) : (group.label ?? "No client"),
@@ -107,7 +108,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Reports({ loaderData }: Route.ComponentProps) {
-	const { query, groups, entries, entryCount, exportPath } = loaderData;
+	const { query, groups, entries, entryCount, exportPath, steps } = loaderData;
 
 	return (
 		<>
@@ -120,7 +121,20 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 			{/* Keyed by the report, so a new report starts its fields at what it shows. */}
 			<ReportChoice key={exportPath} {...loaderData} />
 
-			<div className="mt-10 max-w-200">
+			{/* The range, and the ones before and after it by its own length. */}
+			<div className="mt-10 flex max-w-200 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+				<p className="text-title-large">{loaderData.range}</p>
+				<p className="flex flex-wrap gap-x-6 gap-y-2 text-body-large">
+					<Link to={steps.previous} preventScrollReset className={TEXT_LINK}>
+						← Previous {steps.unit}
+					</Link>
+					<Link to={steps.next} preventScrollReset className={TEXT_LINK}>
+						Next {steps.unit} →
+					</Link>
+				</p>
+			</div>
+
+			<div className="mt-6 max-w-200">
 				<Ledger heading={`By ${GROUP_LABELS[query.group].toLowerCase()}`} note={loaderData.range}>
 					{groups.length > 0 ? (
 						<LedgerRows label={`Time by ${GROUP_LABELS[query.group].toLowerCase()}`}>
@@ -191,8 +205,15 @@ function ReportChoice({
 	groupings,
 	choices,
 	everyone,
-}: Pick<Route.ComponentProps["loaderData"], "query" | "groupings" | "choices" | "everyone">) {
+	range: shown,
+}: Pick<
+	Route.ComponentProps["loaderData"],
+	"query" | "groupings" | "choices" | "everyone" | "range"
+>) {
 	const [range, setRange] = useState<Range>(query.range);
+	// A week or a month Previous and Next stepped to is offered while it is shown, by its days.
+	const stepped = (id: Range) => id === "week" || id === "month";
+	const ranges = RANGES.filter((id) => !stepped(id) || id === query.range);
 
 	return (
 		<Form method="get" aria-label="Choose a report" className="mt-8 max-w-200">
@@ -200,7 +221,7 @@ function ReportChoice({
 				<Select
 					label="Range"
 					name="range"
-					options={RANGES.map((id) => ({ id, label: RANGE_LABELS[id] }))}
+					options={ranges.map((id) => ({ id, label: stepped(id) ? shown : RANGE_LABELS[id] }))}
 					value={range}
 					onChange={(id) => setRange(RANGES.find((each) => each === id) ?? range)}
 				/>
@@ -222,6 +243,7 @@ function ReportChoice({
 						<TextField label="Last day" name="to" type="date" defaultValue={query.to} isRequired />
 					</>
 				)}
+				{stepped(range) && <input type="hidden" name="from" value={query.from} />}
 				{choices.length > 0 && (
 					<Select
 						label="Person"

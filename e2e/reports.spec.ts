@@ -13,7 +13,8 @@ import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 
 // Reports (TS-014a) and the export as CSV (TS-014b) in the browser: a report
-// chosen with the keyboard alone, the file it downloads, and no WCAG 2.2 A or AA
+// chosen with the keyboard alone, the file it downloads, Previous and Next
+// stepping the range by its own length (TS-059), and no WCAG 2.2 A or AA
 // violation at either window size in either scheme. Whose time a report holds,
 // role by role, is tested through the Worker (test/pages/reports.test.ts).
 //
@@ -193,4 +194,61 @@ for (const viewport of [
 			});
 		});
 	}
+}
+
+for (const viewport of [
+	{ width: 390, height: 844 },
+	{ width: 1280, height: 800 },
+]) {
+	test(`Previous and Next move the range by its own length, with the keyboard, ${viewport.width}px wide`, async ({
+		page,
+	}) => {
+		await page.setViewportSize(viewport);
+		/** Follows the link named `name` from the keyboard, with its focus shown. */
+		const follow = async (name: string) => {
+			const link = page.getByRole("main").getByRole("link", { name, exact: true });
+			await link.focus();
+			await expectFocusShown(link);
+			await page.keyboard.press("Enter");
+		};
+
+		// A week, by a week: from the one before to the one with the entries.
+		await openShell(page, `${reportsPath()}?range=week&from=2026-09-30`);
+		await expect(page.getByText("Nothing tracked in this range.")).toBeVisible();
+		await follow("Next week →");
+		await expect(page).toHaveURL(`${reportsPath()}?range=week&from=${FIRST}&group=project`);
+		await expect(page.getByText(/^Total\s*4:15$/)).toBeVisible();
+		expect(await problems(page), "problems in a stepped week").toEqual([]);
+
+		// A month, by a calendar month: October, which ends on the 31st, to November and back.
+		await openShell(page, `${reportsPath()}?range=month&from=2026-10-31`);
+		await expect(page.getByText(/^Total\s*4:15$/)).toBeVisible();
+		await follow("Next month →");
+		await expect(page).toHaveURL(`${reportsPath()}?range=month&from=2026-11-01&group=project`);
+		await expect(page.getByText(/^1\s–\s30 November 2026$/).first()).toBeVisible();
+		await follow("← Previous month");
+		await expect(page).toHaveURL(`${reportsPath()}?range=month&from=2026-10-01&group=project`);
+		await expect(page.getByText(/^Total\s*4:15$/)).toBeVisible();
+		expect(await problems(page), "problems in a stepped month").toEqual([]);
+
+		// A custom range, by its number of days, the grouping kept.
+		await openShell(page, `${customWeek()}&group=day`);
+		await follow("Next 7 days →");
+		await expect(page).toHaveURL(
+			`${reportsPath()}?range=custom&from=2026-10-12&to=2026-10-18&group=day`,
+		);
+		await expect(page.getByText("Nothing tracked in this range.")).toBeVisible();
+		await follow("← Previous 7 days");
+		await expect(page).toHaveURL(
+			`${reportsPath()}?range=custom&from=${FIRST}&to=${LAST}&group=day`,
+		);
+		await expect(page.getByText(/^Total\s*4:15$/)).toBeVisible();
+		expect(await problems(page), "problems in a stepped custom range").toEqual([]);
+
+		// Nothing runs off the side of the window.
+		const overflow = await page.evaluate(
+			() => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+		);
+		expect(overflow).toBeLessThanOrEqual(0);
+	});
 }

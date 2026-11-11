@@ -116,7 +116,8 @@ for (const viewport of [
 				}) => {
 					const { slug, member, guest } = homeOrganisation();
 					await openShell(page, homePath("team"));
-					await expectNoProblems(page, "Team");
+					// Team's filter by name is empty: its text's contrast is measured in e2e/people.spec.ts.
+					await expectNoProblems(page, "Team", [EMPTY_INPUT]);
 					await openMembers(page, slug);
 					await expectNoProblems(page, "Members");
 
