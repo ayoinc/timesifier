@@ -35,7 +35,9 @@ describe("uuidv7", () => {
 
 	it("sets version 7 and the RFC 9562 variant in every id", () => {
 		for (let i = 0; i < 1000; i++) {
-			expect(uuidv7()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+			expect(uuidv7()).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+			);
 		}
 	});
 

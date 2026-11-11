@@ -120,9 +120,7 @@ describe("organisation scope", () => {
 		const scope = organisationScope(database, acme.id);
 
 		// What an untyped caller could send, for example a parsed request body.
-		const fromRequest = JSON.parse(
-			JSON.stringify({ userId: chidi.id, organisationId: globex.id }),
-		);
+		const fromRequest = JSON.parse(JSON.stringify({ userId: chidi.id, organisationId: globex.id }));
 		const [inserted] = await scope.memberships.insert(fromRequest);
 
 		expect(inserted?.organisationId).toBe(acme.id);

@@ -21,6 +21,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 13  | Tests               | Vitest in the Workers runtime, plus Playwright                                           | Jev                                |
 | 14  | Lint and format     | Biome                                                                                    | Preparer                           |
 | 15  | Board               | `BOARD.md` in the repository                                                             | Preparer                           |
+| 17  | Ids and timestamps  | UUID version 7 text ids; integer timestamps in milliseconds since the Unix epoch         | Preparer                           |
 | 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
 
 ## Evidence
@@ -76,6 +77,31 @@ Runs inside the Worker and keeps identities in our own D1 database. Community gu
 ### 14 and 15. Biome and the board
 
 Biome formats and lints with one tool and one config. The board lives in the repository so that the card, its acceptance criteria and the change that satisfies them are reviewed together.
+
+### 17. UUIDv7 ids and epoch-millisecond timestamps
+
+Decided in TS-007, before the first table was created.
+
+**Ids are UUID version 7 (RFC 9562), stored as 36-character lowercase text and generated in the application** by `uuidv7` in `app/db/`, with Web Crypto and no dependency.
+
+| Option                 | Evidence                                                                                                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| UUIDv7 text            | The first 48 bits are the creation time, so ids sort by creation as plain strings and new rows land at the end of the primary-key index. Not guessable from a neighbour: 74 random bits. The id exists before the insert, so related rows can go in one batch. A published standard. |
+| Auto-increment integer | Smallest and fastest. Reveals how many rows exist and lets a caller walk them, which matters for a multi-tenant product. The id is known only after the insert.                                                                                                                      |
+| UUIDv4                 | Standard and unguessable. Random order scatters inserts across the index and says nothing about creation order.                                                                                                                                                                      |
+| ULID, nanoid           | Would need a dependency or a format that is not a standard.                                                                                                                                                                                                                          |
+
+Text, not a 16-byte blob: ids appear unchanged in URLs, logs and the D1 console, and Better Auth expects string ids. Ids created in the same millisecond are unique but not ordered among themselves. An id reveals when its row was created; none of our ids needs to hide that.
+
+**Timestamps are integers holding milliseconds since the Unix epoch**, in columns `created_at` and, where rows change, `updated_at`, set by the application.
+
+| Option                     | Evidence                                                                                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Integer epoch milliseconds | The epoch is defined in UTC, so a stored value cannot carry a time zone or be misread as local time. Compares and sorts as a number. It is what `Date.now()` returns and the precision the ids use. Eight bytes at most. |
+| ISO 8601 text              | Readable in the console. SQLite has no date type, so nothing stops a value without a zone or in a second format, and comparison is correct only while every value has the same shape. Two to three times the size.       |
+| Integer epoch seconds      | What SQLite's `unixepoch()` returns. Loses the order of events within a second, which a timer product needs.                                                                                                             |
+
+Drizzle maps these columns to `Date` (`integer` with mode `timestamp_ms`), so code never handles the raw number.
 
 ### 18. Zod 4 for validation, and the origin-check rule
 

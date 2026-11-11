@@ -17,8 +17,13 @@ export type TenantTable = SQLiteTable & {
 };
 
 type Row<T extends TenantTable> = InferSelectModel<T>;
-/** What a caller supplies for a new row: everything except the organisation. */
-type NewRow<T extends TenantTable> = Omit<InferInsertModel<T>, "organisationId">;
+/**
+ * What a caller supplies for a new row: everything except the organisation.
+ * The `infer` step makes TypeScript wait for the real table before removing
+ * the key; applied to the generic directly, `Omit` also drops optional columns.
+ */
+type NewRow<T extends TenantTable> =
+	InferInsertModel<T> extends infer Insert ? Omit<Insert, "organisationId"> : never;
 /** Narrows a statement further within the organisation, for example `(m) => eq(m.userId, id)`. */
 type Filter<T extends TenantTable> = (table: T) => SQL | undefined;
 
