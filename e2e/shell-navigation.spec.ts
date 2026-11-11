@@ -302,6 +302,9 @@ for (const viewport of [COMPACT, MEDIUM]) {
 
 		test("every destination is reached with Tab and Enter alone", async ({ page }) => {
 			await openShell(page, homePath(first.id));
+			// Where a move to a destination leaves the focus: on its heading. The walk
+			// starts there, as each step after the first does.
+			await page.getByRole("heading", { level: 1, name: first.label, exact: true }).focus();
 
 			for (const destination of [...others, first]) {
 				const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
