@@ -1,6 +1,7 @@
 import { Outlet } from "react-router";
 
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
+import { pendingLeaveOf } from "~/leave/leave.server";
 import {
 	membershipContext,
 	notFound,
@@ -69,14 +70,22 @@ export const middleware: Route.MiddlewareFunction[] = [requireOrganisation, requ
 export async function loader({ context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { organisation, role } = membership;
+	const [periods, leave, timer] = await Promise.all([
+		pendingApprovalsOf(membership),
+		pendingLeaveOf(membership),
+		navigationTimer(membership),
+	]);
 	return {
 		name: organisation.name,
 		slug: organisation.slug,
 		role,
 		destinations: visibleDestinations(viewerOf(membership)),
-		/** The periods waiting for this person's decision, for the Approvals link (TS-047). */
-		pendingApprovals: await pendingApprovalsOf(membership),
-		timer: await navigationTimer(membership),
+		/**
+		 * What waits for this person's decision, for the Approvals link: the
+		 * periods (TS-047) and the requests for leave (TS-061).
+		 */
+		pendingApprovals: periods === null ? null : periods + (leave ?? 0),
+		timer,
 	};
 }
 

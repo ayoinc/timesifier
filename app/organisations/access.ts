@@ -53,6 +53,38 @@ export function mayReopenPeriods(access: Access): boolean {
 }
 
 /**
+ * Whether `access` may approve or refuse a request for leave of `personId`
+ * (TS-061): an owner or admin, or a manager of a team the person is in, and
+ * never the person themselves, whatever their role.
+ */
+export function mayDecideLeaveOf(access: Access, personId: string): boolean {
+	if (personId === access.userId) return false;
+	return isAdministrator(access.role) || access.managed.has(personId);
+}
+
+/**
+ * Whether `access` may cancel an approved request of `personId` that has not
+ * started: an owner or admin alone, and never on their own leave.
+ */
+export function mayCancelLeaveOf(access: Access, personId: string): boolean {
+	return personId !== access.userId && isAdministrator(access.role);
+}
+
+/**
+ * Whether `access` may see which kind of leave `personId` is on. Everyone in
+ * the organisation sees that a colleague is on leave; the person, the
+ * managers of their teams, owners and admins also see the kind.
+ */
+export function maySeeLeaveKindOf(access: Access, personId: string): boolean {
+	return maySeeTimeOf(access, personId);
+}
+
+/** Whether `access` may set the working week, the kinds of leave and the public holidays. */
+export function mayManageLeavePolicy(access: Access): boolean {
+	return isAdministrator(access.role);
+}
+
+/**
  * Whose time a list or a report for `access` may hold: everyone's, or the
  * people named. A query passes the people to SQL; it never filters afterwards.
  */

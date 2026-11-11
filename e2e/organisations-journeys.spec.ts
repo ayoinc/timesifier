@@ -232,10 +232,15 @@ test.describe("a person who has just signed in for the first time", () => {
 		// Until he gives a name, the others see his address. He gives one on My account.
 		await setName(other, bob.name);
 
-		// Bob, a member, is shown Timesheet, Projects and Reports. Team and
+		// Bob, a member, is shown Timesheet, Time off, Projects and Reports. Team and
 		// Workspace settings are not his to open: their addresses are the 404 page.
 		await openShell(other, organisationPath(slug));
-		await expect(destinationLinks(other)).toHaveText(["Timesheet", "Projects", "Reports"]);
+		await expect(destinationLinks(other)).toHaveText([
+			"Timesheet",
+			"Time off",
+			"Projects",
+			"Reports",
+		]);
 		for (const address of [members, invitations, settings]) {
 			expect((await other.goto(address))?.status(), address).toBe(404);
 			await expect(other.getByText(NOT_FOUND)).toBeVisible();

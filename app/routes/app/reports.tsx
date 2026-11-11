@@ -5,6 +5,8 @@ import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
+import { halfDaysLabel } from "~/leave/kinds";
+import { minutesLabel } from "~/leave/words";
 import { membershipContext } from "~/organisations/membership.server";
 import {
 	EVERYONE,
@@ -18,7 +20,7 @@ import { clockIn, dayLabel, hoursAndMinutes, rangeLabel, stepUnit } from "~/repo
 import { reportExportPath } from "~/reports/paths";
 import { reportSearch, type Step, steppedRange } from "~/reports/query";
 import { byStart, totalsOf } from "~/reports/report";
-import { piecesOfReport, reportRequest } from "~/reports/reports.server";
+import { peopleOfReport, piecesOfReport, reportRequest } from "~/reports/reports.server";
 import { destination } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
@@ -46,6 +48,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const { query, grouping, days, zone, choices, showClients, seesEveryone } = report;
 	const pieces = (await piecesOfReport(report)).sort(byStart);
 	const totals = totalsOf(pieces, grouping);
+	const lines = await peopleOfReport(report, pieces);
 	// Whether the viewer may see anybody's time but their own.
 	const others = choices.length > 1;
 
@@ -103,6 +106,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			};
 		}),
 		entryCount: pieces.length,
+		/** Each person's worked time beside the time expected of them and their leave (TS-061). */
+		people: lines.map((line) => ({
+			id: line.id,
+			name: line.name,
+			worked: hoursAndMinutes(line.worked),
+			expected: minutesLabel(line.expectedMinutes),
+			leave:
+				line.leaveHalfDays === 0
+					? "No leave"
+					: `${minutesLabel(line.leaveMinutes)} leave (${halfDaysLabel(line.leaveHalfDays)})`,
+		})),
 		exportPath: reportExportPath(membership.organisation.slug, `?${search}`),
 	};
 }
@@ -159,6 +173,29 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 					</a>
 				</p>
 			</div>
+
+			{loaderData.people.length > 0 && (
+				<Section
+					id="people"
+					heading="People"
+					lead="Time worked beside the time expected of each person: their working week, less public holidays and approved leave. Leave is never counted as worked."
+				>
+					<div className="max-w-200">
+						<Ledger heading="Worked, expected and leave" note={loaderData.range}>
+							<LedgerRows label="Worked, expected and leave by person">
+								{loaderData.people.map((person) => (
+									<LedgerRow
+										key={person.id}
+										title={<span className="wrap-anywhere">{person.name}</span>}
+										detail={`${person.expected} expected · ${person.leave}`}
+										value={person.worked}
+									/>
+								))}
+							</LedgerRows>
+						</Ledger>
+					</div>
+				</Section>
+			)}
 
 			{entryCount > 0 && (
 				<Section

@@ -16,11 +16,13 @@ import { finishRunningTransition, INDICATOR_NAME, TRANSITION } from "./transitio
 // One navigation, drawn two ways by CSS alone (design rule 17), in the public
 // pages' words and rules (docs/design-direction.md, "For the product screens").
 // Under 600px it is a bar along the bottom edge: 64px of paper under a 2px ink
-// rule, its destinations side by side in label-medium, so that all seven an
-// owner is shown fit in 390px, a long label on two lines. From 600px it is a column of the same links beside the page, under the
-// band, where it stays as the page scrolls, with the links grouped under their
-// headings (docs/navigation.md). The bar leaves the headings out: there is no
-// room for them, and the links are in the same order without them.
+// rule, its destinations side by side in label-medium on one line each, so
+// that all eight an owner is shown fit in 390px; Workspace settings shows its
+// bar label, Settings, there, and is still read out in full. From 600px it is a
+// column of the same links beside the page, under the band, where it stays as
+// the page scrolls, with the links grouped under their headings
+// (docs/navigation.md). The bar leaves the headings out: there is no room for
+// them, and the links are in the same order without them.
 // Each destination is its label in label-large; the current one is marked by a
 // 2px ink rule, under its label in the bar and before it in the column, and by
 // `aria-current`. Nothing is filled and nothing is amber.
@@ -113,7 +115,16 @@ function DestinationLink({
 		>
 			{/* The keyboard's focus indicator is drawn around the label. */}
 			<span className="rounded-extra-small py-1 underline-offset-4 group-hover:underline group-focus-visible:focus-indicator">
-				{destination.label}
+				{destination.barLabel ? (
+					<>
+						<span aria-hidden="true" className="medium:hidden">
+							{destination.barLabel}
+						</span>
+						<span className="max-medium:sr-only">{destination.label}</span>
+					</>
+				) : (
+					destination.label
+				)}
 				{count > 0 && (
 					<>
 						{" "}

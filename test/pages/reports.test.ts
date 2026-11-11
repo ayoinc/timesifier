@@ -7,6 +7,7 @@ import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, seedTeam } from "../organisations/harness";
 import { parseCsv } from "../reports/csv";
 import { open, openData, type Person, pageBody, person, textOf } from "./harness";
+import { seedHoliday, seedLeave } from "./leave-seed";
 
 // Reports (TS-014a) and their export as CSV (TS-014b), at /app/<slug>/reports
 // and /app/<slug>/reports/export, through the Worker. Whose time a report
@@ -393,5 +394,55 @@ describe("the export", () => {
 		expect(new Set(rows.map((row) => row.entry_id)).size).toBe(451);
 		expect(secondsOf(rows)).toBe(2 * HOUR + 450 * 30);
 		expect(await pageTotal(linus, WEEK)).toBe("5:45");
+	});
+});
+
+describe("people: worked, expected and leave (TS-061)", () => {
+	/** The People section of the report at `query`, as text. */
+	async function peopleOf(who: Person, query: string) {
+		const response = await open(`${REPORTS}?${query}`, who);
+		expect(response.status).toBe(200);
+		const text = textOf(await pageBody(response));
+		return text.slice(text.indexOf("Worked, expected and leave"));
+	}
+
+	beforeEach(async () => {
+		// Monday is a public holiday. Linus is on approved annual leave Thursday and
+		// Friday; Mallory took a half day's sick leave on Wednesday, and her annual
+		// leave on Tuesday was never approved.
+		await seedHoliday(acme.id, "2026-10-05", "Founders' Day");
+		await seedLeave(acme.id, linus.user.id, "annual", "2026-10-08", "2026-10-09");
+		await seedLeave(acme.id, mallory.user.id, "sick", "2026-10-07", "2026-10-07", {
+			startsHalf: true,
+		});
+		await seedLeave(acme.id, mallory.user.id, "annual", "2026-10-06", "2026-10-06", {
+			status: "pending",
+		});
+	});
+
+	it("shows each person's time worked beside the time expected of them and their leave", async () => {
+		const people = await peopleOf(ada, WEEK);
+		expect(people).toMatch(/ada@example\.com 30:00 expected · No leave 1:00/);
+		expect(people).toMatch(/grace@example\.com 30:00 expected · No leave 0:00/);
+		expect(people).toMatch(/hedy@example\.com 30:00 expected · No leave 2:00/);
+		expect(people).toMatch(/linus@example\.com 15:00 expected · 15:00 leave \(2 days\) 2:00/);
+		expect(people).toMatch(/mallory@example\.com 26:15 expected · 3:45 leave \(half a day\) 3:00/);
+	});
+
+	it("never counts leave as time worked", async () => {
+		expect(await pageTotal(ada, WEEK)).toBe("8:00");
+		expect(await pageTotal(ada, `${WEEK}&person=${linus.user.id}`)).toBe("2:00");
+		const { rows } = await exported(ada, WEEK);
+		expect(secondsOf(rows)).toBe(8 * HOUR);
+	});
+
+	it("holds only the people the viewer may see", async () => {
+		const managed = await peopleOf(hedy, WEEK);
+		expect(managed).toContain("hedy@example.com");
+		expect(managed).toContain("linus@example.com 15:00 expected · 15:00 leave (2 days)");
+		expect(managed).not.toContain("mallory@example.com");
+		const own = await peopleOf(mallory, WEEK);
+		expect(own).toContain("mallory@example.com 26:15 expected · 3:45 leave (half a day) 3:00");
+		expect(own).not.toContain("linus@example.com");
 	});
 });

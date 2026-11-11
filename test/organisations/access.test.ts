@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
 	type Access,
+	mayCancelLeaveOf,
 	mayChangeTimeOf,
+	mayDecideLeaveOf,
 	mayDecidePeriodOf,
+	mayManageLeavePolicy,
 	mayReopenPeriods,
+	maySeeLeaveKindOf,
 	maySeeTimeOf,
 	timeScopeOf,
 } from "~/organisations/access";
@@ -67,6 +71,46 @@ describe("deciding a person's period", () => {
 			false,
 			false,
 		]);
+	});
+});
+
+describe("a person's leave (TS-061)", () => {
+	/** Mona manages another team, which holds Bola: not Linus's. */
+	const otherManager: Access = { userId: "mona", role: "member", managed: new Set(["bola"]) };
+	const everyone = [owner, admin, manager, otherManager, member];
+
+	it("is decided by an owner, an admin or a manager of the person's team, never by the person", () => {
+		expect(everyone.map((access) => whom(access, mayDecideLeaveOf))).toEqual([
+			["grace", "hedy", "linus", "bola"],
+			["ada", "hedy", "linus", "bola"],
+			["linus"],
+			["bola"],
+			[],
+		]);
+	});
+
+	it("is cancelled by an owner or admin alone, never on their own", () => {
+		expect(everyone.map((access) => whom(access, mayCancelLeaveOf))).toEqual([
+			["grace", "hedy", "linus", "bola"],
+			["ada", "hedy", "linus", "bola"],
+			[],
+			[],
+			[],
+		]);
+	});
+
+	it("shows its kind to the person, their team's managers, owners and admins", () => {
+		expect(everyone.map((access) => whom(access, maySeeLeaveKindOf))).toEqual([
+			PEOPLE,
+			PEOPLE,
+			["hedy", "linus"],
+			["bola"],
+			["linus"],
+		]);
+	});
+
+	it("follows a policy only an owner or admin sets", () => {
+		expect(everyone.map(mayManageLeavePolicy)).toEqual([true, true, false, false, false]);
 	});
 });
 

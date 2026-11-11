@@ -55,6 +55,12 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	"routes/app/projects": () => formFromAMember("/app/acme/projects", "intent=delete&projectId=p1"),
 	// A client's name is 1 to 120 characters; this is none.
 	"routes/app/clients": () => formFromAMember("/app/acme/clients", "intent=create&name="),
+	// A request's first day is a date the calendar has; 31 February is not.
+	"routes/app/time-off": () =>
+		formFromAMember(
+			"/app/acme/time-off",
+			"intent=request&kindId=k1&startsOn=2026-02-31&endsOn=2026-03-02",
+		),
 	// An invitation is joined or declined; this asks for neither. The invitation
 	// is one the person could join, so only the input is wrong.
 	"routes/invitations.$id": async () => {

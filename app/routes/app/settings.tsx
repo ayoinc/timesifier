@@ -8,7 +8,20 @@ import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Select } from "~/components/Select";
 import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
+import { organisationScope } from "~/db";
+import { LARGEST_ALLOWANCE_DAYS, LEAVE_NAME_MAX_LENGTH } from "~/leave/kinds";
+import { LeaveSettings } from "~/leave/LeaveSettings";
+import {
+	addPublicHoliday,
+	changeKind,
+	leaveKindsOf,
+	publicHolidaysOf,
+	removePublicHoliday,
+	setWorkingWeek,
+	workingWeekOf,
+} from "~/leave/leave.server";
 import { parseRequest } from "~/lib/validate";
+import { isAdministrator } from "~/organisations/access";
 import { deleteOrganisation, renameOrganisation } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { NAME_MAX_LENGTH, Name, nameProblem } from "~/organisations/name";
@@ -19,7 +32,9 @@ import { allows } from "~/organisations/roles";
 import { WeekStart } from "~/periods/periods";
 import { APP_PATH, destination } from "~/shell/destinations";
 import { PageHeading, Section } from "~/shell/PageHeading";
+import { Day } from "~/time/calendar";
 import { TimeZone } from "~/time/zones";
+import { TypedHours } from "~/timesheet/durations";
 import { WEEKDAYS, weekdayName, zoneLabel } from "~/workspace/general";
 import { changeGeneral, timeZones } from "~/workspace/general.server";
 
@@ -30,7 +45,9 @@ import { FormSheet } from "./FormSheet";
 // manage for everyone in it (docs/navigation.md, "Workspace settings"). Only
 // they are shown it; anybody else gets 404 here (app/shell/destinations.ts).
 // General holds its name, its default time zone, the day its weeks start on
-// and whether Clients is shown (TS-048). The person's own account is on My
+// and whether Clients is shown (TS-048). Below it are the working week, the
+// kinds of leave with their allowances, and the public holidays, which apply to
+// everyone in the organisation (TS-061). The person's own account is on My
 // account.
 
 const { label } = destination("settings");
@@ -40,9 +57,15 @@ export function meta() {
 }
 
 /** The organisation and what the person's role lets them do to it. The checks on the layouts have already run. */
-export function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation, role } = context.get(membershipContext);
 	const canChange = allows(role, { organization: ["update"] });
+	const scope = organisationScope(env.DB, organisation.id);
+	const [week, kinds, holidays] = await Promise.all([
+		workingWeekOf(scope),
+		leaveKindsOf(scope),
+		publicHolidaysOf(scope),
+	]);
 	return {
 		organisation: {
 			name: organisation.name,
@@ -55,9 +78,39 @@ export function loader({ context }: Route.LoaderArgs) {
 		},
 		// Only those who may choose a zone are sent the list.
 		zones: canChange ? timeZones() : [],
+		/** The working week, the kinds of leave and the public holidays (TS-061). */
+		leave: { week: [...week], kinds, holidays },
 	};
 }
 
+const LeaveName = z.string().trim().min(1).max(LEAVE_NAME_MAX_LENGTH);
+/** A checkbox sends its value only while it is ticked. */
+const Ticked = z
+	.literal("on")
+	.optional()
+	.transform((value) => value === "on");
+/** A yearly allowance in days, whole or half; empty is none. Kept as half days. */
+const AllowanceDays = z
+	.string()
+	.trim()
+	.max(6)
+	.transform((text, context) => {
+		if (text === "") return null;
+		const days = Number(text.replace(",", "."));
+		if (
+			!Number.isFinite(days) ||
+			days < 0 ||
+			days > LARGEST_ALLOWANCE_DAYS ||
+			!Number.isInteger(days * 2)
+		) {
+			context.addIssue({
+				code: "custom",
+				message: `Type whole or half days, at most ${LARGEST_ALLOWANCE_DAYS}.`,
+			});
+			return z.NEVER;
+		}
+		return days * 2;
+	});
 /** Each thing this page can ask for. A form says which with its `intent`. */
 const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("rename"), name: Name }),
@@ -67,6 +120,26 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("clients"), clientsEnabled: z.literal("on").optional() }),
 	// What the person typed to confirm. It is compared with the name; it is never used as one.
 	z.object({ intent: z.literal("delete"), confirmation: z.string().max(200) }),
+	z.object({
+		intent: z.literal("working-week"),
+		day1: TypedHours,
+		day2: TypedHours,
+		day3: TypedHours,
+		day4: TypedHours,
+		day5: TypedHours,
+		day6: TypedHours,
+		day7: TypedHours,
+	}),
+	z.object({
+		intent: z.literal("kind"),
+		kindId: z.string().min(1).max(64),
+		name: LeaveName,
+		enabled: Ticked,
+		needsApproval: Ticked,
+		allowanceDays: AllowanceDays.optional(),
+	}),
+	z.object({ intent: z.literal("add-holiday"), day: Day, name: LeaveName }),
+	z.object({ intent: z.literal("remove-holiday"), holidayId: z.string().min(1).max(64) }),
 ]);
 
 /**
@@ -104,6 +177,46 @@ export async function action({ request, context }: Route.ActionArgs) {
 			);
 		}
 
+		case "working-week":
+		case "kind":
+		case "add-holiday":
+		case "remove-holiday": {
+			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
+			const scope = organisationScope(env.DB, organisation.id);
+			if (input.intent === "working-week") {
+				const week = [
+					input.day1,
+					input.day2,
+					input.day3,
+					input.day4,
+					input.day5,
+					input.day6,
+					input.day7,
+				];
+				await setWorkingWeek(scope, week);
+				return done("The working week is saved.");
+			}
+			if (input.intent === "kind") {
+				const changed = await changeKind(scope, input.kindId, {
+					name: input.name,
+					enabled: input.enabled,
+					needsApproval: input.needsApproval,
+					allowanceHalfDays: input.allowanceDays ?? null,
+				});
+				return changed
+					? done(`${input.name} is saved.`)
+					: declined("That kind of leave is not there.", 404);
+			}
+			if (input.intent === "add-holiday") {
+				return (await addPublicHoliday(scope, { day: input.day, name: input.name }))
+					? done(`${input.name} is a public holiday.`)
+					: declined("There is already a public holiday on that day.", 409);
+			}
+			return (await removePublicHoliday(scope, input.holidayId))
+				? done("Public holiday removed.")
+				: declined("That public holiday is no longer there.", 404);
+		}
+
 		case "delete": {
 			if (input.confirmation.trim() !== organisation.name) {
 				return declined("That is not the organisation's name. Type it exactly as it is shown.");
@@ -118,7 +231,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 type Task = "rename" | "time-zone" | "week-start" | "delete";
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-	const { organisation, zones } = loaderData;
+	const { organisation, zones, leave } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
@@ -178,6 +291,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 					</LedgerRows>
 				</Ledger>
 			</Section>
+
+			<LeaveSettings data={leave} onDone={setSaid} />
 
 			{/* Deletion is last, under its own rule. */}
 			{organisation.canDelete && (

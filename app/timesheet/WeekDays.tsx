@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
 import { cx } from "~/components/cx";
+import { minutesLabel } from "~/leave/words";
 import { finishRunningTransition } from "~/shell/transitions";
 import type { Day } from "~/time/calendar";
 
@@ -9,13 +10,31 @@ import { useDayFormat } from "./format";
 import type { DayData } from "./timesheet.server";
 import { dayPath } from "./views";
 
+/** The one word a day of the strip shows under its total, where seven fit in 390px; its full name is read out. */
+const SHORT: Partial<Record<DayData["away"]["days"][number]["kind"], string>> = {
+	leave: "Leave",
+	holiday: "Holiday",
+	"not-a-working-day": "Off",
+};
+
 /**
  * Above the Day view's day (TS-056): the seven days of its period, each a link
  * to its day with the time tracked on it, the day shown marked, and the
  * period's total. The totals are the Week view's, added up by the same
- * `weekSheet`.
+ * `weekSheet`. A day of leave, a public holiday and a day not worked say so
+ * (TS-061), and the period's total stands beside the time expected over it.
  */
-export function WeekDays({ week, day, slug }: { week: DayData["week"]; day: Day; slug: string }) {
+export function WeekDays({
+	week,
+	away,
+	day,
+	slug,
+}: {
+	week: DayData["week"];
+	away: DayData["away"];
+	day: Day;
+	slug: string;
+}) {
 	const formatShort = useDayFormat("short");
 	const formatLong = useDayFormat();
 	return (
@@ -24,8 +43,10 @@ export function WeekDays({ week, day, slug }: { week: DayData["week"]; day: Day;
 			<fieldset className="min-w-0 flex-1">
 				<legend className="sr-only">Days of the week</legend>
 				<ol className="grid grid-cols-7 gap-1">
-					{week.days.map((each) => {
+					{week.days.map((each, index) => {
 						const isShown = each.day === day;
+						const marked = away.days[index];
+						const short = marked ? SHORT[marked.kind] : undefined;
 						return (
 							<li key={each.day} className="min-w-0">
 								<Link
@@ -48,6 +69,13 @@ export function WeekDays({ week, day, slug }: { week: DayData["week"]; day: Day;
 									<span className="text-label-large tabular-nums">
 										{formatDuration(each.total)}
 									</span>
+									{short && marked?.label && (
+										<span className="max-w-full truncate text-label-small">
+											<span className="sr-only">, </span>
+											<span aria-hidden="true">{short}</span>
+											<span className="sr-only">{marked.label}</span>
+										</span>
+									)}
 								</Link>
 							</li>
 						);
@@ -56,7 +84,13 @@ export function WeekDays({ week, day, slug }: { week: DayData["week"]; day: Day;
 			</fieldset>
 			<p className="flex items-baseline justify-between gap-4 rounded-medium border-2 border-on-surface px-4 py-2 medium:flex-col medium:items-end medium:justify-center">
 				<span className="text-label-large">Week total</span>
-				<span className="text-title-medium tabular-nums">{formatDuration(week.total)}</span>
+				<span className="text-title-medium tabular-nums">
+					{formatDuration(week.total)}
+					<span className="text-label-large text-on-surface-variant">
+						{" "}
+						of {minutesLabel(away.expectedMinutes)} expected
+					</span>
+				</span>
 			</p>
 		</div>
 	);

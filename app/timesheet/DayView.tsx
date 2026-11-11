@@ -8,6 +8,7 @@ import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger"
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
+import { minutesLabel } from "~/leave/words";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { destinationPath } from "~/shell/destinations";
@@ -44,6 +45,8 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 	const travel = useTravel(dayNumber(day));
 	const live = useNow(data.running !== null, now);
 	const canTrack = !locked && projects.some((p) => !p.archived);
+	// The day as leave sees it: its name and the time expected on it (TS-061).
+	const shownDay = data.away.days.find((d) => d.day === day);
 
 	const [task, setTask] = useState<"track" | "edit" | "delete" | null>(null);
 	const [entry, setEntry] = useState<SheetEntry | null>(null);
@@ -72,7 +75,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 				next={{ to: dayPath(slug, addDays(day, 1)), label: "Next day" }}
 			/>
 
-			<WeekDays week={data.week} day={day} slug={slug} />
+			<WeekDays week={data.week} away={data.away} day={day} slug={slug} />
 
 			<Timer
 				data={data}
@@ -94,6 +97,12 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 						heading={day === today ? `Today, ${formatDay(day)}` : formatDay(day)}
 						note={locked ? "Submitted" : undefined}
 					>
+						{shownDay && (
+							<p className="px-4 pb-3 text-body-medium text-on-surface-variant @sm:px-5">
+								{shownDay.label ? `${shownDay.label}. ` : ""}
+								{minutesLabel(shownDay.expectedMinutes)} expected.
+							</p>
+						)}
 						{entries.length === 0 ? (
 							<p className="px-4 pb-4 text-body-large text-on-surface-variant @sm:px-5">
 								Nothing tracked on this day.
@@ -230,6 +239,12 @@ function TrackTime({
 	const isToday = data.day === data.today;
 	const startsTimer = isToday && hours.trim() === "";
 	const active = data.projects.filter((p) => !p.archived);
+	// A whole day of leave, or a public holiday: tracking is allowed, and said to be unusual (TS-061).
+	const away = data.away.days.find(
+		(d) =>
+			d.day === data.day &&
+			((d.kind === "leave" && d.expectedMinutes === 0) || d.kind === "holiday"),
+	);
 	return (
 		<FormSheet
 			title="Track time"
@@ -245,6 +260,17 @@ function TrackTime({
 			<p className="text-body-large text-on-surface-variant">
 				{isToday ? `Today, ${formatDay(data.day)}` : formatDay(data.day)}
 			</p>
+			{away && (
+				<p
+					role="note"
+					className="rounded-medium border-2 border-on-surface px-4 py-3 text-body-large"
+				>
+					{away.kind === "holiday"
+						? `${away.label} is a public holiday.`
+						: `You are on ${away.label?.toLowerCase()} this day.`}{" "}
+					You can still track time on it.
+				</p>
+			)}
 			<input type="hidden" name="day" value={data.day} />
 			<Select
 				label="Project"

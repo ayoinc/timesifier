@@ -375,6 +375,167 @@ export const teamMembers = sqliteTable(
 	],
 );
 
+// Leave (TS-061). The kinds of leave, the requests for it, the organisation's
+// public holidays and its working week. A new organisation is given the six
+// kinds and a week of Monday to Friday, 7.5 hours a day, by the trigger
+// `organisations_leave_defaults` in `migrations/0007_leave.sql`, which drizzle-kit
+// cannot write; the same migration gave every organisation that already existed
+// the same rows.
+
+/**
+ * A kind of leave in one organisation: one row for each of the six keys
+ * (`app/leave/kinds.ts`). Owners and admins rename a kind, switch it off, set
+ * its yearly allowance and whether its requests wait for a decision; they never
+ * add or delete one. The allowance is in half days; null is no allowance, so
+ * nothing is counted against it.
+ */
+export const leaveKinds = sqliteTable(
+	"leave_kinds",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		/** `annual`, `sick`, `study`, `parental`, `unpaid` or `holiday`. Never changes. */
+		key: text("key").notNull(),
+		name: text("name").notNull(),
+		enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+		needsApproval: integer("needs_approval", { mode: "boolean" }).notNull().default(true),
+		/** Half days a year, or null for none. */
+		allowanceHalfDays: integer("allowance_half_days"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("leave_kinds_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("leave_kinds_organisation_id_key_unique").on(table.organisationId, table.key),
+		check(
+			"leave_kinds_key_known",
+			sql`${table.key} IN ('annual', 'sick', 'study', 'parental', 'unpaid', 'holiday')`,
+		),
+		check(
+			"leave_kinds_allowance_in_range",
+			sql`${table.allowanceHalfDays} IS NULL OR ${table.allowanceHalfDays} BETWEEN 0 AND 730`,
+		),
+	],
+);
+
+/**
+ * One person's request for leave: from a first to a last local day, both
+ * included, in their time zone. `startsHalf` makes the first day a half day and
+ * `endsHalf` the last; a request of one day is a half day by `startsHalf`
+ * alone. The kind and the person are of the same organisation, which the pairs
+ * of columns make the database hold; when the person leaves the organisation
+ * their requests go with their membership.
+ *
+ * `status` is `pending` until it is decided or withdrawn; a request that needs
+ * no decision is `approved` when it is made. `decidedBy` and `decidedAt` are who
+ * approved, refused or cancelled it and when; `comment` is what they said, and
+ * the reason given with a cancellation. `note` is the person's own.
+ */
+export const leaveRequests = sqliteTable(
+	"leave_requests",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		kindId: text("kind_id").notNull(),
+		startsOn: text("starts_on").notNull(),
+		endsOn: text("ends_on").notNull(),
+		startsHalf: integer("starts_half", { mode: "boolean" }).notNull().default(false),
+		endsHalf: integer("ends_half", { mode: "boolean" }).notNull().default(false),
+		/** `pending`, `approved`, `refused`, `withdrawn` or `cancelled`. */
+		status: text("status").notNull(),
+		note: text("note"),
+		decidedBy: text("decided_by").references(() => users.id),
+		decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+		comment: text("comment"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("leave_requests_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("leave_requests_organisation_id_user_id_starts_on_idx").on(
+			table.organisationId,
+			table.userId,
+			table.startsOn,
+		),
+		index("leave_requests_organisation_id_status_starts_on_idx").on(
+			table.organisationId,
+			table.status,
+			table.startsOn,
+		),
+		foreignKey({
+			name: "leave_requests_kind_fk",
+			columns: [table.organisationId, table.kindId],
+			foreignColumns: [leaveKinds.organisationId, leaveKinds.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "leave_requests_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
+		check(
+			"leave_requests_status_known",
+			sql`${table.status} IN ('pending', 'approved', 'refused', 'withdrawn', 'cancelled')`,
+		),
+		check("leave_requests_ends_on_or_after_start", sql`${table.endsOn} >= ${table.startsOn}`),
+		check(
+			"leave_requests_one_half_on_one_day",
+			sql`${table.endsOn} > ${table.startsOn} OR NOT ${table.endsHalf}`,
+		),
+	],
+);
+
+/** A day off for everyone in the organisation, such as a bank holiday. One a day. */
+export const publicHolidays = sqliteTable(
+	"public_holidays",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		/** The local date, `YYYY-MM-DD`: the same day in every person's zone. */
+		day: text("day").notNull(),
+		name: text("name").notNull(),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("public_holidays_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("public_holidays_organisation_id_day_unique").on(table.organisationId, table.day),
+	],
+);
+
+/**
+ * The organisation's working week: for each day of the week as ISO counts it
+ * (1 is Monday), the minutes a person is expected to work; 0 is not a working
+ * day. Seven rows an organisation.
+ */
+export const workingDays = sqliteTable(
+	"working_days",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		weekday: integer("weekday").notNull(),
+		minutes: integer("minutes").notNull(),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("working_days_organisation_id_weekday_unique").on(
+			table.organisationId,
+			table.weekday,
+		),
+		check("working_days_weekday_in_range", sql`${table.weekday} BETWEEN 1 AND 7`),
+		check("working_days_minutes_in_range", sql`${table.minutes} BETWEEN 0 AND 1440`),
+	],
+);
+
 /**
  * A signed-in browser. The token is the value the session cookie carries, signed.
  *

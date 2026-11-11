@@ -39,10 +39,28 @@ const destinationPages = allRoutes
 
 /** Who is shown what, by docs/navigation.md: the expected link labels of each kind of person, in order. */
 const SHOWN: Record<string, string[]> = {
-	owner: ["Timesheet", "Projects", "Clients", "Team", "Approvals", "Reports", "Workspace settings"],
-	admin: ["Timesheet", "Projects", "Clients", "Team", "Approvals", "Reports", "Workspace settings"],
-	manager: ["Timesheet", "Projects", "Team", "Approvals", "Reports"],
-	member: ["Timesheet", "Projects", "Reports"],
+	owner: [
+		"Timesheet",
+		"Time off",
+		"Projects",
+		"Clients",
+		"Team",
+		"Approvals",
+		"Reports",
+		"Workspace settings",
+	],
+	admin: [
+		"Timesheet",
+		"Time off",
+		"Projects",
+		"Clients",
+		"Team",
+		"Approvals",
+		"Reports",
+		"Workspace settings",
+	],
+	manager: ["Timesheet", "Time off", "Projects", "Team", "Approvals", "Reports"],
+	member: ["Timesheet", "Time off", "Projects", "Reports"],
 };
 
 const VIEWERS: Record<string, Viewer> = {
@@ -88,10 +106,16 @@ function navigationOf(html: string): string {
 	return nav;
 }
 
-/** The labels of the destinations' links in a navigation, in order: what follows the timer's control. */
+/**
+ * The labels of the destinations' links in a navigation, in order: what follows
+ * the timer's control. Words hidden from assistive technology, such as a bar
+ * label, are left out, as a screen reader leaves them out.
+ */
 function linksOf(nav: string): string[] {
 	const list = nav.slice(nav.indexOf("<ul"));
-	return [...list.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)].map(([, inner]) => textOf(inner ?? ""));
+	return [...list.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)].map(([, inner]) =>
+		textOf((inner ?? "").replace(/<span aria-hidden="true"[^>]*>[^<]*<\/span>/g, "")),
+	);
 }
 
 /** A 404's body, with the organisation's address taken out. */
@@ -103,6 +127,7 @@ describe("the list of destinations", () => {
 	it("is the navigation of docs/navigation.md, in its order", () => {
 		expect(destinations.map(({ label, heading }) => [heading, label])).toEqual([
 			["Track", "Timesheet"],
+			["Track", "Time off"],
 			["Organize", "Projects"],
 			["Organize", "Clients"],
 			["Organize", "Team"],

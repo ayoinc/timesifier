@@ -45,6 +45,13 @@ export type Audience = "everyone" | "managers" | "administrators";
 const LIST = [
 	{ id: "timesheet", label: "Timesheet", segment: "", heading: "Track", audience: "everyone" },
 	{
+		id: "time-off",
+		label: "Time off",
+		segment: "time-off",
+		heading: "Track",
+		audience: "everyone",
+	},
+	{
 		id: "projects",
 		label: "Projects",
 		segment: "projects",
@@ -72,6 +79,8 @@ const LIST = [
 	{
 		id: "settings",
 		label: "Workspace settings",
+		// Eight links share the bar of a 390px window only if this one is short there (TS-061).
+		barLabel: "Settings",
 		segment: "settings",
 		heading: null,
 		audience: "administrators",
@@ -92,6 +101,8 @@ export interface Destination {
 	audience: Audience;
 	/** Whether it is shown only while the organisation has Clients turned on. */
 	needsClients?: boolean;
+	/** The shorter words its link shows in the bar under 600px; its label is still what is read out. */
+	barLabel?: string;
 }
 
 /** In the order they are shown: a later one is "forward" of an earlier one. */
