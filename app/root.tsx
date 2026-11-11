@@ -18,6 +18,7 @@ import plainFont from "./fonts/sofia-sans-latin-wght-normal.woff2?url";
 import { MAIN_ID, SiteHeader } from "./landing/Site";
 import { readColorScheme } from "./shell/color-scheme.server";
 import { APP_PATH } from "./shell/destinations";
+import { useFreshOnReturn } from "./shell/fresh-on-return";
 import { TEXT_LINK } from "./shell/links";
 import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "./shell/Outside";
@@ -117,6 +118,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+	useFreshOnReturn();
 	return <Outlet />;
 }
 
