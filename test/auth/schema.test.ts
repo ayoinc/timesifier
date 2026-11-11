@@ -50,17 +50,11 @@ describe("the auth tables in app/db/schema.ts", () => {
 		expect(limit?.last_request).toBeGreaterThanOrEqual(before);
 	});
 
-	it("lose a person's sessions and passkeys when the person is deleted", async () => {
+	it("lose a person's sessions when the person is deleted", async () => {
 		const { user } = await signIn(mailbox, "ada@example.com");
-		await env.DB.prepare(
-			"insert into passkeys (id, user_id, public_key, credential_id, counter, device_type, backed_up, created_at) values ('p1', ?, 'k', 'c', 0, 'singleDevice', 0, 0)",
-		)
-			.bind(user.id)
-			.run();
 
 		await env.DB.prepare("delete from users where id = ?").bind(user.id).run();
 
 		expect(await env.DB.prepare("select count(*) as n from sessions").first("n")).toBe(0);
-		expect(await env.DB.prepare("select count(*) as n from passkeys").first("n")).toBe(0);
 	});
 });

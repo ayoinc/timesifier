@@ -29,6 +29,13 @@
 			"when": 1794376449040,
 			"tag": "0003_passkey_credential_unique",
 			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "6",
+			"when": 1794382317155,
+			"tag": "0004_remove_passkeys",
+			"breakpoints": true
 		}
 	]
 }

@@ -193,7 +193,6 @@ export function setBinding(name: keyof Env, value: unknown): void {
 const COUNTED = {
 	users: "users",
 	sessions: "sessions",
-	passkeys: "passkeys",
 	// `verifications` also holds the rows that count the codes sent to an
 	// address (app/auth/quota.server.ts); a code's row is named after its kind.
 	codes: "verifications where identifier like '%-otp-%'",

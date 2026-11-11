@@ -128,10 +128,14 @@ describe("hosts", () => {
 		setBinding("ENVIRONMENT", environment);
 
 		const session = await get("/get-session", { origin });
-		const options = await get("/passkey/generate-authenticate-options", { origin });
+		const signingIn = await post(
+			"/sign-in/email-otp",
+			{ email: EMAIL, otp: "00000000" },
+			{ origin },
+		);
 
-		expect([session.status, options.status]).toEqual([404, 404]);
-		expect(options.headers.getSetCookie()).toEqual([]);
+		expect([session.status, signingIn.status]).toEqual([404, 404]);
+		expect(signingIn.headers.getSetCookie()).toEqual([]);
 	});
 
 	it.each([

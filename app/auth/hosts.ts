@@ -1,6 +1,6 @@
 /**
  * The hosts the application answers on, by environment. Nothing about a
- * session, a cookie or a passkey is ever derived from a `Host` header that is
+ * session or a cookie is ever derived from a `Host` header that is
  * not one of them, and no environment trusts another's hosts: production does
  * not trust a preview, which runs code that has not been reviewed, nor a
  * service on a person's own machine.
