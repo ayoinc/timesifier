@@ -8,19 +8,17 @@ _Empty._
 
 ## Review (limit 2)
 
-_Empty._
-
-## Ready (limit 3)
-
 ### TS-002 · Pipeline: checks on every pull request
 
-Depends on: TS-001, and the repository being on GitHub.
+Blocked on one criterion; the rest is merged.
 
-- [ ] A workflow runs on every pull request and on `main`: install with a frozen lockfile, typecheck, lint, tests, build.
-- [ ] A secret scan and `pnpm audit --audit-level=high` run in the workflow, and a finding fails it.
-- [ ] Every third-party action is pinned to a full commit SHA, and the workflow's default `permissions` are `contents: read`.
-- [ ] A throwaway pull request with a failing test shows a failed check; it is then closed.
-- [ ] `main` is protected: the check must pass before merging.
+- [x] A workflow runs on every pull request and on `main`: install with a frozen lockfile, typecheck, lint, tests, build. _Pull request #2: job `checks` passed in 46 s._
+- [x] A secret scan and `pnpm audit --audit-level=high` run in the workflow, and a finding fails it. _Job `secret scan` passed; the audit is the last step of `checks`. Neither has been shown failing on a real finding._
+- [x] Every third-party action is pinned to a full commit SHA, and the workflow's default `permissions` are `contents: read`. _See `.github/workflows/ci.yml`._
+- [x] A throwaway pull request with a failing test shows a failed check; it is then closed. _Pull request #3: `checks` failed in 35 s; closed and its branch deleted._
+- [ ] `main` is protected: the check must pass before merging. _Blocked: GitHub answered "Upgrade to GitHub Pro or make this repository public to enable this feature." The owner decides. Until then, TS-003 deploys only after `checks` passes in the same workflow run._
+
+## Ready (limit 3)
 
 ### TS-003 · Pipeline: preview and production deploys to timesifier.com
 
