@@ -275,6 +275,96 @@ describe("an invitation", () => {
 	});
 });
 
+describe("an invitation whose sender may no longer invite", () => {
+	/** Ada owns Acme, Grace is an admin of it, and Grace has invited Eve as an admin. */
+	async function invitedByAnAdmin() {
+		const { ada, grace, eve, organisation } = await acme();
+		const made = await invite(ada.cookie, organisation.id, "grace@example.com", "admin");
+		expect((await accept(grace.cookie, made.id)).status).toBe(200);
+		const graceMemberId = await value<string>(
+			"select id from memberships where user_id = ?",
+			grace.user.id,
+		);
+		const invitation = await invite(grace.cookie, organisation.id, "eve@example.com", "admin");
+		const as = (cookie: string, path: string, more: Record<string, unknown>) =>
+			post(`/organization/${path}`, { organizationId: organisation.id, ...more }, { cookie });
+		return { ada, grace, eve, organisation, graceMemberId, invitation, as };
+	}
+
+	it.each(["was removed", "was made a member", "left"] as const)(
+		"cannot be seen or accepted once the admin who sent it %s",
+		async (what) => {
+			const { ada, grace, eve, graceMemberId, invitation, as } = await invitedByAnAdmin();
+			const changes = {
+				"was removed": () =>
+					as(ada.cookie, "remove-member", { memberIdOrEmail: "grace@example.com" }),
+				"was made a member": () =>
+					as(ada.cookie, "update-member-role", { memberId: graceMemberId, role: "member" }),
+				left: () => as(grace.cookie, "leave", {}),
+			};
+			expect((await changes[what]()).status).toBe(200);
+
+			const seen = await get(`/organization/get-invitation?id=${invitation.id}`, {
+				cookie: eve.cookie,
+			});
+			const accepted = await accept(eve.cookie, invitation.id);
+
+			expect(await answer(accepted)).toEqual(INVITATION_NOT_FOUND);
+			expect(await answer(seen)).toEqual(INVITATION_NOT_FOUND);
+			expect(await membershipOf(eve.user.id)).toBeNull();
+			expect(await statusOf(invitation.id)).toBe("pending");
+		},
+	);
+
+	it("can still be accepted while the admin who sent it is an admin", async () => {
+		const { eve, organisation, invitation } = await invitedByAnAdmin();
+
+		const accepted = await accept(eve.cookie, invitation.id);
+
+		expect(accepted.status).toBe(200);
+		expect(await membershipOf(eve.user.id)).toEqual({
+			role: "admin",
+			organisation_id: organisation.id,
+		});
+	});
+
+	it("cannot be accepted once the owner who sent it has handed the organisation over and become a member", async () => {
+		const { ada, grace, eve, organisation, graceMemberId, invitation, as } =
+			await invitedByAnAdmin();
+		const fromTheOwner = await invite(ada.cookie, organisation.id, "eve2@example.com");
+		const eve2 = await signIn(mailbox, "eve2@example.com");
+		const adaMemberId = await value<string>(
+			"select id from memberships where user_id = ?",
+			ada.user.id,
+		);
+		await as(ada.cookie, "update-member-role", { memberId: graceMemberId, role: "owner" });
+		const demoted = await as(grace.cookie, "update-member-role", {
+			memberId: adaMemberId,
+			role: "member",
+		});
+		expect(demoted.status).toBe(200);
+
+		expect(await answer(await accept(eve2.cookie, fromTheOwner.id))).toEqual(INVITATION_NOT_FOUND);
+		expect(await membershipOf(eve2.user.id)).toBeNull();
+		// The invitation Grace sent stands: she may invite.
+		expect((await accept(eve.cookie, invitation.id)).status).toBe(200);
+	});
+
+	it("can still be declined by the person it was sent to", async () => {
+		const { ada, eve, invitation, as } = await invitedByAnAdmin();
+		await as(ada.cookie, "remove-member", { memberIdOrEmail: "grace@example.com" });
+
+		const declined = await post(
+			"/organization/reject-invitation",
+			{ invitationId: invitation.id },
+			{ cookie: eve.cookie },
+		);
+
+		expect(declined.status).toBe(200);
+		expect(await statusOf(invitation.id)).toBe("rejected");
+	});
+});
+
 describe("inviting a person", () => {
 	it.each([
 		["an address that is already a member", { email: "ada@example.com", role: "member" }],

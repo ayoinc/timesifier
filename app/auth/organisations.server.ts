@@ -133,17 +133,29 @@ function member(
 }
 
 /** The fields of the plugin's `invitation` model that decide whether it can still be taken. */
-type StoredInvitation = { email: string; status: string; expiresAt: Date };
+type StoredInvitation = {
+	email: string;
+	status: string;
+	expiresAt: Date;
+	organizationId: string;
+	inviterId: string;
+};
 
 /**
  * An endpoint for the person an invitation was sent to. There is one answer
  * for an invitation that does not exist, one that has been accepted, declined
  * or cancelled, one that has expired, and one that was sent to somebody else,
  * so an invitation's id tells nobody but its recipient anything.
+ *
+ * `standing` adds one more to that list: an invitation whose sender may no
+ * longer invite. An invitation stands on its sender's right to send it.
+ * Otherwise an admin about to be removed could invite an address of their own
+ * and come back with it. Declining needs no such thing.
  */
 function recipient(
 	from: Endpoint["from"],
 	schema: z.ZodType<{ invitationId: string } | { id: string }>,
+	needs: "standing" | "pending",
 ): Endpoint {
 	return {
 		from,
@@ -160,7 +172,20 @@ function recipient(
 				invitation.expiresAt > new Date() &&
 				invitation.email.toLowerCase() === user.email.toLowerCase() &&
 				user.emailVerified;
-			if (!theirs) throw invitationNotFound();
+			if (!invitation || !theirs) throw invitationNotFound();
+
+			if (needs === "standing") {
+				const [sender] = await organisationScope(
+					env.DB,
+					invitation.organizationId,
+				).memberships.select((m) => eq(m.userId, invitation.inviterId));
+				// The sender's role today, asked the question the plugin asks of
+				// whoever invites: a role this application does not know grants nothing.
+				const role = Role.safeParse(sender?.role);
+				const mayInvite =
+					role.success && roles[role.data].authorize({ invitation: ["create"] }).success;
+				if (!mayInvite) throw invitationNotFound();
+			}
 			return input;
 		},
 	};
@@ -178,9 +203,17 @@ const ENDPOINTS: Record<string, Endpoint> = {
 	"/organization/list": anyone("query", nothing),
 	"/organization/list-user-invitations": anyone("query", nothing),
 
-	"/organization/get-invitation": recipient("query", z.strictObject({ id: Id })),
-	"/organization/accept-invitation": recipient("body", z.strictObject({ invitationId: Id })),
-	"/organization/reject-invitation": recipient("body", z.strictObject({ invitationId: Id })),
+	"/organization/get-invitation": recipient("query", z.strictObject({ id: Id }), "standing"),
+	"/organization/accept-invitation": recipient(
+		"body",
+		z.strictObject({ invitationId: Id }),
+		"standing",
+	),
+	"/organization/reject-invitation": recipient(
+		"body",
+		z.strictObject({ invitationId: Id }),
+		"pending",
+	),
 
 	"/organization/get-full-organization": member("query", z.strictObject(organisation)),
 	"/organization/list-members": member("query", z.strictObject(organisation)),
