@@ -1,5 +1,5 @@
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
-import { LINK, PRIVACY_EMAIL, TERMS_PATH } from "~/landing/Site";
+import { LINK, PRIVACY_EMAIL, PRIVACY_PATH, pageMeta, TERMS_PATH } from "~/landing/Site";
 
 import type { Route } from "./+types/privacy";
 
@@ -10,19 +10,18 @@ import type { Route } from "./+types/privacy";
 // the ones the application sets.
 
 export function meta(_: Route.MetaArgs) {
-	return [
-		{ title: "Privacy notice · Timesifier" },
-		{
-			name: "description",
-			content:
-				"What Timesifier stores about you, where it is kept, who handles it, the cookies it sets, and how to have your data exported or deleted.",
-		},
-	];
+	return pageMeta({
+		path: PRIVACY_PATH,
+		title: "Privacy notice · Timesifier",
+		description:
+			"What Timesifier stores about you, where it is kept, who handles it, the cookies it sets, and how to have your data exported or deleted.",
+	});
 }
 
 export default function Privacy() {
 	return (
 		<Document
+			path={PRIVACY_PATH}
 			title="Privacy notice"
 			lead="What Timesifier stores about you today, where it is kept, who else handles it, and how to have it exported or deleted. It will change as the product does, and its date with it."
 		>
@@ -86,7 +85,7 @@ export default function Privacy() {
 						tracking.
 					</Row>
 					<Row term="The check that you are a person">
-						Before a sign-in code is sent, the sign-in and sign-up pages run Cloudflare Turnstile,
+						Before a sign-in code is sent, the page that asks for it runs Cloudflare Turnstile,
 						which loads from challenges.cloudflare.com. No other page loads it.
 					</Row>
 					<Row term="Analytics">

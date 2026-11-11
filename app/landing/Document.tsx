@@ -1,17 +1,6 @@
 import type { ReactNode } from "react";
 
-import { SIGN_IN_PATH } from "~/routes/auth/paths";
-
-import {
-	MAIN_ID,
-	PAGE,
-	PRIVACY_PATH,
-	SiteFooter,
-	SiteHeader,
-	type SiteLink,
-	SkipLink,
-	TERMS_PATH,
-} from "./Site";
+import { MAIN_ID, PAGE, SiteFooter, SiteHeader, SkipLink } from "./Site";
 
 // The frame of a page that is read from top to bottom: the privacy notice and
 // the terms. The title stands on the sheet with the date of the version; each
@@ -20,13 +9,9 @@ import {
 /** The date the notices were first written. Each says so under its title. */
 const FIRST_VERSION = { date: "2026-11-11", inWords: "11 November 2026" };
 
-const LINKS: readonly SiteLink[] = [
-	{ href: PRIVACY_PATH, label: "Privacy notice" },
-	{ href: TERMS_PATH, label: "Terms" },
-	{ href: SIGN_IN_PATH, label: "Sign in" },
-];
-
 export interface DocumentProps {
+	/** The page's own address: `/privacy`. */
+	path: string;
 	title: string;
 	/** What the page is and what it covers, in a sentence or two. */
 	lead: ReactNode;
@@ -34,11 +19,11 @@ export interface DocumentProps {
 	children: ReactNode;
 }
 
-export function Document({ title, lead, children }: DocumentProps) {
+export function Document({ path, title, lead, children }: DocumentProps) {
 	return (
 		<>
 			<SkipLink />
-			<SiteHeader label="Site" links={LINKS} />
+			<SiteHeader current={path} />
 
 			<main id={MAIN_ID} tabIndex={-1} className="outline-none">
 				<div className="bg-sheet text-on-sheet">
@@ -54,7 +39,7 @@ export function Document({ title, lead, children }: DocumentProps) {
 				<div className={`${PAGE} pt-4 pb-16 expanded:pb-24`}>{children}</div>
 			</main>
 
-			<SiteFooter />
+			<SiteFooter current={path} />
 		</>
 	);
 }
@@ -74,7 +59,7 @@ export function DocumentSection({ id, title, children }: DocumentSectionProps) {
 		<section
 			id={id}
 			aria-labelledby={headingId}
-			className="grid scroll-mt-8 gap-x-8 gap-y-4 border-b-2 border-on-surface py-10 expanded:grid-cols-12 expanded:py-12"
+			className="grid gap-x-8 gap-y-4 border-b-2 border-on-surface py-10 expanded:grid-cols-12 expanded:py-12"
 		>
 			<h2 id={headingId} className="text-headline-medium text-balance expanded:col-span-4">
 				{title}

@@ -1,5 +1,5 @@
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
-import { LINK, PRIVACY_EMAIL, PRIVACY_PATH } from "~/landing/Site";
+import { LINK, PRIVACY_EMAIL, PRIVACY_PATH, pageMeta, TERMS_PATH } from "~/landing/Site";
 
 import type { Route } from "./+types/terms";
 
@@ -9,28 +9,27 @@ import type { Route } from "./+types/terms";
 // that the repository cannot back.
 
 export function meta(_: Route.MetaArgs) {
-	return [
-		{ title: "Terms · Timesifier" },
-		{
-			name: "description",
-			content:
-				"What Timesifier is today, how accounts and organisations work, the limits on its use, and how to leave.",
-		},
-	];
+	return pageMeta({
+		path: TERMS_PATH,
+		title: "Terms · Timesifier",
+		description:
+			"What Timesifier is today, how accounts and organisations work, the limits on its use, and how to leave.",
+	});
 }
 
 export default function Terms() {
 	return (
 		<Document
+			path={TERMS_PATH}
 			title="Terms"
 			lead="What Timesifier is today, what an account and an organisation are, the limits on their use, and how to leave. They will change as the product does, and their date with them."
 		>
 			<DocumentSection id="what" title="What Timesifier is">
 				<p>
 					Timesifier is a web application for keeping track of time, for one person or a small team.
-					It is an early version. Today you can create an account, create an organisation and invite
-					people into it. The timer, the projects and the weekly report that the home page shows are
-					being built, and are not in the product yet.
+					It is an early version. Today you can sign in with your email address, create an
+					organisation and invite people into it. The timer, the projects and the weekly report that
+					the home page shows are being built, and are not in the product yet.
 				</p>
 				<p>
 					Being an early version, it can be unavailable for a time, and what it does will change.
