@@ -11,7 +11,7 @@ export const CODE_LIFETIME_SECONDS = 300;
 export function signInCodeEmail(code: string): Omit<Email, "to"> {
 	const minutes = CODE_LIFETIME_SECONDS / 60;
 	const lead = "Enter this code to sign in to Timesifier:";
-	const expiry = `It works for ${minutes} minutes and can be used once.`;
+	const expiry = `It works for ${minutes} minutes, once, and only in the browser that asked for it.`;
 	const ignore =
 		"If you did not ask for it, you can ignore this email: nobody can sign in without the code.";
 
