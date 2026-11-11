@@ -4,7 +4,16 @@ How the board works, and what Ready and Done mean, is in `docs/ways-of-working.m
 
 ## In progress (limit 1)
 
-_Empty._
+### TS-005 · Component foundation
+
+Depends on: TS-004.
+
+- [ ] The headless library choice is confirmed against the current documentation of React Aria Components, Base UI and Radix, and `docs/decisions.md` entry 6 is updated with what was found.
+- [ ] Button, IconButton, TextField, Checkbox, Switch, Select, Menu, Dialog, Sheet, Tabs, Snackbar and Tooltip exist and are styled only with tokens.
+- [ ] Each component has a test that operates it by keyboard and asserts its role and accessible name.
+- [ ] The `/design` route shows every component in every state in light and dark, and returns 404 in a production build.
+- [ ] An automated accessibility scan of `/design` reports no violations.
+- [ ] With reduced motion requested, a test finds no animation of position or scale in any component.
 
 ## Review (limit 2)
 
@@ -18,42 +27,11 @@ Blocked on one criterion; the rest is merged.
 - [x] A throwaway pull request with a failing test shows a failed check; it is then closed. _Pull request #3: `checks` failed in 35 s; closed and its branch deleted._
 - [ ] `main` is protected: the check must pass before merging. _Blocked: GitHub answered "Upgrade to GitHub Pro or make this repository public to enable this feature." The owner decides. Until then, TS-003 deploys only after `checks` passes in the same workflow run._
 
-### TS-007 · Database foundation
-
-Four criteria are merged with this card's pull request. The pipeline's part of the fifth is proven by that pull request and its merge, and is ticked in the next pull request.
-
-- [x] The D1 database is created in the EU; the option used is confirmed against Cloudflare's documentation and written in `docs/architecture.md`. _`wrangler d1 create <name> --jurisdiction eu`; `wrangler d1 list --json` reports `"jurisdiction":"eu"` for `timesifier` and `timesifier-preview`. Confirmed against <https://developers.cloudflare.com/d1/configuration/data-location/>: a jurisdiction keeps the database running and storing data inside the region, where a location hint is only a preference._
-- [x] `pnpm db:migrate:local` builds the schema from an empty database using committed SQL migrations. _After `rm -rf .wrangler/state/v3/d1`, the command applied `0000_init.sql` ("8 commands executed successfully"); `sqlite_master` then listed `users`, `organisations` and `memberships`; a second run printed "No migrations to apply!"._
-- [x] Tables `users`, `organisations` and `memberships` exist with time-sortable ids and UTC timestamps. _`test/db/schema.test.ts`: "has the users, organisations and memberships tables", "gives each new row a UUIDv7 id that carries its creation time", "stores timestamps as integer milliseconds since the Unix epoch". `test/db/uuidv7.test.ts`: ids from later milliseconds sort after earlier ones; 10,000 ids are unique._
-- [x] A test seeds two organisations and shows that the organisation-scoped data layer returns no rows of one to a caller scoped to the other. _`test/db/scope.test.ts`: "selects the rows of its own organisation and none of another's", and the same for update and delete; "cannot insert into another organisation, even when the values name it"; "cannot move a row to another organisation with an update". Removing the organisation filter from the code failed five of them._
-- [ ] Remote migrations run only from the pipeline; the README says so. _The README says so, and `package.json` has no script that migrates a remote database._
-
 ## Ready (limit 3)
 
 _Empty._
 
 ## Backlog
-
-### TS-004 · Design tokens
-
-Depends on: TS-001.
-
-- [ ] `pnpm tokens` generates the Material 3 colour roles for light and dark schemes from one seed colour, as CSS custom properties, and the output is committed.
-- [ ] Type scale, shape, spacing, elevation and motion tokens (durations, easings, one spring) exist as CSS custom properties and as Tailwind theme variables.
-- [ ] `pnpm check:tokens` exits non-zero when a file under `app/` contains a hex colour or an arbitrary Tailwind value; a test fixture proves it.
-- [ ] A test checks every text colour role against its background role in both schemes: each pair is at least 4.5:1.
-- [ ] The Tokens table in `docs/design-system.md` is filled in.
-
-### TS-005 · Component foundation
-
-Depends on: TS-004.
-
-- [ ] The headless library choice is confirmed against the current documentation of React Aria Components, Base UI and Radix, and `docs/decisions.md` entry 6 is updated with what was found.
-- [ ] Button, IconButton, TextField, Checkbox, Switch, Select, Menu, Dialog, Sheet, Tabs, Snackbar and Tooltip exist and are styled only with tokens.
-- [ ] Each component has a test that operates it by keyboard and asserts its role and accessible name.
-- [ ] The `/design` route shows every component in every state in light and dark, and returns 404 in a production build.
-- [ ] An automated accessibility scan of `/design` reports no violations.
-- [ ] With reduced motion requested, a test finds no animation of position or scale in any component.
 
 ### TS-006 · Application shell
 
@@ -218,6 +196,26 @@ Depends on: TS-006.
 - [ ] Each public page has a title, a description and a social preview image, and is server rendered (the text is present in `curl` output).
 
 ## Done
+
+### TS-004 · Design tokens
+
+Done 2026-11-11. Pull request #7.
+
+- [x] `pnpm tokens` generates the Material 3 colour roles for light and dark schemes from one seed colour, as CSS custom properties, and the output is committed. _`app/styles/tokens.css` holds 53 `--md-sys-color-*` roles, each as `light-dark(light, dark)`, from `SEED_COLOUR` in `scripts/tokens.ts`. `scripts/tokens.test.ts`: "gives byte-identical output on every run, equal to the committed file"._
+- [x] Type scale, shape, spacing, elevation and motion tokens (durations, easings, one spring) exist as CSS custom properties and as Tailwind theme variables. _Counted in `app/styles/tokens.css`: 75 type scale properties (15 roles), 10 corners, 1 spacing unit, 6 elevation levels, 16 durations, 10 easings, 4 for the spring. `app/app.css` points 162 Tailwind theme variables at them. Compiling it emits `text-headline-medium`, `bg-primary`, `rounded-medium`, `shadow-level2`, `ease-emphasized`, `duration-short4` and `p-4`, and nothing for `text-3xl`, `bg-red-500`, `rounded-lg`, `shadow-md` or `ease-in-out`: Tailwind's own scales are cleared._
+- [x] `pnpm check:tokens` exits non-zero when a file under `app/` contains a hex colour or an arbitrary Tailwind value; a test fixture proves it. _`node scripts/check-tokens.ts scripts/fixtures/check-tokens/dirty` exits 1 and lists nine findings; on `app/` it exits 0. `scripts/check-tokens.test.ts`: "fails on the dirty fixture and lists every raw value with its file, line and match", "passes array indexing, index signatures, attribute selectors and URL fragments". `pnpm lint` now runs it._
+- [x] A test checks every text colour role against its background role in both schemes: each pair is at least 4.5:1. _`scripts/tokens.test.ts`, "colour roles": 39 pairs in each scheme, 78 cases, all pass at standard contrast with no adjustment._
+- [x] The Tokens table in `docs/design-system.md` is filled in. _Eight rows: seed, colour roles, typeface, type scale, shape, spacing, elevation, motion; and how to change the seed._
+
+### TS-007 · Database foundation
+
+Done 2026-11-11. Pull request #6.
+
+- [x] The D1 database is created in the EU; the option used is confirmed against Cloudflare's documentation and written in `docs/architecture.md`. _`wrangler d1 create <name> --jurisdiction eu`; `wrangler d1 list --json` reports `"jurisdiction":"eu"` for `timesifier` and `timesifier-preview`. Confirmed against <https://developers.cloudflare.com/d1/configuration/data-location/>: a jurisdiction keeps the database running and storing data inside the region, where a location hint is only a preference._
+- [x] `pnpm db:migrate:local` builds the schema from an empty database using committed SQL migrations. _After `rm -rf .wrangler/state/v3/d1`, the command applied `0000_init.sql` ("8 commands executed successfully"); `sqlite_master` then listed `users`, `organisations` and `memberships`; a second run printed "No migrations to apply!"._
+- [x] Tables `users`, `organisations` and `memberships` exist with time-sortable ids and UTC timestamps. _`test/db/schema.test.ts`: "has the users, organisations and memberships tables", "gives each new row a UUIDv7 id that carries its creation time", "stores timestamps as integer milliseconds since the Unix epoch". `test/db/uuidv7.test.ts`: ids from later milliseconds sort after earlier ones; 10,000 ids are unique._
+- [x] A test seeds two organisations and shows that the organisation-scoped data layer returns no rows of one to a caller scoped to the other. _`test/db/scope.test.ts`: "selects the rows of its own organisation and none of another's", and the same for update and delete; "cannot insert into another organisation, even when the values name it"; "cannot move a row to another organisation with an update". Removing the organisation filter from the code failed five of them._
+- [x] Remote migrations run only from the pipeline; the README says so. _Pull request #6: the `preview` job applied `0000_init.sql` to `timesifier-preview` ("Executed 8 commands"). Its merge started run 42948925785, whose `deploy` job applied the same file to `timesifier` before deploying version `166533bb`; production then listed the tables `users`, `organisations` and `memberships`. The README states the rule, and `package.json` has no script that migrates a remote database._
 
 ### TS-010 · Security headers and request checks
 

@@ -10,7 +10,8 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 
-// Fonts are self-hosted by TS-004; no third-party requests from the document.
+// Fonts are self-hosted: app.css imports the font files through styles/tokens.css,
+// so the document makes no third-party requests.
 export const links: Route.LinksFunction = () => [];
 
 export function Layout({ children }: { children: React.ReactNode }) {

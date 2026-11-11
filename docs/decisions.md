@@ -21,6 +21,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 13  | Tests               | Vitest in the Workers runtime, plus Playwright                                           | Jev                                |
 | 14  | Lint and format     | Biome                                                                                    | Preparer                           |
 | 15  | Board               | `BOARD.md` in the repository                                                             | Preparer                           |
+| 16  | Seed and typeface   | Seed colour `#4F5BD5`; Roboto Flex, self-hosted                                          | Preparer, for the owner to confirm |
 | 17  | Ids and timestamps  | UUID version 7 text ids; integer timestamps in milliseconds since the Unix epoch         | Preparer                           |
 | 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
 
@@ -77,6 +78,15 @@ Runs inside the Worker and keeps identities in our own D1 database. Community gu
 ### 14 and 15. Biome and the board
 
 Biome formats and lints with one tool and one config. The board lives in the repository so that the card, its acceptance criteria and the change that satisfies them are reviewed together.
+
+### 16. Seed colour and typeface
+
+Chosen by the preparer while building TS-004, for the owner to confirm.
+
+- **Seed colour `#4F5BD5`:** an indigo. Every colour role in the light and dark schemes is derived from it by Google's `@material/material-color-utilities` (0.4.0): tonal spot scheme, standard contrast, 2025 specification. With this seed every text role is at least 4.5:1 against its background in both schemes; `scripts/tokens.test.ts` checks it.
+- **Roboto Flex:** the variable typeface Material 3 Expressive is drawn with. It is served from our own origin by `@fontsource-variable/roboto-flex` (5.3.0, SIL Open Font License 1.1), weight axis only, so no font request leaves `timesifier.com`.
+
+Both are one-line changes in `scripts/tokens.ts` (`SEED_COLOUR` and `TYPEFACE`), followed by `pnpm tokens`; a different typeface also needs its Fontsource package installed. The steps are in `docs/design-system.md`, under Tokens.
 
 ### 17. UUIDv7 ids and epoch-millisecond timestamps
 

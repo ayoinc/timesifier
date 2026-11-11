@@ -36,6 +36,13 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 
 `pnpm format` fixes formatting and import order. Local secrets go in `.dev.vars`; see `.dev.vars.example` and `docs/security.md`.
 
+Design tokens:
+
+```sh
+pnpm tokens        # regenerate app/styles/tokens.css after changing scripts/tokens.ts
+pnpm check:tokens  # fail if a file under app/ holds a hex colour or an arbitrary Tailwind value
+```
+
 ## Database
 
 The schema is `app/db/schema.ts`. Changes reach a database only as the SQL migrations in `migrations/`.

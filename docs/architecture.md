@@ -125,4 +125,6 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 | Zod                      | 4.6.7      |
 | Drizzle ORM              | 0.45.4     |
 | Drizzle Kit              | 0.31.11    |
+| Material Color Utilities | 0.4.0      |
+| Roboto Flex (Fontsource) | 5.3.0      |
 | `compatibility_date`     | 2026-11-09 |
