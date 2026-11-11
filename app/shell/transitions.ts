@@ -47,5 +47,9 @@ export function finishRunningTransition() {
 	const { activeViewTransition } = document as Document & {
 		activeViewTransition?: ViewTransition | null;
 	};
-	activeViewTransition?.skipTransition();
+	if (!activeViewTransition) return;
+	// Skipping before the transition is ready rejects its `ready` promise with
+	// "Transition was skipped". That is what was asked for, not an error.
+	activeViewTransition.ready.catch(() => {});
+	activeViewTransition.skipTransition();
 }
