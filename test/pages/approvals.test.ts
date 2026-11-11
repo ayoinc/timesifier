@@ -79,10 +79,12 @@ describe("the page", () => {
 		expect(current).toContain("This week has not ended yet.");
 	});
 
-	it("opens on the latest week with something pending", async () => {
+	it("links the other weeks that have something pending", async () => {
 		const grace = await memberOfAcme("member", "grace@example.com");
 		await seedPeriod(acme.id, grace.user.id, WEEK, "submitted");
-		expect(textOf(await pageBody(await open(APPROVALS, ada)))).toContain("5 to 11 January 2026");
+		const html = await pageBody(await open(`${APPROVALS}?week=2026-01-12`, ada));
+		expect(textOf(html)).toContain("Also waiting: 5 to 11 January 2026 (1)");
+		expect(html).toContain(`href="/app/acme/approvals?week=${WEEK}"`);
 	});
 
 	it("puts the pending count on the Approvals link", async () => {

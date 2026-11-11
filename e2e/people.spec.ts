@@ -4,13 +4,16 @@ import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
 
 import { destinationPath } from "../app/shell/destinations";
+import { newPerson, ownAddress, signIn } from "./auth";
+import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
-import { createOrganisation, homeOrganisation } from "./organisation";
+import { createOrganisation } from "./organisation";
 
 // Team and Approvals (TS-038, TS-045, TS-047), in an organisation of the
-// test's own so nothing here changes what the other tests see: its owner is
-// the signed-in person, and the setup's member joins it with a submitted week.
+// test's own so nothing here changes what the other tests see: a new person
+// signs in and creates it, and a second new person, written straight to the
+// database, joins it with a submitted week.
 // Each view is scanned at both window sizes, and the work is done with the
 // keyboard alone.
 
@@ -36,21 +39,33 @@ function sql(command: string): string {
 	}
 }
 
-/** The setup's member joins `slug` and submits the week of `WEEK` there, with a day of time. */
+/** The member every test's organisation gets. */
+const member = { name: "Grace Hopper" };
+
+/** A new person joins `slug` as a member and submits the week of `WEEK` there, with a day of time. */
 function memberSubmitsWeek(slug: string) {
-	const { member } = homeOrganisation();
 	const now = Date.now();
-	const user = `(select id from users where email = '${member.email}')`;
+	const userId = randomUUID();
+	const user = `'${userId}'`;
 	const organisation = `(select id from organisations where slug = '${slug}')`;
 	const project = randomUUID();
 	sql(
 		[
+			`insert into users (id, name, email, email_verified, created_at, updated_at) values (${user}, '${member.name}', 'grace-${userId}@example.com', 1, ${now}, ${now})`,
 			`insert into memberships (id, organisation_id, user_id, role, created_at, updated_at) values ('${randomUUID()}', ${organisation}, ${user}, 'member', ${now}, ${now})`,
 			`insert into projects (id, organisation_id, name, name_key, created_at, updated_at) values ('${project}', ${organisation}, 'Website', 'website', ${now}, ${now})`,
 			`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values ('${randomUUID()}', ${organisation}, ${user}, '${project}', 'Copy', ${Date.parse("2026-01-06T10:00:00Z")}, ${Date.parse("2026-01-06T17:30:00Z")}, ${now}, ${now})`,
 			`insert into periods (id, organisation_id, user_id, starts_on, ends_on, status, submitted_at, created_at, updated_at) values ('${randomUUID()}', ${organisation}, ${user}, '${WEEK}', '2026-01-11', 'submitted', ${now}, ${now}, ${now})`,
 		].join("; "),
 	);
+}
+
+/** A new person signs in and creates an organisation, which a member joins with a submitted week. */
+async function ownOrganisationWithAWeek(page: Page): Promise<string> {
+	await signIn(page, newPerson().email);
+	const { slug } = await createOrganisation(page);
+	memberSubmitsWeek(slug);
+	return slug;
 }
 
 async function expectNoProblems(page: Page, heading: string, unmeasurable: string[] = []) {
@@ -83,16 +98,17 @@ for (const viewport of [
 	{ width: 1280, height: 800 },
 ]) {
 	test.describe(`in a window ${viewport.width}px wide`, () => {
-		test.use({ viewport });
+		test.use({ viewport, storageState: SIGNED_OUT });
+		test.beforeEach(async ({ context, baseURL }) => {
+			await ownAddress(context, baseURL);
+		});
 		// Each test seeds its organisation through wrangler, which takes seconds.
 		test.setTimeout(120_000);
 
 		test("Team: this week, one person's week, and the teams, with the keyboard", async ({
 			page,
 		}) => {
-			const { slug } = await createOrganisation(page);
-			memberSubmitsWeek(slug);
-			const { member } = homeOrganisation();
+			const slug = await ownOrganisationWithAWeek(page);
 			const team = destinationPath(slug, "team");
 
 			await openShell(page, `${team}?week=${WEEK}`);
@@ -133,11 +149,9 @@ for (const viewport of [
 		test("Approvals: pending, approve with the keyboard, then decided and reopen", async ({
 			page,
 		}) => {
-			const { slug } = await createOrganisation(page);
-			memberSubmitsWeek(slug);
-			const { member } = homeOrganisation();
+			const slug = await ownOrganisationWithAWeek(page);
 
-			await openShell(page, destinationPath(slug, "approvals"));
+			await openShell(page, `${destinationPath(slug, "approvals")}?week=${WEEK}`);
 			// The link counts what waits.
 			await expect(
 				page.getByRole("navigation").getByRole("link", { name: "Approvals 1 pending" }),

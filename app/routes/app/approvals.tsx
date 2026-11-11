@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import * as z from "zod";
 
@@ -55,12 +55,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const people = await decidablePeople(scope, organisation, access);
 	const waiting = await pendingPeriods(scope, people);
 
-	// With no week asked for, the latest week with something pending, or else last week.
-	const url = new URL(request.url);
-	if (!url.searchParams.has(WEEK_PARAM) && waiting[0]) {
-		url.searchParams.set(WEEK_PARAM, waiting[0].startsOn);
-	}
-	const viewed = await viewedPeriod(membership, url, -1);
+	// With no week asked for, last week: the one most people have just
+	// submitted. It does not follow what is pending, so a decision that empties
+	// it leaves the page where it is; other weeks waiting are linked above.
+	const viewed = await viewedPeriod(membership, new URL(request.url), -1);
 	const approvals = await approvalsFor(scope, people, viewed.period, viewed.today);
 	const date = new Intl.DateTimeFormat("en-GB", {
 		day: "numeric",
@@ -186,20 +184,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 	};
 	const here = destinationPath(organisation.slug, "approvals");
 	// `?tab=decided` or `?tab=not-submitted` opens on that tab, so a link can point at it.
-	const [search, setSearch] = useSearchParams();
-	// The week on screen goes into the address, so a decision that empties it
-	// does not move the page to another week when the page is read again.
-	const startsOn = week.period.startsOn;
-	useEffect(() => {
-		if (search.has(WEEK_PARAM)) return;
-		setSearch(
-			(current) => {
-				current.set(WEEK_PARAM, startsOn);
-				return current;
-			},
-			{ replace: true, preventScrollReset: true },
-		);
-	}, [search, setSearch, startsOn]);
+	const [search] = useSearchParams();
 	const tab = TABS.find((each) => each === search.get("tab")) ?? "pending";
 
 	return (
