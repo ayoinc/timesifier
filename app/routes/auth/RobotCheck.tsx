@@ -54,7 +54,8 @@ export interface RobotCheckHandle {
 	/**
 	 * A token for one request to the server, as soon as the check has earned one.
 	 * A token is spent by the request that carries it, so each call starts the
-	 * check again for the next. Resolves `null` when the check failed.
+	 * check again for the next. Resolves `null` when the check failed; the call
+	 * after that runs the check again and waits for its answer.
 	 */
 	token(): Promise<string | null>;
 }
@@ -76,6 +77,8 @@ export function RobotCheck({ siteKey, ref }: RobotCheckProps) {
 	const earned = useRef<string | null | undefined>(undefined);
 	// Whoever asked for a token before there was one.
 	const waiting = useRef<((token: string | null) => void) | null>(null);
+	// Runs the check: the first time, and again after it has failed.
+	const run = useRef<() => void>(() => {});
 
 	const produced = useEffectEvent((token: string | null | undefined) => {
 		earned.current = token;
@@ -96,7 +99,13 @@ export function RobotCheck({ siteKey, ref }: RobotCheckProps) {
 
 	useImperativeHandle(ref, () => ({
 		token() {
-			if (earned.current !== undefined) return Promise.resolve(spend());
+			if (typeof earned.current === "string") return Promise.resolve(spend());
+			// The check failed before this press. The page told the person to press
+			// again, so the press runs it again.
+			if (earned.current === null) {
+				earned.current = undefined;
+				run.current();
+			}
 			return new Promise((resolve) => {
 				waiting.current = resolve;
 			});
@@ -107,29 +116,35 @@ export function RobotCheck({ siteKey, ref }: RobotCheckProps) {
 	// page, which is when Turnstile can find the widget it is asked to remove.
 	useLayoutEffect(() => {
 		let gone = false;
-		loadTurnstile().then(
-			(turnstile) => {
-				if (gone || !container.current) return;
-				widget.current =
-					turnstile.render(container.current, {
-						sitekey: siteKey,
-						// Follows the scheme chosen in Settings, or the device when none is.
-						theme: document.documentElement.dataset.colorScheme ?? "auto",
-						size: "flexible",
-						appearance: "interaction-only",
-						// The token goes to the server in a header, not in a form field.
-						"response-field": false,
-						callback: (token: string) => produced(token),
-						"expired-callback": () => produced(undefined),
-						// Returning true tells Turnstile the page has dealt with the error.
-						"error-callback": () => {
-							produced(null);
-							return true;
-						},
-					}) ?? null;
-			},
-			() => produced(null),
-		);
+		run.current = () => {
+			// A widget that is there starts over; one that never arrived is fetched again.
+			if (widget.current) return window.turnstile?.reset(widget.current);
+			loadTurnstile().then(
+				(turnstile) => {
+					if (gone || !container.current) return;
+					widget.current =
+						turnstile.render(container.current, {
+							sitekey: siteKey,
+							// The page's scheme: light, or what the person chose in Settings.
+							// Where they chose to follow their device, the widget follows it too.
+							theme: document.documentElement.dataset.colorScheme ?? "auto",
+							size: "flexible",
+							appearance: "interaction-only",
+							// The token goes to the server in a header, not in a form field.
+							"response-field": false,
+							callback: (token: string) => produced(token),
+							"expired-callback": () => produced(undefined),
+							// Returning true tells Turnstile the page has dealt with the error.
+							"error-callback": () => {
+								produced(null);
+								return true;
+							},
+						}) ?? null;
+				},
+				() => produced(null),
+			);
+		};
+		run.current();
 		return () => {
 			gone = true;
 			if (widget.current) window.turnstile?.remove(widget.current);

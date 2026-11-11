@@ -3,8 +3,9 @@ import { Outlet, useLocation, useNavigationType, useParams } from "react-router"
 
 import { cx } from "~/components/cx";
 import { requireSession, signedInContext } from "~/routes/auth/session.server";
-import { destinationIndex, ORGANISATION_PARAM } from "~/shell/destinations";
+import { destinationIndex, NEW_ORGANISATION_PATH, ORGANISATION_PARAM } from "~/shell/destinations";
 import { Navigation } from "~/shell/Navigation";
+import { OUTSIDE_FRAME, ProductName } from "~/shell/Outside";
 import { finishRunningTransition, TRANSITION, useTravel } from "~/shell/transitions";
 
 import type { Route } from "./+types/layout";
@@ -68,13 +69,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 	}, []);
 
 	return (
-		<div
-			className={
-				organisation
-					? "min-h-dvh max-medium:pb-16 medium:ps-24"
-					: "mx-auto flex min-h-dvh w-full max-w-110 flex-col gap-10 px-4 pt-12 pb-8 medium:pt-24"
-			}
-		>
+		<div className={organisation ? "min-h-dvh max-medium:pb-16 medium:ps-24" : OUTSIDE_FRAME}>
 			{/* Off the top edge until it is focused. With script it moves the focus
 			    without adding a history entry; without, the browser follows the fragment. */}
 			{organisation && (
@@ -102,17 +97,8 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 			)}
 
 			{/* Outside an organisation there is nothing to navigate, so the product's
-			    name stands where the pages a person signs in on have it. */}
-			{!organisation && (
-				<header>
-					<a
-						href="/"
-						className="rounded-extra-small font-brand text-title-large text-primary outline-none focus-visible:focus-indicator"
-					>
-						Timesifier
-					</a>
-				</header>
-			)}
+			    name stands at the top (~/shell/Outside). */}
+			{!organisation && <ProductName />}
 
 			{/* The content slides in the direction of travel, and only when the
 			    destination changes: React would otherwise start a transition for every
@@ -131,7 +117,14 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 				</main>
 			</ViewTransition>
 
-			{!organisation && <SignedInAs email={loaderData.email} />}
+			{/* The page that creates an organisation is where a new account lands, and
+			    signing in with the wrong one of two addresses makes one: its way out says so. */}
+			{!organisation && (
+				<SignedInAs
+					email={loaderData.email}
+					wayOut={pathname === NEW_ORGANISATION_PATH ? "Use a different email" : "Sign out"}
+				/>
+			)}
 		</div>
 	);
 }

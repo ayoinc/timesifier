@@ -42,14 +42,16 @@ export function SendCodeForm({ email, siteKey, children, onSent }: SendCodeFormP
 
 	return (
 		// Script sends the form. Where script does not run, `dialog` makes a press on
-		// "Continue" do nothing: a form with no method would put the name and the
-		// address into the page's address, and so into the history and the logs.
-		<form method="dialog" onSubmit={submit} className="flex flex-col gap-4">
+		// "Continue" do nothing: a form with no method would put the address into the
+		// page's address, and so into the history and the logs.
+		<form method="dialog" onSubmit={submit} className="mt-8 flex flex-col gap-6">
 			{children}
 			<RobotCheck ref={check} siteKey={siteKey} />
 			<NoticeLine notice={notice} />
 			<div>
-				<Button type="submit">Continue</Button>
+				<Button type="submit" size="large">
+					Continue
+				</Button>
 			</div>
 		</form>
 	);

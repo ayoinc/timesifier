@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
+import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
 import { TextField } from "~/components/TextField";
 
 import { POLICY_ADDITION_HEADER, TURNSTILE_ADDITION } from "../../workers/security-headers";
@@ -7,13 +8,16 @@ import type { Route } from "./+types/sign-in";
 import { AuthPage, changeStep, StepHeading, StepLead } from "./auth/AuthPage";
 import { CodeStep } from "./auth/CodeStep";
 import { leaveFor } from "./auth/client";
-import { NeedsScript, OtherPage } from "./auth/links";
-import { signUpLink } from "./auth/paths";
+import { NeedsScript } from "./auth/links";
+import { forgetCode, pendingCode, rememberCode } from "./auth/pending-code";
 import { SendCodeForm } from "./auth/SendCodeForm";
 import { loadAuthPage } from "./auth/session.server";
 
-// The sign-in page: an email address, then the code sent to it. Each step is
-// one view with one primary action (design rule 1).
+// The one way in, for a person who is new and a person coming back alike: an
+// email address, then the code sent to it. The first code an address proves
+// itself with makes its account, so the page never asks which of the two a
+// person is, and never says: the server does not. Each view has one primary
+// action (design rule 1).
 
 export function meta() {
 	return [{ title: "Sign in · Timesifier" }];
@@ -28,7 +32,7 @@ export function loader({ request, url }: Route.LoaderArgs) {
 	return loadAuthPage(request, url);
 }
 
-/** The steps, in order: a later one is "forward" of an earlier one. */
+/** The views, in order: a later one is "forward" of an earlier one. */
 const STEPS = ["email", "code"] as const;
 type Step = (typeof STEPS)[number];
 
@@ -36,18 +40,59 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 	const { next, turnstileSiteKey } = loaderData;
 	const [step, setStep] = useState<Step>("email");
 	const [email, setEmail] = useState("");
+	// When the code this tab is waiting for runs out, as a time on its clock.
+	const [until, setUntil] = useState<number | null>(null);
 
-	// How a change of step moves, and when it does not: ./auth/AuthPage.tsx.
+	// How a change of view moves, and when it does not: ./auth/AuthPage.tsx.
 	const go = (to: Step) => changeStep(() => setStep(to));
+
+	// A person who asked for a code in this tab and has come back, or reloaded,
+	// is where they left off (./auth/pending-code.ts). The server cannot know, so
+	// the page arrives asking for the address and changes before it is painted
+	// again.
+	useLayoutEffect(() => {
+		const pending = pendingCode();
+		if (!pending) return;
+		setEmail(pending.email);
+		setUntil(Date.now() + pending.remaining);
+		setStep("code");
+	}, []);
+
+	// And when the code has run out, the tab no longer holds the address. A new
+	// code has its own five minutes.
+	useEffect(() => {
+		if (until === null) return;
+		const timer = setTimeout(forgetCode, until - Date.now());
+		return () => clearTimeout(timer);
+	}, [until]);
+
+	function sent() {
+		rememberCode(email);
+		setUntil(Date.now() + CODE_LIFETIME_SECONDS * 1000);
+	}
+
+	function forget() {
+		forgetCode();
+		setUntil(null);
+	}
 
 	return (
 		<AuthPage step={STEPS.indexOf(step)}>
 			<NeedsScript>Signing in needs JavaScript.</NeedsScript>
 			{step === "email" && (
 				<>
-					<StepHeading>Sign in</StepHeading>
-					<StepLead>We will email you a code that signs you in. There is no password.</StepLead>
-					<SendCodeForm email={email} siteKey={turnstileSiteKey} onSent={() => go("code")}>
+					<StepHeading>Enter your email</StepHeading>
+					<StepLead>
+						We will email you a code. If you are new here, the same code sets you up.
+					</StepLead>
+					<SendCodeForm
+						email={email}
+						siteKey={turnstileSiteKey}
+						onSent={() => {
+							sent();
+							go("code");
+						}}
+					>
 						<TextField
 							label="Email"
 							name="email"
@@ -58,18 +103,21 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 							isRequired
 						/>
 					</SendCodeForm>
-					<OtherPage to={signUpLink(next)} label="Create an account">
-						New to Timesifier?
-					</OtherPage>
 				</>
 			)}
 			{step === "code" && (
 				<CodeStep
 					email={email}
-					submitLabel="Sign in"
 					siteKey={turnstileSiteKey}
-					onSignedIn={() => leaveFor(next)}
-					onChangeEmail={() => go("email")}
+					onSent={sent}
+					onSignedIn={() => {
+						forget();
+						leaveFor(next);
+					}}
+					onChangeEmail={() => {
+						forget();
+						go("email");
+					}}
 				/>
 			)}
 		</AuthPage>

@@ -4,8 +4,9 @@
  * and before the plugin sees the request.
  *
  * - A request carries exactly the fields listed here. The plugin would also
- *   issue a code of three other kinds, and take an image for a new account and
- *   a name of any length and any JSON type.
+ *   issue a code of three other kinds, and take a name and an image for a new
+ *   account. No page asks a name on the way in, so the server takes none: a
+ *   person sets theirs in Settings.
  * - An address is sent at most five codes in any hour to the browsers that
  *   have signed in as it before, and five to everybody else. A code allows
  *   three guesses, so without a cap the guesses against one address are three
@@ -38,7 +39,6 @@ import {
 	KNOWN_BROWSER_KEPT_SECONDS,
 	withProofFor,
 } from "./known-browser.server";
-import { PersonName } from "./person-name";
 import { type Cap, takeOne } from "./quota.server";
 import { CODE_LIFETIME_SECONDS } from "./sign-in-code-email";
 
@@ -51,11 +51,7 @@ const USE_PATH = "/sign-in/email-otp";
  * words.
  */
 const Asking = z.strictObject({ email: z.unknown(), type: z.literal("sign-in") });
-const Using = z.strictObject({
-	email: z.unknown(),
-	otp: z.unknown(),
-	name: PersonName.optional(),
-});
+const Using = z.strictObject({ email: z.unknown(), otp: z.unknown() });
 
 /** For each of the two kinds of asker, apart. */
 const CODES_PER_HOUR: Cap = { max: 5, seconds: 60 * 60 };

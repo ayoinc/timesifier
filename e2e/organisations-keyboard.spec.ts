@@ -156,7 +156,7 @@ test("creating an organisation: the field, the action and the way out, with the 
 	await expect(page.getByLabel("Organisation name")).toBeFocused();
 	await tabTo(page, page.getByRole("button", { name: "Create organisation" }));
 	await tabTo(page, page.getByRole("link", { name: "Back to your organisations" }));
-	await tabTo(page, page.getByRole("button", { name: "Sign out" }));
+	await tabTo(page, page.getByRole("button", { name: "Use a different email" }));
 
 	// Enter in the field presses the one primary action; a name of spaces is caught there.
 	await page.getByLabel("Organisation name").focus();

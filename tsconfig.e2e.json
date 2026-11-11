@@ -4,7 +4,8 @@
 		"playwright.config.ts",
 		"e2e/**/*.ts",
 		"app/shell/destinations.ts",
-		"app/auth/code.ts"
+		"app/auth/code.ts",
+		"app/shell/color-scheme.server.ts"
 	],
 	"compilerOptions": {
 		"composite": true,

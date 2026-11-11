@@ -51,7 +51,7 @@ async function bringInEveryImage(page: Page) {
 for (const viewport of [COMPACT, WIDE]) {
 	for (const colorScheme of ["light", "dark"] as const) {
 		test.describe(`in a window ${viewport.width}px wide, in the ${colorScheme} scheme`, () => {
-			test.use({ viewport, colorScheme });
+			test.use({ viewport, chosenScheme: colorScheme });
 
 			// A scan measures the page with everything on it arrived: with reduced
 			// motion asked for, nothing waits on the scrolling to be shown.

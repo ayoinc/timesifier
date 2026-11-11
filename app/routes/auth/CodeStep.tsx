@@ -17,15 +17,16 @@ import {
 import { sendCode, signInWithCode } from "./client";
 import { RobotCheck, type RobotCheckHandle } from "./RobotCheck";
 
+/** The label of the action that asks for another code. The check's failure names it. */
+const SEND_ANOTHER = "Send a new code";
+
 export interface CodeStepProps {
 	/** The address the code was sent to. */
 	email: string;
-	/** For a new account: the name it is created with. */
-	name?: string;
-	/** The primary action: "Sign in", or "Create account". */
-	submitLabel: string;
 	/** Turnstile's public site key: sending another code needs the check again. */
 	siteKey: string;
+	/** Another code was asked for, and the server took the request. */
+	onSent: () => void;
 	/** The code was right and the person is signed in. */
 	onSignedIn: () => void;
 	/** The person wants to give a different address. */
@@ -33,19 +34,12 @@ export interface CodeStepProps {
 }
 
 /**
- * The step that takes the emailed code. Its one primary action signs the
- * person in; beside it are the two ways out of a code that will not arrive or
+ * The view that takes the emailed code. Its one primary action signs the
+ * person in; under it are the two ways out of a code that will not arrive or
  * will not work. Nothing here says whether the address has an account: the
- * same step follows any address.
+ * same view follows any address.
  */
-export function CodeStep({
-	email,
-	name,
-	submitLabel,
-	siteKey,
-	onSignedIn,
-	onChangeEmail,
-}: CodeStepProps) {
+export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: CodeStepProps) {
 	const [code, setCode] = useState("");
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const check = useRef<RobotCheckHandle>(null);
@@ -55,7 +49,7 @@ export function CodeStep({
 		event.preventDefault();
 		once(async () => {
 			setNotice(progress("Checking the code…"));
-			const outcome = await signInWithCode(email, code, name);
+			const outcome = await signInWithCode(email, code);
 			if (outcome.ok) return onSignedIn();
 			setNotice(problem(outcome.problem));
 		});
@@ -65,10 +59,11 @@ export function CodeStep({
 		once(async () => {
 			setNotice(progress("Sending a new code…"));
 			const token = await check.current?.token();
-			if (!token) return setNotice(problem("robot-check"));
+			if (!token) return setNotice(problem("robot-check", SEND_ANOTHER));
 			const outcome = await sendCode(email, token);
-			if (!outcome.ok) return setNotice(problem(outcome.problem));
+			if (!outcome.ok) return setNotice(problem(outcome.problem, SEND_ANOTHER));
 			setCode("");
+			onSent();
 			setNotice(progress("A new code has been asked for. Use the newest one you receive."));
 		});
 	}
@@ -78,15 +73,18 @@ export function CodeStep({
 			<StepHeading>Check your email</StepHeading>
 			{/* The server answers the same whether or not a message went out, so this
 			    says where to look and never that the code has arrived. "The" and not
-			    "a": the length is a number that may begin with a vowel sound. */}
+			    "a": the length is a number that may begin with a vowel sound. The last
+			    sentence is the rule that is public anyway: a person who has asked too
+			    often is answered as ever and sent nothing. */}
 			<StepLead>
 				Look for the {SIGN_IN_CODE_LENGTH}-digit code in the inbox of{" "}
-				<strong className="text-on-surface">{email}</strong>. It can take a minute to arrive and may
-				be in your spam folder. Type it here: a code works only in the browser that asked for it,
-				and for {CODE_LIFETIME_SECONDS / 60} minutes. If nothing comes, send a new code.
+				<strong className="wrap-anywhere text-on-surface">{email}</strong>. It can take a minute to
+				arrive and may be in your spam folder. Type it here: a code works only in the browser that
+				asked for it, and for {CODE_LIFETIME_SECONDS / 60} minutes. If nothing comes, send a new
+				code. We send at most five codes an hour to one address.
 			</StepLead>
 
-			<form onSubmit={submit} className="flex flex-col gap-4">
+			<form onSubmit={submit} className="mt-8 flex flex-col gap-6">
 				<TextField
 					label="Code"
 					name="code"
@@ -104,10 +102,15 @@ export function CodeStep({
 				/>
 				<RobotCheck ref={check} siteKey={siteKey} />
 				<NoticeLine notice={notice} />
-				<div className="flex flex-wrap items-center gap-2">
-					<Button type="submit">{submitLabel}</Button>
+				<div>
+					<Button type="submit" size="large">
+						Continue
+					</Button>
+				</div>
+				{/* The ways out stand under the action, ruled off from it, and never beside it. */}
+				<div className="flex flex-wrap items-center gap-2 border-t border-outline-variant pt-4">
 					<Button variant="text" onPress={sendAnother}>
-						Send a new code
+						{SEND_ANOTHER}
 					</Button>
 					<Button variant="text" onPress={onChangeEmail}>
 						Use a different email

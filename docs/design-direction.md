@@ -103,15 +103,15 @@ The owner's instruction: the mindset of Benji Taylor's essay ["Family Values"](h
 4. **No dead or needless link.** Every link leads to a page or a place that exists and says something, and no two navigations on a page repeat each other. `e2e/public-links.spec.ts` follows every link on the public pages.
 5. **Plain words, true today.** A sentence says what the product does now, or says "will". "Nothing on the page is untrue", below.
 
-| Screen              | The one primary action                                           | What stays out until it is needed                                 |
-| ------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Public pages        | "Get started", at the top and at the end, to the sign-in page    | A second call to action, a pricing table, a newsletter field      |
-| Sign in             | Send the code, then confirm it                                   | The name field until the address is new; any other way to sign in |
-| Today and the timer | Start, which becomes Stop: one control                           | Manual entry and editing, until asked for                         |
-| Projects            | New project                                                      | Archiving, budgets and filters, until a project has them          |
-| The week            | None: it is a reading page                                       | The entries behind a cell, until the cell is chosen               |
-| Reports             | Export what is on the page                                       | Any chart that is not the figures themselves                      |
-| Settings            | The form being edited saves; deleting is never the filled button | Danger, until the person scrolls to it                            |
+| Screen              | The one primary action                                           | What stays out until it is needed                                     |
+| ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Public pages        | "Get started", at the top and at the end, to the sign-in page    | A second call to action, a pricing table, a newsletter field          |
+| Sign in             | Continue: the address, then the code sent to it                  | A name on the way in; any other way to sign in; a page for new people |
+| Today and the timer | Start, which becomes Stop: one control                           | Manual entry and editing, until asked for                             |
+| Projects            | New project                                                      | Archiving, budgets and filters, until a project has them              |
+| The week            | None: it is a reading page                                       | The entries behind a cell, until the cell is chosen                   |
+| Reports             | Export what is on the page                                       | Any chart that is not the figures themselves                          |
+| Settings            | The form being edited saves; deleting is never the filled button | Danger, until the person scrolls to it                                |
 
 ### Fluidity
 
@@ -149,9 +149,30 @@ Between public pages there is no cross-document view transition. It was built an
 
 ## One way in
 
-The public pages have one primary action and it opens `/sign-in`, which serves a person who is new and a person coming back alike. There is no "create an account". The band at the top carries one quiet "Sign in" to the same address.
+The public pages have one primary action and it opens `/sign-in`, which serves a person who is new and a person coming back alike. There is no "create an account", on any page or in any email, and no address that makes one: `/sign-up` is answered with the way to `/sign-in`. The band at the top carries one quiet "Sign in" to the same address.
 
 The action reads **"Get started"** (`PRIMARY_ACTION` in `app/landing/Site.tsx`). The owner's other wording, "Start tracking", promises what the next page cannot yet do; **it becomes "Start tracking" on the day the timer card (TS-012) ships.** Under each action one line says what is open today.
+
+**The sign-in page** (card TS-036) is the next page of the same product: the public pages' band, with nothing at its right because this page is the way in, their column and their foot. It has two views and each has one filled action.
+
+| Where                                     | Words                                                                                                           |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Title                                     | Sign in · Timesifier                                                                                            |
+| First view, heading                       | Enter your email                                                                                                |
+| First view, lead                          | We will email you a code. If you are new here, the same code sets you up.                                       |
+| Second view, heading                      | Check your email                                                                                                |
+| Second view, lead                         | Where to look, where the code works and for how long, and: "We send at most five codes an hour to one address." |
+| The action, on both views                 | Continue                                                                                                        |
+| Under the second view's action, ruled off | Send a new code; Use a different email                                                                          |
+| The check failed                          | We could not confirm this browser. Wait a moment and press Continue again.                                      |
+
+The page asks an address and a code and nothing else: no name, which a person gives in Settings. It never says whether an address has an account, because the server does not. A code that was asked for is still there after a reload or a trip to the mailbox. One page for everybody means that signing in with the wrong one of two addresses makes a second, empty account, so the two pages such an account lands on (creating an organisation, and an invitation that is not this account's) say "Signed in as" with the address and offer "Use a different email".
+
+From 840px a photograph stands in the columns beside the form: the station clock, which the home page uses too. Under 840px the page is the form alone. That choice is the builder's, not the owner's, and is the first thing to take out if the page should be quieter.
+
+## Light is the product's face
+
+The owner, on seeing both schemes on 2026-11-11: "the light mode is way better, it looks more beautiful." So a person who has chosen nothing gets the light scheme on every page, public and signed in, whatever their device prefers: the amber sheet on paper is what the product looks like, and a visitor's first sight of it is not left to a setting they made for other software. Dark stays, as a choice in Settings beside Light and "Match my device", and is held to the same contrast. How it is rendered is in `docs/design-system.md`, "Colour schemes".
 
 ## Nothing on the page is untrue
 
@@ -239,7 +260,7 @@ The owner wants everything after sign-in to follow the same convention as the ho
 
 **Totals and figures.** Any time or count a person might compare is tabular and condensed. A running time is `Digits` inside an element with the role `timer`; it is the largest thing on its page. A duration is hours and minutes (`1:05`), a running time adds seconds (`1:05:32`), a time of day is on the 24-hour clock (`09:15`).
 
-**Buttons.** One filled button in a view (`Button`, `variant="filled"`): ink on paper, amber on the dark board. It is 48px tall on a public page with 4px corners, and the component's own 40px and 10px in the product; never a pill. The second action is `outlined`; the third is `text`. A destructive action is a `text` button in the error colour until the confirming step, where it is the filled one. A button's words say what it does ("Send the code", "Create the organisation"), not "Submit" or "Continue".
+**Buttons.** One filled button in a view (`Button`, `variant="filled"`): ink on paper, amber on the dark board. It is 48px tall on a public page with 4px corners (`size="large"`, which the sign-in page uses; the home page's action is a link drawn the same), and the component's own 40px and 10px in the product; never a pill. The second action is `outlined`; the third is `text`. A destructive action is a `text` button in the error colour until the confirming step, where it is the filled one. A button's words say what it does ("Send the code", "Create the organisation"), not "Submit" or "Continue". The sign-in page is the one exception, by the owner's card (TS-036): both its views say "Continue", because a label that said what the code does ("Sign in", "Create account") would have to say which of the two a person is.
 
 **Fields.** `TextField`, one to a line, the label above and always visible, the help under it, the error under that in the error colour and tied to the field. A form has one column, its fields no wider than 480px, 24px between fields, and its one filled button at the start of the line under the last field, not across the width. No placeholder stands in for a label.
 
@@ -318,4 +339,4 @@ All but the last are in the component gallery (`/design`) with their tests. What
 
 ## What follows from this in the product
 
-The shell, the sign-in pages and every component take the same tokens, so they already have the type, the colours and the corners: a filled button in the application is the same ink-and-amber button as the one on the home page. What they do not have yet is the convention above: the shell's surfaces are still laid out as a default Material application, its lists are not yet `Ledger`s, and its headers do not carry the lockup. Restyling them is the cards that follow this one; the signed-in product screens (today, projects, the week, reports) are the owner's to design and build.
+The shell, the sign-in page and every component take the same tokens, so they already have the type, the colours and the corners: a filled button in the application is the same ink-and-amber button as the one on the home page. The sign-in page follows the convention above since TS-036. What the signed-in pages do not have yet is that convention: the shell's surfaces are still laid out as a default Material application, its lists are not yet `Ledger`s, and its headers do not carry the lockup. Restyling them is the cards that follow this one; the signed-in product screens (today, projects, the week, reports) are the owner's to design and build.

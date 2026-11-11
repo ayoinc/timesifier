@@ -2,12 +2,13 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
 	ARRIVAL,
+	CONTINUE,
 	codeSentBy,
 	newPerson,
 	openAuthPage,
 	ownAddress,
+	signIn,
 	signOut,
-	signUp,
 	TIME_WITH_TURNS,
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
@@ -15,8 +16,8 @@ import { expect, test } from "./fixtures";
 import { openSettings } from "./organisation";
 
 // Design rule 15: everything works by keyboard, with a visible focus indicator.
-// Both pages and the account part of Settings are walked here with the keyboard
-// alone: no pointer touches the page after it has loaded.
+// The sign-in page and the account part of Settings are walked here with the
+// keyboard alone: no pointer touches the page after it has loaded.
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
@@ -41,26 +42,35 @@ async function tabTo(page: Page, element: Locator) {
 	await expectFocusShown(element);
 }
 
-test("signing up and the code, with the keyboard alone", async ({ page }) => {
-	const person = newPerson();
-	await openAuthPage(page, "/sign-up");
+/** The first two stops of the page: the way past the band, and the product's name in it. */
+async function tabThroughTheBand(page: Page) {
+	await tabTo(page, page.getByRole("link", { name: "Skip to main content" }));
+	await tabTo(page, page.getByRole("banner").getByRole("link", { name: "Timesifier" }));
+}
 
-	// The tab order follows the page: the name of the product, then the fields.
-	await tabTo(page, page.getByRole("link", { name: "Timesifier" }));
-	await page.keyboard.press("Tab");
-	await expect(page.getByLabel("Name")).toBeFocused();
-	await page.keyboard.type(person.name);
+test("a new address and its code, with the keyboard alone", async ({ page }) => {
+	const person = newPerson();
+	await openAuthPage(page);
+
+	// The tab order follows the page: the band, then the one field and its action.
+	await tabThroughTheBand(page);
 	await page.keyboard.press("Tab");
 	await expect(page.getByLabel("Email")).toBeFocused();
 	await page.keyboard.type(person.email);
+	await tabTo(page, page.getByRole("button", CONTINUE));
+	// After the action there is only the foot of the page.
+	await tabTo(page, page.getByRole("link", { name: "Privacy notice" }));
+	await page.keyboard.press("Shift+Tab");
+	await page.keyboard.press("Shift+Tab");
+	await expect(page.getByLabel("Email")).toBeFocused();
 
-	// Enter in a field presses the step's one primary action.
+	// Enter in a field presses the view's one primary action.
 	const code = await codeSentBy(() => page.keyboard.press("Enter"));
 
-	// The new step takes the focus into its field: the code can be typed at once.
+	// The new view takes the focus into its field: the code can be typed at once.
 	await expect(page.getByLabel("Code")).toBeFocused();
 	await page.keyboard.type(code);
-	await tabTo(page, page.getByRole("button", { name: "Create account" }));
+	await tabTo(page, page.getByRole("button", CONTINUE));
 	await tabTo(page, page.getByRole("button", { name: "Send a new code" }));
 	await tabTo(page, page.getByRole("button", { name: "Use a different email" }));
 	await page.keyboard.press("Shift+Tab");
@@ -71,19 +81,16 @@ test("signing up and the code, with the keyboard alone", async ({ page }) => {
 	await expect(page).toHaveURL(ARRIVAL);
 });
 
-test("signing in with an email code, with the keyboard alone", async ({ page }) => {
+test("an address that has an account, with the keyboard alone", async ({ page }) => {
 	const person = newPerson();
-	await signUp(page, person);
+	await signIn(page, person.email);
 	await signOut(page);
 
-	await openAuthPage(page, "/sign-in");
-	await tabTo(page, page.getByRole("link", { name: "Timesifier" }));
+	await openAuthPage(page);
+	await tabThroughTheBand(page);
 	await page.keyboard.press("Tab");
 	await expect(page.getByLabel("Email")).toBeFocused();
 	await page.keyboard.type(person.email);
-	await tabTo(page, page.getByRole("button", { name: "Continue" }));
-	await tabTo(page, page.getByRole("link", { name: "Create an account" }));
-	await page.keyboard.press("Shift+Tab");
 	const code = await codeSentBy(() => page.keyboard.press("Enter"));
 
 	await expect(page.getByLabel("Code")).toBeFocused();
@@ -92,14 +99,22 @@ test("signing in with an email code, with the keyboard alone", async ({ page }) 
 	await expect(page).toHaveURL(ARRIVAL);
 });
 
-test("going back a step, with the keyboard alone, returns to the field that was filled", async ({
+test("the skip link moves the focus past the band, into the main region", async ({ page }) => {
+	await openAuthPage(page);
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Enter");
+
+	await expect(page.getByRole("main")).toBeFocused();
+	await page.keyboard.press("Tab");
+	await expect(page.getByLabel("Email")).toBeFocused();
+});
+
+test("going back a view, with the keyboard alone, returns to the field that was filled", async ({
 	page,
 }) => {
 	const person = newPerson();
-	await openAuthPage(page, "/sign-up");
-	await page.getByLabel("Name").focus();
-	await page.keyboard.type(person.name);
-	await page.keyboard.press("Tab");
+	await openAuthPage(page);
+	await page.getByLabel("Email").focus();
 	await page.keyboard.type(person.email);
 	await codeSentBy(() => page.keyboard.press("Enter"));
 	await expect(page.getByLabel("Code")).toBeFocused();
@@ -109,14 +124,13 @@ test("going back a step, with the keyboard alone, returns to the field that was 
 	await tabTo(page, page.getByRole("button", { name: "Use a different email" }));
 	await page.keyboard.press("Enter");
 
-	// What was typed is still there, and the focus is in the first field.
-	await expect(page.getByLabel("Name")).toBeFocused();
-	await expect(page.getByLabel("Name")).toHaveValue(person.name);
+	// What was typed is still there, and the focus is in the field.
+	await expect(page.getByLabel("Email")).toBeFocused();
 	await expect(page.getByLabel("Email")).toHaveValue(person.email);
 });
 
 test("signing out from Settings, with the keyboard alone", async ({ page }) => {
-	await signUp(page, newPerson());
+	await signIn(page, newPerson().email);
 	await expect(page).toHaveURL(ARRIVAL);
 	await openSettings(page);
 

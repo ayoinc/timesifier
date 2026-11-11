@@ -66,7 +66,7 @@ describe("the locale the root loader hands to the page", () => {
 	it("is the negotiated one, and the interface stays English", async () => {
 		const html = await page("fr-FR,fr;q=0.9");
 
-		expect(html).toContain('<html lang="en">');
+		expect(html).toContain('<html lang="en" ');
 		expect(html).toContain('\\"locale\\",\\"fr-FR\\"');
 	});
 

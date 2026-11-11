@@ -1,6 +1,6 @@
 /**
- * What a person's name may be, wherever one is taken: the sign-up page, the
- * server when a code creates the account, and any page that changes it later.
+ * What a person's name may be, wherever one is taken: Settings, and any page
+ * that changes it later. No name is asked on the way in.
  *
  * One line of text that begins and ends with something other than a space, no
  * longer than a page can show, with no control character and none that

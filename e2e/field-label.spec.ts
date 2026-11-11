@@ -119,13 +119,13 @@ test("Select: the label moves above the value's line with focus and comes back d
 	await expect.poll(() => reachIntoValueLine(select)).toBeGreaterThan(0);
 });
 
-test("the sign-up page: the label of the name moves above the value's line with focus and stays there while a person types", async ({
+test("the sign-in page: the label of the address moves above the value's line with focus and stays there while a person types", async ({
 	page,
 }) => {
 	// Where the defect was seen: a page the server rendered, with nothing else on it.
 	await page.context().clearCookies();
-	await page.goto("/sign-up");
-	const field = page.getByRole("textbox", { name: "Name" });
+	await page.goto("/sign-in");
+	const field = page.getByRole("textbox", { name: "Email" });
 	await expect(page.locator("#react-aria-pressable-style")).toBeAttached();
 	expect(await reachIntoValueLine(field)).toBeGreaterThan(0);
 
@@ -133,11 +133,11 @@ test("the sign-up page: the label of the name moves above the value's line with 
 	await expect.poll(() => reachIntoValueLine(field)).toBeLessThanOrEqual(0);
 	await expect.poll(() => lineHeight(field)).toBe(2);
 
-	await field.pressSequentially("Ada");
-	await expect(field).toHaveValue("Ada");
+	await field.pressSequentially("ada@example.com");
+	await expect(field).toHaveValue("ada@example.com");
 	expect(await reachIntoValueLine(field)).toBeLessThanOrEqual(0);
 
-	await page.getByRole("textbox", { name: "Email" }).focus();
+	await page.getByRole("button", { name: "Continue" }).focus();
 	await expect.poll(() => lineHeight(field)).toBe(1);
 	expect(await reachIntoValueLine(field)).toBeLessThanOrEqual(0);
 });

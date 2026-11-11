@@ -9,17 +9,21 @@ import {
 
 import { cx } from "~/components/cx";
 import { CheckIcon } from "~/components/icons/CheckIcon";
+import { Photo } from "~/landing/Photo";
+import { PHOTOS } from "~/landing/photos";
+import { MAIN_ID, PAGE, SiteFooter, SiteHeader, SkipLink } from "~/landing/Site";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 
 import type { Problem } from "./client";
+import { SIGN_IN_PATH } from "./paths";
 
-// What the sign-in and sign-up pages share: the frame around their steps, how a
-// step arrives, and the words for what can go wrong.
+// The frame of the sign-in page, how one of its views gives way to the other,
+// and the words for what can go wrong.
 
 export interface AuthPageProps {
-	/** The position of the step on screen in the page's sequence: a later step is "forward". */
+	/** The position of the view on screen in the page's sequence: a later one is "forward". */
 	step: number;
-	/** The step: a heading, what it asks, and one primary action. */
+	/** The view: a heading, what it asks, and one primary action. */
 	children: ReactNode;
 }
 
@@ -32,7 +36,7 @@ export interface AuthPageProps {
  * is in its place at once and fades in (design rule 9).
  *
  * A view transition whose parts only fade is not enough here. When the new
- * step's `<main>` measures the same as the old one's, React leaves the rest of
+ * step measures the same as the old one, React leaves the rest of
  * the page out of the transition, and to do so it starts an animation from
  * script that holds the `width` and `height` of `::view-transition` at nothing
  * (react-dom 19.3.1, `commitAfterMutationEffectsOnFiber`). A style sheet cannot
@@ -50,22 +54,25 @@ const ARRIVAL =
 	"motion-reduce:starting:opacity-0";
 
 /**
- * The frame of a page outside the shell: the product's name, which stays put,
- * and one step at a time below it.
+ * The frame of the sign-in page: the next page of the public pages, with their
+ * band at the top (which holds the name alone here), their column and their
+ * foot (docs/design-direction.md, "For the product screens"). The view is one
+ * column of five; from 840px a photograph stands beside it, and holds still
+ * while the view changes.
  *
- * A change of step moves like a change of destination in the shell, with the
+ * A change of view moves like a change of destination in the shell, with the
  * same transition and the same tokens (docs/design-system.md, "Shell"): forward
  * one way, back the other. With reduced motion requested it is not a transition
- * (`changeStep`): the step is there at once and fades in. When the step has
+ * (`changeStep`): the view is there at once and fades in. When the view has
  * changed, the keyboard focus goes to its first field, or to its heading when
- * it has none, so the next key press lands in the new step. The step a page
+ * it has none, so the next key press lands in the new view. The view a page
  * loads with is left alone, like any page the browser loads whole.
  */
 export function AuthPage({ step, children }: AuthPageProps) {
 	const travel = useTravel(step);
-	const main = useRef<HTMLElement>(null);
+	const view = useRef<HTMLDivElement>(null);
 
-	// The step the page loaded with is there already; every later one arrives.
+	// The view the page loaded with is there already; every later one arrives.
 	const [arrived, setArrived] = useState(false);
 	if (travel && !arrived) setArrived(true);
 
@@ -73,48 +80,66 @@ export function AuthPage({ step, children }: AuthPageProps) {
 	useLayoutEffect(() => {
 		if (shown.current === step) return;
 		shown.current = step;
-		const first = main.current?.querySelector<HTMLElement>("input") ?? null;
-		(first ?? main.current?.querySelector("h1"))?.focus();
+		const first = view.current?.querySelector<HTMLElement>("input") ?? null;
+		(first ?? view.current?.querySelector("h1"))?.focus();
 	}, [step]);
 
 	return (
-		<div className="mx-auto flex min-h-dvh w-full max-w-110 flex-col gap-10 px-4 pt-12 pb-8 medium:pt-24">
-			<header>
-				{/* A plain link: leaving these pages loads the next one whole (./client.ts, `leaveFor`). */}
-				<a
-					href="/"
-					className="rounded-extra-small font-brand text-title-large text-primary outline-none focus-visible:focus-indicator"
-				>
-					Timesifier
-				</a>
-			</header>
+		<div className="flex min-h-dvh flex-col">
+			<SkipLink />
+			{/* Its links are plain ones: leaving this page loads the next one whole (./client.ts, `leaveFor`). */}
+			<SiteHeader current={SIGN_IN_PATH} />
 
-			{/* Only a change of step starts a transition, as in the shell. Each step has
-			    its own `<main>`: the fade starts from the first style of a new element. */}
-			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-				<main key={step} ref={main} className={cx("flex flex-col gap-6", arrived && ARRIVAL)}>
-					{children}
-				</main>
-			</ViewTransition>
+			<main
+				id={MAIN_ID}
+				tabIndex={-1}
+				className={`${PAGE} grid flex-1 content-start gap-x-8 gap-y-12 pt-10 pb-16 outline-none expanded:grid-cols-12 expanded:pt-24 expanded:pb-24`}
+			>
+				{/* Only a change of view starts a transition, as in the shell. Each view is
+				    an element of its own: the fade starts from the first style of a new element. */}
+				<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
+					<div
+						key={step}
+						ref={view}
+						className={cx(
+							"flex min-w-0 max-w-120 flex-col expanded:col-span-5",
+							arrived && ARRIVAL,
+						)}
+					>
+						{children}
+					</div>
+				</ViewTransition>
+				<Photo
+					photo={PHOTOS.platform}
+					alt="An empty railway platform in the rain, with a yellow-rimmed station clock above a departure screen."
+					sizes="(min-width: 75rem) 560px, (min-width: 52.5rem) 48vw, 100vw"
+					caption="Amsterdam Sloterdijk. Photograph: Nikolai Kolosov."
+					className="max-expanded:hidden expanded:col-span-6 expanded:col-start-7"
+				/>
+			</main>
+
+			<SiteFooter current={SIGN_IN_PATH}>
+				<p>Photograph by Nikolai Kolosov, from Unsplash.</p>
+			</SiteFooter>
 		</div>
 	);
 }
 
-/** The one `h1` of a step. It takes the focus from script when its step has no field. */
+/** The one `h1` of a view. It takes the focus from script when its view has no field. */
 export function StepHeading({ children }: { children: ReactNode }) {
 	return (
 		<h1
 			tabIndex={-1}
-			className="w-fit rounded-extra-small text-headline-medium outline-none focus-visible:focus-indicator"
+			className="w-fit rounded-extra-small text-headline-large text-balance outline-none focus-visible:focus-indicator medium:text-display-small"
 		>
 			{children}
 		</h1>
 	);
 }
 
-/** The sentence under a step's heading that says what the step is for. */
+/** The sentence under a view's heading that says what the view is for. */
 export function StepLead({ children }: { children: ReactNode }) {
-	return <p className="text-body-large text-on-surface-variant">{children}</p>;
+	return <p className="mt-4 text-body-large text-on-surface-variant">{children}</p>;
 }
 
 /**
@@ -161,10 +186,12 @@ export function NoticeLine({ notice }: { notice: Notice | null }) {
 	);
 }
 
-/** The words for each thing that can go wrong. None says whether an address has an account. */
-export const PROBLEM_WORDS: Record<Problem, string> = {
+/**
+ * The words for each thing that can go wrong but one. None says whether an
+ * address has an account.
+ */
+const PROBLEM_WORDS: Record<Exclude<Problem, "robot-check">, string> = {
 	"too-many": "Too many attempts. Try again in a minute.",
-	"robot-check": "We could not check that you are not a robot. Reload the page and try again.",
 	"invalid-email": "That email address is not valid. Check it and try again.",
 	"wrong-code": "That code is not right. Check it, or send a new one.",
 	"expired-code": "That code has expired. Send a new one.",
@@ -172,8 +199,19 @@ export const PROBLEM_WORDS: Record<Problem, string> = {
 	failed: "Something went wrong. Check your connection and try again.",
 };
 
-export function problem(kind: Problem): Notice {
-	return { tone: "problem", text: PROBLEM_WORDS[kind] };
+/**
+ * Turnstile's check failing is the one problem whose words name a button:
+ * pressing it again runs the check again (./RobotCheck.tsx). `again` is the
+ * label of the button the person pressed.
+ */
+export function problem(kind: Problem, again = "Continue"): Notice {
+	return {
+		tone: "problem",
+		text:
+			kind === "robot-check"
+				? `We could not confirm this browser. Wait a moment and press ${again} again.`
+				: PROBLEM_WORDS[kind],
+	};
 }
 
 export function progress(text: string): Notice {

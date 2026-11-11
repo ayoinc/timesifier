@@ -37,8 +37,12 @@ export interface HomeOrganisation extends Organisation {
 	member: { name: string; email: string };
 	/** An organisation the member owns, so that `/app` shows them a choice. */
 	membersOwn: Organisation;
-	/** A person with an invitation to it that they have not answered (`SIGNED_IN_AS_GUEST`). */
-	guest: { name: string; email: string };
+	/**
+	 * A person with an invitation to it that they have not answered
+	 * (`SIGNED_IN_AS_GUEST`). They are in no organisation, so they have no
+	 * Settings and have given no name.
+	 */
+	guest: { email: string };
 	/** The address of the page of the guest's invitation. */
 	guestInvitation: string;
 }

@@ -2,12 +2,12 @@ import type { Page } from "@playwright/test";
 
 import {
 	ARRIVAL,
+	CONTINUE,
 	codeSentBy,
 	newPerson,
 	openAuthPage,
 	ownAddress,
-	signOut,
-	signUp,
+	signIn,
 	TIME_WITH_TURNS,
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
@@ -16,10 +16,10 @@ import { expect, test } from "./fixtures";
 import { movement, watchForMovement } from "./motion";
 import { openSettings } from "./organisation";
 
-// Every view of the sign-up page, the sign-in page and the account part of
-// Settings: no WCAG 2.2 A or AA violation and every text's contrast measured, at
-// both window sizes and in both schemes (rules 14 and 16). Then rule 9: with
-// reduced motion requested nothing on these pages moves or changes size.
+// Both views of the sign-in page and the account part of Settings: no WCAG 2.2
+// A or AA violation and every text's contrast measured, at both window sizes
+// and in both schemes (rules 14 and 16). Then rule 9: with reduced motion
+// requested nothing on the page moves or changes size.
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
@@ -40,41 +40,36 @@ for (const viewport of [
 ]) {
 	for (const colorScheme of ["light", "dark"] as const) {
 		test.describe(`in a window ${viewport.width}px wide, in the ${colorScheme} scheme`, () => {
-			test.use({ viewport, colorScheme });
+			// A scan measures the page settled: with reduced motion asked for, the
+			// band at the top is not part-way through settling.
+			test.use({ viewport, chosenScheme: colorScheme, reducedMotion: "reduce" });
 
-			test("every view of the sign-up page has no accessibility violations", async ({ page }) => {
+			test("both views of the sign-in page have no accessibility violations, and nothing runs off the side", async ({
+				page,
+			}) => {
 				const person = newPerson();
-				await openAuthPage(page, "/sign-up");
+				await openAuthPage(page);
 				expect(await page.evaluate(() => getComputedStyle(document.body).colorScheme)).toContain(
 					colorScheme,
 				);
-				await expectNoProblems(page, "Create your account", [EMPTY_INPUT]);
+				await expectNoProblems(page, "Enter your email", [EMPTY_INPUT]);
 
-				await page.getByLabel("Name").fill(person.name);
 				await page.getByLabel("Email").fill(person.email);
-				await expectNoProblems(page, "Create your account");
-				const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+				await expectNoProblems(page, "Enter your email");
+				const code = await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 				await expectNoProblems(page, "Check your email", [EMPTY_INPUT]);
 
 				await page.getByLabel("Code").fill(code);
 				await expectNoProblems(page, "Check your email");
-			});
-
-			test("every view of the sign-in page has no accessibility violations", async ({ page }) => {
-				const person = newPerson();
-				await signUp(page, person);
-				await signOut(page);
-
-				await openAuthPage(page, "/sign-in");
-				await expectNoProblems(page, "Sign in", [EMPTY_INPUT]);
-				await page.getByLabel("Email").fill(person.email);
-				await expectNoProblems(page, "Sign in");
-				await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
-				await expectNoProblems(page, "Check your email", [EMPTY_INPUT]);
+				expect(
+					await page.evaluate(
+						() => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+					),
+				).toBe(0);
 			});
 
 			test("the account part of Settings has no accessibility violations", async ({ page }) => {
-				await signUp(page, newPerson());
+				await signIn(page, newPerson().email);
 				await expect(page).toHaveURL(ARRIVAL);
 
 				await openSettings(page);
@@ -118,45 +113,44 @@ function pageHeight(page: Page): Promise<number> {
 }
 
 /**
- * Every change of view the sign-up page makes, forward and back, as far as the
- * code typed into its last step: three changes of step. It stays on the page:
+ * Every change of view the sign-in page makes, forward and back, as far as the
+ * code typed into its second view: three changes of view. It stays on the page:
  * what the watcher has seen is the page's own. Returns the height of the page
- * at each step it stopped on.
+ * at each view it stopped on.
  */
-async function walkEveryStep(page: Page): Promise<number[]> {
+async function walkEveryView(page: Page): Promise<number[]> {
 	const heights: number[] = [];
 	const person = newPerson();
-	await openAuthPage(page, "/sign-up");
-	await page.getByLabel("Name").fill(person.name);
+	await openAuthPage(page);
 	await page.getByLabel("Email").fill(person.email);
 	// 1: forward, to the code.
-	await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+	await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 	await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
 	heights.push(await pageHeight(page));
 
-	// 2: back a step. 3: forward again.
+	// 2: back a view. 3: forward again.
 	await page.getByRole("button", { name: "Use a different email" }).click();
-	await expect(page.getByRole("heading", { level: 1, name: "Create your account" })).toBeVisible();
+	await expect(page.getByRole("heading", { level: 1, name: "Enter your email" })).toBeVisible();
 	heights.push(await pageHeight(page));
-	const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+	const code = await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 	await page.getByLabel("Code").fill(code);
 	await expect(page.getByLabel("Code")).toHaveValue(code);
 	return heights;
 }
 
-// Shorter than the sign-up page's taller step and taller than its shorter one,
-// so the page outgrows the window at one step and fits it again at the other.
-// At this width the step that takes the name and address measures 568px and
-// the one that takes the code is taller than this window and no taller than 600px.
-const SHORT = { width: 1280, height: 576 };
+// A window the page outgrows at one view and fits again at the other, so a
+// scrollbar would come and go with the change of view. At this width the
+// photograph is not shown and the view that takes the address stands 574px
+// tall with the band and the foot; the one that takes the code, 810px.
+const BETWEEN = { width: 700, height: 700 };
 
 test.describe("with reduced motion requested", () => {
 	test.use({ reducedMotion: "reduce" });
 
-	test("no step of the sign-up page moves or changes size", async ({ page }) => {
+	test("no view of the sign-in page moves or changes size", async ({ page }) => {
 		await watchForMovement(page);
 		await countViewTransitions(page);
-		await walkEveryStep(page);
+		await walkEveryView(page);
 		expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(
 			true,
 		);
@@ -164,94 +158,98 @@ test.describe("with reduced motion requested", () => {
 		expect(await viewTransitionsStarted(page)).toBe(0);
 	});
 
-	test.describe("in a window shorter than the page's taller step", () => {
-		test.use({ viewport: SHORT });
+	test.describe("in a window shorter than the page's taller view", () => {
+		test.use({ viewport: BETWEEN });
 
-		test("no step of the sign-up page moves or changes size", async ({ page }) => {
+		test("no view of the sign-in page moves or changes size", async ({ page }) => {
 			await watchForMovement(page);
 			await countViewTransitions(page);
-			const heights = await walkEveryStep(page);
+			const heights = await walkEveryView(page);
 
 			// The case this test is for: the page was taller than the window, and was not.
-			expect(Math.max(...heights)).toBeGreaterThan(SHORT.height);
-			expect(Math.min(...heights)).toBe(SHORT.height);
+			expect(Math.max(...heights)).toBeGreaterThan(BETWEEN.height);
+			expect(Math.min(...heights)).toBe(BETWEEN.height);
 			expect(await movement(page)).toEqual([]);
 			expect(await viewTransitionsStarted(page)).toBe(0);
 		});
 	});
 
-	// A change of step is not a view transition here (app/routes/auth/AuthPage.tsx,
-	// `changeStep`). The watcher alone would not hold that: React sizes a
-	// transition's overlay from script only when the two steps measure the same,
-	// which depends on how an address wraps in the sentence around it.
-	test("the steps of the sign-in page change without moving", async ({ page }) => {
-		await watchForMovement(page);
-		await countViewTransitions(page);
-		await openAuthPage(page, "/sign-in");
-		await page.getByLabel("Email").fill(newPerson().email);
-		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
-		await expect(page.getByLabel("Code")).toBeFocused();
-		await page.getByRole("button", { name: "Use a different email" }).click();
-		await expect(page.getByLabel("Email")).toBeFocused();
-
-		expect(await movement(page)).toEqual([]);
-		expect(await viewTransitionsStarted(page)).toBe(0);
-	});
-
 	// What takes the transition's place (rule 9: a fade or nothing).
-	test("a step that arrives fades in, and the step the page loaded with does not", async ({
+	test("a view that arrives fades in, and the view the page loaded with does not", async ({
 		page,
 	}) => {
-		// Every CSS transition that starts on a step, by the property it changes.
+		// Every CSS transition that starts on a view, by the property it changes.
+		// A view is the element that holds the page's heading and its form.
 		await page.addInitScript(() => {
 			const started: string[] = [];
 			window.__stepTransitions = started;
 			document.addEventListener("transitionrun", (event) => {
-				if (event.target instanceof Element && event.target.localName === "main") {
+				if (event.target instanceof Element && event.target.matches("main > :has(> h1)")) {
 					started.push(event.propertyName);
 				}
 			});
 		});
-		await openAuthPage(page, "/sign-in");
+		await openAuthPage(page);
 		await page.getByLabel("Email").fill(newPerson().email);
 		expect(await page.evaluate(() => window.__stepTransitions)).toEqual([]);
 
-		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+		await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 		await expect(page.getByLabel("Code")).toBeFocused();
 		await expect.poll(() => page.evaluate(() => window.__stepTransitions)).toEqual(["opacity"]);
+	});
+
+	test("a view the page comes back to after a reload is simply there: nothing fades or moves", async ({
+		page,
+	}) => {
+		await openAuthPage(page);
+		await page.getByLabel("Email").fill(newPerson().email);
+		await codeSentBy(() => page.getByRole("button", CONTINUE).click());
+		await expect(page.getByLabel("Code")).toBeFocused();
+
+		await watchForMovement(page);
+		await countViewTransitions(page);
+		await page.reload();
+		await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
+		expect(await movement(page)).toEqual([]);
+		expect(await viewTransitionsStarted(page)).toBe(0);
 	});
 });
 
 test.describe("with motion allowed", () => {
 	test.use({ reducedMotion: "no-preference" });
 
-	// The same steps and the same watcher. This is what shows the tests above can fail.
-	test("the watcher sees the steps of the sign-up page move", async ({ page }) => {
+	// The same views and the same watcher. This is what shows the tests above can fail.
+	test("the watcher sees the views of the sign-in page move, and the band takes no part", async ({
+		page,
+	}) => {
 		await watchForMovement(page);
 		await countViewTransitions(page);
-		await walkEveryStep(page);
+		// The band at the top, measured on every frame: it is the same through every change.
+		await page.addInitScript(() => {
+			const seen = new Set<string>();
+			(window as Window & { __band?: Set<string> }).__band = seen;
+			const look = () => {
+				const band = document.querySelector("header")?.getBoundingClientRect();
+				if (band) seen.add([band.x, band.y, band.width, band.height].join(","));
+				requestAnimationFrame(look);
+			};
+			requestAnimationFrame(look);
+		});
+		await walkEveryView(page);
 
-		// One for each change of step: forward, back, forward again.
+		// One for each change of view: forward, back, forward again.
 		expect(await viewTransitionsStarted(page)).toBe(3);
 		const seen = await movement(page);
 		for (const moved of [
-			/^animation of translate on <html>/, // a step arrives from the side it lies on
+			/^animation of translate on <html>/, // a view arrives from the side it lies on
 			/^transition of top on <label> "Code/, // a field's label floats
 		]) {
 			expect(seen).toContainEqual(expect.stringMatching(moved));
 		}
-	});
-
-	// The sign-in page's two steps, there and back: one for each change of step.
-	test("the steps of the sign-in page are view transitions", async ({ page }) => {
-		await countViewTransitions(page);
-		await openAuthPage(page, "/sign-in");
-		await page.getByLabel("Email").fill(newPerson().email);
-		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
-		await expect(page.getByLabel("Code")).toBeFocused();
-		await page.getByRole("button", { name: "Use a different email" }).click();
-		await expect(page.getByLabel("Email")).toBeFocused();
-
-		expect(await viewTransitionsStarted(page)).toBe(2);
+		// Nothing of the band's own moves or scales.
+		expect(seen.filter((line) => / on <(header|a|span|svg)\b.*Timesifier/.test(line))).toEqual([]);
+		expect(
+			await page.evaluate(() => [...((window as Window & { __band?: Set<string> }).__band ?? [])]),
+		).toHaveLength(1);
 	});
 });

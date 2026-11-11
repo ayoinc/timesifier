@@ -3,14 +3,30 @@ import { useState } from "react";
 import { Button } from "~/components/Button";
 import { type Notice, NoticeLine, problem, useOneAtATime } from "~/routes/auth/AuthPage";
 import { leaveFor, signOut } from "~/routes/auth/client";
-import { SIGN_IN_PATH } from "~/routes/auth/paths";
+import { signInLink } from "~/routes/auth/paths";
+import { APP_PATH } from "~/shell/destinations";
+
+export interface SignedInAsProps {
+	/** The address of the account that is signed in. */
+	email: string;
+	/**
+	 * What the way out is called. On a page a new account lands on it is "Use a
+	 * different email": one page signs in new and returning people alike, so a
+	 * person who uses another address of theirs quietly gets a second, empty
+	 * account, and this is the way back from it.
+	 */
+	wayOut: "Sign out" | "Use a different email";
+	/** Where the person was going, kept for after they sign in again. */
+	next?: string;
+}
 
 /**
- * Who is signed in, and the way out, for the pages under `/app` that are in no
+ * Who is signed in, and the way out, for the signed-in pages that are in no
  * organisation. Settings holds both everywhere else, and a person with no
- * organisation has no Settings to go to.
+ * organisation has no Settings to go to. The way out ends the session and
+ * loads the sign-in page.
  */
-export function SignedInAs({ email }: { email: string }) {
+export function SignedInAs({ email, wayOut, next = APP_PATH }: SignedInAsProps) {
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const once = useOneAtATime();
 
@@ -18,7 +34,7 @@ export function SignedInAs({ email }: { email: string }) {
 		once(async () => {
 			const outcome = await signOut();
 			if (!outcome.ok) return setNotice(problem(outcome.problem));
-			leaveFor(SIGN_IN_PATH);
+			leaveFor(signInLink(next));
 		});
 	}
 
@@ -29,7 +45,7 @@ export function SignedInAs({ email }: { email: string }) {
 			</p>
 			<NoticeLine notice={notice} />
 			<Button variant="text" onPress={leave}>
-				Sign out
+				{wayOut}
 			</Button>
 		</footer>
 	);

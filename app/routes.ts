@@ -39,13 +39,12 @@ const app = route(APP_PATH, "routes/app/layout.tsx", [
 ]);
 
 // The privacy notice and the terms have their addresses in landing/Site.tsx.
-// The two pages a person uses without a session have their addresses in
+// The one page a person uses without a session has its address in
 // routes/auth/paths.ts as well, which the guard and the pages read. An
 // invitation's page is outside `/app`: the person it is for is not a member yet.
 export default [
 	index("routes/home.tsx"),
 	route("sign-in", "routes/sign-in.tsx"),
-	route("sign-up", "routes/sign-up.tsx"),
 	route("privacy", "routes/privacy.tsx"),
 	route("terms", "routes/terms.tsx"),
 	app,

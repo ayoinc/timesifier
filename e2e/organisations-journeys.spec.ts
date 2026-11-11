@@ -12,7 +12,8 @@ import {
 	newPerson,
 	ownAddress,
 	type Person,
-	signUp,
+	setName,
+	signIn,
 	TIME_WITH_TURNS,
 } from "./auth";
 import { SIGNED_IN_AS_MEMBER, SIGNED_OUT } from "./auth-state";
@@ -36,7 +37,7 @@ import {
 
 const NOT_FOUND = "The requested page could not be found.";
 
-test.describe("a person who has just signed up", () => {
+test.describe("a person who has just signed in for the first time", () => {
 	test.use({ storageState: SIGNED_OUT });
 	test.describe.configure({ timeout: TIME_WITH_TURNS });
 
@@ -56,7 +57,7 @@ test.describe("a person who has just signed up", () => {
 				refusals,
 			}) => {
 				const person = newPerson();
-				await signUp(page, person);
+				await signIn(page, person.email);
 
 				// No organisation yet: one field, one primary action, and no navigation.
 				await expect(page).toHaveURL(ARRIVAL);
@@ -130,8 +131,10 @@ test.describe("a person who has just signed up", () => {
 		const ada = newPerson();
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
 
-		await signUp(page, ada);
+		await signIn(page, ada.email);
 		const { name: firstName, slug } = await createOrganisation(page);
+		// Nobody asked her name on the way in. She gives it where a person does.
+		await setName(page, ada.name);
 		const settings = destinationPath(slug, "settings");
 		const members = membersPath(slug);
 
@@ -181,16 +184,14 @@ test.describe("a person who has just signed up", () => {
 		await expect(page.getByText("You are the only one here.")).toHaveCount(0);
 
 		// Bob opens the link from his email in a browser of his own. He has no
-		// session, so he is sent to sign in, and from there to make an account;
-		// the invitation is where he arrives.
+		// session and no account, so he is sent to the one page that signs
+		// anybody in; the invitation is where he arrives.
 		const bobs = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
 		await ownAddress(bobs, baseURL);
 		const other = await bobs.newPage();
 		await other.goto(link);
 		await expect(other).toHaveURL(`/sign-in?next=${encodeURIComponent(link)}`);
-		await other.getByRole("link", { name: "Create an account" }).click();
-		await expect(other).toHaveURL(`/sign-up?next=${encodeURIComponent(link)}`);
-		await signUp(other, bob, other.url());
+		await signIn(other, bob.email, other.url());
 		await expect(other).toHaveURL(link);
 		await expect(other.getByRole("heading", { level: 1, name: `Join ${name}?` })).toBeVisible();
 		await expect(
@@ -211,6 +212,9 @@ test.describe("a person who has just signed up", () => {
 		await expect(other.getByText(name)).toHaveCount(0);
 		await other.getByRole("link", { name: "Go to Timesifier" }).click();
 		await expect(other).toHaveURL(organisationPath(slug));
+
+		// Until he gives a name, the others see his address. He gives one in Settings.
+		await setName(other, bob.name);
 
 		// Bob, a member, sees who is in the organisation and none of the owner's controls.
 		await openMembers(other, slug);
@@ -309,7 +313,7 @@ test.describe("a person who has just signed up", () => {
 	}) => {
 		test.setTimeout(2 * TIME_WITH_TURNS);
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
-		await signUp(page, newPerson());
+		await signIn(page, newPerson().email);
 		const { slug } = await createOrganisation(page);
 		await openMembers(page, slug);
 		await page.getByRole("button", { name: "Invite a person" }).click();
@@ -326,7 +330,7 @@ test.describe("a person who has just signed up", () => {
 		const bobs = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
 		await ownAddress(bobs, baseURL);
 		const other = await bobs.newPage();
-		await signUp(other, bob, `/sign-up?next=${encodeURIComponent(link)}`);
+		await signIn(other, bob.email, `/sign-in?next=${encodeURIComponent(link)}`);
 		await expect(other.getByText("as an admin.")).toBeVisible();
 		await other.getByRole("button", { name: "Decline" }).click();
 
@@ -352,7 +356,7 @@ test.describe("a person who has just signed up", () => {
 	}) => {
 		test.setTimeout(2 * TIME_WITH_TURNS);
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
-		await signUp(page, newPerson());
+		await signIn(page, newPerson().email);
 		const { slug } = await createOrganisation(page);
 		await openMembers(page, slug);
 		await page.getByRole("button", { name: "Invite a person" }).click();
@@ -382,12 +386,15 @@ test.describe("a person who has just signed up", () => {
 		const bobs = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
 		await ownAddress(bobs, baseURL);
 		const other = await bobs.newPage();
-		await signUp(other, bob, `/sign-up?next=${encodeURIComponent(link)}`);
+		await signIn(other, bob.email, `/sign-in?next=${encodeURIComponent(link)}`);
 		await expect(other).toHaveURL(link);
 		await expect(
 			other.getByRole("heading", { level: 1, name: "This invitation is no longer valid" }),
 		).toBeVisible();
-		await expect(other.getByRole("button")).toHaveCount(0);
+		// Nothing to press in the page itself. Under it: whose session this is, and the way back.
+		await expect(other.getByRole("main").getByRole("button")).toHaveCount(0);
+		await expect(other.getByText(`Signed in as ${bob.email}`)).toBeVisible();
+		await expect(other.getByRole("button")).toHaveText(["Use a different email"]);
 		await bobs.close();
 	});
 });

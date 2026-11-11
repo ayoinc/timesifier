@@ -44,7 +44,7 @@ export const links: Route.LinksFunction = () => [
 
 /**
  * What the server works out from the request for every page: the colour scheme
- * the person has chosen (`null` follows the device), the locale dates and
+ * (light, unless the person chose another in Settings), the locale dates and
  * numbers are formatted in, and the origin the page was asked for on, which is
  * the deployment's own: a public page names its picture in full with it.
  */
@@ -73,20 +73,24 @@ export function shouldRevalidate({
 export function Layout({ children }: { children: React.ReactNode }) {
 	// Missing when the root loader itself failed and the error page is shown.
 	const data = useRouteLoaderData<typeof loader>("root");
+	// Light is the product's face. The page is held to it, or to dark where the
+	// person chose that; it follows the device only where they chose that.
+	const choice = data?.colorScheme ?? "light";
+	const scheme = choice === "system" ? null : choice;
 
 	return (
-		<html lang="en" data-color-scheme={data?.colorScheme ?? undefined}>
+		<html lang="en" data-color-scheme={scheme ?? undefined}>
 			<head>
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
-				{/* The browser's own frame takes the colour of the band at the top: the
-				    scheme the person chose here, or else the one their device is in. */}
-				{(data?.colorScheme ? [data.colorScheme] : (["light", "dark"] as const)).map((scheme) => (
+				{/* The browser's own frame takes the colour of the band at the top: in the
+				    page's scheme, or in the device's where the page follows the device. */}
+				{(scheme ? [scheme] : (["light", "dark"] as const)).map((each) => (
 					<meta
-						key={scheme}
+						key={each}
 						name="theme-color"
-						content={THEME_COLOUR[scheme]}
-						media={data?.colorScheme ? undefined : `(prefers-color-scheme: ${scheme})`}
+						content={THEME_COLOUR[each]}
+						media={scheme ? undefined : `(prefers-color-scheme: ${each})`}
 					/>
 				))}
 				<Meta />
