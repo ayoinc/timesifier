@@ -13,10 +13,12 @@ import { emailOTPClient } from "better-auth/client/plugins";
 
 /** What went wrong, in the terms the pages have words for. */
 export type Problem =
-	/** The limit of ten a minute. */
+	/** The rate limit turned the request away. */
 	| "too-many"
 	/** Turnstile's token was missing or refused. */
 	| "robot-check"
+	/** The server does not take the address for an email address. */
+	| "invalid-email"
 	| "wrong-code"
 	| "expired-code"
 	/** Three wrong codes: the code no longer works. */
@@ -51,6 +53,13 @@ const CODE_PROBLEMS: Record<string, Problem> = {
 	TOO_MANY_ATTEMPTS: "spent-code",
 };
 
+/** Why a request for a code was refused. The first two are the Turnstile check's. */
+const SEND_PROBLEMS: Record<string, Problem> = {
+	MISSING_RESPONSE: "robot-check",
+	VERIFICATION_FAILED: "robot-check",
+	INVALID_EMAIL: "invalid-email",
+};
+
 function outcome(error: Failure | null, problems: Record<string, Problem> = {}): Outcome {
 	if (!error) return DONE;
 	if (error.status === 429) return { ok: false, problem: "too-many" };
@@ -77,10 +86,7 @@ export function sendCode(email: string, token: string): Promise<Outcome> {
 			type: "sign-in",
 			fetchOptions: { headers: { "x-captcha-response": token } },
 		});
-		// The Turnstile check answers 400 without a token and 403 for one it refuses.
-		if (error?.status === 400 || error?.status === 403)
-			return { ok: false, problem: "robot-check" };
-		return outcome(error);
+		return outcome(error, SEND_PROBLEMS);
 	});
 }
 

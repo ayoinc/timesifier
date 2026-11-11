@@ -13,9 +13,9 @@ import { SIGNED_OUT } from "./auth-state";
 import { expect, test } from "./fixtures";
 
 // What the pages say when the answer is no: a wrong code, a code tried too
-// often, too many attempts, a code that has expired, a robot check that fails,
-// and a passkey prompt that comes to nothing. No message says whether an
-// address has an account.
+// often, too many attempts, a code that has expired, an address the server
+// will not send to, a robot check that fails, and a passkey prompt that comes
+// to nothing. No message says whether an address has an account.
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
@@ -119,6 +119,27 @@ test.describe("an expired code", () => {
 		await page.getByRole("button", { name: "Sign in", exact: true }).click();
 		await expect(page.getByRole("alert")).toHaveText("That code has expired. Send a new one.");
 		await expect(page.getByRole("button", { name: "Send a new code" })).toBeVisible();
+	});
+});
+
+test.describe("an address the server will not send to", () => {
+	test.use({ refusals: { [SEND]: [400] } });
+
+	test("is said to be the address, and the robot check is not blamed", async ({ page }) => {
+		await openAuthPage(page, "/sign-in");
+		await page.getByRole("button", { name: "Use an email code instead" }).click();
+		// A browser takes an address whose domain has no dot; the server does not.
+		await page.getByLabel("Email").fill("ada@example");
+		const answered = page.waitForResponse((response) => response.url().endsWith(SEND));
+		await page.getByRole("button", { name: "Continue" }).click();
+
+		expect((await answered).status()).toBe(400);
+		await expect(page.getByRole("alert")).toHaveText(
+			"That email address is not valid. Check it and try again.",
+		);
+		await expect(
+			page.getByRole("heading", { level: 1, name: "Sign in with an email code" }),
+		).toBeVisible();
 	});
 });
 

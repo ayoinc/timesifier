@@ -125,6 +125,7 @@ export function NoticeLine({ notice }: { notice: Notice | null }) {
 export const PROBLEM_WORDS: Record<Problem, string> = {
 	"too-many": "Too many attempts. Try again in a minute.",
 	"robot-check": "We could not check that you are not a robot. Reload the page and try again.",
+	"invalid-email": "That email address is not valid. Check it and try again.",
 	"wrong-code": "That code is not right. Check it, or send a new one.",
 	"expired-code": "That code has expired. Send a new one.",
 	"spent-code": "That code no longer works: it was entered wrongly too many times. Send a new one.",
