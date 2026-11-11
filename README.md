@@ -4,7 +4,7 @@ Timesifier helps individuals and teams understand and improve how they use their
 
 ## Status
 
-The application is scaffolded and the foundation is being built card by card. `BOARD.md` shows what is done.
+The scaffold is live at <https://timesifier.com> and the foundation is being built card by card. `BOARD.md` shows what is done.
 
 ## Where things are
 
@@ -35,3 +35,7 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 
 `pnpm format` fixes formatting and import order. Local secrets go in `.dev.vars`; see `.dev.vars.example` and `docs/security.md`.
+
+## Delivery
+
+Every pull request is checked and gets a preview URL as a comment. Merging to `main` deploys to production; nothing is deployed from a laptop. The steps, the pipeline's token and the rollback command are in `docs/architecture.md`.

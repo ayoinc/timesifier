@@ -10,6 +10,19 @@
 	// Selected by create-cloudflare on the day the project was scaffolded.
 	"compatibility_date": "2026-11-09",
 	"compatibility_flags": ["nodejs_compat"],
+	// Production is served only on its own domain. Wrangler creates the DNS
+	// records for these two hostnames and touches no other record in the zone.
+	"workers_dev": false,
+	"routes": [
+		{ "pattern": "timesifier.com", "custom_domain": true },
+		{ "pattern": "www.timesifier.com", "custom_domain": true }
+	],
+	// Each pull request gets a preview on workers.dev. Without this line a preview
+	// has no URL, because turning workers_dev off turns preview URLs off too.
+	"preview_urls": true,
+	// Previews do not inherit production settings; preview-safe bindings go here.
+	// https://developers.cloudflare.com/workers/previews/configuration/
+	"previews": {},
 	"observability": {
 		"enabled": true,
 		"logs": { "enabled": true, "head_sampling_rate": 1 },

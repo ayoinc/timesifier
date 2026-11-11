@@ -1,4 +1,5 @@
 import { createRequestHandler } from "react-router";
+import { canonicalRedirect } from "./canonical-host";
 
 const requestHandler = createRequestHandler(
 	() => import("virtual:react-router/server-build"),
@@ -7,6 +8,6 @@ const requestHandler = createRequestHandler(
 
 export default {
 	async fetch(request) {
-		return requestHandler(request);
+		return canonicalRedirect(request) ?? requestHandler(request);
 	},
 } satisfies ExportedHandler<Env>;
