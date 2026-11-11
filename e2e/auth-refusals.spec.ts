@@ -105,7 +105,7 @@ test.describe("a code typed in a browser that did not ask for it", () => {
 		// The refusal used up none of the code's attempts: it still works where it was asked for.
 		await page.getByLabel("Code").fill(code);
 		await page.getByRole("button", { name: "Sign in", exact: true }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
 	});
 });
 

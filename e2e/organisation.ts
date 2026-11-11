@@ -7,10 +7,11 @@ import {
 	APP_PATH,
 	type DestinationId,
 	destinationPath,
+	membersPath,
 	NEW_ORGANISATION_PATH,
 	organisationPath,
 } from "../app/shell/destinations";
-import { expect, openShell } from "./fixtures";
+import { expect, openShell, type Refusals } from "./fixtures";
 
 // What the browser tests share about organisations: the one the signed-in
 // person of the Chromium project owns, and how any other person gets theirs.
@@ -23,24 +24,42 @@ export interface Organisation {
 /** The address of an organisation: `/app/<slug>`, and not the page that creates one. */
 const ORGANISATION_ADDRESS = /^\/app\/(?!new$)[a-z0-9-]+$/;
 
-/** Where the setup project keeps the organisation of the person every Chromium test starts as. */
+/**
+ * What the setup project leaves for the other tests: the organisation of the
+ * person the Chromium tests start as, and the people in and around it. No test
+ * changes any of it; a test that renames, invites, removes or deletes makes an
+ * organisation of its own.
+ */
+export interface HomeOrganisation extends Organisation {
+	/** Who created it. The Chromium tests start signed in as them (`SIGNED_IN`). */
+	owner: { name: string; email: string };
+	/** A person who accepted an invitation to it (`SIGNED_IN_AS_MEMBER`). */
+	member: { name: string; email: string };
+	/** An organisation the member owns, so that `/app` shows them a choice. */
+	membersOwn: Organisation;
+	/** A person with an invitation to it that they have not answered (`SIGNED_IN_AS_GUEST`). */
+	guest: { name: string; email: string };
+	/** The address of the page of the guest's invitation. */
+	guestInvitation: string;
+}
+
+/** Where the setup project keeps it. */
 const HOME = "test-results/.auth/organisation.json";
 
-/** Called by the setup project, once, when that person has created their organisation. */
-export function saveHomeOrganisation(organisation: Organisation) {
+/** Called by the setup project, once. */
+export function saveHomeOrganisation(organisation: HomeOrganisation) {
 	mkdirSync(dirname(HOME), { recursive: true });
 	writeFileSync(HOME, JSON.stringify(organisation));
 }
 
-let home: Organisation | undefined;
+let home: HomeOrganisation | undefined;
 
 /**
- * The organisation of the person the Chromium tests start as. Read when a test
- * first asks, never when a file is loaded: Playwright loads every test file
- * before the setup project has run.
+ * Read when a test first asks, never when a file is loaded: Playwright loads
+ * every test file before the setup project has run.
  */
-export function homeOrganisation(): Organisation {
-	home ??= JSON.parse(readFileSync(HOME, "utf8")) as Organisation;
+export function homeOrganisation(): HomeOrganisation {
+	home ??= JSON.parse(readFileSync(HOME, "utf8")) as HomeOrganisation;
 	return home;
 }
 
@@ -97,4 +116,39 @@ export async function openSettings(page: Page): Promise<string> {
 	const slug = await ownOrganisation(page);
 	await openShell(page, destinationPath(slug, "settings"));
 	return slug;
+}
+
+/** Opens the members page of the organisation with this slug. */
+export async function openMembers(page: Page, slug: string) {
+	await openShell(page, membersPath(slug));
+	await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible();
+}
+
+/** The address of an invitation's page, as its email gives it. */
+export const INVITATION_LINK = /\/invitations\/[0-9a-f-]{36}\b/;
+
+/**
+ * Fills in the sheet that "Invite a person" opens and sends it. The members
+ * page is open, and the person on it may invite. Returns when the page has
+ * said the invitation is on its way.
+ */
+export async function invite(page: Page, email: string, role: "Member" | "Admin" = "Member") {
+	await page.getByRole("button", { name: "Invite a person" }).click();
+	const sheet = page.getByRole("dialog", { name: "Invite a person" });
+	await sheet.getByLabel("Email address").fill(email);
+	// The radio itself is hidden; its label is what a pointer presses.
+	await sheet.getByText(role, { exact: true }).click();
+	await sheet.getByRole("button", { name: "Send invitation" }).click();
+	await expect(page.getByRole("status").filter({ hasText: email })).toBeVisible();
+	await expect(sheet).toBeHidden();
+}
+
+/**
+ * Names a refusal the test is about to cause on an address it could not know
+ * when it was written: one that holds an organisation's slug or an
+ * invitation's id. `refusals` is the test's own fixture (./fixtures.ts), which
+ * reads this entry when the console reports the refused request.
+ */
+export function expectRefusal(refusals: Refusals, path: string, ...statuses: number[]) {
+	refusals[path] = [...(refusals[path] ?? []), ...statuses];
 }

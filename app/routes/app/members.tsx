@@ -39,6 +39,10 @@ import { useOrganisation } from "./useOrganisation";
 // control is a courtesy: the server decides every time one is used.
 
 const TITLE = "Members";
+/** The roles an invitation can give, the usual one first. */
+const INVITED_ROLES = ["member", "admin"] as const satisfies readonly z.output<
+	typeof InvitedRole
+>[];
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
 
 export function meta() {
@@ -317,7 +321,7 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 					isRequired
 					maxLength={254}
 				/>
-				<RoleChoice roles={InvitedRole.options} defaultValue="member" />
+				<RoleChoice roles={INVITED_ROLES} defaultValue="member" />
 			</FormSheet>
 
 			<FormSheet
