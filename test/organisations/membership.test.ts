@@ -154,7 +154,7 @@ describe("the membership function", () => {
 	it("does not answer for a host that is not ours", async () => {
 		const { ada } = await twoOrganisations();
 
-		const elsewhere = pageRequest("acme", ada.cookie, "https://timesifier.com.evil.example");
+		const elsewhere = pageRequest("acme", ada.cookie, "https://timesifier.example.evil.example");
 
 		expect(await findMembership(elsewhere, "acme")).toBeNull();
 	});

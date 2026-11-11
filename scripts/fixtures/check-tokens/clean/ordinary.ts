@@ -9,7 +9,7 @@ export function firstAndLast(rows: number[][], index: number) {
 }
 
 export const links = {
-	help: "https://timesifier.com/help#faq",
+	help: "https://timesifier.example/help#faq",
 	section: "/reports#add",
 	anchor: { href: "#feed" },
 	issue: "See pull request 123 and section 4.2",

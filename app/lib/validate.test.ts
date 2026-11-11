@@ -9,7 +9,7 @@ const schema = z.object({
 });
 
 function post(body: BodyInit, contentType?: string): Request {
-	return new Request("https://timesifier.com/entries", {
+	return new Request("https://timesifier.example/entries", {
 		method: "POST",
 		body,
 		headers: contentType ? { "Content-Type": contentType } : undefined,
@@ -105,7 +105,7 @@ describe("parseRequest", () => {
 			},
 			{ highWaterMark: 0 },
 		);
-		const request = new Request("https://timesifier.com/entries", {
+		const request = new Request("https://timesifier.example/entries", {
 			method: "POST",
 			body,
 			headers: { "Content-Type": "application/json", "Content-Length": String(64 * 1024 + 1) },

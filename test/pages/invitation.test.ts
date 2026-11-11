@@ -56,7 +56,7 @@ describe("the link in the email", () => {
 		const { page } = await invited();
 
 		const message = mailbox.sent().find(({ to }) => to === "bob@example.com");
-		expect(message?.text).toContain(`https://timesifier.com${page}`);
+		expect(message?.text).toContain(`https://timesifier.example${page}`);
 	});
 });
 

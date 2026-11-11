@@ -18,7 +18,7 @@ import {
 } from "./auth/harness";
 import { freshDatabase } from "./db/database";
 
-const PREVIEW = "https://pr-12-timesifier.ayoinc.workers.dev";
+const PREVIEW = "https://pr-12-timesifier.acme.workers.dev";
 const LOCAL = "http://localhost:5173";
 
 const worker = exports.default;
@@ -69,8 +69,8 @@ describe("a Worker without a setting refuses sign-in", () => {
 		["BETTER_AUTH_SECRET", "", "not set"],
 		["TURNSTILE_SECRET_KEY", undefined, "not set"],
 		["EMAIL_FROM", undefined, "not set"],
-		["EMAIL_FROM", "Timesifier <no-reply@mail.timesifier.com>", "not valid"],
-		["EMAIL_FROM", "no-reply@mail.timesifier.com, someone@elsewhere.example", "not valid"],
+		["EMAIL_FROM", "Timesifier <no-reply@mail.timesifier.example>", "not valid"],
+		["EMAIL_FROM", "no-reply@mail.timesifier.example, someone@elsewhere.example", "not valid"],
 		["ENVIRONMENT", undefined, "not set"],
 		["ENVIRONMENT", "staging", "not valid"],
 	])("%s is %s: Better Auth answers 500 and does nothing (%s)", async (name, value, fault) => {
@@ -99,12 +99,12 @@ describe("a Worker without a setting refuses sign-in", () => {
 		["empty", ""],
 		["a pattern that matches every host", "*"],
 		["a pattern that matches other hosts", "*.com"],
-		["a URL", "https://timesifier.com"],
+		["a URL", "https://timesifier.example"],
 	])("production whose APP_HOST is %s serves nothing on any host", async (_name, value) => {
 		setBinding("APP_HOST", value);
 
 		// The host it should have had, a preview's, and a version's own address.
-		for (const origin of [ORIGIN, PREVIEW, "https://41b1b1d9-timesifier.ayoinc.workers.dev"]) {
+		for (const origin of [ORIGIN, PREVIEW, "https://41b1b1d9-timesifier.acme.workers.dev"]) {
 			expect(await signInAnswers(origin), origin).toEqual([500, 500, 500, 500]);
 			expect((await worker.fetch(`${origin}/`)).status, origin).toBe(500);
 		}
@@ -118,9 +118,9 @@ describe("a Worker without a setting refuses sign-in", () => {
 		["not set", undefined],
 		["empty", ""],
 		["every workers.dev host", ".workers.dev"],
-		["every host of the account", ".ayoinc.workers.dev"],
+		["every host of the account", ".acme.workers.dev"],
 		["a pattern", "*"],
-		["production's host", "timesifier.com"],
+		["production's host", "timesifier.example"],
 	])("a preview whose PREVIEW_HOST_SUFFIX is %s serves no sign-in", async (_name, value) => {
 		setBinding("ENVIRONMENT", "preview");
 		setBinding("PREVIEW_HOST_SUFFIX", value);
@@ -171,7 +171,7 @@ describe("the hosts an environment trusts", () => {
 		[production, "https://time.example.org/", true],
 		[production, "https://time.example.org:8443/", false],
 		[production, "https://www.time.example.org/", false],
-		[production, "https://timesifier.com/", false],
+		[production, "https://timesifier.example/", false],
 		[production, "https://pr-12-time.acme.workers.dev/", false],
 		[production, "http://localhost:5173/", false],
 		[preview, "https://pr-12-time.acme.workers.dev/", true],

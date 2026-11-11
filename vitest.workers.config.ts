@@ -25,9 +25,9 @@ export default defineConfig({
 					// The deployment under test: production, on the first host. Tests that
 					// set ENVIRONMENT to `preview` use the suffix. app/auth/hosts.ts.
 					ENVIRONMENT: "production",
-					APP_HOST: "timesifier.com",
-					PREVIEW_HOST_SUFFIX: "-timesifier.ayoinc.workers.dev",
-					EMAIL_FROM: "no-reply@mail.timesifier.com",
+					APP_HOST: "timesifier.example",
+					PREVIEW_HOST_SUFFIX: "-timesifier.acme.workers.dev",
+					EMAIL_FROM: "no-reply@mail.timesifier.example",
 				},
 			},
 		})),

@@ -45,13 +45,16 @@ function occurrences(text: string, part: string): number {
 }
 
 describe("the sign-in code email", () => {
-	it("comes from no-reply@mail.timesifier.com and carries the code once", async () => {
+	it("comes from no-reply@mail.timesifier.example and carries the code once", async () => {
 		await requestCode(EMAIL);
 		const code = await mailbox.codeFor(EMAIL);
 
 		expect(mailbox.sent()).toHaveLength(1);
 		const [message] = mailbox.sent();
-		expect(message?.from).toEqual({ name: "Timesifier", email: "no-reply@mail.timesifier.com" });
+		expect(message?.from).toEqual({
+			name: "Timesifier",
+			email: "no-reply@mail.timesifier.example",
+		});
 		expect(message?.to).toBe(EMAIL);
 		expect(occurrences(message?.text ?? "", code)).toBe(1);
 		expect(occurrences(message?.html ?? "", code)).toBe(1);
@@ -178,7 +181,7 @@ describe("logs", () => {
 		let failure: unknown;
 		const lines = await logLinesDuring(async () => {
 			failure = await getSession(
-				new Request("https://timesifier.com/app", { headers: { Cookie: cookie } }),
+				new Request("https://timesifier.example/app", { headers: { Cookie: cookie } }),
 			).catch((error: unknown) => error);
 		});
 

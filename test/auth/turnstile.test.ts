@@ -78,12 +78,8 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		}
 
 		it.each([
-			["production", "https://timesifier.com", "timesifier.com"],
-			[
-				"preview",
-				"https://pr-12-timesifier.ayoinc.workers.dev",
-				"pr-12-timesifier.ayoinc.workers.dev",
-			],
+			["production", "https://timesifier.example", "timesifier.example"],
+			["preview", "https://pr-12-timesifier.acme.workers.dev", "pr-12-timesifier.acme.workers.dev"],
 		])(
 			"in %s, accepts one solved on the host the request was made to",
 			async (environment, origin, hostname) => {
@@ -98,19 +94,15 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		);
 
 		it.each([
-			["production", "https://timesifier.com", "elsewhere.example"],
-			["production", "https://timesifier.com", "pr-12-timesifier.ayoinc.workers.dev"],
-			["production", "https://timesifier.com", "www.timesifier.com"],
-			["production", "https://timesifier.com", undefined],
-			[
-				"preview",
-				"https://pr-12-timesifier.ayoinc.workers.dev",
-				"pr-13-timesifier.ayoinc.workers.dev",
-			],
-			["preview", "https://pr-12-timesifier.ayoinc.workers.dev", "timesifier.com"],
+			["production", "https://timesifier.example", "elsewhere.example"],
+			["production", "https://timesifier.example", "pr-12-timesifier.acme.workers.dev"],
+			["production", "https://timesifier.example", "www.timesifier.example"],
+			["production", "https://timesifier.example", undefined],
+			["preview", "https://pr-12-timesifier.acme.workers.dev", "pr-13-timesifier.acme.workers.dev"],
+			["preview", "https://pr-12-timesifier.acme.workers.dev", "timesifier.example"],
 			// The hostname of Cloudflare's test keys means nothing without a test secret.
-			["production", "https://timesifier.com", "example.com"],
-			["preview", "https://pr-12-timesifier.ayoinc.workers.dev", "example.com"],
+			["production", "https://timesifier.example", "example.com"],
+			["preview", "https://pr-12-timesifier.acme.workers.dev", "example.com"],
 		])(
 			"in %s on %s, refuses one solved on %s, and creates and sends no code",
 			async (environment, origin, hostname) => {
@@ -128,7 +120,7 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 
 		it("with a test secret, accepts the one hostname Cloudflare's test keys answer with, on any host", async () => {
 			setBinding("ENVIRONMENT", "preview");
-			const origin = "https://pr-12-timesifier.ayoinc.workers.dev";
+			const origin = "https://pr-12-timesifier.acme.workers.dev";
 
 			// Not answered for: this is Cloudflare's own answer to its test secret.
 			const response = await requestCode(EMAIL, { origin });

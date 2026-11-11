@@ -10,7 +10,7 @@ import { createOrganisation } from "./organisations/harness";
 // the `__Host-color-scheme` cookie, and the root loader that renders it on <html>.
 // Both are driven through the Worker's real fetch handler.
 
-const ORIGIN = "https://timesifier.com";
+const ORIGIN = "https://timesifier.example";
 const SETTINGS = destinationPath("acme", "settings");
 const TODAY = destinationPath("acme", "today");
 
