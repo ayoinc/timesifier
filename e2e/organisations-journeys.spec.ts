@@ -83,7 +83,10 @@ test.describe("a person who has just signed in for the first time", () => {
 
 				// Every destination, for its owner, each at its address in this organisation.
 				const links = destinationLinks(page);
-				await expect(links).toHaveText(destinations.map(({ label }) => label));
+				// A link with a bar label holds both words; its label alone is what is read out.
+				await expect(links).toHaveText(
+					destinations.map(({ label, barLabel }) => `${barLabel ?? ""}${label}`),
+				);
 				for (const { id, label } of destinations) {
 					await expect(links.filter({ hasText: label })).toHaveAttribute(
 						"href",
