@@ -197,6 +197,15 @@
 	--default-transition-timing-function: var(--md-sys-motion-easing-standard);
 }
 
+/*
+ * Material's window sizes: compact under 600px, medium from 600px (design rule 17).
+ * `medium:` and `max-medium:` are the variants. A media query cannot read a custom
+ * property, so this is the one size that is written here and not in the tokens.
+ */
+@theme {
+	--breakpoint-medium: 37.5rem;
+}
+
 /* Tailwind has no theme namespace for durations; this utility reads the tokens above. */
 @utility duration-* {
 	--tw-duration: --value(--duration-*);
@@ -348,4 +357,133 @@ body {
 /* What a tab's indicator moves by when the selection changes; React Aria animates exactly these. */
 @utility transition-indicator {
 	transition-property: translate, width;
+}
+
+/*
+ * The shell's view transitions (TS-006). React's <ViewTransition> starts each one
+ * and puts these classes on its parts: app/shell/transitions.ts names them, and
+ * docs/design-system.md, "Shell", says what moves and why.
+ */
+
+/* The page stays usable under a running transition: the next press lands on the
+   page, not on the picture of it, and can interrupt the transition (rule 8). */
+::view-transition {
+	pointer-events: none;
+}
+
+/* What nothing below overrides: a change that has no direction is a short fade. */
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+	animation-duration: var(--md-sys-motion-duration-short4);
+	animation-timing-function: var(--md-sys-motion-easing-standard);
+}
+
+/* The active indicator is one element: it travels to the new destination on the spring. */
+::view-transition-group(.shell-indicator) {
+	animation-duration: var(--md-sys-motion-spring-duration);
+	animation-timing-function: var(--md-sys-motion-spring-easing);
+}
+
+/*
+ * The content moves in the direction of travel (rule 5). Going forward, to a later
+ * destination, the old page leaves towards the start and the new one arrives from
+ * the end; going back is the mirror of that. `--shell-shift` is where a page
+ * leaves to, or arrives from.
+ */
+::view-transition-old(.shell-forward),
+::view-transition-new(.shell-back) {
+	--shell-shift: calc(var(--md-sys-spacing-unit) * -8);
+}
+
+::view-transition-new(.shell-forward),
+::view-transition-old(.shell-back) {
+	--shell-shift: calc(var(--md-sys-spacing-unit) * 8);
+}
+
+/* The old page is gone before the new one is half-way: they never read as one page. */
+::view-transition-old(.shell-forward),
+::view-transition-old(.shell-back) {
+	animation:
+		var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-emphasized-accelerate) both
+		shell-fade-out,
+		var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-accelerate) both
+		shell-leave-across;
+}
+
+::view-transition-new(.shell-forward),
+::view-transition-new(.shell-back) {
+	animation:
+		var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-emphasized-decelerate)
+		var(--md-sys-motion-duration-short2) both shell-fade-in,
+		var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate) both
+		shell-arrive-across;
+}
+
+/* Under 600px the destinations lie side by side in the bar, so the content moves
+   across. From 600px they are stacked in the rail, so it moves up and down. */
+@variant medium {
+	::view-transition-old(.shell-forward),
+	::view-transition-old(.shell-back) {
+		animation-name: shell-fade-out, shell-leave-along;
+	}
+
+	::view-transition-new(.shell-forward),
+	::view-transition-new(.shell-back) {
+		animation-name: shell-fade-in, shell-arrive-along;
+	}
+}
+
+@keyframes shell-fade-out {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes shell-fade-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes shell-leave-across {
+	to {
+		translate: var(--shell-shift) 0;
+	}
+}
+
+@keyframes shell-arrive-across {
+	from {
+		translate: var(--shell-shift) 0;
+	}
+}
+
+@keyframes shell-leave-along {
+	to {
+		translate: 0 var(--shell-shift);
+	}
+}
+
+@keyframes shell-arrive-along {
+	from {
+		translate: 0 var(--shell-shift);
+	}
+}
+
+/* With reduced motion requested nothing moves or changes size (rule 9): each part
+   takes its new place at once, and what changed fades. */
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(*) {
+		animation: none;
+	}
+
+	::view-transition-old(.shell-forward),
+	::view-transition-old(.shell-back) {
+		animation-name: shell-fade-out;
+	}
+
+	::view-transition-new(.shell-forward),
+	::view-transition-new(.shell-back) {
+		animation-name: shell-fade-in;
+	}
 }
