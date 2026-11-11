@@ -21,6 +21,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 13  | Tests               | Vitest in the Workers runtime, plus Playwright                                           | Jev                                |
 | 14  | Lint and format     | Biome                                                                                    | Preparer                           |
 | 15  | Board               | `BOARD.md` in the repository                                                             | Preparer                           |
+| 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
 
 ## Evidence
 
@@ -75,6 +76,28 @@ Runs inside the Worker and keeps identities in our own D1 database. Community gu
 ### 14 and 15. Biome and the board
 
 Biome formats and lints with one tool and one config. The board lives in the repository so that the card, its acceptance criteria and the change that satisfies them are reviewed together.
+
+### 18. Zod 4 for validation, and the origin-check rule
+
+Decided while building TS-010.
+
+**Validation.** Every action starts with `parseRequest` from `app/lib/validate.ts`, which checks the request's form data or JSON against a Zod 4 schema and answers 400 when it does not match.
+
+| Option       | Evidence                                                                                                                                                                               |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Zod 4        | 4.6.7 on 2026-11-11, maintained by Colin McDonnell. No dependencies. One schema gives the check and the TypeScript type. Better Auth (decision 8) already uses it for its own schemas. |
+| Valibot      | Smaller in the browser bundle. Validation here runs on the server, where that does not matter. A second schema library beside the one Better Auth brings.                              |
+| Hand-written | No dependency. Every action would repeat type guards, and the types could drift from the checks.                                                                                       |
+
+**Origin check.** The Worker answers 403 to a `POST`, `PUT`, `PATCH` or `DELETE` whose `Origin` header is present and differs from the request URL's origin, or whose `Sec-Fetch-Site` header is present and is neither `same-origin` nor `none`. A request with neither header is let through. `GET`, `HEAD` and `OPTIONS` are never blocked.
+
+| Option                        | Evidence                                                                                                                                                                                            |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Header check in the Worker    | No state, no token in every form. Browsers send `Origin` on every state-changing request and a page cannot set it or `Sec-Fetch-Site`. Runs before the framework, so it covers resource routes too. |
+| React Router's own check only | In 8.5.1 it answers 400 when `Origin` does not match, for page and data requests. Resource routes are not covered, and it does not read `Sec-Fetch-Site`.                                           |
+| A token in every form         | Works without trusting headers. Needs a session before the first form, a hidden field in every form and a check in every action; one forgotten check is a hole.                                     |
+
+A request with neither header does not come from a browser, and forgery needs a browser that holds the person's session. Session cookies are `SameSite=Lax` (TS-008) as a second layer. The consequence: a `GET` must never change state.
 
 ## To verify when the code is scaffolded
 
