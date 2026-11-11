@@ -17,7 +17,7 @@ Timesifier holds personal data: who worked on what, and when. The owner is in th
 | Browser       | Content Security Policy with nonces, HSTS, `frame-ancestors 'none'`, Referrer-Policy, Permissions-Policy. State-changing requests are checked for origin. | TS-010 |
 | Secrets       | None in the repository. A secret scan runs on every pull request.                                                                                         | TS-002 |
 | Supply chain  | Frozen lockfile, dependency audit, third-party actions pinned to a commit, workflows with read-only permissions by default                                | TS-002 |
-| Deployment    | The pipeline's Cloudflare token can reach this Worker, this database and this zone, nothing else.                                                         | TS-003 |
+| Deployment    | The pipeline's token reaches this Worker, this zone's Worker routes and the account's D1 databases. Scope and expiry: `docs/architecture.md`.             | TS-003 |
 | AI            | Text from users is data, never instructions. Output is a suggestion a person accepts. Spend is capped.                                                    | TS-015 |
 | Audit         | Sign-in, role changes, exports and deletions are recorded.                                                                                                | TS-020 |
 | Data rights   | A person can export their data and delete their account. Retention is written down.                                                                       | TS-021 |
