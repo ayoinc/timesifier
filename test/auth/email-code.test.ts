@@ -365,6 +365,18 @@ describe("a code is used in the browser that asked for it", () => {
 		expect(await response.json()).toEqual({ code: "OTP_EXPIRED", message: "OTP expired" });
 		expect(await countRows("sessions")).toBe(0);
 	});
+
+	it("answers a request that carries no code at all as malformed, cookie or no cookie", async () => {
+		const browser = codeCookie(await requestCode(EMAIL));
+
+		const withoutCookie = await post("/sign-in/email-otp", { email: EMAIL });
+		const withCookie = await post("/sign-in/email-otp", { email: EMAIL }, { cookie: browser });
+
+		for (const response of [withoutCookie, withCookie]) {
+			expect(response.status).toBe(400);
+			expect(await response.json()).toMatchObject({ code: "VALIDATION_ERROR" });
+		}
+	});
 });
 
 describe("what is not offered", () => {

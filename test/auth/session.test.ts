@@ -152,10 +152,18 @@ describe("hosts", () => {
 			setBinding("ENVIRONMENT", environment);
 			const { cookie } = await signIn(mailbox, EMAIL, { origin });
 
-			for (const field of ["callbackURL", "redirectTo", "errorCallbackURL", "newUserCallbackURL"]) {
+			// Better Auth's own code for each field, whether it or our rule refuses.
+			const codes = {
+				callbackURL: "INVALID_CALLBACK_URL",
+				redirectTo: "INVALID_REDIRECT_URL",
+				errorCallbackURL: "INVALID_ERROR_CALLBACK_URL",
+				newUserCallbackURL: "INVALID_NEW_USER_CALLBACK_URL",
+			};
+			for (const [field, code] of Object.entries(codes)) {
 				const response = await post("/sign-out", { [field]: url }, { origin, cookie });
 
 				expect(response.status, field).toBe(403);
+				expect(await response.json(), field).toMatchObject({ code });
 				expect(response.headers.get("Location"), field).toBeNull();
 			}
 			expect(await whoIs(cookie, { origin }), "still signed in").toMatchObject({ email: EMAIL });
