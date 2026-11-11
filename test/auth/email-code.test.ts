@@ -120,14 +120,27 @@ describe("signing in with a code sent by email", () => {
 		expect(await mailbox.codeFor("nobody@example.com")).toMatch(/^\d{6}$/);
 	});
 
-	it("keeps a hash of the code in the database, never the code", async () => {
+	it("keeps the code in the database as a keyed hash: neither the code nor its plain SHA-256 is there", async () => {
 		await requestCode(EMAIL);
 		const code = await mailbox.codeFor(EMAIL);
+		const digest = new Uint8Array(
+			await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code)),
+		);
+		const base64 = btoa(String.fromCharCode(...digest));
+		// However the digest is written down: Better Auth's own way is the second.
+		const plainHashes = [
+			base64,
+			base64.replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", ""),
+			Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+		];
 
-		const stored = await env.DB.prepare("select value from verifications").first<string>("value");
+		const stored = await env.DB.prepare(
+			"select value from verifications where identifier like 'sign-in-otp-%'",
+		).first<string>("value");
 
 		expect(stored).toBeTruthy();
 		expect(stored).not.toContain(code);
+		for (const hash of plainHashes) expect(stored).not.toContain(hash);
 	});
 });
 

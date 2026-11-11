@@ -39,6 +39,7 @@ import { invitations, memberships } from "~/db/schema";
 import { sendEmail } from "./email.server";
 import { endpointPath, isOffered } from "./endpoints";
 import { allowedHosts, isOurHost } from "./hosts";
+import { keyedHash } from "./keyed-hash.server";
 import { errorName, logLibraryLine } from "./log.server";
 import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.server";
 import { redirectRules } from "./redirects.server";
@@ -151,8 +152,11 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 				endpoints: ["/email-otp/send-verification-otp"],
 			}),
 			emailOTP({
-				// Only a hash of the code is stored, so a copy of the database signs nobody in.
-				storeOTP: "hashed",
+				// A code is stored as an HMAC under the secret. The plugin's own "hashed"
+				// is a plain SHA-256, and there are few enough codes to try them all:
+				// whoever read the table would have every live code. With the key, a
+				// copy of the database signs nobody in without the secret as well.
+				storeOTP: { hash: (code) => keyedHash(BETTER_AUTH_SECRET, "sign-in-code", code) },
 				expiresIn: CODE_LIFETIME_SECONDS,
 				async sendVerificationOTP({ email, otp, type }) {
 					if (type !== "sign-in") return;
