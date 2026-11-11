@@ -193,7 +193,7 @@ The owner's decisions (2026-11-11):
 - [ ] Keyboard alone and axe with WCAG 2.2 AA on Time off, its sheet, and leave on Timesheet, Team and My account, at 390px and 1280px in both schemes (browser test).
 - [ ] typecheck, lint, the tests and the browser tests pass in the pipeline; the pull request shows Time off and the Requests tab at 390px and 1280px, and the owner has accepted them.
 
-What follows from the decisions, and is not a defect: a change to the working week, a holiday or an allowance changes what is worked out for every day, past days included, because nothing of it is stored; no request changes its status. A request from the organisation's only owner, with no admin and no manager of a team they are in, has nobody to decide it, and waits.
+What follows from the decisions, and is not a defect: a change to the working week, a holiday or an allowance changes what is worked out for every day, past days included, because nothing of it is stored; no request changes its status. A request from a person nobody else may decide for (the organisation's only owner, with no other owner or admin and no manager of a team they are in) is approved as it is made, recorded as decided by them with the comment "Approved automatically: nobody else can decide it", and the request sheet tells them so before they send it (decision of 2026-11-11).
 
 Not in this card: leave accrued month by month, carry-over, hours of leave rather than half days, a working week or holiday calendar per person or team, and the team calendar (TS-041).
 

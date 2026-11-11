@@ -584,3 +584,43 @@ describe("the Requests tab", () => {
 		expect(text).toContain("No approved leave is to come.");
 	});
 });
+
+describe("when nobody else can decide", () => {
+	// The sheet's sentence saying so before it is sent is checked in the browser (e2e/leave.spec.ts).
+	it("a sole owner's leave that needs approval is approved as it is sent, by themselves", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(T0);
+		const annual = await requestLeave(ada, "annual", "2026-11-16", "2026-11-17");
+		expect(annual.status).toBe(200);
+		expect(annual.said).toContain("Approved automatically: nobody else can decide it.");
+		expect(
+			await row("select status, decided_by, comment from leave_requests where id = ?", annual.id),
+		).toEqual({
+			status: "approved",
+			decided_by: ada.user.id,
+			comment: "Approved automatically: nobody else can decide it",
+		});
+		// Leave that needs nobody's approval is recorded as before, with no comment.
+		const sick = await requestLeave(ada, "sick", "2026-11-18", "2026-11-18");
+		expect(
+			await row("select status, decided_by, comment from leave_requests where id = ?", sick.id),
+		).toEqual({ status: "approved", decided_by: null, comment: null });
+	});
+
+	it("an owner with an admin waits for the admin", async () => {
+		await memberOfAcme("admin", "hedy@example.com");
+		vi.spyOn(Date, "now").mockReturnValue(T0);
+		const annual = await requestLeave(ada, "annual", "2026-11-16", "2026-11-17");
+		expect(annual.said).toContain("Requested. It waits for a manager's approval.");
+		expect(await statusOf(annual.id)).toBe("pending");
+	});
+
+	it("a member whose team has a manager waits; a member with no team, beside the owner, waits too", async () => {
+		const { grace, bob } = await seedPeople();
+		expect((await requestLeave(grace, "annual", "2026-11-16", "2026-11-16")).said).toContain(
+			"Requested.",
+		);
+		expect((await requestLeave(bob, "annual", "2026-11-16", "2026-11-16")).said).toContain(
+			"Requested.",
+		);
+	});
+});

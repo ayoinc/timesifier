@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { type OrganisationScope, organisationScope, type ScopedAccessor, users } from "~/db";
@@ -285,7 +285,9 @@ export async function requestLeave(
 	userId: string,
 	request: NewRequest,
 	now = new Date(),
-): Promise<{ ok: true; status: LeaveStatus } | { ok: false; problem: NotRequested }> {
+): Promise<
+	{ ok: true; status: LeaveStatus; alone: boolean } | { ok: false; problem: NotRequested }
+> {
 	const span: LeaveSpan = {
 		startsOn: request.startsOn,
 		endsOn: request.endsOn,
@@ -363,7 +365,8 @@ export async function requestLeave(
 		}
 	}
 
-	const status: LeaveStatus = kind.needsApproval ? "pending" : "approved";
+	const alone = kind.needsApproval && !(await someoneElseDecides(scope, userId));
+	const status: LeaveStatus = kind.needsApproval && !alone ? "pending" : "approved";
 	await scope.leaveRequests.insert({
 		userId,
 		kindId: kind.id,
@@ -371,8 +374,45 @@ export async function requestLeave(
 		status,
 		note: request.note,
 		decidedAt: status === "approved" ? now : null,
+		// Nobody but the person could decide it, so it is approved as it is made (TS-061).
+		...(alone ? { decidedBy: userId, comment: APPROVED_ALONE } : {}),
 	});
-	return { ok: true, status };
+	return { ok: true, status, alone };
+}
+
+/** The comment on a request approved as it was made because nobody else could decide it. */
+export const APPROVED_ALONE = "Approved automatically: nobody else can decide it";
+
+/**
+ * Whether anybody but `userId` may decide their leave: another owner or admin,
+ * or a manager of a team they are in other than themselves.
+ */
+export async function someoneElseDecides(
+	scope: OrganisationScope,
+	userId: string,
+): Promise<boolean> {
+	const [administrators, mine] = await Promise.all([
+		scope.memberships.select(
+			(m) => and(inArray(m.role, ["owner", "admin"]), ne(m.userId, userId)),
+			{ limit: 1 },
+		),
+		scope.teamMembers.select((t) => eq(t.userId, userId)),
+	]);
+	if (administrators.length > 0) return true;
+	if (mine.length === 0) return false;
+	const managers = await scope.teamMembers.select(
+		(t) =>
+			and(
+				inArray(
+					t.teamId,
+					mine.map((m) => m.teamId),
+				),
+				eq(t.isManager, true),
+				ne(t.userId, userId),
+			),
+		{ limit: 1 },
+	);
+	return managers.length > 0;
 }
 
 /** What a step on a request came to. */

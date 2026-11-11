@@ -27,6 +27,7 @@ import {
 	requestLeave,
 	requestsToDecide,
 	type Stepped,
+	someoneElseDecides,
 	withdrawLeave,
 	workingWeekOf,
 } from "~/leave/leave.server";
@@ -75,10 +76,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			? "requests"
 			: "mine";
 
-	const [mine, week, holidays] = await Promise.all([
+	const [mine, week, holidays, decidedByOthers] = await Promise.all([
 		myLeave(scope, user.id, year),
 		workingWeekOf(scope),
 		publicHolidaysOf(scope, { first: today, last: `${year + 1}-12-31` }),
+		someoneElseDecides(scope, user.id),
 	]);
 	const holidayKind = mine.kinds.find((k) => k.key === HOLIDAY_KIND);
 	const calendar = {
@@ -136,6 +138,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		})),
 		holidays: holidayKind?.enabled === false ? [] : holidays.slice(0, 12),
 		decisions: requests,
+		/** Whether nobody but the person may decide their leave, so what needs approval is approved as it is sent. */
+		alone: !decidedByOthers,
 		zone,
 	};
 }
@@ -194,9 +198,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 			});
 			if (!made.ok) return declined(made.problem.message);
 			return done(
-				made.status === "approved"
-					? "Recorded. It needs nobody's approval."
-					: "Requested. It waits for a manager's approval.",
+				made.alone
+					? "Approved automatically: nobody else can decide it."
+					: made.status === "approved"
+						? "Recorded. It needs nobody's approval."
+						: "Requested. It waits for a manager's approval.",
 			);
 		}
 		case "withdraw":
@@ -280,6 +286,12 @@ export default function TimeOff({ loaderData }: Route.ComponentProps) {
 				onDone={setSaid}
 			>
 				<RequestFields kinds={loaderData.kinds} today={loaderData.today} />
+				{loaderData.alone && (
+					<p className="text-body-medium text-on-surface-variant">
+						Nobody else here can decide your leave, so leave that needs approval is approved as soon
+						as you send it.
+					</p>
+				)}
 			</FormSheet>
 
 			<FormSheet

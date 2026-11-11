@@ -114,6 +114,21 @@ test("a member asks for leave and records sick leave; the owner approves; both s
 	// A member has no Requests tab: nobody's leave is theirs to decide.
 	await expect(other.getByRole("link", { name: /^Requests/ })).toHaveCount(0);
 
+	// He asks for study leave too, thinks again, and withdraws it while it waits.
+	await requestLeave(
+		other,
+		"Study leave",
+		dayFromToday(20),
+		dayFromToday(22),
+		"Requested. It waits for a manager's approval.",
+	);
+	await mine.getByRole("button", { name: /^Withdraw Study leave/ }).click();
+	const withdrawing = other.getByRole("dialog", { name: /^Withdraw your request/ });
+	await withdrawing.getByRole("button", { name: "Withdraw" }).click();
+	await expect(withdrawing).toBeHidden();
+	await expect(other.getByRole("status")).toHaveText("Request withdrawn.");
+	await expect(mine).toContainText("Study leave · Withdrawn");
+
 	// He records sick leave over today with the keyboard alone. It needs nobody's approval.
 	const button = other.getByRole("button", { name: "Request time off" });
 	await button.focus();
@@ -190,24 +205,27 @@ test("a member asks for leave and records sick leave; the owner approves; both s
 	await other.context().close();
 });
 
-test("a pending request is withdrawn by its person", async ({ page }) => {
+test("an owner whom nobody else can decide for is told so, and their leave is approved as it is sent", async ({
+	page,
+}) => {
 	await signIn(page, newPerson().email);
 	const { slug } = await createOrganisation(page);
 	await openShell(page, destinationPath(slug, "time-off"));
+	await page.getByRole("button", { name: "Request time off" }).click();
+	await expect(requestSheet(page)).toContainText(
+		"Nobody else here can decide your leave, so leave that needs approval is approved as soon as you send it.",
+	);
+	await page.keyboard.press("Escape");
 	await requestLeave(
 		page,
 		"Study leave",
 		dayFromToday(20),
 		dayFromToday(26),
-		"Requested. It waits for a manager's approval.",
+		"Approved automatically: nobody else can decide it.",
 	);
 	const mine = page.getByRole("list", { name: "Your requests" });
-	await mine.getByRole("button", { name: /^Withdraw Study leave/ }).click();
-	const withdrawing = page.getByRole("dialog", { name: /^Withdraw your request/ });
-	await withdrawing.getByRole("button", { name: "Withdraw" }).click();
-	await expect(withdrawing).toBeHidden();
-	await expect(page.getByRole("status")).toHaveText("Request withdrawn.");
-	await expect(mine).toContainText("Study leave · Withdrawn");
+	await expect(mine).toContainText("Study leave · Approved");
+	await expect(mine).toContainText("“Approved automatically: nobody else can decide it”");
 	await expect(mine.getByRole("button", { name: /^Withdraw/ })).toHaveCount(0);
 });
 
@@ -260,7 +278,7 @@ for (const viewport of [
 					"Annual leave",
 					dayFromToday(14),
 					dayFromToday(20),
-					"Requested. It waits for a manager's approval.",
+					"Approved automatically: nobody else can decide it.",
 				);
 				await expectNoProblems(page, "Time off", [EMPTY_INPUT]);
 				await page.getByRole("link", { name: /^Requests/ }).click();
