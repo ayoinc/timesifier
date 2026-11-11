@@ -130,4 +130,5 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 | Drizzle Kit              | 0.31.11    |
 | Material Color Utilities | 0.4.0      |
 | Roboto Flex (Fontsource) | 5.3.0      |
+| Better Auth              | 1.7.19     |
 | `compatibility_date`     | 2026-11-09 |
