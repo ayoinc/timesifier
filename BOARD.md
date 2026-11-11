@@ -23,6 +23,17 @@ Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the arch
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-063 · The profile menu
+
+Builder: an AI session on branch `ts-063-profile-menu`. Harvest opens profile and sign out from the person at the top (`docs/research/harvest-app/*.txt`, "Profile and settings for <owner>"); Timesifier had a "My account" link in the band and a Sign out button on My account. This card puts both in one profile menu at the end of the band. In review: the pull request against `main`; screenshots at 390px and 1280px in both schemes are in `cmux-assets/browser/timesifier/TS-063/` (band, menu open, the menu outside an organisation).
+
+- [x] A round button with the person's initials (from their name, else the first letter of their address), named "Account menu for <name>, <initials>", stands in the band beside the organisation's name; design tokens only, 40px across, a visible focus ring, at 390px and 1280px in both schemes (`app/shell/ProfileMenu.tsx`; `test/pages/destinations.test.ts`, "the profile menu"; `e2e/profile-menu.spec.ts`: size, initials, the focus ring after Escape; `pnpm check:tokens`).
+- [x] A click, Enter, Space or ArrowDown opens a menu with exactly Account settings (My account) and Sign out, under the person's name and address as plain text; Escape closes it and gives the focus back (`e2e/profile-menu.spec.ts`, the first two tests).
+- [x] Sign out ends the session the way the old button did and lands on `/sign-in` (`e2e/profile-menu.spec.ts`: the session is `null` after; `e2e/one-way-in.spec.ts`, a whole page load).
+- [x] The band's "My account" link and My account's Sign out are gone; Sign out everywhere stays on My account. Outside an organisation the same menu holds the way out alone, "Use a different email" on `/app/new` (`test/pages/settings.test.ts`; `e2e/profile-menu.spec.ts`, the outside test; `e2e/organisations-keyboard.spec.ts`).
+- [x] A worker test for the initials; a browser spec for the menu; every spec that used the link or the button uses the menu (`test/auth/initials.test.ts`; `e2e/auth.ts` `signOut` and `chooseAccountSettings`; axe at 390px and 1280px in both schemes in `e2e/profile-menu.spec.ts`, and the shell's and organisations' scans with the menu in the band; the Chromium run: 338 passed).
+- [x] `docs/navigation.md` and `docs/design-system.md` say where My account and Sign out are ("Utility items"; `docs/design-system.md`, "Shell" and the Menu row; `docs/architecture.md`, `docs/security.md`).
+
 ### Waiting on the owner's screenshots · the heading features and their Harvest parity
 
 Merged and deployed on 2026-11-11: the Timesheet slice (TS-012a, TS-013, TS-012b, TS-046, TS-051, TS-052) in pull request #34, and TS-056 to TS-059 (`docs/harvest-comparison.md`, observed in Harvest's application with rea) in pull requests #38, #36 and #37, with the cards below. Each card's criteria and evidence stay on it; what is left for each is the owner's acceptance of its screenshots at 390px and 1280px in both schemes. Two departures from the Timesheet cards' texts, both from `docs/navigation.md`: the views are `?view=week` and `?view=history` on Timesheet's own address, not `/week`; the person's zone is set on My account, not Settings.

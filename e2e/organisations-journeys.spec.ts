@@ -10,10 +10,13 @@ import {
 } from "../app/shell/destinations";
 import {
 	ARRIVAL,
+	accountMenuName,
+	chooseAccountSettings,
 	foundInMessageSentBy,
 	newPerson,
 	ownAddress,
 	type Person,
+	profileButton,
 	setName,
 	signIn,
 	TIME_WITH_TURNS,
@@ -72,7 +75,7 @@ test.describe("a person who has just signed in for the first time", () => {
 				await expect(page.getByRole("main").getByRole("button")).toHaveText([
 					"Create organisation",
 				]);
-				await expect(page.getByText(`Signed in as ${person.email}`)).toBeVisible();
+				await expect(profileButton(page)).toHaveAccessibleName(accountMenuName(person.email));
 
 				const { name, slug } = await createOrganisation(page);
 
@@ -297,7 +300,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		await bobs.close();
 
 		// The last owner cannot leave, and is told why.
-		await page.getByRole("banner").getByRole("link", { name: "My account" }).click();
+		await chooseAccountSettings(page);
 		await expect(page).toHaveURL(account);
 		expectRefusal(refusals, `${account}.data`, 400);
 		await page.getByRole("button", { name: "Leave organisation" }).click();
@@ -448,13 +451,13 @@ test.describe("a person who belongs to two organisations", () => {
 		await expect(page.getByRole("heading", { level: 1, name: "Timesheet" })).toBeFocused();
 
 		// My account says whose organisation it is, and leads back to the choice.
-		await page.getByRole("banner").getByRole("link", { name: "My account" }).click();
+		await chooseAccountSettings(page);
 		await expect(page.getByText(`You are an owner of ${home.membersOwn.name}.`)).toBeVisible();
 		await page.getByRole("link", { name: "Switch organisation" }).click();
 		await expect(page).toHaveURL("/app");
 		await page.getByRole("link", { name: home.name, exact: true }).click();
 		await expect(page).toHaveURL(organisationPath(home.slug));
-		await page.getByRole("banner").getByRole("link", { name: "My account" }).click();
+		await chooseAccountSettings(page);
 		await expect(page.getByText(`You are a member of ${home.name}.`)).toBeVisible();
 	});
 

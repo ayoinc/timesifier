@@ -9,24 +9,19 @@ import { APP_PATH } from "~/shell/destinations";
 export interface SignedInAsProps {
 	/** The address of the account that is signed in. */
 	email: string;
-	/**
-	 * What the way out is called. On a page a new account lands on it is "Use a
-	 * different email": one page signs in new and returning people alike, so a
-	 * person who uses another address of theirs quietly gets a second, empty
-	 * account, and this is the way back from it.
-	 */
-	wayOut: "Sign out" | "Use a different email";
 	/** Where the person was going, kept for after they sign in again. */
 	next?: string;
 }
 
 /**
- * Who is signed in, and the way out, for the signed-in pages that are in no
- * organisation. Settings holds both everywhere else, and a person with no
- * organisation has no Settings to go to. The way out ends the session and
- * loads the sign-in page.
+ * Who is signed in, and the way out, at the foot of an invitation's page that
+ * can no longer be used. That page is outside `/app` and its band holds the
+ * name alone; under `/app` the profile menu holds both (`app/shell/ProfileMenu.tsx`).
+ * The way out is "Use a different email": an invitation sent to another address
+ * is the commonest reason to be there. It ends the session and loads the
+ * sign-in page, which goes back to `next` afterwards.
  */
-export function SignedInAs({ email, wayOut, next = APP_PATH }: SignedInAsProps) {
+export function SignedInAs({ email, next = APP_PATH }: SignedInAsProps) {
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const once = useOneAtATime();
 
@@ -46,7 +41,7 @@ export function SignedInAs({ email, wayOut, next = APP_PATH }: SignedInAsProps) 
 				</p>
 				<NoticeLine notice={notice} />
 				<Button variant="text" onPress={leave}>
-					{wayOut}
+					Use a different email
 				</Button>
 			</div>
 		</footer>

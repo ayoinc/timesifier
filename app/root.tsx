@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { I18nProvider } from "react-aria";
 import {
 	isRouteErrorResponse,
@@ -22,6 +23,7 @@ import { useFreshOnReturn } from "./shell/fresh-on-return";
 import { TEXT_LINK } from "./shell/links";
 import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "./shell/Outside";
+import { ignoreSkippedTransitions } from "./shell/transitions";
 import { THEME_COLOUR } from "./styles/theme-colour";
 
 // Fonts are self-hosted: app.css imports the font files through styles/tokens.css,
@@ -119,6 +121,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
 	useFreshOnReturn();
+	// A view transition the browser skips is the shell's design, not an error (transitions.ts).
+	useEffect(ignoreSkippedTransitions, []);
 	return <Outlet />;
 }
 

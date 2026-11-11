@@ -3,12 +3,15 @@ import type { Page } from "@playwright/test";
 import { membersPath, organisationPath } from "../app/shell/destinations";
 import {
 	ARRIVAL,
+	accountMenuName,
 	CONTINUE,
 	codeSentBy,
 	foundInMessageSentBy,
 	newPerson,
 	openAuthPage,
+	openProfileMenu,
 	ownAddress,
+	profileButton,
 	signIn,
 	signOut,
 	TIME_WITH_TURNS,
@@ -86,7 +89,7 @@ for (const viewport of [COMPACT, WIDE]) {
 			await expect(
 				page.getByRole("heading", { level: 1, name: "Create your organisation" }),
 			).toBeVisible();
-			await expect(page.getByText(`Signed in as ${person.email}`)).toBeVisible();
+			await expect(profileButton(page)).toHaveAccessibleName(accountMenuName(person.email));
 
 			const { name } = await createOrganisation(page);
 			await expect(page.getByRole("heading", { level: 1, name: "Timesheet" })).toBeVisible();
@@ -373,8 +376,11 @@ test.describe("whose account this is", () => {
 		await expect(page).toHaveURL(ARRIVAL);
 		await openOutsideOrganisation(page, ARRIVAL);
 
-		await expect(page.getByText(`Signed in as ${slip}`)).toBeVisible();
-		await page.getByRole("button", { name: "Use a different email" }).click();
+		// The profile menu is named after the account, and says its address above its items.
+		await expect(profileButton(page)).toHaveAccessibleName(accountMenuName(slip));
+		const menu = await openProfileMenu(page);
+		await expect(page.getByText(slip, { exact: true })).toBeVisible();
+		await menu.getByRole("menuitem", { name: "Use a different email" }).click();
 
 		await expectLoadedWhole(page);
 		await expect(page).toHaveURL("/sign-in");
@@ -385,7 +391,7 @@ test.describe("whose account this is", () => {
 		// And the address that was meant goes in by the same page.
 		await enterAddressAndCode(page, meant.email);
 		await expect(page).toHaveURL(ARRIVAL);
-		await expect(page.getByText(`Signed in as ${meant.email}`)).toBeVisible();
+		await expect(profileButton(page)).toHaveAccessibleName(accountMenuName(meant.email));
 	});
 
 	test("an invitation that is not this account's says who is signed in, and the way back keeps the invitation", async ({
@@ -445,7 +451,7 @@ test.describe("every way to the sign-in page is a whole page load", () => {
 		});
 	}
 
-	test("the guard, the shell after its session has ended, both ways out of My account, and the address a page for new people once had", async ({
+	test("the guard, the shell after its session has ended, Sign out everywhere on My account and Sign out in the profile menu, and the address a page for new people once had", async ({
 		page,
 		browser,
 		baseURL,
@@ -483,11 +489,11 @@ test.describe("every way to the sign-in page is a whole page load", () => {
 		await expectLoadedWhole(page);
 		await expect(page).toHaveURL(`/sign-in?next=${encodeURIComponent(home)}`);
 
-		// "Sign out", from My account. And after each of them the page can still send a code.
+		// "Sign out", from the profile menu. And after each of them the page can still send a code.
 		await enterAddressAndCode(page, person.email);
 		await expect(page).toHaveURL(home);
-		await openAccount(page);
-		await page.getByRole("button", { name: "Sign out", exact: true }).click();
+		await openShell(page, home);
+		await (await openProfileMenu(page)).getByRole("menuitem", { name: "Sign out" }).click();
 		await expectLoadedWhole(page);
 		await enterAddressAndCode(page, person.email);
 		await expect(page).toHaveURL(home);

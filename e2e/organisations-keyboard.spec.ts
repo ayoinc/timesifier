@@ -143,9 +143,11 @@ for (const viewport of [
 			await expect(page).toHaveURL(homePath("team"));
 			await expect(page.getByRole("heading", { level: 1, name: "Team" })).toBeFocused();
 
-			// Leaving is on My account, which the band leads to.
-			const toAccount = page.getByRole("banner").getByRole("link", { name: "My account" });
-			await toAccount.focus();
+			// Leaving is on My account, which the profile menu in the band leads to.
+			const profile = page.getByRole("banner").getByRole("button", { name: /^Account menu for / });
+			await profile.focus();
+			await page.keyboard.press("Enter");
+			await expect(page.getByRole("menuitem", { name: "Account settings" })).toBeFocused();
 			await page.keyboard.press("Enter");
 			await expect(page).toHaveURL(accountPath(slug));
 			await expect(page.getByRole("heading", { level: 1, name: "My account" })).toBeFocused();
@@ -173,7 +175,15 @@ test("creating an organisation: the field, the action and the way out, with the 
 	await expect(page.getByLabel("Organisation name")).toBeFocused();
 	await tabTo(page, page.getByRole("button", { name: "Create organisation" }));
 	await tabTo(page, page.getByRole("link", { name: "Back to your organisations" }));
-	await tabTo(page, page.getByRole("button", { name: "Use a different email" }));
+	// The way out is in the profile menu at the end of the band, just before the field.
+	await page.getByLabel("Organisation name").focus();
+	await page.keyboard.press("Shift+Tab");
+	const profile = page.getByRole("banner").getByRole("button", { name: /^Account menu for / });
+	await expectFocusShown(profile);
+	await page.keyboard.press("ArrowDown");
+	await expect(page.getByRole("menuitem", { name: "Use a different email" })).toBeFocused();
+	await page.keyboard.press("Escape");
+	await expectFocusShown(profile);
 
 	// Enter in the field presses the one primary action; a name of spaces is caught there.
 	await page.getByLabel("Organisation name").focus();

@@ -490,8 +490,9 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				await expect(page.getByRole("status").filter({ hasText: "Saved." })).toBeAttached();
 				expect(await gridProblems(page)).toEqual([]);
 
+				// The timer still runs, in the navigation: a digit may be changing as it is scanned.
 				await openShell(page, `${organisationPath(slug)}?view=history`);
-				expect(await problems(page)).toEqual([]);
+				expect(await problems(page, [DIGIT_CHANGING])).toEqual([]);
 			});
 		});
 	}

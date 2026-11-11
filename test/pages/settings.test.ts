@@ -93,10 +93,12 @@ describe("what the page shows", () => {
 		expect(account).toContain(">My account</h1>");
 		const yours = account.indexOf(">Your account</h2>");
 		expect(yours).toBeGreaterThan(-1);
-		// The colour scheme and both ways out are under the person's heading.
-		for (const heading of ["Appearance", "Sign out", "Sign out everywhere"]) {
+		// The colour scheme and signing out everywhere are under the person's heading.
+		for (const heading of ["Appearance", "Sign out everywhere"]) {
 			expect(account.indexOf(`>${heading}</h3>`), heading).toBeGreaterThan(yours);
 		}
+		// Signing out of this browser alone is in the profile menu, not on the page (TS-063).
+		expect(account).not.toContain(">Sign out</h3>");
 		expect(textOf(account)).not.toContain("Delete organisation");
 	});
 
@@ -297,12 +299,12 @@ describe("a person's name", () => {
 		expect((await stored())?.name).toBe(name);
 	});
 
-	it("keeps the session working after the change", async () => {
+	it("keeps the session working after the change, and the profile menu takes the name", async () => {
 		await submit(ACCOUNT, { intent: "name", name: "Ada" }, ada, { byScript: true });
 
 		const page = await open(ACCOUNT, ada);
 		expect(page.status).toBe(200);
-		expect(textOf(await pageBody(page))).toContain("You are signed in as ada@example.com");
+		expect(await pageBody(page)).toContain('aria-label="Account menu for Ada, A"');
 	});
 });
 

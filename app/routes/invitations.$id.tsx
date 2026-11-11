@@ -132,11 +132,7 @@ export default function InvitationPage({ loaderData, params }: Route.ComponentPr
 				</main>
 				{/* An invitation sent to another address is the commonest reason to be
 				    here: the way out leads back to this page, signed in as somebody else. */}
-				<SignedInAs
-					email={loaderData.email}
-					wayOut="Use a different email"
-					next={invitationPath(params.id)}
-				/>
+				<SignedInAs email={loaderData.email} next={invitationPath(params.id)} />
 			</div>
 		);
 	}

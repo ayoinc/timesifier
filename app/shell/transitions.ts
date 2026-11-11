@@ -55,3 +55,35 @@ export function finishRunningTransition() {
 	activeViewTransition.ready.catch(() => {});
 	activeViewTransition.skipTransition();
 }
+
+/**
+ * Whether a rejected promise is a view transition the browser skipped: an
+ * `AbortError` saying "Transition was skipped".
+ */
+export function isSkippedTransition(reason: unknown): boolean {
+	return (
+		reason instanceof DOMException &&
+		reason.name === "AbortError" &&
+		reason.message.includes("Transition was skipped")
+	);
+}
+
+let ignoringSkips = false;
+
+/**
+ * Keeps a skipped view transition from being reported as an uncaught error.
+ * Skipping is the shell's design (design rule 8): a press that starts a
+ * navigation ends the running transition, and when React starts the next one
+ * the browser skips the one it supersedes. Each skip rejects that transition's
+ * `ready` promise, which React holds and leaves unhandled, so nobody else can
+ * catch it. `finishRunningTransition` catches its own skip; this catches the
+ * browser's. Any other rejection is still reported. Installed once, in the
+ * browser, by the root of the application.
+ */
+export function ignoreSkippedTransitions() {
+	if (ignoringSkips || typeof window === "undefined") return;
+	ignoringSkips = true;
+	window.addEventListener("unhandledrejection", (event) => {
+		if (isSkippedTransition(event.reason)) event.preventDefault();
+	});
+}

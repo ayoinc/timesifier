@@ -1,12 +1,13 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { BrowserContext, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { SIGN_IN_CODE_LENGTH } from "../app/auth/code";
+import { initialsOf } from "../app/auth/person-name";
 import { APP_PATH, NEW_ORGANISATION_PATH } from "../app/shell/destinations";
-import { expect, openShell } from "./fixtures";
-import { openAccount, openOutsideOrganisation } from "./organisation";
+import { expect, openShell, takenOver } from "./fixtures";
+import { openAccount } from "./organisation";
 
 // What the browser tests of signing in and signing out share.
 
@@ -165,21 +166,50 @@ export async function setName(page: Page, name: string) {
  */
 export const ARRIVAL = NEW_ORGANISATION_PATH;
 
+/** The round button with the person's initials at the end of the band (TS-063). */
+export function profileButton(page: Page): Locator {
+	return page.getByRole("banner").getByRole("button", { name: /^Account menu for / });
+}
+
+/** The name of the profile menu and its button: whose it is, then the letters it shows (WCAG 2.5.3). */
+export function accountMenuName(email: string, name: string | null = null): string {
+	return `Account menu for ${name ?? email}, ${initialsOf(name, email)}`;
+}
+
+/** Opens the profile menu from the page that is open, and answers with the menu. */
+export async function openProfileMenu(page: Page): Promise<Locator> {
+	await profileButton(page).click();
+	const menu = page.getByRole("menu");
+	await expect(menu).toBeVisible();
+	return menu;
+}
+
+/** Goes to My account the one way the shell has: Account settings, in the profile menu. */
+export async function chooseAccountSettings(page: Page) {
+	const menu = await openProfileMenu(page);
+	await menu.getByRole("menuitem", { name: "Account settings" }).click();
+	await expect(page.getByRole("heading", { level: 1, name: "My account" })).toBeFocused();
+}
+
 /**
- * Signs out and arrives at the sign-in page. A person with an organisation
- * signs out from its My account; a person with none, from the page that would
- * create one, which is where `/app` sends them and where the way out is called
+ * Signs out and arrives at the sign-in page. "Sign out" is in the profile menu
+ * of every page under `/app`; on the page that would create a first
+ * organisation, which is where `/app` sends a person with none, it is called
  * "Use a different email". "Sign out everywhere" is on My account alone, so a
  * person with no organisation gets one first.
  */
 export async function signOut(page: Page, button: "Sign out" | "Sign out everywhere" = "Sign out") {
-	await page.goto(APP_PATH);
-	if (button === "Sign out" && new URL(page.url()).pathname === NEW_ORGANISATION_PATH) {
-		await openOutsideOrganisation(page, NEW_ORGANISATION_PATH);
-		await page.getByRole("button", { name: "Use a different email" }).click();
-	} else {
+	if (button === "Sign out everywhere") {
 		await openAccount(page);
 		await page.getByRole("button", { name: button, exact: true }).click();
+	} else {
+		await page.goto(APP_PATH);
+		await takenOver(page, "header");
+		const outside = new URL(page.url()).pathname === NEW_ORGANISATION_PATH;
+		const menu = await openProfileMenu(page);
+		await menu
+			.getByRole("menuitem", { name: outside ? "Use a different email" : "Sign out" })
+			.click();
 	}
 	await expect(page).toHaveURL("/sign-in");
 }
