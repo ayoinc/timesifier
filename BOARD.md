@@ -2,7 +2,7 @@
 
 How the board works, and what Ready and Done mean, is in `docs/ways-of-working.md`. Tick a criterion only with its evidence beside it.
 
-## In progress (limit 1)
+## In progress (limit 1 per worker)
 
 ### TS-005 · Component foundation
 
