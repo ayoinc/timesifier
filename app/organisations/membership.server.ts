@@ -8,7 +8,7 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { data } from "react-router";
+import { createContext, data } from "react-router";
 import { getSession, type SignedIn } from "~/auth/auth.server";
 import { organisationScope, organisations } from "~/db";
 import { Role } from "./roles";
@@ -32,8 +32,18 @@ export type Membership = {
  */
 export async function findMembership(request: Request, slug: string): Promise<Membership | null> {
 	const signedIn = await getSession(request);
-	if (!signedIn) return null;
+	return signedIn ? membershipOf(signedIn.user, slug) : null;
+}
 
+/**
+ * The same, for a person a guard has already read from the request: the
+ * membership of `user` in the organisation at `slug`, or `null`. The same two
+ * queries run whether or not the organisation exists.
+ */
+export async function membershipOf(
+	user: SignedIn["user"],
+	slug: string,
+): Promise<Membership | null> {
 	const [organisation] = await drizzle(env.DB)
 		.select({ id: organisations.id, name: organisations.name, slug: organisations.slug })
 		.from(organisations)
@@ -42,13 +52,13 @@ export async function findMembership(request: Request, slug: string): Promise<Me
 	// No organisation has an empty id, so an unknown slug is looked up as a
 	// membership that cannot exist.
 	const [membership] = await organisationScope(env.DB, organisation?.id ?? "").memberships.select(
-		(m) => eq(m.userId, signedIn.user.id),
+		(m) => eq(m.userId, user.id),
 	);
 
 	// A role this application does not know grants nothing.
 	const role = Role.safeParse(membership?.role);
 	if (!organisation || !role.success) return null;
-	return { organisation, role: role.data, user: signedIn.user };
+	return { organisation, role: role.data, user };
 }
 
 /**
@@ -58,6 +68,36 @@ export async function findMembership(request: Request, slug: string): Promise<Me
  */
 export async function requireMembership(request: Request, slug: string): Promise<Membership> {
 	const membership = await findMembership(request, slug);
-	if (!membership) throw data("Not Found", { status: 404 });
+	if (!membership) throw notFound();
 	return membership;
+}
+
+/**
+ * The membership every loader and action under `/app/<slug>/` acts on. The
+ * organisation layout's middleware sets it before any of them runs, from the
+ * slug in the address and the database (`requireMembershipOf`). It has no
+ * default: reading it on a route that layout does not cover fails loudly.
+ */
+export const membershipContext = createContext<Membership>();
+
+/**
+ * `requireMembership` for the organisation layout, which stands behind the
+ * session guard and is handed the person the guard read. It throws the same 404.
+ */
+export async function requireMembershipOf(
+	user: SignedIn["user"],
+	slug: string,
+): Promise<Membership> {
+	const membership = await membershipOf(user, slug);
+	if (!membership) throw notFound();
+	return membership;
+}
+
+/**
+ * The one answer to anybody who asks for an organisation that is not theirs or
+ * not there. A page that finds, part of the way through, that the person is no
+ * longer a member throws it too.
+ */
+export function notFound() {
+	return data("Not Found", { status: 404 });
 }
