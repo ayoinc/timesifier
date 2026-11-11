@@ -106,6 +106,16 @@ export function dayOf(instant: number | Date, zone: string): Day {
 }
 
 /**
+ * How many minutes after midnight on `day` the wall clock in `zone` reads at
+ * `instant`: 0 to 1440 for an instant on that day, whatever its clock changes
+ * do to the length of the day. On the day the clocks go back an instant in
+ * the hour they pass twice reads the same as one an hour before it.
+ */
+export function wallMinutes(instant: number, day: Day, zone: string): number {
+	return (wallClock(instant, zone) - parseDay(day)) / 60_000;
+}
+
+/**
  * The instant at which the wall clock in `zone` reads `minutes` after midnight
  * on `day`. A time the clock skips, in the hour a clock change jumps over, is
  * read as that many minutes after the change; a time the clock passes twice is

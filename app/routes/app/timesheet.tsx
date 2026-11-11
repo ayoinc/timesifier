@@ -9,6 +9,7 @@ import { TEXT_LINK } from "~/shell/links";
 import { PageHeading } from "~/shell/PageHeading";
 import { finishRunningTransition } from "~/shell/transitions";
 import { timesheetAction } from "~/timesheet/actions.server";
+import { CalendarView } from "~/timesheet/CalendarView";
 import { DayView } from "~/timesheet/DayView";
 import { markCookie, readMarks } from "~/timesheet/getting-started.server";
 import { HistoryView } from "~/timesheet/HistoryView";
@@ -23,7 +24,8 @@ import { useOrganisation } from "./useOrganisation";
 // Timesheet, under Track: the person's own time (docs/navigation.md). Its Day
 // view is "Track time", the period's days and the day's entries, with the
 // period's submission at its foot; its Week view the grid of projects by days
-// with "Submit week" at its foot; and History the person's periods.
+// with "Submit week" at its foot; its Calendar the week on an hour axis or the
+// month of days (TS-062); and History the person's periods.
 // Each view is this destination's address with a query (`timesheet/views.ts`),
 // and each shows the caller's own time alone, whatever their role.
 
@@ -125,6 +127,7 @@ export default function Timesheet({ loaderData }: Route.ComponentProps) {
 
 			{data.view === "day" && <DayView data={data} slug={organisation.slug} />}
 			{data.view === "week" && <WeekView data={data} slug={organisation.slug} />}
+			{data.view === "calendar" && <CalendarView data={data} slug={organisation.slug} />}
 			{data.view === "history" && <HistoryView data={data} slug={organisation.slug} />}
 		</>
 	);

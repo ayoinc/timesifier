@@ -107,6 +107,8 @@ export interface DayHours {
 	day: Day;
 	/** Whole minutes, more than none. */
 	minutes: number;
+	/** When it starts, an instant on `day`, where a slot of the calendar was chosen (TS-062); else `gridEntryStart` places it. */
+	startedAt?: number;
 	zone: string;
 	/** The server's clock. */
 	now: number;
@@ -114,14 +116,16 @@ export interface DayHours {
 
 /**
  * Adds one entry of `minutes` on `day` for `userId`, on an active project
- * (TS-056): it starts where `gridEntryStart` says, as an hour typed into an
- * empty cell of the week's grid does, and lasts the time typed.
+ * (TS-056): it starts at `startedAt` when given, or where `gridEntryStart`
+ * says, as an hour typed into an empty cell of the week's grid does, and
+ * lasts the time typed.
  */
 export async function addHours(scope: OrganisationScope, userId: string, hours: DayHours) {
 	const { projectId, description, day, minutes, zone, now } = hours;
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
-	const startedAt = gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
+	const startedAt =
+		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
 	const [added] = await scope.timeEntries.insert({
 		userId,
 		projectId,

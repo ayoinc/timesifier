@@ -1081,6 +1081,80 @@ describe("getting started (TS-056)", () => {
 	});
 });
 
+describe("the Calendar view (TS-062)", () => {
+	const WEEK = `${PAGE}?view=calendar&date=2026-11-11`;
+	const MONTH = `${PAGE}?view=calendar&scale=month&date=2026-11-11`;
+
+	beforeEach(async () => {
+		clockAt(T0);
+		await seedEntry(
+			ada,
+			instantAt("2026-11-09", 9 * 60, LONDON),
+			instantAt("2026-11-09", 11 * 60, LONDON),
+			{ description: "Plans" },
+		);
+		// From 23:30 on the Tuesday to 00:30 on the Wednesday: an hour of the Tuesday's.
+		await seedEntry(
+			ada,
+			instantAt("2026-11-10", 23 * 60 + 30, LONDON),
+			instantAt("2026-11-11", 30, LONDON),
+		);
+	});
+
+	it("shows the week's days with the Week view's totals, and each entry as a block", async () => {
+		const text = await textAt(WEEK);
+		expect(text).toMatch(/Week total 3:00/);
+		expect(text).toMatch(/Mon 9 Monday 9 November, 2:00 tracked/);
+		expect(text).toMatch(/Tue 10 Tuesday 10 November, 1:00 tracked/);
+		expect(text).toMatch(/Today, Wednesday 11 November, 0:00 tracked/);
+		expect(text).toContain("Plans, Site, 09:00–11:00, 2:00, edit");
+		expect(text).toContain("continued from the day before");
+		expect(await textAt(`${PAGE}?view=week&start=2026-11-09`)).toMatch(/Week total 3:00/);
+	});
+
+	it("shows the month's days, the weeks' totals and the month's", async () => {
+		const text = await textAt(MONTH);
+		expect(text).toContain("November 2026");
+		expect(text).toMatch(/Month total 3:00/);
+		expect(text).toContain("Monday 9 November, 2:00");
+		expect(text).toContain("Week of 9 November, 3:00");
+		expect(text).toContain("Week of 26 October, 0:00");
+	});
+
+	it("marks the days of a submitted week", async () => {
+		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
+		const main = await mainOf(WEEK);
+		expect(textOf(main)).toContain("Submitted");
+		expect(main).not.toContain("Track time, Monday 9 November");
+		expect(await textAt(MONTH)).toContain("Monday 9 November, 2:00, submitted");
+	});
+
+	it("answers an address it cannot read with 400", async () => {
+		for (const query of ["scale=year", "zoom=huge", "scale=month&zoom=compact"]) {
+			expect((await open(`${PAGE}?view=calendar&${query}`, ada)).status, query).toBe(400);
+		}
+	});
+
+	it("tracks time from a slot: the entry starts at the time chosen, in the person's zone", async () => {
+		expect(
+			await post(track({ projectId: site, day: "2026-11-12", start: "14:30", hours: "1.5" })),
+		).toBe(200);
+		const added = (await entries()).results.at(-1);
+		expect(added?.startedAt).toBe(instantAt("2026-11-12", 14 * 60 + 30, LONDON));
+		expect(added?.endedAt).toBe(instantAt("2026-11-12", 16 * 60, LONDON));
+	});
+
+	it("asks for the hours from a slot, and refuses a time the clocks skip, storing nothing", async () => {
+		const before = await countEntries();
+		expect(await post(track({ projectId: site, start: "14:30" }))).toBe(400);
+		expect(
+			await post(track({ projectId: site, day: "2026-03-29", start: "01:30", hours: "1" })),
+		).toBe(400);
+		expect(await post(track({ projectId: site, start: "25:00", hours: "1" }))).toBe(400);
+		expect(await countEntries()).toBe(before);
+	});
+});
+
 describe("an error while starting", () => {
 	it("logs the error's name and the path alone, never the description", async () => {
 		const lines: string[] = [];

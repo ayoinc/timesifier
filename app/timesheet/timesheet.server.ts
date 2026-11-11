@@ -13,10 +13,11 @@ import {
 	periodBounds,
 	periodContaining,
 } from "~/periods/periods";
-import { bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { addDays, bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { runningEntry } from "~/time/entries.server";
 import { zoneOfMember } from "~/time/zones.server";
 
+import { calendarDays, type DayStatus } from "./calendar-sheets";
 import type { GettingStarted } from "./GettingStarted";
 import { gettingStarted, type Marks } from "./getting-started.server";
 
@@ -31,6 +32,7 @@ import {
 	type WeekSheet,
 	weekSheet,
 } from "./sheets";
+import type { CalendarScale, Zoom } from "./views";
 import type { ChosenView } from "./views.server";
 
 /**
@@ -205,7 +207,29 @@ export interface HistoryData extends TimesheetBase {
 	rows: HistoryRow[];
 }
 
-export type TimesheetData = DayData | WeekData | HistoryData;
+export interface CalendarData extends TimesheetBase {
+	view: "calendar";
+	scale: CalendarScale;
+	zoom: Zoom;
+	/** The day the calendar is on: the address's, or today. */
+	date: Day;
+	/** The days shown: one period, or the periods that cover the month (`calendarDays`). */
+	days: Day[];
+	/** The first day of the month shown, on the month's scale. */
+	month: Day | null;
+	/**
+	 * The entries that start on the days shown, and those that start the day
+	 * before and may run past its midnight onto the first of them: the views
+	 * add up only the first, and draw both.
+	 */
+	entries: SheetEntry[];
+	/** The days shown that are in a submitted or approved period. */
+	lockedDays: Day[];
+	/** What each day is besides its time, such as leave; nothing fills it yet (TS-061 will). */
+	statuses: Partial<Record<Day, DayStatus>>;
+}
+
+export type TimesheetData = DayData | WeekData | CalendarData | HistoryData;
 
 /**
  * The data of the view `chosen` for the person behind `membership`, at `now`.
@@ -241,6 +265,28 @@ export async function timesheetData(
 		case "week": {
 			const period = periodContaining(chosen.start ?? today, organisation.weekStartsOn);
 			return { ...base, ...(await weekData(scope, user.id, period, zone, now, projects)) };
+		}
+		case "calendar": {
+			const date = chosen.date ?? today;
+			const { days, month } = calendarDays(chosen.scale, date, organisation.weekStartsOn);
+			const first = days[0] as Day;
+			const last = days.at(-1) as Day;
+			const [entries, locked] = await Promise.all([
+				entriesStartingIn(scope, user.id, bounds(addDays(first, -1), last, zone)),
+				lockedDays(scope, user.id, days),
+			]);
+			return {
+				...base,
+				view: "calendar",
+				scale: chosen.scale,
+				zoom: chosen.zoom,
+				date,
+				days,
+				month,
+				entries,
+				lockedDays: days.filter((day) => locked.has(day)),
+				statuses: {},
+			};
 		}
 		case "history": {
 			const current = periodContaining(today, organisation.weekStartsOn);

@@ -3,20 +3,38 @@ import type { Day } from "~/time/calendar";
 
 /**
  * The views of Timesheet and their addresses (docs/navigation.md: "Day view:
- * the timer and the day's entries. Week view: … History lists past periods").
- * All three are the destination's own address with a query, so the navigation
- * marks Timesheet on each and the check of who may open it is the
+ * the timer and the day's entries. Week view: … Calendar … History lists past
+ * periods"). All four are the destination's own address with a query, so the
+ * navigation marks Timesheet on each and the check of who may open it is the
  * destination's:
  *
  * - `/app/<slug>` or `?day=YYYY-MM-DD`: one day, today in the person's zone by default.
  * - `?view=week` or `?view=week&start=YYYY-MM-DD`: the period that starts on that day.
+ * - `?view=calendar`, with `scale=month`, `date=YYYY-MM-DD` and `zoom=compact`
+ *   where they are not the defaults: the week or the month that holds the day (TS-062).
  * - `?view=history`: the person's periods and their status.
  */
 
-export const VIEWS = ["day", "week", "history"] as const;
+export const VIEWS = ["day", "week", "calendar", "history"] as const;
 export type View = (typeof VIEWS)[number];
 
-export const VIEW_LABELS: Record<View, string> = { day: "Day", week: "Week", history: "History" };
+export const VIEW_LABELS: Record<View, string> = {
+	day: "Day",
+	week: "Week",
+	calendar: "Calendar",
+	history: "History",
+};
+
+/** What the calendar shows at once: a week on an hour axis, or a month of days. */
+export const CALENDAR_SCALES = ["week", "month"] as const;
+export type CalendarScale = (typeof CALENDAR_SCALES)[number];
+
+/** How tall the week calendar's hours are: the whole day in view, or tall enough to read a quarter of an hour. */
+export const ZOOMS = ["compact", "detailed"] as const;
+export type Zoom = (typeof ZOOMS)[number];
+
+/** The week calendar's zoom when the address names none. */
+export const DEFAULT_ZOOM: Zoom = "detailed";
 
 /** Where on the Day view "Track time" is: "Start timer" in the navigation leads here, and the sheet opens. */
 export const TIMER_ANCHOR = "timer";
@@ -31,6 +49,26 @@ export function weekPath(slug: string, start?: Day): string {
 	return `${organisationPath(slug)}?view=week${start ? `&start=${start}` : ""}`;
 }
 
+/**
+ * The address of the calendar: the week or the month that holds `date`, or
+ * today when there is none, and the week's zoom. A default is left out, so
+ * each calendar has one address.
+ */
+export function calendarPath(
+	slug: string,
+	{
+		scale = "week",
+		date,
+		zoom = DEFAULT_ZOOM,
+	}: { scale?: CalendarScale; date?: Day; zoom?: Zoom } = {},
+): string {
+	const query = new URLSearchParams({ view: "calendar" });
+	if (scale !== "week") query.set("scale", scale);
+	if (date) query.set("date", date);
+	if (scale === "week" && zoom !== DEFAULT_ZOOM) query.set("zoom", zoom);
+	return `${organisationPath(slug)}?${query}`;
+}
+
 /** The address of History. */
 export function historyPath(slug: string): string {
 	return `${organisationPath(slug)}?view=history`;
@@ -39,6 +77,7 @@ export function historyPath(slug: string): string {
 /** The address of `view` with nothing chosen: today, this week. */
 export function viewPath(slug: string, view: View): string {
 	if (view === "week") return weekPath(slug);
+	if (view === "calendar") return calendarPath(slug);
 	if (view === "history") return historyPath(slug);
 	return dayPath(slug);
 }

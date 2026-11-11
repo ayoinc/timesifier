@@ -53,6 +53,8 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		description: Description.default(""),
 		day: Day,
 		hours: Hours.default(""),
+		/** When the entry starts, where a slot of the calendar was chosen (TS-062). */
+		start: Clock.optional(),
 	}),
 	z.object({ intent: z.literal("stop") }),
 	z.object({
@@ -98,6 +100,7 @@ function typedInstant(date: Day, clock: string, zone: string) {
 const SKIPPED = "That time does not exist on that day: the clocks change then.";
 const NOT_TODAY = "Type the hours worked on that day. A timer runs today only.";
 const NO_HOURS = "Type more than no hours, or leave them empty to start a timer.";
+const FROM_START = "Type the hours worked from that time.";
 
 export async function timesheetAction(request: Request, membership: Membership) {
 	const input = await parseRequest(request, TimesheetForm);
@@ -109,8 +112,10 @@ export async function timesheetAction(request: Request, membership: Membership) 
 	switch (input.intent) {
 		// With no hours the timer starts now, which is today: on another day hours
 		// are asked for. With hours, one entry of them is placed on the day shown
-		// as hours typed into the week's grid are (`gridEntryStart`).
+		// at the time chosen on the calendar, or else as hours typed into the
+		// week's grid are (`gridEntryStart`).
 		case "track": {
+			if (input.hours.trim() === "" && input.start !== undefined) return declined(FROM_START);
 			if (input.hours.trim() === "") {
 				if (input.day !== dayOf(now, zone)) return declined(NOT_TODAY);
 				const started = await startTimer(scope, {
@@ -124,12 +129,16 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			}
 			const hours = TypedHours.safeParse(input.hours);
 			if (!hours.success) return declined(hours.error.issues[0]?.message ?? "Type hours as 1.5.");
-			if (hours.data === 0) return declined(NO_HOURS);
+			if (hours.data === 0) return declined(input.start === undefined ? NO_HOURS : FROM_START);
+			const startedAt =
+				input.start === undefined ? undefined : typedInstant(input.day, input.start, zone);
+			if (startedAt === null) return declined(SKIPPED);
 			const added = await addHours(scope, user.id, {
 				projectId: input.projectId,
 				description: input.description,
 				day: input.day,
 				minutes: hours.data,
+				startedAt,
 				zone,
 				now,
 			});
