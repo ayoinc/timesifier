@@ -8,8 +8,9 @@ import { bounds, type Day, dayOf } from "./calendar";
 import { gridEntryStart } from "./grid";
 
 /**
- * Entries a person writes by hand: one added, changed or deleted in the Day
- * view (TS-012b), and the hours of one cell of the week's grid (TS-052). Each
+ * Entries a person writes by hand: hours tracked on a day from the Day view's
+ * "Track time" (TS-056), an entry changed or deleted in the Day view
+ * (TS-012b), and the hours of one cell of the week's grid (TS-052). Each
  * acts on the caller's own entries alone: an entry of anybody else, in this
  * organisation or another, is not found, whatever the caller's role
  * (`mayChangeTimeOf`). A day in a submitted or approved period is refused,
@@ -40,23 +41,6 @@ async function ownEntry(scope: OrganisationScope, userId: string, id: string) {
 		limit: 1,
 	});
 	return entry ?? null;
-}
-
-/** Adds an entry with a start and an end for `userId`, on an active project. */
-export async function addEntry(scope: OrganisationScope, userId: string, zone: string, span: Span) {
-	if (span.endedAt <= span.startedAt) return refuse("ends-before-start");
-	if (!(await findActiveProject(scope, span.projectId))) return refuse("no-project");
-	if ((await lockedDays(scope, userId, [dayOf(span.startedAt, zone)])).size > 0) {
-		return refuse("locked");
-	}
-	const [added] = await scope.timeEntries.insert({
-		userId,
-		projectId: span.projectId,
-		description: span.description,
-		startedAt: new Date(span.startedAt),
-		endedAt: new Date(span.endedAt),
-	});
-	return { ok: true as const, entry: added };
 }
 
 /**
@@ -109,6 +93,45 @@ export async function deleteEntry(
 	return { ok: true as const };
 }
 
+/** The entries of `userId` that belong to `day` in `zone`: those that start on it. */
+function entriesOfDay(scope: OrganisationScope, userId: string, day: Day, zone: string) {
+	const { from, to } = bounds(day, day, zone);
+	return scope.timeEntries.select((e) =>
+		and(eq(e.userId, userId), gte(e.startedAt, new Date(from)), lt(e.startedAt, new Date(to))),
+	);
+}
+
+export interface DayHours {
+	projectId: string;
+	description: string | null;
+	day: Day;
+	/** Whole minutes, more than none. */
+	minutes: number;
+	zone: string;
+	/** The server's clock. */
+	now: number;
+}
+
+/**
+ * Adds one entry of `minutes` on `day` for `userId`, on an active project
+ * (TS-056): it starts where `gridEntryStart` says, as an hour typed into an
+ * empty cell of the week's grid does, and lasts the time typed.
+ */
+export async function addHours(scope: OrganisationScope, userId: string, hours: DayHours) {
+	const { projectId, description, day, minutes, zone, now } = hours;
+	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
+	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
+	const startedAt = gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
+	const [added] = await scope.timeEntries.insert({
+		userId,
+		projectId,
+		description,
+		startedAt: new Date(startedAt),
+		endedAt: new Date(startedAt + minutes * 60_000),
+	});
+	return { ok: true as const, entry: added };
+}
+
 export interface CellHours {
 	projectId: string;
 	day: Day;
@@ -129,10 +152,7 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 	const { projectId, day, minutes, zone, now } = cell;
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
 
-	const { from, to } = bounds(day, day, zone);
-	const ofDay = await scope.timeEntries.select((e) =>
-		and(eq(e.userId, userId), gte(e.startedAt, new Date(from)), lt(e.startedAt, new Date(to))),
-	);
+	const ofDay = await entriesOfDay(scope, userId, day, zone);
 	const inCell = ofDay.filter((entry) => entry.projectId === projectId);
 	if (inCell.length > 1 || inCell.some((entry) => entry.endedAt === null)) {
 		return refuse("in-day-view");

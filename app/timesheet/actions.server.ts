@@ -1,16 +1,18 @@
 import { env } from "cloudflare:workers";
+import { data } from "react-router";
 import * as z from "zod";
 
 import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
 import type { Membership } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
+import type { Outcome } from "~/organisations/problems";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
-import { Day, exactInstantAt } from "~/time/calendar";
+import { Day, dayOf, exactInstantAt } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { startTimer, stopTimer } from "~/time/entries.server";
 import {
-	addEntry,
+	addHours,
 	deleteEntry,
 	editEntry,
 	type NotWritten,
@@ -19,11 +21,14 @@ import {
 import { zoneOfMember } from "~/time/zones.server";
 
 import { TypedHours } from "./durations";
+import { markCookie } from "./getting-started.server";
 
 /**
- * Everything the Timesheet's views ask the server for, in one action: the
- * timer (TS-012a), entries by hand (TS-012b), a cell of the week's grid
- * (TS-052) and a week's submission (TS-046). Each acts on the caller's own
+ * Everything the Timesheet's views ask the server for, in one action: "Track
+ * time", which starts the timer or saves hours on a day (TS-056), the timer's
+ * Stop (TS-012a), an entry changed or deleted by hand (TS-012b), a cell of the
+ * week's grid (TS-052), a week's submission (TS-046) and putting getting
+ * started away (TS-056). Each acts on the caller's own
  * time alone, in the organisation the layout read from the address: no form
  * names a person or an organisation, and `stop` names no entry. Times are the
  * server's clock, or a day and a time the person typed, read in their zone.
@@ -38,23 +43,32 @@ const Description = z
 	.max(ENTRY_DESCRIPTION_MAX_LENGTH)
 	.transform((text) => text || null);
 
-const EntryFields = {
-	projectId: Id,
-	date: Day,
-	start: Clock,
-	end: Clock,
-	description: Description.default(""),
-};
+/** Hours as typed: `1.5`, `1,5`, `1:30`, or nothing. */
+const Hours = z.string().max(16);
 
 export const TimesheetForm = z.discriminatedUnion("intent", [
-	z.object({ intent: z.literal("start"), projectId: Id, description: Description.default("") }),
+	z.object({
+		intent: z.literal("track"),
+		projectId: Id,
+		description: Description.default(""),
+		day: Day,
+		hours: Hours.default(""),
+	}),
 	z.object({ intent: z.literal("stop") }),
-	z.object({ intent: z.literal("add"), ...EntryFields }),
-	z.object({ intent: z.literal("edit"), entryId: Id, ...EntryFields }),
+	z.object({
+		intent: z.literal("edit"),
+		entryId: Id,
+		projectId: Id,
+		date: Day,
+		start: Clock,
+		end: Clock,
+		description: Description.default(""),
+	}),
 	z.object({ intent: z.literal("delete"), entryId: Id }),
-	z.object({ intent: z.literal("cell"), projectId: Id, day: Day, hours: z.string().max(16) }),
+	z.object({ intent: z.literal("cell"), projectId: Id, day: Day, hours: Hours }),
 	z.object({ intent: z.literal("submit"), startsOn: Day }),
 	z.object({ intent: z.literal("withdraw"), startsOn: Day }),
+	z.object({ intent: z.literal("put-away") }),
 ]);
 
 /** What each refusal says to the person, and the status it is answered with. */
@@ -82,6 +96,8 @@ function typedInstant(date: Day, clock: string, zone: string) {
 }
 
 const SKIPPED = "That time does not exist on that day: the clocks change then.";
+const NOT_TODAY = "Type the hours worked on that day. A timer runs today only.";
+const NO_HOURS = "Type more than no hours, or leave them empty to start a timer.";
 
 export async function timesheetAction(request: Request, membership: Membership) {
 	const input = await parseRequest(request, TimesheetForm);
@@ -91,16 +107,33 @@ export async function timesheetAction(request: Request, membership: Membership) 
 	const now = Date.now();
 
 	switch (input.intent) {
-		case "start": {
-			const started = await startTimer(scope, {
-				userId: user.id,
+		// With no hours the timer starts now, which is today: on another day hours
+		// are asked for. With hours, one entry of them is placed on the day shown
+		// as hours typed into the week's grid are (`gridEntryStart`).
+		case "track": {
+			if (input.hours.trim() === "") {
+				if (input.day !== dayOf(now, zone)) return declined(NOT_TODAY);
+				const started = await startTimer(scope, {
+					userId: user.id,
+					projectId: input.projectId,
+					description: input.description,
+					zone,
+					now,
+				});
+				return started.ok ? done("Timer started.") : refusal(started.reason);
+			}
+			const hours = TypedHours.safeParse(input.hours);
+			if (!hours.success) return declined(hours.error.issues[0]?.message ?? "Type hours as 1.5.");
+			if (hours.data === 0) return declined(NO_HOURS);
+			const added = await addHours(scope, user.id, {
 				projectId: input.projectId,
 				description: input.description,
+				day: input.day,
+				minutes: hours.data,
 				zone,
 				now,
 			});
-			if (started.ok) return done("Timer started.");
-			return refusal(started.reason);
+			return added.ok ? done("Entry saved.") : refusal(added.reason);
 		}
 
 		case "stop": {
@@ -108,23 +141,17 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			return done(stopped ? "Timer stopped." : "No timer was running.");
 		}
 
-		case "add":
 		case "edit": {
 			const startedAt = typedInstant(input.date, input.start, zone);
 			const endedAt = typedInstant(input.date, input.end, zone);
 			if (startedAt === null || endedAt === null) return declined(SKIPPED);
-			const span = {
+			const written = await editEntry(scope, user.id, zone, input.entryId, {
 				projectId: input.projectId,
 				description: input.description,
 				startedAt,
 				endedAt,
-			};
-			const written =
-				input.intent === "add"
-					? await addEntry(scope, user.id, zone, span)
-					: await editEntry(scope, user.id, zone, input.entryId, span);
-			if (!written.ok) return refusal(written.reason);
-			return done(input.intent === "add" ? "Entry added." : "Entry saved.");
+			});
+			return written.ok ? done("Entry saved.") : refusal(written.reason);
 		}
 
 		case "delete": {
@@ -168,5 +195,10 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				? done("Submission withdrawn. You can change the week's entries again.")
 				: declined("Only a submission nobody has decided yet can be withdrawn.", 409);
 		}
+
+		case "put-away":
+			return data<Outcome>(done("Getting started is put away."), {
+				headers: { "Set-Cookie": markCookie(request.headers.get("Cookie"), user.id, "away") },
+			});
 	}
 }

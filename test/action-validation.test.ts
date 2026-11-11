@@ -35,7 +35,10 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	"routes/app/account": () => formFromAMember("/app/acme/account", "scheme=sepia"),
 	// A description is at most 500 characters; this is 501.
 	"routes/app/timesheet": () =>
-		formFromAMember("/app/acme?index", `intent=start&projectId=p1&description=${"x".repeat(501)}`),
+		formFromAMember(
+			"/app/acme?index",
+			`intent=track&projectId=p1&day=2026-11-11&description=${"x".repeat(501)}`,
+		),
 	// An organisation's name is 1 to 80 characters; this is none.
 	"routes/app/new": () => formFromAMember("/app/new", "name="),
 	// A role is one of three words; this is none of them.

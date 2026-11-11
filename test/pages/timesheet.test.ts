@@ -2,7 +2,9 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { uuidv7 } from "~/db";
-import { instantAt } from "~/time/calendar";
+import { addDays, dayOf, instantAt } from "~/time/calendar";
+import { gridEntryStart } from "~/time/grid";
+import { GETTING_STARTED_COOKIE } from "~/timesheet/getting-started.server";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, type Role, seedMembership, value } from "../organisations/harness";
@@ -10,7 +12,9 @@ import { open, openData, type Person, pageBody, person, submit, textOf } from ".
 
 // Timesheet, /app/<slug>: the timer (TS-012a), the Day and Week views
 // (TS-013), entries by hand (TS-012b), the week's grid (TS-052), a week's
-// submission and History (TS-046), and the timer in the navigation (TS-051).
+// submission and History (TS-046), the timer in the navigation (TS-051), and
+// "Track time", the week's days above the day, the submission at the Day
+// view's foot and getting started (TS-056).
 // Every request goes through the Worker, as a browser makes it.
 
 const PAGE = "/app/acme";
@@ -89,6 +93,11 @@ async function post(fields: Record<string, string>, who: Person = ada) {
 	return (await submit(ACTION, fields, who, { byScript: true })).status;
 }
 
+/** "Track time" on the day the server's clock is in, in London: with no hours, it starts the timer. */
+function track(fields: Record<string, string> = {}) {
+	return { intent: "track", day: dayOf(Date.now(), LONDON), ...fields };
+}
+
 const entries = () =>
 	env.DB.prepare(
 		"select id, user_id as userId, project_id as projectId, description, started_at as startedAt, ended_at as endedAt from time_entries order by started_at",
@@ -118,9 +127,7 @@ async function mainOf(path: string, who: Person = ada) {
 describe("the timer (TS-012a)", () => {
 	it("starts one entry at the server's clock, whatever the request claims", async () => {
 		clockAt(T0);
-		expect(
-			await post({ intent: "start", projectId: site, description: "Plans", startedAt: "0" }),
-		).toBe(200);
+		expect(await post(track({ projectId: site, description: "Plans", startedAt: "0" }))).toBe(200);
 
 		const { results } = await entries();
 		expect(results).toHaveLength(1);
@@ -140,20 +147,16 @@ describe("the timer (TS-012a)", () => {
 		const theirs = await seedProject(initech.id, "Theirs");
 
 		for (const projectId of ["", "no-such-project", archived, theirs]) {
-			expect(await post({ intent: "start", projectId }), projectId).toBe(400);
+			expect(await post(track({ projectId })), projectId).toBe(400);
 		}
-		expect(await post({ intent: "start" })).toBe(400);
+		expect(await post(track())).toBe(400);
 		expect(await countEntries()).toBe(0);
 	});
 
 	it("stores a description of 500 characters and refuses one of 501 with 400", async () => {
-		expect(await post({ intent: "start", projectId: site, description: "x".repeat(501) })).toBe(
-			400,
-		);
+		expect(await post(track({ projectId: site, description: "x".repeat(501) }))).toBe(400);
 		expect(await countEntries()).toBe(0);
-		expect(await post({ intent: "start", projectId: site, description: "x".repeat(500) })).toBe(
-			200,
-		);
+		expect(await post(track({ projectId: site, description: "x".repeat(500) }))).toBe(200);
 		expect((await entries()).results[0]?.description).toHaveLength(500);
 	});
 
@@ -162,7 +165,7 @@ describe("the timer (TS-012a)", () => {
 		expect(await post({ intent: "stop" })).toBe(200);
 		expect(await countEntries()).toBe(0);
 
-		await post({ intent: "start", projectId: site });
+		await post(track({ projectId: site }));
 		clockAt(T0 + 25 * MINUTE);
 		expect(await post({ intent: "stop", entryId: "ignored" })).toBe(200);
 		expect((await entries()).results[0]?.endedAt).toBe(T0 + 25 * MINUTE);
@@ -170,9 +173,9 @@ describe("the timer (TS-012a)", () => {
 
 	it("starting while one runs stops the first at the second's start", async () => {
 		clockAt(T0);
-		await post({ intent: "start", projectId: site });
+		await post(track({ projectId: site }));
 		clockAt(T0 + HOUR);
-		await post({ intent: "start", projectId: site });
+		await post(track({ projectId: site }));
 
 		const { results } = await entries();
 		expect(results.map((e) => [e.startedAt, e.endedAt])).toEqual([
@@ -186,7 +189,7 @@ describe("the timer (TS-012a)", () => {
 		const main = await mainOf(PAGE);
 
 		expect(textOf(main)).toContain("No project to track yet");
-		expect(main).not.toContain(">Start timer</button>");
+		expect(main).not.toContain(">Track time</button>");
 		const timer = /<section id="timer"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
 		const links = [...timer.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)];
 		expect(links.map(([, href, label]) => [href, textOf(label ?? "")])).toEqual([
@@ -194,13 +197,13 @@ describe("the timer (TS-012a)", () => {
 		]);
 	});
 
-	it("with a project shows the active projects to choose from and one button, Start timer", async () => {
-		await seedProject(acme.id, "Old", true);
+	it("with a project shows one button, Track time, and no form of its own", async () => {
 		const main = await mainOf(PAGE);
+		const timer = /<section id="timer"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
 
-		expect(main.match(/>Start timer<\/button>/g)).toHaveLength(1);
-		expect(main).toMatch(new RegExp(`<option value="${site}"[^>]*>Site</option>`));
-		expect(main).not.toContain(">Old</option>");
+		expect(timer.match(/<button\b/g)).toHaveLength(1);
+		expect(timer).toMatch(/>Track time<\/button>/);
+		expect(timer).not.toContain("<form");
 	});
 
 	it("shows a start time in the person's zone, across the clock change", async () => {
@@ -223,7 +226,7 @@ describe("the timer (TS-012a)", () => {
 		await createOrganisation(grace.cookie, "Initech");
 		await seedEntry(ada, T0 - HOUR, null);
 
-		expect(await post({ intent: "start", projectId: site }, grace)).toBe(404);
+		expect(await post(track({ projectId: site }), grace)).toBe(404);
 		expect(await post({ intent: "stop" }, grace)).toBe(404);
 		expect((await entries()).results.map((e) => e.endedAt)).toEqual([null]);
 	});
@@ -231,13 +234,10 @@ describe("the timer (TS-012a)", () => {
 	it("lets a person run one timer in each of two organisations", async () => {
 		const globex = await createOrganisation(ada.cookie, "Globex");
 		const theirs = await seedProject(globex.id, "Theirs");
-		await post({ intent: "start", projectId: site });
-		const response = await submit(
-			"/app/globex?index",
-			{ intent: "start", projectId: theirs },
-			ada,
-			{ byScript: true },
-		);
+		await post(track({ projectId: site }));
+		const response = await submit("/app/globex?index", track({ projectId: theirs }), ada, {
+			byScript: true,
+		});
 
 		expect(response.status).toBe(200);
 		expect(await value("select count(*) from time_entries where ended_at is null")).toBe(2);
@@ -247,7 +247,7 @@ describe("the timer (TS-012a)", () => {
 describe("the timer in the navigation (TS-051)", () => {
 	it("shows the running project, the elapsed time and Stop on every page", async () => {
 		clockAt(T0);
-		await post({ intent: "start", projectId: site });
+		await post(track({ projectId: site }));
 		clockAt(T0 + 65 * MINUTE + 5_000);
 
 		for (const path of [PAGE, "/app/acme/projects", "/app/acme/account", "/app/acme/reports"]) {
@@ -262,7 +262,7 @@ describe("the timer in the navigation (TS-051)", () => {
 	});
 
 	it("stops through the Timesheet's stop, from any page", async () => {
-		await post({ intent: "start", projectId: site });
+		await post(track({ projectId: site }));
 		const html = await pageBody(await open("/app/acme/reports", ada));
 		const form = /<form[^>]*action="([^"]*)"[^>]*>(?:(?!<\/form>)[\s\S])*Stop timer for Site/.exec(
 			html,
@@ -356,7 +356,8 @@ describe("the Day view (TS-013)", () => {
 	it("with nothing tracked says so and adds no button to the list", async () => {
 		const main = await mainOf(`${PAGE}?day=2026-11-01`);
 		expect(textOf(main)).toContain("Nothing tracked on this day.");
-		expect(main.match(/<button[^>]*>Start timer<\/button>/g)).toHaveLength(1);
+		expect(main.match(/>Track time<\/button>/g)).toHaveLength(1);
+		expect(main).not.toContain("Add entry");
 	});
 
 	it("answers a day that is not a date with 400", async () => {
@@ -525,8 +526,9 @@ describe("the Week view (TS-013, TS-052)", () => {
 });
 
 describe("entries by hand (TS-012b)", () => {
-	const fields = (more: Record<string, string> = {}) => ({
-		intent: "add",
+	const fields = (entryId: string, more: Record<string, string> = {}) => ({
+		intent: "edit",
+		entryId,
 		projectId: site,
 		date: "2026-11-10",
 		start: "09:00",
@@ -534,34 +536,41 @@ describe("entries by hand (TS-012b)", () => {
 		description: "Survey",
 		...more,
 	});
+	const anEntry = () =>
+		seedEntry(
+			ada,
+			instantAt("2026-11-10", 13 * 60, LONDON),
+			instantAt("2026-11-10", 14 * 60, LONDON),
+		);
 
-	it("are added, changed and deleted by their person, read in their zone", async () => {
-		expect(await post(fields())).toBe(200);
-		const [added] = (await entries()).results;
-		expect(added).toMatchObject({
+	it("are changed and deleted by their person, read in their zone", async () => {
+		const id = await anEntry();
+		expect(await post(fields(id))).toBe(200);
+		expect((await entries()).results[0]).toMatchObject({
 			startedAt: Date.parse("2026-11-10T09:00:00Z"),
 			endedAt: Date.parse("2026-11-10T10:30:00Z"),
 			description: "Survey",
 		});
 
 		await setZone(ada, "Pacific/Auckland");
-		expect(
-			await post({
-				...fields({ intent: "edit", start: "08:00", end: "09:00" }),
-				entryId: added?.id ?? "",
-			}),
-		).toBe(200);
+		expect(await post(fields(id, { start: "08:00", end: "09:00" }))).toBe(200);
 		expect((await entries()).results[0]?.startedAt).toBe(Date.parse("2026-11-09T19:00:00Z"));
 
-		expect(await post({ intent: "delete", entryId: added?.id ?? "" })).toBe(200);
+		expect(await post({ intent: "delete", entryId: id })).toBe(200);
+		expect(await countEntries()).toBe(0);
+	});
+
+	it("are no longer added with a start and an end: the intent is refused with 400", async () => {
+		expect(await post({ ...fields("x"), intent: "add" })).toBe(400);
 		expect(await countEntries()).toBe(0);
 	});
 
 	it("refuses an end before its start, and a time the clocks skip", async () => {
-		expect(await post(fields({ start: "10:00", end: "09:00" }))).toBe(400);
-		expect(await post(fields({ start: "10:00", end: "10:00" }))).toBe(400);
-		expect(await post(fields({ date: "2026-03-29", start: "01:30", end: "03:00" }))).toBe(400);
-		expect(await countEntries()).toBe(0);
+		const id = await anEntry();
+		expect(await post(fields(id, { start: "10:00", end: "09:00" }))).toBe(400);
+		expect(await post(fields(id, { start: "10:00", end: "10:00" }))).toBe(400);
+		expect(await post(fields(id, { date: "2026-03-29", start: "01:30", end: "03:00" }))).toBe(400);
+		expect((await entries()).results[0]?.startedAt).toBe(instantAt("2026-11-10", 13 * 60, LONDON));
 	});
 
 	it.each(["owner", "admin", "member"] as const)(
@@ -571,7 +580,7 @@ describe("entries by hand (TS-012b)", () => {
 			const id = await seedEntry(linus, T0 - 2 * HOUR, T0 - HOUR, { description: "Mine" });
 			const who = role === "owner" ? ada : await memberOfAcme(role, `${role}@example.com`);
 
-			expect(await post({ ...fields({ intent: "edit" }), entryId: id }, who)).toBe(404);
+			expect(await post(fields(id), who)).toBe(404);
 			expect(await post({ intent: "delete", entryId: id }, who)).toBe(404);
 			expect((await entries()).results).toEqual([
 				expect.objectContaining({ id, description: "Mine", startedAt: T0 - 2 * HOUR }),
@@ -581,10 +590,11 @@ describe("entries by hand (TS-012b)", () => {
 
 	it("are refused on an archived project, and a running entry is left to the timer", async () => {
 		const old = await seedProject(acme.id, "Old", true);
-		expect(await post(fields({ projectId: old }))).toBe(400);
+		const id = await anEntry();
+		expect(await post(fields(id, { projectId: old }))).toBe(400);
 		const running = await seedEntry(ada, T0, null);
 		expect(await post({ intent: "delete", entryId: running })).toBe(409);
-		expect(await countEntries()).toBe(1);
+		expect(await countEntries()).toBe(2);
 	});
 });
 
@@ -619,16 +629,8 @@ describe("submitting a week (TS-046)", () => {
 		expect(await post({ intent: "cell", projectId: site, day: "2026-11-10", hours: "3" })).toBe(
 			409,
 		);
-		expect(
-			await post({
-				intent: "add",
-				projectId: site,
-				date: "2026-11-12",
-				start: "09:00",
-				end: "10:00",
-			}),
-		).toBe(409);
-		expect(await post({ intent: "start", projectId: site })).toBe(409);
+		expect(await post(track({ projectId: site, day: "2026-11-12", hours: "1" }))).toBe(409);
+		expect(await post(track({ projectId: site }))).toBe(409);
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(409);
 		expect(await countEntries()).toBe(1);
 
@@ -668,7 +670,7 @@ describe("submitting a week (TS-046)", () => {
 
 	it("refuses a week that has not begun, and one with a timer running in it", async () => {
 		expect(await post({ intent: "submit", startsOn: "2026-11-16" })).toBe(409);
-		await post({ intent: "start", projectId: site });
+		await post(track({ projectId: site }));
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(409);
 		expect(await value("select count(*) from periods")).toBe(0);
 	});
@@ -708,6 +710,368 @@ describe("History (TS-046)", () => {
 	});
 });
 
+describe("Track time (TS-056)", () => {
+	it("is the Day view's one primary action: its one filled button, and no Add entry", async () => {
+		clockAt(T0);
+		await seedEntry(
+			ada,
+			instantAt("2026-11-10", 9 * 60, LONDON),
+			instantAt("2026-11-10", 10 * 60, LONDON),
+		);
+		const main = await mainOf(`${PAGE}?day=2026-11-11`);
+		const filled = [
+			...main.matchAll(
+				/<button\b[^>]*class="[^"]*\bover-primary\b[^"]*"[^>]*>([\s\S]*?)<\/button>/g,
+			),
+		].map(([, label]) => textOf(label ?? ""));
+
+		expect(filled).toEqual(["Track time"]);
+		expect(main).toMatch(/>Submit week<\/button>/);
+		expect(main).not.toContain("Add entry");
+		expect(main).not.toContain(">Start timer</button>");
+	});
+
+	it("is where Start timer in the navigation leads: today's Day view, at Track time", async () => {
+		clockAt(T0);
+		const html = await pageBody(await open("/app/acme/projects", ada));
+		const nav = /<nav aria-label="Main"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? "";
+		expect(nav).toMatch(/<a[^>]*href="\/app\/acme#timer"[^>]*>[\s\S]*?Start timer/);
+		expect(await mainOf(PAGE)).toMatch(/<section id="timer"[\s\S]*?>Track time<\/button>/);
+	});
+
+	it("with no hours starts the timer at the server's clock", async () => {
+		clockAt(T0);
+		expect(await post(track({ projectId: site, description: "Plans", hours: " " }))).toBe(200);
+		expect((await entries()).results).toEqual([
+			expect.objectContaining({
+				projectId: site,
+				description: "Plans",
+				startedAt: T0,
+				endedAt: null,
+			}),
+		]);
+	});
+
+	it.each(["1.5", "1,5", "1:30"])(
+		"with hours %s saves one entry of 90 minutes on the day shown, where gridEntryStart places it",
+		async (hours) => {
+			clockAt(T0);
+			const day = "2026-11-09";
+			expect(await post(track({ projectId: site, day, hours, description: "Survey" }))).toBe(200);
+			const first = gridEntryStart(day, LONDON, [], T0);
+			expect((await entries()).results).toEqual([
+				expect.objectContaining({
+					userId: ada.user.id,
+					projectId: site,
+					description: "Survey",
+					startedAt: first,
+					endedAt: first + 90 * MINUTE,
+				}),
+			]);
+
+			expect(await post(track({ projectId: site, day, hours: "1" }))).toBe(200);
+			const second = gridEntryStart(
+				day,
+				LONDON,
+				[{ startedAt: first, endedAt: first + 90 * MINUTE }],
+				T0,
+			);
+			expect(second).toBe(first + 90 * MINUTE);
+			expect((await entries()).results.map((e) => [e.startedAt, e.endedAt])).toEqual([
+				[first, first + 90 * MINUTE],
+				[second, second + HOUR],
+			]);
+		},
+	);
+
+	it("asks for hours on a day other than today, and refuses hours that are not hours or none", async () => {
+		clockAt(T0);
+		for (const hours of ["", "0", "0:00", "lots", "25", "1.5.5"]) {
+			expect(await post(track({ projectId: site, day: "2026-11-09", hours })), hours).toBe(400);
+		}
+		expect(await post(track({ projectId: site, hours: "0" }))).toBe(400);
+		expect(await post(track({ projectId: site, day: "11 November", hours: "1" }))).toBe(400);
+		expect(await countEntries()).toBe(0);
+	});
+
+	it("refuses an archived project and another organisation's, with hours and without", async () => {
+		const archived = await seedProject(acme.id, "Old", true);
+		const grace = await person(mailbox, "grace@example.com");
+		const theirs = await seedProject(
+			(await createOrganisation(grace.cookie, "Initech")).id,
+			"Theirs",
+		);
+		clockAt(T0);
+
+		for (const projectId of [archived, theirs]) {
+			expect(await post(track({ projectId })), projectId).toBe(400);
+			expect(await post(track({ projectId, day: "2026-11-09", hours: "1" })), projectId).toBe(400);
+		}
+		expect(await countEntries()).toBe(0);
+	});
+
+	it("is refused on a locked day, with hours and without, and a locked day does not offer it", async () => {
+		clockAt(T0);
+		await seedEntry(
+			ada,
+			instantAt("2026-11-09", 9 * 60, LONDON),
+			instantAt("2026-11-09", 10 * 60, LONDON),
+		);
+		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
+
+		expect(await post(track({ projectId: site, day: "2026-11-10", hours: "1" }))).toBe(409);
+		expect(await post(track({ projectId: site }))).toBe(409);
+		expect(await countEntries()).toBe(1);
+		const main = await mainOf(`${PAGE}?day=2026-11-10`);
+		expect(main).not.toContain(">Track time</button>");
+		expect(textOf(main)).toContain("so nothing can be tracked or changed on it");
+
+		// The week after is not locked.
+		expect(await post(track({ projectId: site, day: "2026-11-16", hours: "1" }))).toBe(200);
+	});
+});
+
+describe("the week's days above the day (TS-056)", () => {
+	/** The links of the period's days on the Day view of `day`: each day, its total, and whether it is marked. */
+	async function weekDays(day: string) {
+		const main = await mainOf(`${PAGE}?day=${day}`);
+		const group =
+			/<legend[^>]*>Days of the week<\/legend>([\s\S]*?)<\/fieldset>/.exec(main)?.[1] ?? "";
+		return {
+			main,
+			days: [...group.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map(
+				([, attributes = "", inner = ""]) => ({
+					day: /href="\/app\/acme\?day=([\d-]+)"/.exec(attributes)?.[1],
+					total: textOf(inner).split(" ").at(-1),
+					shown: /aria-current="date"/.test(attributes),
+				}),
+			),
+		};
+	}
+
+	it("links each of the period's seven days with its total, marks the day shown, and adds them up as the Week view does", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+		clockAt(T0);
+		const ops = await seedProject(acme.id, "Ops", true);
+		await seedEntry(
+			ada,
+			instantAt("2026-11-09", 9 * 60, LONDON),
+			instantAt("2026-11-09", 11 * 60, LONDON),
+		);
+		await seedEntry(
+			ada,
+			instantAt("2026-11-10", 23 * 60 + 30, LONDON),
+			instantAt("2026-11-11", 30, LONDON),
+		);
+		await seedEntry(ada, T0 - 45 * MINUTE, null);
+		await seedEntry(
+			ada,
+			instantAt("2026-11-15", 9 * 60, LONDON),
+			instantAt("2026-11-15", 10 * 60, LONDON),
+			{ project: ops },
+		);
+		// The day before the period, and another person's time, count for nothing here.
+		await seedEntry(
+			ada,
+			instantAt("2026-11-08", 9 * 60, LONDON),
+			instantAt("2026-11-08", 10 * 60, LONDON),
+		);
+		await seedEntry(linus, T0 - 3 * HOUR, T0 - HOUR);
+
+		const { main, days } = await weekDays("2026-11-11");
+		expect(days).toEqual(
+			[0, 1, 2, 3, 4, 5, 6].map((step) => ({
+				day: addDays("2026-11-09", step),
+				total: ["2:00", "1:00", "0:45", "0:00", "0:00", "0:00", "1:00"][step],
+				shown: step === 2,
+			})),
+		);
+		expect(textOf(main)).toContain("Week total 4:45");
+
+		const week = await textAt(`${PAGE}?view=week&start=2026-11-09`);
+		const [, dayTotals = "", weekTotal] =
+			/Day total ((?:\d+:\d\d ){7})Week total (\d+:\d\d)/.exec(week) ?? [];
+		expect(days.map((each) => each.total)).toEqual(dayTotals.trim().split(" "));
+		expect(weekTotal).toBe("4:45");
+
+		const sunday = await weekDays("2026-11-15");
+		expect(sunday.days.filter((each) => each.shown).map((each) => each.day)).toEqual([
+			"2026-11-15",
+		]);
+		expect(sunday.days.map((each) => each.total)).toEqual(days.map((each) => each.total));
+	});
+
+	it("follows the organisation's week start", async () => {
+		await env.DB.prepare("update organisations set week_starts_on = 7").run();
+		const { days } = await weekDays("2026-11-11");
+		expect(days.map((each) => each.day)).toEqual(
+			[0, 1, 2, 3, 4, 5, 6].map((step) => addDays("2026-11-08", step)),
+		);
+	});
+});
+
+describe("the Day view's foot (TS-056)", () => {
+	const DAY = `${PAGE}?day=2026-11-10`;
+
+	beforeEach(() => {
+		clockAt(T0);
+	});
+
+	it("shows the period and its status, and Submit week, whose submission both views then show", async () => {
+		await seedEntry(
+			ada,
+			instantAt("2026-11-10", 9 * 60, LONDON),
+			instantAt("2026-11-10", 10 * 60, LONDON),
+		);
+		const before = await mainOf(DAY);
+		expect(textOf(before)).toMatch(/9 – 15 November 2026 Status: Not submitted/);
+		expect(before.match(/>Submit week<\/button>/g)).toHaveLength(1);
+
+		// The Week view's own action, for the period the day is in.
+		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
+		const after = await mainOf(DAY);
+		expect(textOf(after)).toMatch(/9 – 15 November 2026 Status: Submitted/);
+		expect(after).toMatch(/>Withdraw submission<\/button>/);
+		expect(after).not.toContain(">Submit week</button>");
+		expect(await textAt(`${PAGE}?view=week&start=2026-11-09`)).toContain("Status: Submitted");
+	});
+
+	it("says why a week was returned, and why a week cannot be submitted yet", async () => {
+		await env.DB.prepare(
+			"insert into periods (id, organisation_id, user_id, starts_on, ends_on, status, submitted_at, comment, created_at, updated_at) values (?, ?, ?, '2026-11-09', '2026-11-15', 'returned', 0, 'Add Friday', 0, 0)",
+		)
+			.bind(uuidv7(), acme.id, ada.user.id)
+			.run();
+		const returned = textOf(await mainOf(DAY));
+		expect(returned).toContain("Status: Returned");
+		expect(returned).toContain("Returned: Add Friday");
+		expect(returned).toContain("Submit week");
+
+		const toCome = await mainOf(`${PAGE}?day=2026-11-17`);
+		expect(textOf(toCome)).toContain("This week can be submitted once it has begun.");
+		expect(toCome).not.toContain(">Submit week</button>");
+
+		await seedEntry(ada, T0 - HOUR, null);
+		const running = await mainOf(DAY);
+		expect(textOf(running)).toContain("Stop the timer before you submit the week.");
+		expect(running).not.toContain(">Submit week</button>");
+	});
+});
+
+describe("getting started (TS-056)", () => {
+	const WEEK = `${PAGE}?view=week&start=2026-11-09`;
+
+	/** The list as a person reads it on the Day view, or null when it is not there. */
+	async function gettingStarted(who: Person = ada) {
+		const main = await mainOf(PAGE, who);
+		const section =
+			/<section[^>]*aria-labelledby="getting-started-heading"[\s\S]*?<\/section>/.exec(main)?.[0];
+		return section === undefined ? null : section;
+	}
+
+	/** The getting-started cookie a response sets, as `name=value`, or null. */
+	function cookieSet(response: Response) {
+		const set = response.headers
+			.getSetCookie()
+			.find((cookie) => cookie.startsWith(`${GETTING_STARTED_COOKIE}=`));
+		return set ?? null;
+	}
+
+	const pairOf = (set: string | null) => set?.split(";")[0] ?? "";
+
+	/** `who` in a browser that also holds the cookie `pair`. */
+	const withCookie = (who: Person, pair: string): Person => ({
+		...who,
+		cookie: `${who.cookie}; ${pair}`,
+	});
+
+	it("counts its three steps, each a link until the database shows it done", async () => {
+		await env.DB.prepare("update projects set archived_at = 1").run();
+		const none = (await gettingStarted()) ?? "";
+		expect(textOf(none)).toBe(
+			"Getting started 0 of 3 Add a project Track an entry Open the week Put away",
+		);
+		const links = [...none.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)];
+		expect(links.map(([, href, label]) => [href, textOf(label ?? "")])).toEqual([
+			["/app/acme/projects", "Add a project"],
+			["/app/acme#timer", "Track an entry"],
+			["/app/acme?view=week", "Open the week"],
+		]);
+
+		// Any active project ticks the first.
+		await env.DB.prepare("update projects set archived_at = null").run();
+		expect(textOf((await gettingStarted()) ?? "")).toContain("1 of 3 Add a project (done)");
+
+		// Another person's entry ticks nothing of Ada's; her own ticks the second.
+		const linus = await memberOfAcme("member", "linus@example.com");
+		await seedEntry(linus, T0 - HOUR, T0);
+		expect(textOf((await gettingStarted()) ?? "")).toContain("1 of 3");
+		expect(textOf((await gettingStarted(linus)) ?? "")).toContain("2 of 3");
+		await seedEntry(ada, T0 - HOUR, null);
+		expect(textOf((await gettingStarted()) ?? "")).toContain(
+			"2 of 3 Add a project (done) Track an entry (done) Open the week Put away",
+		);
+	});
+
+	it("ticks Open the week once the person has opened the Week view, in their own name", async () => {
+		const opened = await open(WEEK, ada);
+		const set = cookieSet(opened);
+		expect(set).toBe(
+			`${GETTING_STARTED_COOKIE}=w:${ada.user.id}; Max-Age=31536000; Path=/; Secure; HttpOnly; SameSite=Lax`,
+		);
+		// A move to the Week view by script sets it too.
+		expect(cookieSet(await openData(WEEK, ada))).toBe(set);
+
+		const browser = withCookie(ada, pairOf(set));
+		expect(textOf((await gettingStarted(browser)) ?? "")).toContain("Open the week (done)");
+		// Opened again, the mark is already there.
+		expect(cookieSet(await open(WEEK, browser))).toBeNull();
+		// The Day view sets nothing.
+		expect(cookieSet(await open(PAGE, ada))).toBeNull();
+
+		// Linus, signed in on the same browser, has not opened the week.
+		const linus = await memberOfAcme("member", "linus@example.com");
+		expect(textOf((await gettingStarted(withCookie(linus, pairOf(set)))) ?? "")).not.toContain(
+			"(done) Put away",
+		);
+		// A value that is not a mark ticks nothing.
+		for (const value of [`w:${ada.user.id}x"`, `x:${ada.user.id}`, `w:${ada.user.id}<`, "w:"]) {
+			const forged = withCookie(ada, `${GETTING_STARTED_COOKIE}=${value}`);
+			expect(textOf((await gettingStarted(forged)) ?? ""), value).toContain(
+				"Open the week Put away",
+			);
+		}
+	});
+
+	it("Put away hides it for that person alone, and keeps their other marks", async () => {
+		const week = pairOf(cookieSet(await open(WEEK, ada)));
+		const response = await submit(ACTION, { intent: "put-away" }, withCookie(ada, week), {
+			byScript: true,
+		});
+		expect(response.status).toBe(200);
+		const both = pairOf(cookieSet(response));
+		expect(both).toBe(`${GETTING_STARTED_COOKIE}=a:${ada.user.id}.w:${ada.user.id}`);
+
+		expect(await gettingStarted(withCookie(ada, both))).toBeNull();
+		const linus = await memberOfAcme("member", "linus@example.com");
+		expect(await gettingStarted(withCookie(linus, both))).not.toBeNull();
+		// Ada's marks stay beside Linus's when he puts it away too.
+		const his = await submit(ACTION, { intent: "put-away" }, withCookie(linus, both), {
+			byScript: true,
+		});
+		expect(pairOf(cookieSet(his))).toBe(
+			`${GETTING_STARTED_COOKIE}=a:${linus.user.id}.a:${ada.user.id}.w:${ada.user.id}`,
+		);
+	});
+
+	it("is gone once all three steps are done", async () => {
+		const week = pairOf(cookieSet(await open(WEEK, ada)));
+		expect(await gettingStarted(withCookie(ada, week))).not.toBeNull();
+		await seedEntry(ada, T0 - HOUR, T0);
+		expect(await gettingStarted(withCookie(ada, week))).toBeNull();
+	});
+});
+
 describe("an error while starting", () => {
 	it("logs the error's name and the path alone, never the description", async () => {
 		const lines: string[] = [];
@@ -719,7 +1083,7 @@ describe("an error while starting", () => {
 		await env.DB.exec("drop table period_events");
 		await env.DB.exec("drop table periods");
 
-		const status = await post({ intent: "start", projectId: site, description: "Secret plans" });
+		const status = await post(track({ projectId: site, description: "Secret plans" }));
 
 		expect(status).toBe(500);
 		expect(lines.join("\n")).not.toContain("Secret plans");

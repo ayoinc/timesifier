@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { data, Link, useLocation, useNavigate } from "react-router";
 
 import { cx } from "~/components/cx";
 import { membershipContext } from "~/organisations/membership.server";
@@ -10,6 +10,7 @@ import { PageHeading } from "~/shell/PageHeading";
 import { finishRunningTransition } from "~/shell/transitions";
 import { timesheetAction } from "~/timesheet/actions.server";
 import { DayView } from "~/timesheet/DayView";
+import { markCookie, readMarks } from "~/timesheet/getting-started.server";
 import { HistoryView } from "~/timesheet/HistoryView";
 import { timesheetData } from "~/timesheet/timesheet.server";
 import { VIEW_LABELS, VIEWS, viewPath } from "~/timesheet/views";
@@ -20,8 +21,9 @@ import type { Route } from "./+types/timesheet";
 import { useOrganisation } from "./useOrganisation";
 
 // Timesheet, under Track: the person's own time (docs/navigation.md). Its Day
-// view is the timer and the day's entries, its Week view the grid of projects
-// by days with "Submit week" at its foot, and History the person's periods.
+// view is "Track time", the period's days and the day's entries, with the
+// period's submission at its foot; its Week view the grid of projects by days
+// with "Submit week" at its foot; and History the person's periods.
 // Each view is this destination's address with a query (`timesheet/views.ts`),
 // and each shows the caller's own time alone, whatever their role.
 
@@ -36,17 +38,26 @@ export function meta() {
  * person has just created this organisation, their first: the page that
  * creates it sends them here with a mark on the address. Only its owner is
  * welcomed to it.
+ *
+ * The first time a person opens the Week view, their browser keeps a mark of
+ * it, which ticks "Open the week" in getting started (TS-056).
  */
-export async function loader({ url, context }: Route.LoaderArgs) {
+export async function loader({ request, url, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const chosen = chosenView(url.searchParams, membership.organisation.weekStartsOn);
-	return {
+	const cookie = request.headers.get("Cookie");
+	const marks = readMarks(cookie, membership.user.id);
+	const page = {
 		welcome: url.searchParams.has(WELCOME_PARAM) && membership.role === "owner",
-		data: await timesheetData(membership, chosen, Date.now()),
+		data: await timesheetData(membership, chosen, Date.now(), marks),
 	};
+	if (chosen.view !== "week" || marks.week) return page;
+	return data(page, {
+		headers: { "Set-Cookie": markCookie(cookie, membership.user.id, "week") },
+	});
 }
 
-/** The timer, entries by hand, a cell of the grid and a week's submission (`timesheet/actions.server.ts`). */
+/** Track time, the timer's Stop, entries by hand, a cell of the grid, a week's submission and getting started (`timesheet/actions.server.ts`). */
 export async function action({ request, context }: Route.ActionArgs) {
 	return timesheetAction(request, context.get(membershipContext));
 }

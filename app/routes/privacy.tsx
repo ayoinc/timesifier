@@ -173,7 +173,7 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 
 			<DocumentSection id="cookies" title="Cookies">
 				<p>
-					Timesifier sets four cookies and no others. Each is sent only to {host}, and only over
+					Timesifier sets five cookies and no others. Each is sent only to {host}, and only over
 					HTTPS. None is for advertising or for following you from site to site.
 				</p>
 				<Rows>
@@ -194,6 +194,12 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 					<Row term="__Host-color-scheme">
 						The word light, dark or system, once you choose a colour scheme in Settings. It is kept
 						for one year. Until you choose, it is not set and the pages are light.
+					</Row>
+					<Row term="__Host-timesifier.getting_started">
+						Shows that you have opened the Week view of your timesheet, and that you put its
+						getting-started list away, so that the list ticks that step or stays hidden. It holds
+						your account's identifier beside each of these marks, for the last people to use
+						Timesifier in this browser, and is kept for one year. Script on the page cannot read it.
 					</Row>
 				</Rows>
 				<p>

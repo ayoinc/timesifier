@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import { PRIMARY_ACTION, PRIVACY_PATH } from "~/landing/Site";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
+import { GETTING_STARTED_COOKIE } from "~/timesheet/getting-started.server";
 
 import { CODE_COOKIE, KNOWN_COOKIE, ORIGIN, SESSION_COOKIE, setBinding } from "./auth/harness";
 
@@ -31,7 +32,13 @@ const readme = import.meta.glob<string>("../README.md", {
 })["../README.md"];
 
 /** Every cookie the application sets, by the name a browser shows for it. */
-const COOKIES = [SESSION_COOKIE, CODE_COOKIE, KNOWN_COOKIE, COLOR_SCHEME_COOKIE];
+const COOKIES = [
+	SESSION_COOKIE,
+	CODE_COOKIE,
+	KNOWN_COOKIE,
+	COLOR_SCHEME_COOKIE,
+	GETTING_STARTED_COOKIE,
+];
 const COUNT = ["no", "one", "two", "three", "four", "five", "six"];
 
 it("the privacy notice lists every cookie the application sets, and counts them", async () => {
