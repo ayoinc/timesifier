@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 
 import { destination } from "../app/shell/destinations";
 import { expect, openShell, test } from "./fixtures";
@@ -11,10 +11,17 @@ const today = destination("today");
 
 /** What a person sees: a dark page has a dark background, a light page a light one. */
 async function shown(page: Page): Promise<"light" | "dark"> {
+	// A page still arriving has no stylesheet yet, and so no background to read.
+	await page.waitForLoadState("load");
 	const [red = 0, green = 0, blue = 0] = await page.evaluate(() =>
 		(getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g) ?? []).map(Number),
 	);
 	return red + green + blue < 3 * 128 ? "dark" : "light";
+}
+
+/** The colour-scheme cookies the browser holds. It also holds the session's, which is not this test's. */
+async function schemeCookies(context: BrowserContext) {
+	return (await context.cookies()).filter(({ name }) => name === "__Host-color-scheme");
 }
 
 function schemes(page: Page) {
@@ -100,12 +107,12 @@ test.describe("with the device set to dark", () => {
 		await openShell(page, settings.path);
 		await choose(page, "Light");
 		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
-		expect(await context.cookies()).toHaveLength(1);
+		expect(await schemeCookies(context)).toHaveLength(1);
 
 		const cookie = await choose(page, "System");
 		await expect(page.locator("html")).not.toHaveAttribute("data-color-scheme");
 		expect(cookie).toBe("__Host-color-scheme=; Max-Age=0; Path=/; Secure; SameSite=Lax");
-		expect(await context.cookies()).toEqual([]);
+		expect(await schemeCookies(context)).toEqual([]);
 
 		expect(await shown(page)).toBe("dark");
 		await page.reload();

@@ -61,6 +61,15 @@ Better Auth takes the application's address from the request only when the host 
 - **Rate limit.** Counted in D1 per client address and path. The address is `CF-Connecting-IP`, which Cloudflare sets and a client cannot forge; `X-Forwarded-For` is ignored. The count starts again 60 seconds after the last request that was let through. The limit applies only to requests that arrive at `/api/auth/`: server code that calls Better Auth directly is not limited, so sign-in must never be offered through another route.
 - **Turnstile.** The token is sent in the `x-captcha-response` header and verified with Cloudflare before a code is created. A missing token gets 400 and a rejected one 403; neither creates nor sends a code. Passkey sign-in is not behind Turnstile: it sends no email and cannot create an account.
 
+### The guard on `/app`
+
+Everything under `/app` needs a session. The layout route `app/routes/app/layout.tsx` exports a `middleware` (`requireSession` in `app/routes/auth/session.server.ts`) that reads the session with `getSession`, from the database, before the loader or action of any route under it runs. Without a session that is still valid it answers with a redirect to `/sign-in?next=<the address asked for>`: a 302 for a page, and the framework's encoding of the same redirect for a data request. An action behind the guard does not run. The layout also exports a `loader`, so that every move between destinations asks the server and passes the guard; an ended session is turned away on the next move, not only on the next page load.
+
+- **A new route under the layout is covered by being there.** `test/auth/guard.test.ts` reads every route whose address is `/app` or below it from the built route configuration and requests each one without a session: the page, its data, and a form posted to each route that has an action. A route placed under `/app` but outside the layout fails that test.
+- **Loaders and actions under `/app`** read the signed-in person from the router context (`signedInContext`), which the guard sets. They do not read the cookie again.
+- **`next` is never trusted.** After sign-in a person goes to `next` only when it is a path on our own origin at or under `/app`; anything else, or nothing, gives `/app` (`safeNext` in `app/routes/auth/paths.ts`). The value is parsed as a browser would follow it, so an address behind `//`, a backslash or `..` is judged by where it leads. The sign-in and sign-up pages send a person who already has a session to the same place.
+- **The pages call Better Auth only through `/api/auth/`**, from the browser, where the rate limit and the Turnstile check act. Settings lists a person's passkeys from its loader by handing a request with the person's own cookie to the same handler. No message on either page says whether an address has an account.
+
 ### Email
 
 `sendEmail` in `app/auth/email.server.ts` is the only code that touches the `EMAIL` binding. Every message comes from `Timesifier <no-reply@mail.timesifier.com>`, and `wrangler.jsonc` allows the binding that sender and no other. The code email is plain text and plain HTML with no link, image or tracking. Sending is handed to `waitUntil`, so how long it takes does not show in the response. A preview has no `EMAIL` binding and sends nothing; locally Wrangler simulates the binding and sends nothing either.
@@ -204,7 +213,7 @@ object-src 'none'
 - The nonce is 128 random bits from Web Crypto, new for every request. The Worker creates it, passes it to `app/entry.server.tsx` through the router context, and writes the header. `ServerRouter` and React put it on every inline script they emit.
 - There is no `unsafe-inline`, no `unsafe-eval` and no `strict-dynamic`. Scripts are our own files, allowed by `'self'`; only the inline scripts need the nonce.
 - **`style-src` allows our own stylesheets and two `<style>` elements by hash, nothing else.** A `style` attribute, and any other `<style>` element, is ignored by the browser, so the page looks wrong without failing. React's `style` prop becomes a `style` attribute in the server-rendered HTML, so it is blocked on first paint. Style with classes and design tokens. A value that must be computed at run time is set from script after hydration through the CSSOM (`element.style.setProperty(…)`), which the policy allows. Check what a library renders on the server before adding it.
-- Add a new source only with the card that needs it, and record it here.
+- Add a new source only with the card that needs it, and record it here. One has been added, for two pages only: see "Turnstile on the page".
 
 ### The two hashes
 
@@ -258,14 +267,24 @@ A body larger than 64 KiB is answered 413 and is not read past the limit; an act
 
 `__Host-color-scheme` holds the word `light` or `dark`, the scheme a person chose in Settings, with `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` and a life of one year; it is not `HttpOnly` because it identifies nobody and grants nothing, so there is nothing for a script to steal. The server writes it only from the validated Settings form and renders from it only one of those two words: any other value is ignored (`app/shell/color-scheme.server.ts`, `test/color-scheme.test.ts`).
 
-### What TS-008 must add for Turnstile
+### Turnstile on the page
 
-Turnstile loads a script from Cloudflare and runs in a frame. On the pages that show the widget, the policy needs:
+Turnstile loads a script from Cloudflare and runs in a frame. Two pages show the widget, `/sign-in` and `/sign-up`, and only their policy has the two sources it needs:
 
-- `script-src`: `https://challenges.cloudflare.com`, and the page's nonce on the Turnstile `<script>` element. The nonce alone is not enough: without `strict-dynamic`, the scripts Turnstile loads for itself need the host to be listed.
-- `frame-src https://challenges.cloudflare.com` (today frames fall back to `default-src 'self'`).
+```
+script-src 'self' 'nonce-<random>' https://challenges.cloudflare.com;
+frame-src https://challenges.cloudflare.com;
+```
 
-Checked on 2026-11-11 against <https://developers.cloudflare.com/turnstile/reference/content-security-policy/>. `connect-src 'self'` is already enough for pre-clearance mode. The pages that show the widget confirm it puts no inline style on our page, and add a test. The token is verified on the server by Better Auth before a code is created; see "Authentication" above.
+Every other directive on those two pages, and the whole policy of every other page, is the one above.
+
+- **How a page gets the addition.** The route exports `headers` and sets `Timesifier-Policy-Addition: turnstile` on its own response. `withSecurityHeaders` in `workers/security-headers.ts` reads the header, removes it, and builds the policy with the addition. The header never reaches a browser, a request cannot set it, a value other than `turnstile` adds nothing, and a response that is not HTML gets the "nothing loads" policy whatever it names. A page that does not ask keeps the base policy. To give another page the widget, export the same `headers` from its route and add the route to the tests named below.
+- **Why the host is listed.** The nonce is on the `<script>` element that loads `https://challenges.cloudflare.com/turnstile/v0/api.js`, and the policy has no `strict-dynamic`, so the scripts Turnstile then loads for itself need the host. Without `frame-src`, a frame falls back to `default-src 'self'`.
+- **Moving between pages loads the page.** A document keeps the policy it was loaded with, so the pages with the addition and the pages without it are never reached from one another by a move inside the page: the links between them are plain links, the guard redirects with `redirectDocument`, and the pages leave with `location.assign`.
+- **Where the widget runs.** `app/routes/auth/RobotCheck.tsx` renders it explicitly, on the views that send a code and nowhere else: the first view of `/sign-in` offers a passkey and loads nothing of Turnstile's. The site key comes from `TURNSTILE_SITE_KEY` through the route's loader. The token goes to the server in the `x-captcha-response` header; the widget is told to add no form field.
+- **What the widget does to our document.** Measured in Chromium on 2026-11-11: it adds one `div` to the element it is given, with a closed shadow root that holds its frame, and sizes the frame through the CSSOM, which the policy allows. It adds no `<style>` element and no `style` attribute to our markup, and raises no violation. `e2e/auth-turnstile.spec.ts` holds this in place, and the fixture every browser test shares fails any test on a violation.
+
+Checked on 2026-11-11 against <https://developers.cloudflare.com/turnstile/reference/content-security-policy/>. `connect-src 'self'` is already enough for pre-clearance mode. Tests: `test/browser-policy.test.ts`, "the Turnstile addition to the policy"; `e2e/auth-turnstile.spec.ts`. The token is verified on the server by Better Auth before a code is created; see "Authentication" above.
 
 ## Known gaps and accepted risks
 

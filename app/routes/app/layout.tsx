@@ -1,15 +1,33 @@
 import { useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
 import { Outlet, useLocation, useNavigationType } from "react-router";
 
+import { requireSession } from "~/routes/auth/session.server";
 import { destinationIndex } from "~/shell/destinations";
 import { Navigation } from "~/shell/Navigation";
 import { finishRunningTransition, TRANSITION, useTravel } from "~/shell/transitions";
 
+import type { Route } from "./+types/layout";
+
 // The application shell: a skip link, the navigation and the main region every
 // destination renders into. docs/design-system.md, "Shell", describes it.
-//
-// This route has no `middleware` and no `loader` yet. The authentication card
-// adds both here as the session guard; until then /app is open and holds no data.
+
+/**
+ * The session guard. It runs before the loader or action of every route under
+ * `/app`, for a document and for a data request alike, and answers a request
+ * without a session with a redirect to the sign-in page (docs/security.md,
+ * "The guard on /app"). A route added under this layout is covered by being here.
+ */
+export const middleware: Route.MiddlewareFunction[] = [requireSession];
+
+/**
+ * Holds no data. It is here so that every move between destinations asks the
+ * server, and so passes the guard: without a loader on the way, React Router
+ * moves between pages that have none without a request, and a person whose
+ * session has ended would go on seeing the shell.
+ */
+export function loader() {
+	return null;
+}
 
 const MAIN_ID = "main";
 

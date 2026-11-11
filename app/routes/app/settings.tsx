@@ -4,6 +4,8 @@ import { Button } from "~/components/Button";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { parseRequest } from "~/lib/validate";
 import type { loader as rootLoader } from "~/root";
+import { Passkeys, SignOut } from "~/routes/auth/AccountSettings";
+import { listPasskeys, signedInContext } from "~/routes/auth/session.server";
 import {
 	type ColorSchemeChoice,
 	colorSchemeCookie,
@@ -18,6 +20,12 @@ const { label } = destination("settings");
 
 export function meta() {
 	return [{ title: `${label} · Timesifier` }];
+}
+
+/** The signed-in person's address and their passkeys. The guard on the layout has already run. */
+export async function loader({ request, context }: Route.LoaderArgs) {
+	const { user } = context.get(signedInContext);
+	return { email: user.email, passkeys: await listPasskeys(request) };
 }
 
 /**
@@ -42,7 +50,7 @@ const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
 	{ value: "dark", label: "Dark" },
 ];
 
-export default function Settings() {
+export default function Settings({ loaderData }: Route.ComponentProps) {
 	const stored = useRouteLoaderData<typeof rootLoader>("root")?.colorScheme ?? "system";
 	const fetcher = useFetcher();
 	// The choice being saved shows as chosen at once; the page follows when the server answers.
@@ -52,7 +60,7 @@ export default function Settings() {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<p className="mt-2 text-body-large text-on-surface-variant">
-				Your account, your organisation and how Timesifier works for you will be set here.
+				Your account and how Timesifier works for you are set here.
 			</p>
 
 			<section aria-labelledby="appearance" className="mt-8">
@@ -78,6 +86,9 @@ export default function Settings() {
 					</noscript>
 				</fetcher.Form>
 			</section>
+
+			<Passkeys passkeys={loaderData.passkeys} />
+			<SignOut email={loaderData.email} />
 		</>
 	);
 }

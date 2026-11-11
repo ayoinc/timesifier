@@ -1,0 +1,144 @@
+import { type Ref, useEffectEvent, useImperativeHandle, useLayoutEffect, useRef } from "react";
+
+// Cloudflare Turnstile, rendered explicitly: the check that a person, not a
+// program, is asking for a sign-in code. The server verifies the token it earns
+// before any code is made (docs/security.md, "Authentication"); this is only
+// the half that earns it.
+//
+// Only the pages whose policy allows Cloudflare's script and frame may render
+// this (docs/security.md, "Turnstile"). The script is fetched from the exact
+// address Cloudflare gives, never from a copy.
+const API = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+
+/** The part of Turnstile's script this component calls. */
+interface TurnstileApi {
+	render(container: HTMLElement, options: Record<string, unknown>): string | null | undefined;
+	reset(widget: string): void;
+	remove(widget: string): void;
+}
+
+declare global {
+	interface Window {
+		turnstile?: TurnstileApi;
+	}
+}
+
+let loading: Promise<TurnstileApi> | undefined;
+
+/** Adds Turnstile's script to the page once, carrying the page's nonce. */
+function loadTurnstile(): Promise<TurnstileApi> {
+	// The executor form: this project's `lib` has no `Promise.withResolvers`.
+	loading ??= new Promise<TurnstileApi>((resolve, reject) => {
+		const script = document.createElement("script");
+		script.src = API;
+		script.async = true;
+		// A browser hides a nonce from the markup but not from script: this is the
+		// nonce of the page's own scripts, which Turnstile hands on to what it loads.
+		script.nonce = document.querySelector<HTMLScriptElement>("script[nonce]")?.nonce ?? "";
+		script.onload = () => {
+			if (window.turnstile) resolve(window.turnstile);
+			else reject(new Error("Turnstile's script loaded without its API."));
+		};
+		script.onerror = () => {
+			// The next widget tries again.
+			loading = undefined;
+			script.remove();
+			reject(new Error("Turnstile's script did not load."));
+		};
+		document.head.appendChild(script);
+	});
+	return loading;
+}
+
+export interface RobotCheckHandle {
+	/**
+	 * A token for one request to the server, as soon as the check has earned one.
+	 * A token is spent by the request that carries it, so each call starts the
+	 * check again for the next. Resolves `null` when the check failed.
+	 */
+	token(): Promise<string | null>;
+}
+
+export interface RobotCheckProps {
+	/** Turnstile's public site key, from the route's loader. */
+	siteKey: string;
+	ref: Ref<RobotCheckHandle>;
+}
+
+/**
+ * Runs Turnstile's check as soon as it is shown. Most people see nothing: the
+ * widget draws itself only when it needs the person to do something.
+ */
+export function RobotCheck({ siteKey, ref }: RobotCheckProps) {
+	const container = useRef<HTMLDivElement>(null);
+	const widget = useRef<string | null>(null);
+	// What the check has produced: a token, `null` once it has failed, nothing yet.
+	const earned = useRef<string | null | undefined>(undefined);
+	// Whoever asked for a token before there was one.
+	const waiting = useRef<((token: string | null) => void) | null>(null);
+
+	const produced = useEffectEvent((token: string | null | undefined) => {
+		earned.current = token;
+		if (token === undefined || !waiting.current) return;
+		waiting.current(spend());
+		waiting.current = null;
+	});
+
+	/** Hands over what was earned. A token handed over is gone: the widget starts on the next. */
+	function spend(): string | null {
+		const token = earned.current ?? null;
+		if (token) {
+			earned.current = undefined;
+			if (widget.current) window.turnstile?.reset(widget.current);
+		}
+		return token;
+	}
+
+	useImperativeHandle(ref, () => ({
+		token() {
+			if (earned.current !== undefined) return Promise.resolve(spend());
+			return new Promise((resolve) => {
+				waiting.current = resolve;
+			});
+		},
+	}));
+
+	// A layout effect, for its cleanup: it runs while the container is still in the
+	// page, which is when Turnstile can find the widget it is asked to remove.
+	useLayoutEffect(() => {
+		let gone = false;
+		loadTurnstile().then(
+			(turnstile) => {
+				if (gone || !container.current) return;
+				widget.current =
+					turnstile.render(container.current, {
+						sitekey: siteKey,
+						// Follows the scheme chosen in Settings, or the device when none is.
+						theme: document.documentElement.dataset.colorScheme ?? "auto",
+						size: "flexible",
+						appearance: "interaction-only",
+						// The token goes to the server in a header, not in a form field.
+						"response-field": false,
+						callback: (token: string) => produced(token),
+						"expired-callback": () => produced(undefined),
+						// Returning true tells Turnstile the page has dealt with the error.
+						"error-callback": () => {
+							produced(null);
+							return true;
+						},
+					}) ?? null;
+			},
+			() => produced(null),
+		);
+		return () => {
+			gone = true;
+			if (widget.current) window.turnstile?.remove(widget.current);
+			widget.current = null;
+			// Nobody is left waiting on a check that is no longer on the page.
+			waiting.current?.(null);
+			waiting.current = null;
+		};
+	}, [siteKey]);
+
+	return <div ref={container} className="empty:hidden" />;
+}

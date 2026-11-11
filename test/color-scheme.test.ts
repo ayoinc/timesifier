@@ -1,7 +1,9 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { destination } from "../app/shell/destinations";
+import { captureEmail, type Mailbox, signIn } from "./auth/harness";
+import { freshDatabase } from "./db/database";
 
 // The colour scheme a person chooses in Settings: the action that stores it in
 // the `__Host-color-scheme` cookie, and the root loader that renders it on <html>.
@@ -13,22 +15,48 @@ const TODAY = destination("today").path;
 
 const worker = exports.default;
 
+// Settings and Today are under /app, which needs a session: every request these
+// helpers make carries the session cookie of a person who has signed in. The
+// sign-in happens in the test, not in a hook: the first request to the Worker
+// loads the whole application, and a hook is given less time than a test.
+let mailbox: Mailbox;
+
+beforeEach(async () => {
+	await freshDatabase();
+	mailbox = captureEmail();
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
+async function session(): Promise<string> {
+	return (await signIn(mailbox, "ada@example.com")).cookie;
+}
+
 /** The Settings form as a browser posts it from our own page. */
-function choose(body: string): Promise<Response> {
+async function choose(body: string): Promise<Response> {
 	return worker.fetch(
 		new Request(`${ORIGIN}${SETTINGS}`, {
 			method: "POST",
-			headers: { "Content-Type": "application/x-www-form-urlencoded", Origin: ORIGIN },
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded",
+				Origin: ORIGIN,
+				Cookie: await session(),
+			},
 			body,
 			redirect: "manual",
 		}),
 	);
 }
 
-/** The opening tag of the page the server renders for a request with this `Cookie` header. */
+/** The opening tag of the page the server renders for a request with this cookie beside the session's. */
 async function htmlTag(cookie?: string): Promise<string> {
+	const signedIn = await session();
 	const response = await worker.fetch(
-		new Request(`${ORIGIN}${TODAY}`, { headers: cookie ? { Cookie: cookie } : {} }),
+		new Request(`${ORIGIN}${TODAY}`, {
+			headers: { Cookie: cookie ? `${signedIn}; ${cookie}` : signedIn },
+		}),
 	);
 	expect(response.status).toBe(200);
 	return (await response.text()).match(/<html[^>]*>/)?.[0] ?? "";

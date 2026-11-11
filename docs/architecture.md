@@ -38,17 +38,21 @@ flowchart LR
 
 `app/routes.ts` is the route tree. The shell's destinations come from the one list in `app/shell/destinations.ts`.
 
-| Address         | Module                    | What it is                                                                                                                          |
-| --------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| every page      | `app/root.tsx`            | The document. Its loader reads the colour-scheme cookie and negotiates the locale; it runs again only after a form is submitted.    |
-| `/`             | `routes/home.tsx`         | The home page, with a link to `/app`. Public pages are a later card.                                                                |
-| `/app`          | `routes/app/layout.tsx`   | The application shell: skip link, navigation, main region. No `loader` and no `middleware` yet: TS-008 adds the session guard here. |
-| `/app` (index)  | `routes/app/today.tsx`    | Today. A placeholder.                                                                                                               |
-| `/app/reports`  | `routes/app/reports.tsx`  | Reports. A placeholder.                                                                                                             |
-| `/app/projects` | `routes/app/projects.tsx` | Projects. A placeholder.                                                                                                            |
-| `/app/settings` | `routes/app/settings.tsx` | Settings. Its `action` stores the colour scheme.                                                                                    |
-| `/api/auth/*`   | `routes/api.auth.$.ts`    | Better Auth.                                                                                                                        |
-| `/design`       | `routes/design.tsx`       | The component gallery. Registered under `pnpm dev` and in a build made with `DESIGN_ROUTE=1` only.                                  |
+| Address         | Module                    | What it is                                                                                                                                                                                               |
+| --------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| every page      | `app/root.tsx`            | The document. Its loader reads the colour-scheme cookie and negotiates the locale; it runs again only after a form is submitted.                                                                         |
+| `/`             | `routes/home.tsx`         | The home page, with a link to `/app`. Public pages are a later card.                                                                                                                                     |
+| `/sign-in`      | `routes/sign-in.tsx`      | Sign in: a passkey first, the email code when asked for. Its loader sends a person who has a session on to `/app`. Its `headers` ask for the Turnstile addition to the policy.                           |
+| `/sign-up`      | `routes/sign-up.tsx`      | Create an account: name and email, the emailed code, then the offer of a passkey. The same loader and `headers` as `/sign-in`.                                                                           |
+| `/app`          | `routes/app/layout.tsx`   | The application shell: skip link, navigation, main region. Its `middleware` is the session guard: without a session, every route under it redirects to `/sign-in?next=…`. Its `loader` holds no data.    |
+| `/app` (index)  | `routes/app/today.tsx`    | Today. A placeholder.                                                                                                                                                                                    |
+| `/app/reports`  | `routes/app/reports.tsx`  | Reports. A placeholder.                                                                                                                                                                                  |
+| `/app/projects` | `routes/app/projects.tsx` | Projects. A placeholder.                                                                                                                                                                                 |
+| `/app/settings` | `routes/app/settings.tsx` | Settings. Its `loader` reads the signed-in person's address and passkeys; its `action` stores the colour scheme. Passkeys are added and removed, and sessions ended, from the page through `/api/auth/`. |
+| `/api/auth/*`   | `routes/api.auth.$.ts`    | Better Auth.                                                                                                                                                                                             |
+| `/design`       | `routes/design.tsx`       | The component gallery. Registered under `pnpm dev` and in a build made with `DESIGN_ROUTE=1` only.                                                                                                       |
+
+What the two sign-in pages share is in `app/routes/auth/`: the frame and the steps (`AuthPage.tsx`, `SendCodeForm.tsx`, `CodeStep.tsx`), the Turnstile widget (`RobotCheck.tsx`), the calls to Better Auth from the browser (`client.ts`), the guard and what the pages load (`session.server.ts`), and the addresses with the rule for `next` (`paths.ts`). The guard, the `next` rule and the Turnstile addition are described in `docs/security.md`.
 
 How the shell looks, moves and takes the focus is in `docs/design-system.md`, "Shell".
 

@@ -1,5 +1,8 @@
 import { exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { POLICY_ADDITION_HEADER, withSecurityHeaders } from "../workers/security-headers";
+import { captureEmail, signIn } from "./auth/harness";
+import { freshDatabase } from "./db/database";
 
 const ORIGIN = "https://timesifier.com";
 
@@ -12,21 +15,30 @@ function nonceIn(policy: string | null): string {
 	return nonce;
 }
 
-async function expectBrowserPolicy(response: Response) {
+/**
+ * The whole policy of an HTML page, directive by directive. `turnstile` is the
+ * one addition a route can ask for: Cloudflare's script, and the frame it runs in.
+ */
+async function expectBrowserPolicy(response: Response, { turnstile = false } = {}) {
 	const { headers } = response;
 	expect(headers.get("Content-Type")).toContain("text/html");
+	// How a route asks for the addition is the Worker's business, not a browser's.
+	expect(headers.has(POLICY_ADDITION_HEADER)).toBe(false);
 
 	const policy = headers.get("Content-Security-Policy") ?? "";
 	const nonce = nonceIn(policy);
 	expect(policy.split("; ")).toEqual([
 		"default-src 'self'",
-		`script-src 'self' 'nonce-${nonce}'`,
+		turnstile
+			? `script-src 'self' 'nonce-${nonce}' https://challenges.cloudflare.com`
+			: `script-src 'self' 'nonce-${nonce}'`,
 		// The two hashes are the <style> elements React Aria inserts from script; see
 		// docs/security.md. test/node/react-aria-styles.test.ts derives them from the library.
 		"style-src 'self' 'sha256-38RhXrc7EdReTKsOm23ZPOCUgniTUUcjky8QOOrQx6o=' 'sha256-gYiS/BvZvRcK27JIXTuwhZ3hs2+VJ1X+2gUlE+farlg='",
 		"img-src 'self' data:",
 		"font-src 'self'",
 		"connect-src 'self'",
+		...(turnstile ? ["frame-src https://challenges.cloudflare.com"] : []),
 		"base-uri 'none'",
 		"form-action 'self'",
 		"frame-ancestors 'none'",
@@ -108,6 +120,89 @@ describe("browser policy headers", () => {
 		const response = await worker.fetch("https://41b1b1d9-timesifier.ayoinc.workers.dev/");
 		expect(response.status).toBe(404);
 		expect(await response.text()).not.toContain("Timesifier");
+	});
+});
+
+describe("the Turnstile addition to the policy", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it.each(["/sign-in", "/sign-up"])(
+		"%s, which shows the widget, may load Turnstile's script and frame",
+		async (path) => {
+			const response = await worker.fetch(`${ORIGIN}${path}`);
+			expect(response.status).toBe(200);
+			await expectBrowserPolicy(response, { turnstile: true });
+		},
+	);
+
+	it("is on no page under /app", async () => {
+		await freshDatabase();
+		const { cookie } = await signIn(captureEmail(), "ada@example.com");
+		for (const path of ["/app", "/app/reports", "/app/projects", "/app/settings"]) {
+			const response = await worker.fetch(`${ORIGIN}${path}`, { headers: { Cookie: cookie } });
+			expect(response.status, path).toBe(200);
+			await expectBrowserPolicy(response);
+		}
+	});
+
+	it("cannot be asked for by a request", async () => {
+		const response = await worker.fetch(`${ORIGIN}/`, {
+			headers: { [POLICY_ADDITION_HEADER]: "turnstile" },
+		});
+		await expectBrowserPolicy(response);
+	});
+
+	it("is not on the redirect that sends a stranger to a page that has it", async () => {
+		const response = await worker.fetch(`${ORIGIN}/app`, { redirect: "manual" });
+		expect(response.status).toBe(302);
+		expect(response.headers.has(POLICY_ADDITION_HEADER)).toBe(false);
+		expect(response.headers.get("Content-Security-Policy")).toBe(
+			"default-src 'none'; frame-ancestors 'none'",
+		);
+	});
+
+	it("is given to an HTML response that names it, and the name is removed", () => {
+		const page = new Response("<!doctype html>", {
+			headers: { "Content-Type": "text/html", [POLICY_ADDITION_HEADER]: "turnstile" },
+		});
+		const { headers } = withSecurityHeaders(page, "bm9uY2U=");
+
+		expect(headers.has(POLICY_ADDITION_HEADER)).toBe(false);
+		const policy = headers.get("Content-Security-Policy") ?? "";
+		expect(policy).toContain(
+			"script-src 'self' 'nonce-bm9uY2U=' https://challenges.cloudflare.com;",
+		);
+		expect(policy).toContain("; frame-src https://challenges.cloudflare.com;");
+	});
+
+	it.each(["Turnstile", "turnstile, anything", "https://attacker.example", ""])(
+		"gives nothing to a response that names %j",
+		(name) => {
+			const page = new Response("<!doctype html>", {
+				headers: { "Content-Type": "text/html", [POLICY_ADDITION_HEADER]: name },
+			});
+			const { headers } = withSecurityHeaders(page, "bm9uY2U=");
+
+			expect(headers.has(POLICY_ADDITION_HEADER)).toBe(false);
+			const policy = headers.get("Content-Security-Policy") ?? "";
+			expect(policy).toContain("script-src 'self' 'nonce-bm9uY2U=';");
+			expect(policy).not.toContain("frame-src");
+			expect(policy).not.toContain("attacker");
+		},
+	);
+
+	it("gives nothing to a response that is not HTML, and still removes the name", () => {
+		const data = new Response("{}", {
+			headers: { "Content-Type": "application/json", [POLICY_ADDITION_HEADER]: "turnstile" },
+		});
+		const { headers } = withSecurityHeaders(data, "bm9uY2U=");
+
+		expect(headers.has(POLICY_ADDITION_HEADER)).toBe(false);
+		expect(headers.get("Content-Security-Policy")).toBe(
+			"default-src 'none'; frame-ancestors 'none'",
+		);
 	});
 });
 
