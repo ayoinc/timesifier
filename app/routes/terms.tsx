@@ -1,5 +1,12 @@
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
-import { LINK, PRIVACY_EMAIL, PRIVACY_PATH, pageMeta, TERMS_PATH } from "~/landing/Site";
+import {
+	LINK,
+	PRIVACY_EMAIL,
+	PRIVACY_PATH,
+	pageMeta,
+	rootOrigin,
+	TERMS_PATH,
+} from "~/landing/Site";
 
 import type { Route } from "./+types/terms";
 
@@ -8,8 +15,9 @@ import type { Route } from "./+types/terms";
 // the roles the ones in BOARD.md under TS-009. Nothing here is a legal promise
 // that the repository cannot back.
 
-export function meta(_: Route.MetaArgs) {
+export function meta({ matches }: Route.MetaArgs) {
 	return pageMeta({
+		origin: rootOrigin(matches),
 		path: TERMS_PATH,
 		title: "Terms · Timesifier",
 		description:

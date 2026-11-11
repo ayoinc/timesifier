@@ -29,9 +29,6 @@ export const MAIN_ID = "main";
  */
 export const PRIMARY_ACTION = "Get started";
 
-/** Where the product lives. A preview of a page shared elsewhere has to name its image in full. */
-const ORIGIN = "https://timesifier.com";
-
 /** The picture a shared link is shown with: the mark and the headline on the sheet, 1200 by 630. */
 export const SOCIAL_IMAGE = {
 	path: "/social.png",
@@ -42,24 +39,28 @@ export const SOCIAL_IMAGE = {
 
 /**
  * A public page's title and description, for the browser and for wherever its
- * link is shared (Open Graph and the tags X reads).
+ * link is shared (Open Graph and the tags X reads). A preview of a page shared
+ * elsewhere has to name its image in full, so the page's own origin comes from
+ * the root loader (`rootOrigin`): no host is written in the code.
  */
 export function pageMeta({
+	origin,
 	path,
 	title,
 	description,
 }: {
+	origin: string;
 	path: string;
 	title: string;
 	description: string;
 }) {
-	const image = `${ORIGIN}${SOCIAL_IMAGE.path}`;
+	const image = `${origin}${SOCIAL_IMAGE.path}`;
 	return [
 		{ title },
 		{ name: "description", content: description },
 		{ property: "og:type", content: "website" },
 		{ property: "og:site_name", content: "Timesifier" },
-		{ property: "og:url", content: `${ORIGIN}${path}` },
+		{ property: "og:url", content: `${origin}${path}` },
 		{ property: "og:title", content: title },
 		{ property: "og:description", content: description },
 		{ property: "og:image", content: image },
@@ -72,6 +73,20 @@ export function pageMeta({
 		{ name: "twitter:image", content: image },
 		{ name: "twitter:image:alt", content: SOCIAL_IMAGE.alt },
 	];
+}
+
+/**
+ * The origin the root loader read from the request, out of a route's `matches`.
+ * Empty when the root loader failed, which is when the error page is shown.
+ */
+export function rootOrigin(matches: readonly ({ loaderData?: unknown } | undefined)[]): string {
+	const data = matches[0]?.loaderData;
+	return typeof data === "object" &&
+		data !== null &&
+		"origin" in data &&
+		typeof data.origin === "string"
+		? data.origin
+		: "";
 }
 
 /** The width and side padding every band of a public page is set in. */

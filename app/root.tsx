@@ -44,11 +44,13 @@ export const links: Route.LinksFunction = () => [
 
 /**
  * What the server works out from the request for every page: the colour scheme
- * the person has chosen (`null` follows the device) and the locale dates and
- * numbers are formatted in.
+ * the person has chosen (`null` follows the device), the locale dates and
+ * numbers are formatted in, and the origin the page was asked for on, which is
+ * the deployment's own: a public page names its picture in full with it.
  */
 export function loader({ request }: Route.LoaderArgs) {
 	return {
+		origin: new URL(request.url).origin,
 		colorScheme: readColorScheme(request.headers.get("Cookie")),
 		locale: negotiateLocale(request.headers.get("Accept-Language")),
 	};

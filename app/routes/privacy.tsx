@@ -1,5 +1,16 @@
+import { env } from "cloudflare:workers";
+
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
-import { LINK, PRIVACY_EMAIL, PRIVACY_PATH, pageMeta, TERMS_PATH } from "~/landing/Site";
+import {
+	LINK,
+	PRIVACY_EMAIL,
+	PRIVACY_PATH,
+	pageMeta,
+	rootOrigin,
+	TERMS_PATH,
+} from "~/landing/Site";
+
+import { setting } from "~/lib/deployment";
 
 import type { Route } from "./+types/privacy";
 
@@ -9,13 +20,26 @@ import type { Route } from "./+types/privacy";
 // the same pull request. test/documents.test.ts holds the cookies' names to
 // the ones the application sets.
 
-export function meta(_: Route.MetaArgs) {
+export function meta({ matches }: Route.MetaArgs) {
 	return pageMeta({
+		origin: rootOrigin(matches),
 		path: PRIVACY_PATH,
 		title: "Privacy notice · Timesifier",
 		description:
 			"What Timesifier stores about you, where it is kept, who handles it, the cookies it sets, and how to have your data exported or deleted.",
 	});
+}
+
+/**
+ * What the notice says of this deployment comes from the deployment: the host
+ * the page was asked for on, and the address its mail is sent from, which is
+ * `null` where none is set.
+ */
+export function loader({ request }: Route.LoaderArgs) {
+	return {
+		host: new URL(request.url).host,
+		sender: setting(env, "EMAIL_FROM") ?? null,
+	};
 }
 
 /**
@@ -43,7 +67,7 @@ function Controller() {
 	);
 }
 
-export default function Privacy() {
+export default function Privacy({ loaderData: { host, sender } }: Route.ComponentProps) {
 	return (
 		<Document
 			path={PRIVACY_PATH}
@@ -118,8 +142,8 @@ export default function Privacy() {
 						Cloudflare Workers answers every request and Cloudflare D1 holds the database.
 					</Row>
 					<Row term="Email">
-						Sign-in codes and invitations are sent through Cloudflare's email service, from
-						no-reply@mail.timesifier.com. The email with a code holds no link, no image and no
+						Sign-in codes and invitations are sent through Cloudflare's email service
+						{sender ? `, from ${sender}` : ""}. The email with a code holds no link, no image and no
 						tracking.
 					</Row>
 					<Row term="The check that you are a person">
@@ -139,9 +163,8 @@ export default function Privacy() {
 						code, a cookie or a session token.
 					</Row>
 					<Row term="Reports of failed connections">
-						Cloudflare asks your browser to tell it when the browser cannot reach timesifier.com.
-						Such a report goes from your browser to a.nel.cloudflare.com, with your internet
-						address.
+						Cloudflare asks your browser to tell it when the browser cannot reach {host}. Such a
+						report goes from your browser to a.nel.cloudflare.com, with your internet address.
 					</Row>
 				</Rows>
 				<p>Timesifier carries no advertising.</p>
@@ -149,8 +172,8 @@ export default function Privacy() {
 
 			<DocumentSection id="cookies" title="Cookies">
 				<p>
-					Timesifier sets four cookies and no others. Each is sent only to timesifier.com, and only
-					over HTTPS. None is for advertising or for following you from site to site.
+					Timesifier sets four cookies and no others. Each is sent only to {host}, and only over
+					HTTPS. None is for advertising or for following you from site to site.
 				</p>
 				<Rows>
 					<Row term="__Host-timesifier.session_token">

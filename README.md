@@ -4,13 +4,14 @@ Timesifier helps individuals and teams understand and improve how they use their
 
 ## Status
 
-The scaffold is live at <https://timesifier.com> and the foundation is being built card by card. `BOARD.md` shows what is done.
+The application is live at <https://timesifier.com>. `BOARD.md` shows what is done, what is being built and what comes next.
 
 ## Where things are
 
 | File                      | What it holds                                                      |
 | ------------------------- | ------------------------------------------------------------------ |
 | `BOARD.md`                | The Kanban board: every card with its acceptance criteria          |
+| `docs/board-done.md`      | The cards that are Done, with their evidence                       |
 | `docs/product.md`         | What Timesifier is, who it is for, what release 1 includes         |
 | `docs/architecture.md`    | The Cloudflare services, environments, delivery and the domain     |
 | `docs/design-system.md`   | Material 3 tokens, the design principles and the rules that follow |
@@ -25,10 +26,14 @@ Needs Node 26 and pnpm 12; the exact versions the pipeline uses are in `.node-ve
 
 ```sh
 pnpm install
+cp .dev.vars.example .dev.vars && chmod 600 .dev.vars   # then fill in the two values as the file explains
+pnpm db:migrate:local
 pnpm dev          # the local address is printed; the app runs in the Workers runtime
 ```
 
-Before opening a pull request:
+Open the address with `localhost`, not `127.0.0.1`: sign-in answers only on `localhost`. "Signing in locally" below says what the values are.
+
+Before opening a pull request, run the checks in the Definition of Done in `docs/ways-of-working.md`. The local ones are:
 
 ```sh
 pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:e2e
@@ -58,12 +63,7 @@ pnpm check:tokens  # fail if a file under app/ holds a hex colour or an arbitrar
 
 ## Signing in locally
 
-Sign-in needs two secrets in `.dev.vars` and the local database:
-
-```sh
-cp .dev.vars.example .dev.vars && chmod 600 .dev.vars   # then fill in the two values as the file explains
-pnpm db:migrate:local
-```
+Sign-in needs two secrets in `.dev.vars` and the local database. The quick start above makes both.
 
 - `BETTER_AUTH_SECRET`: any random value, for example from `openssl rand -base64 32`.
 - `TURNSTILE_SECRET_KEY`: Cloudflare's published test secret, which passes every check. It is written in `.dev.vars.example`.

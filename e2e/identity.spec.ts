@@ -40,10 +40,13 @@ for (const path of PAGES) {
 		const content = (selector: string) => page.locator(selector).getAttribute("content");
 
 		const image = new URL((await content('meta[property="og:image"]')) ?? "");
-		expect(image.origin).toBe("https://timesifier.com");
+		// The origin is the one the page was asked for on: no host is written in the code.
+		expect(image.origin).toBe(new URL(baseURL ?? "").origin);
 		expect(await content('meta[name="twitter:image"]')).toBe(image.href);
 		expect(await content('meta[name="twitter:card"]')).toBe("summary_large_image");
-		expect(await content('meta[property="og:url"]')).toBe(`https://timesifier.com${path}`);
+		expect(await content('meta[property="og:url"]')).toBe(
+			`${new URL(baseURL ?? "").origin}${path}`,
+		);
 		// A shared link shows the page's own title and description.
 		expect(await content('meta[property="og:title"]')).toBe(await page.title());
 		expect(await content('meta[property="og:description"]')).toBe(

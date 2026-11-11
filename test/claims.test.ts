@@ -4,7 +4,7 @@ import { PRIMARY_ACTION, PRIVACY_PATH, TERMS_PATH } from "~/landing/Site";
 import { SIGN_IN_PATH, SIGN_UP_PATH } from "~/routes/auth/paths";
 import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
 
-import { CODE_COOKIE, KNOWN_COOKIE, ORIGIN, SESSION_COOKIE } from "./auth/harness";
+import { CODE_COOKIE, KNOWN_COOKIE, ORIGIN, SESSION_COOKIE, setBinding } from "./auth/harness";
 
 // The public pages state facts. Each test here ties one of those sentences to
 // the thing it is about, so that the code and the page cannot part company
@@ -75,4 +75,18 @@ it("the home page has one primary action, said the same at the top and at the en
 	for (const path of ["/", PRIVACY_PATH, TERMS_PATH]) {
 		expect(await page(path), path).not.toContain(`href="${SIGN_UP_PATH}"`);
 	}
+});
+
+it("the privacy notice names this deployment's host and sender, from its settings and the request", async () => {
+	setBinding("EMAIL_FROM", "no-reply@mail.timesifier.example");
+	const text = words(await page(PRIVACY_PATH));
+
+	const { host } = new URL(ORIGIN);
+	expect(text).toContain(`Each is sent only to ${host}`);
+	expect(text).toContain(`cannot reach ${host}.`);
+	expect(text).toContain("email service, from no-reply@mail.timesifier.example. The email");
+
+	// A deployment that sends no mail names no address.
+	setBinding("EMAIL_FROM", undefined);
+	expect(words(await page(PRIVACY_PATH))).toContain("Cloudflare's email service. The email");
 });

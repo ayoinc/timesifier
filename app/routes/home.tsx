@@ -12,6 +12,7 @@ import {
 	PRIMARY_ACTION,
 	PRIVACY_PATH,
 	pageMeta,
+	rootOrigin,
 	SiteFooter,
 	SiteHeader,
 	SkipLink,
@@ -29,8 +30,9 @@ import type { Route } from "./+types/home";
 // With script, one clock runs through it (~/landing/RunningDay); what moves as
 // it is scrolled is in ~/landing/public.css.
 
-export function meta(_: Route.MetaArgs) {
+export function meta({ matches }: Route.MetaArgs) {
 	return pageMeta({
+		origin: rootOrigin(matches),
 		path: "/",
 		title: "Timesifier: a timer and a weekly report, being built",
 		description:
