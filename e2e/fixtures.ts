@@ -9,15 +9,34 @@ declare global {
 }
 
 /**
+ * Requests the server is meant to refuse: the statuses expected, by the path
+ * they are answered on. An object, not a list: Playwright reads a list given
+ * to `test.use` as a value with its options.
+ */
+export type Refusals = Record<string, number[]>;
+
+/**
  * Every browser test imports `test` from here. A test fails when its page raises a
  * `securitypolicyviolation` event, logs a console error or throws: a page that
  * works but breaks the Content Security Policy is a failing page.
+ *
+ * Chromium logs a console error for every response with a status of 400 or
+ * above. A test that makes the server refuse a request on purpose names the
+ * refusal with `test.use({ refusals: { "/path": [403] } })`; any other error
+ * still fails it.
  */
-export const test = base.extend<{ pageHealth: undefined }>({
+export const test = base.extend<{ pageHealth: undefined; refusals: Refusals }>({
+	refusals: [{}, { option: true }],
 	pageHealth: [
-		async ({ page }, use) => {
+		async ({ page, refusals }, use) => {
 			const violations: PolicyViolation[] = [];
 			const errors: string[] = [];
+			const meant = (text: string, url: string) =>
+				(refusals[URL.parse(url)?.pathname ?? ""] ?? []).some((status) =>
+					text.startsWith(
+						`Failed to load resource: the server responded with a status of ${status} `,
+					),
+				);
 
 			await page.exposeFunction("__reportPolicyViolation", (violation: PolicyViolation) => {
 				violations.push(violation);
@@ -33,7 +52,8 @@ export const test = base.extend<{ pageHealth: undefined }>({
 				});
 			});
 			page.on("console", (message) => {
-				if (message.type() === "error") errors.push(message.text());
+				if (message.type() !== "error") return;
+				if (!meant(message.text(), message.location().url)) errors.push(message.text());
 			});
 			page.on("pageerror", (error) => errors.push(`uncaught: ${error.message}`));
 

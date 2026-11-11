@@ -1,6 +1,11 @@
 {
 	"extends": "./tsconfig.json",
-	"include": ["playwright.config.ts", "e2e/**/*.ts", "app/shell/destinations.ts"],
+	"include": [
+		"playwright.config.ts",
+		"e2e/**/*.ts",
+		"app/shell/destinations.ts",
+		"app/auth/code.ts"
+	],
 	"compilerOptions": {
 		"composite": true,
 		"strict": true,
