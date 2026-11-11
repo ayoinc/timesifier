@@ -14,8 +14,12 @@
  *   answers the same 404 whether that organisation does not exist or the
  *   person asking is not a member of it;
  * - answers the same 404 for every invitation that is not there for the
- *   person asking to take;
+ *   person asking to take, one whose sender may no longer invite included;
+ * - lets a person own at most five organisations;
  * - derives a new organisation's slug from its name.
+ *
+ * Beside the gate, one hook lets a person send at most twenty invitations in
+ * any 24 hours.
  *
  * See docs/security.md, "Organisations and roles".
  */
@@ -31,7 +35,9 @@ import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
 import { sendEmail } from "./email.server";
 import { isOurHost } from "./hosts";
+import { valid } from "./input.server";
 import { INVITATION_LIFETIME_SECONDS, invitationEmail } from "./invitation-email";
+import { type Cap, takeOne } from "./quota.server";
 
 /** Requests one client may make on one of these paths in `window` seconds; the next is answered 429. */
 const LIMIT = { window: 60, max: 10 };
@@ -44,6 +50,15 @@ export const ORGANISATION_RATE_LIMITS = {
 	"/organization/create": LIMIT,
 	"/organization/invite-member": LIMIT,
 };
+
+// Two caps that are not about one client in one minute. Without them one
+// account could create organisations without end, each named with a sentence
+// of its choosing, and have the application's own address send that sentence
+// to strangers ten times a minute.
+/** Invitations one person may send in any 24 hours, across every organisation. */
+const INVITATIONS_PER_SENDER: Cap = { max: 20, seconds: 24 * 60 * 60 };
+/** Organisations one person may own. Creating one makes its creator its owner. */
+const ORGANISATIONS_PER_OWNER = 5;
 
 // The plugin's own codes and wording, so a page reads one vocabulary. The
 // plugin sends them with status 400, and something else to a person who is
@@ -66,8 +81,9 @@ async function slugFor(name: string): Promise<string> {
 
 const Id = z.string().min(1).max(64);
 /**
- * Shown in pages and in the subject of an email, so it holds no line break, no
- * other control character and none that reverses the direction of text.
+ * Shown in pages and quoted in an invitation's message, so it holds no line
+ * break, no other control character and none that reverses the direction of
+ * text.
  */
 const Name = z
 	.string()
@@ -81,7 +97,7 @@ const nothing = z.strictObject({});
 /** Who is asking, and Better Auth's own access to its tables. */
 type Asking = {
 	user: { id: string; email: string; emailVerified: boolean };
-	adapter: Pick<DBAdapter, "findOne">;
+	adapter: Pick<DBAdapter, "findOne" | "count">;
 };
 
 /**
@@ -93,16 +109,6 @@ type Endpoint = {
 	from: "body" | "query";
 	admit(raw: unknown, asking: Asking): Promise<Record<string, unknown>>;
 };
-
-/** `raw` as `schema` allows it, or a 400 that says what is wrong with it. */
-async function valid<Input>(schema: z.ZodType<Input>, raw: unknown): Promise<Input> {
-	const parsed = await schema.safeParseAsync(raw ?? {});
-	if (parsed.success) return parsed.data;
-	throw new APIError("BAD_REQUEST", {
-		code: "VALIDATION_ERROR",
-		message: z.prettifyError(parsed.error),
-	});
-}
 
 /** An endpoint for any signed-in person. */
 function anyone(from: Endpoint["from"], schema: z.ZodType<Record<string, unknown>>): Endpoint {
@@ -142,17 +148,29 @@ function member(
 }
 
 /** The fields of the plugin's `invitation` model that decide whether it can still be taken. */
-type StoredInvitation = { email: string; status: string; expiresAt: Date };
+type StoredInvitation = {
+	email: string;
+	status: string;
+	expiresAt: Date;
+	organizationId: string;
+	inviterId: string;
+};
 
 /**
  * An endpoint for the person an invitation was sent to. There is one answer
  * for an invitation that does not exist, one that has been accepted, declined
  * or cancelled, one that has expired, and one that was sent to somebody else,
  * so an invitation's id tells nobody but its recipient anything.
+ *
+ * `standing` adds one more to that list: an invitation whose sender may no
+ * longer invite. An invitation stands on its sender's right to send it.
+ * Otherwise an admin about to be removed could invite an address of their own
+ * and come back with it. Declining needs no such thing.
  */
 function recipient(
 	from: Endpoint["from"],
 	schema: z.ZodType<{ invitationId: string } | { id: string }>,
+	needs: "standing" | "pending",
 ): Endpoint {
 	return {
 		from,
@@ -169,7 +187,20 @@ function recipient(
 				invitation.expiresAt > new Date() &&
 				invitation.email.toLowerCase() === user.email.toLowerCase() &&
 				user.emailVerified;
-			if (!theirs) throw invitationNotFound();
+			if (!invitation || !theirs) throw invitationNotFound();
+
+			if (needs === "standing") {
+				const [sender] = await organisationScope(
+					env.DB,
+					invitation.organizationId,
+				).memberships.select((m) => eq(m.userId, invitation.inviterId));
+				// The sender's role today, asked the question the plugin asks of
+				// whoever invites: a role this application does not know grants nothing.
+				const role = Role.safeParse(sender?.role);
+				const mayInvite =
+					role.success && roles[role.data].authorize({ invitation: ["create"] }).success;
+				if (!mayInvite) throw invitationNotFound();
+			}
 			return input;
 		},
 	};
@@ -177,19 +208,43 @@ function recipient(
 
 /** Every endpoint of the plugin that can be called, and exactly what each accepts. */
 const ENDPOINTS: Record<string, Endpoint> = {
-	"/organization/create": anyone(
-		"body",
-		// A name and nothing else. The slug is ours to choose.
-		z
-			.strictObject({ name: Name })
-			.transform(async ({ name }) => ({ name, slug: await slugFor(name) })),
-	),
+	"/organization/create": {
+		from: "body",
+		async admit(raw, { user, adapter }) {
+			// A name and nothing else. The slug is ours to choose.
+			const { name } = await valid(z.strictObject({ name: Name }), raw);
+			// The plugin's own limit counts every organisation a person belongs
+			// to, so five invitations accepted would stop a person creating their
+			// first. This counts the ones they own, which creating adds to.
+			const owned = await adapter.count({
+				model: "member",
+				where: [
+					{ field: "userId", value: user.id },
+					{ field: "role", value: "owner" },
+				],
+			});
+			if (owned >= ORGANISATIONS_PER_OWNER) {
+				throw new APIError("FORBIDDEN", {
+					code: "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
+					message: "You have reached the maximum number of organizations",
+				});
+			}
+			return { name, slug: await slugFor(name) };
+		},
+	},
 	"/organization/list": anyone("query", nothing),
-	"/organization/list-user-invitations": anyone("query", nothing),
 
-	"/organization/get-invitation": recipient("query", z.strictObject({ id: Id })),
-	"/organization/accept-invitation": recipient("body", z.strictObject({ invitationId: Id })),
-	"/organization/reject-invitation": recipient("body", z.strictObject({ invitationId: Id })),
+	"/organization/get-invitation": recipient("query", z.strictObject({ id: Id }), "standing"),
+	"/organization/accept-invitation": recipient(
+		"body",
+		z.strictObject({ invitationId: Id }),
+		"standing",
+	),
+	"/organization/reject-invitation": recipient(
+		"body",
+		z.strictObject({ invitationId: Id }),
+		"pending",
+	),
 
 	"/organization/get-full-organization": member("query", z.strictObject(organisation)),
 	"/organization/list-members": member("query", z.strictObject(organisation)),
@@ -261,9 +316,24 @@ export function organisationPlugins() {
 			invitationExpiresIn: INVITATION_LIFETIME_SECONDS,
 			// An invitation is for the person who has proved the address it was sent to.
 			requireEmailVerificationOnInvitation: true,
+			organizationHooks: {
+				// The last thing before an invitation is stored and its message sent,
+				// after every check of the plugin's own, so only an invitation that
+				// is really made uses up one of the day's twenty. The count is kept
+				// apart from the invitations themselves: cancelling one, or deleting
+				// the organisation, gives nothing back.
+				async beforeCreateInvitation({ inviter }) {
+					if (!(await takeOne(env.DB, `invitations:${inviter.id}`, INVITATIONS_PER_SENDER))) {
+						throw new APIError("TOO_MANY_REQUESTS", {
+							code: "TOO_MANY_INVITATIONS",
+							message: `You have sent ${INVITATIONS_PER_SENDER.max} invitations in the last 24 hours. Try again later.`,
+						});
+					}
+				},
+			},
 			async sendInvitationEmail({ id, email, role, organization, inviter }, request) {
 				// `handleAuthRequest` lets through only requests to our own hosts.
-				if (!request || !isOurHost(request)) {
+				if (!request || !isOurHost(request, env.ENVIRONMENT)) {
 					throw new Error("An invitation's link needs the request the invitation was made in.");
 				}
 				const message = invitationEmail({

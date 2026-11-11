@@ -23,7 +23,7 @@ describe("the auth tables in app/db/schema.ts", () => {
 		// or field is missing; it warns when an adapter has no check to run.
 		const complaints = [vi.spyOn(console, "warn"), vi.spyOn(console, "error")];
 
-		const response = await get("/ok");
+		const response = await get("/get-session");
 
 		expect(response.status).toBe(200);
 		for (const complaint of complaints) expect(complaint).not.toHaveBeenCalled();

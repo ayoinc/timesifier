@@ -7,7 +7,9 @@ import { SIGNED_IN } from "./e2e/auth-state";
 // The build is made with DESIGN_ROUTE=1: it is the only build that has /design.
 // It is written to build/ like any other, so e2e/remove-build.ts deletes it when
 // the tests end: a build with the gallery in it must never be the one deployed.
-const PORT = 5385;
+// The port is this one place. Two checkouts running the tests at once need two
+// ports: `E2E_PORT=5386 pnpm test:e2e`.
+const PORT = Number(process.env.E2E_PORT) || 5385;
 const ORIGIN = `http://localhost:${PORT}`;
 
 // React Aria locks page scrolling differently on iOS; these tests run in WebKit only.

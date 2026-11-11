@@ -12,6 +12,33 @@ import { nonceContext } from "../workers/nonce";
 
 export const streamTimeout = 5_000;
 
+/**
+ * What the log says about an error React Router caught on the server, in a
+ * loader, an action, a middleware or while rendering: the error's name and the
+ * path that was asked for, and nothing else.
+ *
+ * Not the message: Drizzle's, for a statement the database refused, is the
+ * statement with its parameters, which may be an address, a token or anything
+ * else a row holds. Not the query string. And not the values in the path
+ * either: each parameter is written as its name, so `/invitations/<id>` is
+ * logged as `/invitations/:id` (docs/security.md, "Never logged").
+ *
+ * A request the browser gave up on is aborted, and React Router reports that
+ * here too; it is not an error and is not logged.
+ * https://reactrouter.com/how-to/error-reporting
+ */
+export function handleError(
+	error: unknown,
+	{ request, params }: { request: Request; params: Record<string, string | undefined> },
+): void {
+	if (request.signal.aborted) return;
+	const path = Object.entries(params).reduce(
+		(path, [name, value]) => (value ? path.replaceAll(value, `:${name}`) : path),
+		new URL(request.url).pathname,
+	);
+	console.error(`error: ${error instanceof Error ? error.name : "error"} at ${path}`);
+}
+
 export default async function handleRequest(
 	request: Request,
 	responseStatusCode: number,
@@ -42,7 +69,8 @@ export default async function handleRequest(
 				// errors encountered during initial shell rendering since they'll
 				// reject and get logged in handleDocumentRequest.
 				if (shellRendered) {
-					console.error(error);
+					const params = routerContext.staticHandlerContext.matches.at(-1)?.params ?? {};
+					handleError(error, { request, params });
 				}
 			},
 		},

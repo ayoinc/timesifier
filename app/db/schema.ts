@@ -172,7 +172,11 @@ export const verifications = sqliteTable(
 	(table) => [index("verifications_identifier_idx").on(table.identifier)],
 );
 
-/** A passkey's public half. The private key never leaves the person's device. */
+/**
+ * A passkey's public half. The private key never leaves the person's device.
+ * A credential's id belongs to one passkey: sign-in finds the passkey by it,
+ * so a second row with the same id could stand in the way of the first.
+ */
 export const passkeys = sqliteTable(
 	"passkeys",
 	{
@@ -192,7 +196,7 @@ export const passkeys = sqliteTable(
 	},
 	(table) => [
 		index("passkeys_user_id_idx").on(table.userId),
-		index("passkeys_credential_id_idx").on(table.credentialID),
+		uniqueIndex("passkeys_credential_id_unique").on(table.credentialID),
 	],
 );
 

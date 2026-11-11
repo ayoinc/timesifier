@@ -6,10 +6,11 @@
  * `handleAuthRequest` answers; server code reads the signed-in person with
  * `getSession`.
  *
- * A person proves an email address with a six-digit code sent to it, which
+ * A person proves an email address with an eight-digit code sent to it, which
  * signs them in and, the first time, creates their account. Once signed in
  * they can add a passkey and use it from then on, with the code as the
- * fallback. There are no passwords.
+ * fallback. There are no passwords. `sign-in-code.server.ts` holds the rules
+ * around the code that the library does not.
  *
  * The same instance holds organisations, memberships and invitations, which
  * `organisations.server.ts` configures.
@@ -18,8 +19,8 @@
 import { env, waitUntil } from "cloudflare:workers";
 import { passkey } from "@better-auth/passkey";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
 import { betterAuth } from "better-auth/minimal";
-import { captcha } from "better-auth/plugins/captcha";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import type { Session, User } from "better-auth/types";
 import { drizzle } from "drizzle-orm/d1";
@@ -36,13 +37,25 @@ import {
 // The two tenant tables are absent from `~/db` on purpose. Better Auth is the
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
+import { SIGN_IN_CODE_LENGTH } from "./code";
 import { sendEmail } from "./email.server";
-import { ALLOWED_HOSTS, isOurHost } from "./hosts";
+import { endpointPath, isOffered } from "./endpoints";
+import { allowedHosts, isOurHost } from "./hosts";
+import { keyedHash } from "./keyed-hash.server";
+import { errorName, logLibraryLine } from "./log.server";
 import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.server";
+import { redirectRules } from "./redirects.server";
+import { signInCodeRules } from "./sign-in-code.server";
 import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
+import { turnstile } from "./turnstile.server";
 
 /** Attempts one client may make on one sign-in path in `window` seconds; the next is answered 429. */
 const SIGN_IN_LIMIT = { window: 60, max: 10 };
+/**
+ * The same for asking for a code, which sends an email each time: three, the
+ * email-code plugin's own default.
+ */
+const ASKING_LIMIT = { window: 60, max: 3 };
 
 /**
  * Every path of the email-code plugin that the flows above do not use. The
@@ -58,9 +71,15 @@ const UNUSED_PATHS = [
 	"/email-otp/change-email",
 ];
 
-type Bindings = Pick<Env, "DB" | "BETTER_AUTH_SECRET" | "TURNSTILE_SECRET_KEY">;
+/**
+ * What the instance is built from. The generated type gives `ENVIRONMENT`
+ * production's value alone; a preview and a developer's machine set others.
+ */
+type Bindings = Pick<Env, "DB" | "BETTER_AUTH_SECRET" | "TURNSTILE_SECRET_KEY"> & {
+	ENVIRONMENT: string | undefined;
+};
 
-function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) {
+function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT }: Bindings) {
 	// Better Auth falls back to a published default secret outside production
 	// mode, and nothing sets production mode in a Worker. Refuse to start instead.
 	if (!BETTER_AUTH_SECRET) throw new Error("BETTER_AUTH_SECRET is not set");
@@ -69,8 +88,17 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 	return betterAuth({
 		appName: "Timesifier",
 		secret: BETTER_AUTH_SECRET,
-		// The address is taken from the request only when its host is one of ours.
-		baseURL: { allowedHosts: ALLOWED_HOSTS },
+		// The address is taken from the request only when its host is one of this
+		// environment's own, and those hosts are the only origins trusted.
+		baseURL: { allowedHosts: allowedHosts(ENVIRONMENT) },
+
+		// An error that is not an answer is thrown out of the handler, to
+		// `handleAuthRequest`. Left to itself the library logs such an error whole.
+		// Better Auth also has a page of its own for errors, at `/error`, which
+		// the mount does not offer: whatever would send a browser there sends it
+		// to the sign-in page instead.
+		onAPIError: { throw: true, errorURL: "/sign-in" },
+		logger: { log: logLibraryLine },
 
 		database: drizzleAdapter(drizzle(DB), {
 			provider: "sqlite",
@@ -98,9 +126,12 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 			// Counted in D1: a Worker's memory is neither shared between isolates nor kept.
 			storage: "database",
 			customRules: {
-				"/email-otp/send-verification-otp": SIGN_IN_LIMIT,
+				"/email-otp/send-verification-otp": ASKING_LIMIT,
 				"/sign-in/email-otp": SIGN_IN_LIMIT,
 				"/passkey/verify-authentication": SIGN_IN_LIMIT,
+				// Anyone may ask for the options, and each answer stores a challenge
+				// for five minutes. The sign-in page asks once each time it loads.
+				"/passkey/generate-authenticate-options": { window: 60, max: 30 },
 				...ORGANISATION_RATE_LIMITS,
 			},
 		},
@@ -124,16 +155,15 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 		},
 
 		plugins: [
-			// Turnstile guards the one request that sends email, which is also the
-			// only way to start an account. The token arrives in `x-captcha-response`.
-			captcha({
-				provider: "cloudflare-turnstile",
-				secretKey: TURNSTILE_SECRET_KEY,
-				endpoints: ["/email-otp/send-verification-otp"],
-			}),
+			// Asking for a code needs a Turnstile token solved on this very host.
+			turnstile(TURNSTILE_SECRET_KEY, "/email-otp/send-verification-otp"),
 			emailOTP({
-				// Only a hash of the code is stored, so a copy of the database signs nobody in.
-				storeOTP: "hashed",
+				// A code is stored as an HMAC under the secret. The plugin's own "hashed"
+				// is a plain SHA-256, and there are few enough codes to try them all:
+				// whoever read the table would have every live code. With the key, a
+				// copy of the database signs nobody in without the secret as well.
+				storeOTP: { hash: (code) => keyedHash(BETTER_AUTH_SECRET, "sign-in-code", code) },
+				otpLength: SIGN_IN_CODE_LENGTH,
 				expiresIn: CODE_LIFETIME_SECONDS,
 				async sendVerificationOTP({ email, otp, type }) {
 					if (type !== "sign-in") return;
@@ -141,10 +171,41 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 					waitUntil(sendEmail({ to: email, ...signInCodeEmail(otp) }));
 				},
 			}),
-			// The relying party is the host of the request, one of ALLOWED_HOSTS, so
-			// a passkey made on a preview works on that preview and nowhere else.
-			passkey({ rpName: "Timesifier" }),
+			// The relying party is the host of the request, one of this environment's
+			// own, so a passkey made on a preview works on that preview and nowhere else.
+			// The authenticator must verify the person, with a PIN or a fingerprint,
+			// both to add a passkey and to sign in with one: the plugin then asks for
+			// that and refuses an answer without it. A key that is merely held, a
+			// stolen one for instance, signs nobody in.
+			passkey({
+				rpName: "Timesifier",
+				authenticatorSelection: { userVerification: "required" },
+				registration: {
+					// The plugin stores a new passkey without looking for its credential
+					// id. An id some passkey already has never comes from an authenticator,
+					// only from a request made up to stand in another passkey's way, so
+					// it is the caller's mistake and is told so. The unique index on
+					// `passkeys.credential_id` remains for two such requests at once.
+					async afterVerification({ ctx, verification }) {
+						const credentialID = verification.registrationInfo?.credential.id;
+						const taken =
+							credentialID &&
+							(await ctx.context.adapter.findOne({
+								model: "passkey",
+								where: [{ field: "credentialID", value: credentialID }],
+							}));
+						if (taken) {
+							throw new APIError("BAD_REQUEST", {
+								code: "PASSKEY_ALREADY_REGISTERED",
+								message: "This passkey is already registered",
+							});
+						}
+					},
+				},
+			}),
 			...organisationPlugins(),
+			redirectRules,
+			signInCodeRules({ DB, secret: BETTER_AUTH_SECRET }),
 		],
 	});
 }
@@ -177,18 +238,51 @@ const auth = builtFrom(
 		DB: env.DB,
 		BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
 		TURNSTILE_SECRET_KEY: env.TURNSTILE_SECRET_KEY,
+		ENVIRONMENT: env.ENVIRONMENT,
 	}),
 	createAuth,
 );
 
 /**
- * Answers a request to `/api/auth/*`: sign-in, sign-out, sessions, passkeys.
- * A request for a host that is not ours is answered 404 before Better Auth
- * sees it, so no cookie is set for such a host and none names it in a passkey.
+ * Every endpoint the installed Better Auth registers under this configuration,
+ * as `METHOD /path`. Its one caller is the test that walks them, which is how
+ * an endpoint added by an upgrade is noticed.
+ */
+export function registeredEndpoints(): string[] {
+	return Object.values(auth().api).flatMap(({ path, options }) =>
+		path ? [options.method].flat().map((method) => `${method} ${path}`) : [],
+	);
+}
+
+/**
+ * Answers a request to `/api/auth/*`: sign-in, sign-out, sessions, passkeys,
+ * organisations.
+ *
+ * Two refusals come before Better Auth, its rate limit or the database sees
+ * the request, each a 404. One is for a host that is not this environment's
+ * own, so no cookie is set for such a host and none names it in a passkey.
+ * The other is for any method and path that `endpoints.ts` does not list.
+ *
+ * An error nobody expected, a statement D1 refused for one, is answered 500
+ * and logged as its name and the endpoint's path: the path has no query
+ * string, and the name has none of what the statement was writing.
  */
 export async function handleAuthRequest(request: Request): Promise<Response> {
-	if (!isOurHost(request)) return new Response("Not Found", { status: 404 });
-	return auth().handler(request);
+	if (!isOurHost(request, env.ENVIRONMENT) || !isOffered(request)) {
+		return new Response("Not Found", { status: 404 });
+	}
+	// Outside the `try`: a missing secret is a fault in the deployment, and its
+	// message, which names the secret and holds no value, belongs in the log.
+	const { handler } = auth();
+	try {
+		return await handler(request);
+	} catch (error) {
+		console.error(`auth: ${errorName(error)} at ${endpointPath(request)}`);
+		return Response.json(
+			{ code: "INTERNAL_SERVER_ERROR", message: "Something went wrong" },
+			{ status: 500 },
+		);
+	}
 }
 
 /** A signed-in person and the session their request carried. */
@@ -199,13 +293,21 @@ export type SignedIn = { user: User; session: Session };
  * session that is still valid or was made to a host that is not ours. Reads
  * the database every time, so an ended session is gone on the next request.
  *
- * This is what a route guard calls.
+ * This is what a route guard calls. When the session cannot be read at all it
+ * throws an error that says so and nothing more. Better Auth's own error for
+ * this carries the failed statement, and with it the session's token, into
+ * whatever logs it; here that is React Router.
  */
 export async function getSession(request: Request): Promise<SignedIn | null> {
-	if (!isOurHost(request)) return null;
+	if (!isOurHost(request, env.ENVIRONMENT)) return null;
 	// Better Auth takes the host from the `Host` header here. The platform sets
 	// it from the request's address; a `Request` built in code may not have it.
 	const headers = new Headers(request.headers);
 	headers.set("Host", new URL(request.url).host);
-	return auth().api.getSession({ headers });
+	const { api } = auth();
+	try {
+		return await api.getSession({ headers });
+	} catch (error) {
+		throw new Error(`The session could not be read (${errorName(error)})`);
+	}
 }

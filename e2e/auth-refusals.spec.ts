@@ -68,6 +68,46 @@ test.describe("a wrong code", () => {
 	});
 });
 
+test.describe("a code typed in a browser that did not ask for it", () => {
+	test.use({ refusals: { [SIGN_IN]: [400] } });
+
+	test("is said to be wrong there, and then signs in the browser that asked", async ({
+		page,
+		browser,
+		baseURL,
+	}) => {
+		const { email } = newPerson();
+		const code = await askForCode(page, email);
+
+		// A second browser with nothing of the first one's. Its request for a code
+		// is answered here and never reaches the server, so the page moves on to
+		// the code as it would, and this browser has asked the server for nothing.
+		const elsewhere = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
+		await ownAddress(elsewhere, baseURL);
+		const other = await elsewhere.newPage();
+		await other.route(`**${SEND}`, (route) => route.fulfill({ json: { success: true } }));
+		await openAuthPage(other, "/sign-in");
+		await other.getByRole("button", { name: "Use an email code instead" }).click();
+		await other.getByLabel("Email").fill(email);
+		await other.getByRole("button", { name: "Continue" }).click();
+
+		const refused = other.waitForResponse((response) => response.url().endsWith(SIGN_IN));
+		await other.getByLabel("Code").fill(code);
+		await other.getByRole("button", { name: "Sign in", exact: true }).click();
+		expect((await refused).status()).toBe(400);
+		await expect(other.getByRole("alert")).toHaveText(
+			"That code is not right. Check it, or send a new one.",
+		);
+		await expect(other).toHaveURL("/sign-in");
+		await elsewhere.close();
+
+		// The refusal used up none of the code's attempts: it still works where it was asked for.
+		await page.getByLabel("Code").fill(code);
+		await page.getByRole("button", { name: "Sign in", exact: true }).click();
+		await expect(page).toHaveURL("/app");
+	});
+});
+
 test.describe("too many attempts", () => {
 	test.use({ refusals: { [SIGN_IN]: [400, 403, 429] } });
 

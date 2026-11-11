@@ -1,8 +1,12 @@
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getSession } from "~/auth/auth.server";
 import { freshDatabase } from "../db/database";
 import {
 	captureEmail,
+	codeCookie,
 	countRows,
+	get,
 	type Mailbox,
 	post,
 	requestCode,
@@ -66,7 +70,7 @@ describe("the sign-in code email", () => {
 });
 
 describe("sending email", () => {
-	it("sends nothing where there is no EMAIL binding, and the log names only the recipient's domain", async () => {
+	it("sends nothing where there is no EMAIL binding, and the log says nothing about the recipient", async () => {
 		setBinding("EMAIL", undefined);
 
 		let response: Response | undefined;
@@ -76,13 +80,11 @@ describe("sending email", () => {
 
 		expect(response?.status).toBe(200);
 		expect(mailbox.send).not.toHaveBeenCalled();
-		expect(await countRows("verifications"), "the code is still created").toBe(1);
-		expect(lines).toEqual([
-			"email: not sent, this environment has no EMAIL binding (recipient at example.com)",
-		]);
+		expect(await countRows("codes"), "the code is still created").toBe(1);
+		expect(lines).toEqual(["email: not sent, this environment has no EMAIL binding"]);
 	});
 
-	it("answers the request and logs no address when Email Service refuses the message", async () => {
+	it("answers the request and logs nothing about the recipient when Email Service refuses the message", async () => {
 		const refusal = Object.assign(new Error(`cannot deliver to ${EMAIL}`), {
 			code: "E_SENDER_NOT_VERIFIED",
 		});
@@ -96,9 +98,7 @@ describe("sending email", () => {
 
 		expect(response?.status).toBe(200);
 		await vi.waitFor(() =>
-			expect(lines).toEqual([
-				"email: send failed with E_SENDER_NOT_VERIFIED (recipient at example.com)",
-			]),
+			expect(lines).toEqual(["email: send failed with E_SENDER_NOT_VERIFIED"]),
 		);
 	});
 });
@@ -124,5 +124,67 @@ describe("logs", () => {
 			expect(secret).not.toBe("");
 			expect(lines.join("\n")).not.toContain(secret);
 		}
+	});
+
+	// D1 refuses or drops a statement now and then. Here a table is gone, which
+	// fails the same way: Drizzle throws an error whose message is the statement
+	// and its parameters.
+	it.each([
+		{
+			table: "verifications",
+			holds: "the address and the code's hash",
+			ask: () => requestCode(EMAIL),
+			path: "/email-otp/send-verification-otp",
+		},
+		{
+			table: "sessions",
+			holds: "the new session's token and the client's address",
+			ask: async (browser: { cookie: string }) =>
+				post("/sign-in/email-otp", { email: EMAIL, otp: await mailbox.codeFor(EMAIL) }, browser),
+			path: "/sign-in/email-otp",
+		},
+		{
+			table: "rate_limits",
+			holds: "the client's address, and the request has an invitation's id in its query string",
+			ask: () => get("/organization/get-invitation?id=0193a1b2-secret-invitation-id"),
+			path: "/organization/get-invitation",
+		},
+	])(
+		"when a statement on $table fails, which holds $holds, the answer is a plain 500 and the log has the error's name and the path alone",
+		async ({ table, ask, path }) => {
+			const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
+			await mailbox.codeFor(EMAIL);
+			await env.DB.exec(`drop table ${table}`);
+
+			let response: Response | undefined;
+			const lines = await logLinesDuring(async () => {
+				response = await ask(browser);
+			});
+
+			expect(lines.join("\n")).toMatch(new RegExp(`^auth: \\w+ at ${path}$`));
+			expect(response?.status).toBe(500);
+			expect(await response?.json()).toEqual({
+				code: "INTERNAL_SERVER_ERROR",
+				message: "Something went wrong",
+			});
+		},
+	);
+
+	it("getSession, when the session cannot be read, puts the session's token in neither its error nor the log", async () => {
+		const { cookie } = await signIn(mailbox, EMAIL);
+		const token = decodeURIComponent(cookie.split("=")[1] ?? "").split(".")[0] ?? "";
+		await env.DB.exec("drop table sessions");
+
+		let failure: unknown;
+		const lines = await logLinesDuring(async () => {
+			failure = await getSession(
+				new Request("https://timesifier.com/app", { headers: { Cookie: cookie } }),
+			).catch((error: unknown) => error);
+		});
+
+		expect(token).not.toBe("");
+		expect(lines.join("\n")).toMatch(/^auth: INTERNAL_SERVER_ERROR \w+$/);
+		expect(failure).toBeInstanceOf(Error);
+		expect(JSON.stringify(failure, Object.getOwnPropertyNames(failure))).not.toContain(token);
 	});
 });

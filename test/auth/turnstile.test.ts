@@ -34,7 +34,7 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		const response = await requestCode(EMAIL);
 
 		expect(response.status).toBe(200);
-		expect(await countRows("verifications")).toBe(1);
+		expect(await countRows("codes")).toBe(1);
 		expect(mailbox.sent()).toHaveLength(1);
 	});
 
@@ -44,7 +44,8 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		const response = await requestCode(EMAIL);
 
 		expect(response.status).toBe(403);
-		expect(await countRows("verifications")).toBe(0);
+		expect(await response.json()).toMatchObject({ code: "VERIFICATION_FAILED" });
+		expect(await countRows("codes")).toBe(0);
 		expect(mailbox.sent()).toEqual([]);
 	});
 
@@ -55,8 +56,86 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		});
 
 		expect(response.status).toBe(400);
-		expect(await countRows("verifications")).toBe(0);
+		expect(await response.json()).toMatchObject({ code: "MISSING_RESPONSE" });
+		expect(await countRows("codes")).toBe(0);
 		expect(mailbox.sent()).toEqual([]);
+	});
+
+	// With a real secret the answer comes from Cloudflare's servers for a token a
+	// person solved, which no test can have. Here `siteverify` is answered for it.
+	describe("the site a token was solved on", () => {
+		const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+
+		/** Makes Turnstile accept every token as one solved on `hostname`. */
+		function solvedOn(hostname: string | undefined) {
+			setBinding("TURNSTILE_SECRET_KEY", "0x4AAAAAAA-a-secret-that-is-not-a-test-secret");
+			const real = globalThis.fetch;
+			vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+				String(input instanceof Request ? input.url : input) === SITEVERIFY
+					? Promise.resolve(Response.json({ success: true, hostname, "error-codes": [] }))
+					: real(input, init),
+			);
+		}
+
+		it.each([
+			["production", "https://timesifier.com", "timesifier.com"],
+			[
+				"preview",
+				"https://pr-12-timesifier.ayoinc.workers.dev",
+				"pr-12-timesifier.ayoinc.workers.dev",
+			],
+		])(
+			"in %s, accepts one solved on the host the request was made to",
+			async (environment, origin, hostname) => {
+				setBinding("ENVIRONMENT", environment);
+				solvedOn(hostname);
+
+				const response = await requestCode(EMAIL, { origin });
+
+				expect(response.status).toBe(200);
+				expect(await countRows("codes")).toBe(1);
+			},
+		);
+
+		it.each([
+			["production", "https://timesifier.com", "elsewhere.example"],
+			["production", "https://timesifier.com", "pr-12-timesifier.ayoinc.workers.dev"],
+			["production", "https://timesifier.com", "www.timesifier.com"],
+			["production", "https://timesifier.com", undefined],
+			[
+				"preview",
+				"https://pr-12-timesifier.ayoinc.workers.dev",
+				"pr-13-timesifier.ayoinc.workers.dev",
+			],
+			["preview", "https://pr-12-timesifier.ayoinc.workers.dev", "timesifier.com"],
+			// The hostname of Cloudflare's test keys means nothing without a test secret.
+			["production", "https://timesifier.com", "example.com"],
+			["preview", "https://pr-12-timesifier.ayoinc.workers.dev", "example.com"],
+		])(
+			"in %s on %s, refuses one solved on %s, and creates and sends no code",
+			async (environment, origin, hostname) => {
+				setBinding("ENVIRONMENT", environment);
+				solvedOn(hostname);
+
+				const response = await requestCode(EMAIL, { origin });
+
+				expect(response.status).toBe(403);
+				expect(await response.json()).toMatchObject({ code: "VERIFICATION_FAILED" });
+				expect(await countRows("codes")).toBe(0);
+				expect(mailbox.sent()).toEqual([]);
+			},
+		);
+
+		it("with a test secret, accepts the one hostname Cloudflare's test keys answer with, on any host", async () => {
+			setBinding("ENVIRONMENT", "preview");
+			const origin = "https://pr-12-timesifier.ayoinc.workers.dev";
+
+			// Not answered for: this is Cloudflare's own answer to its test secret.
+			const response = await requestCode(EMAIL, { origin });
+
+			expect(response.status).toBe(200);
+			expect(await countRows("codes")).toBe(1);
+		});
 	});
 
 	it("does not stand in front of passkey sign-in", async () => {

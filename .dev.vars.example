@@ -2,6 +2,11 @@
 # `chmod 600 .dev.vars`. Names only here; never commit a value.
 # See docs/security.md, "Secrets".
 
+# Not a secret. wrangler.jsonc says "production", and production trusts only
+# timesifier.com: without this line sign-in answers 404 on localhost.
+# See app/auth/hosts.ts.
+ENVIRONMENT=development
+
 # Signs session cookies. Any random value of 32 characters or more:
 #   openssl rand -base64 32
 BETTER_AUTH_SECRET=
