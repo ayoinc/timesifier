@@ -25,6 +25,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 17  | Ids and timestamps  | UUID version 7 text ids; integer timestamps in milliseconds since the Unix epoch         | Preparer                           |
 | 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
 | 19  | Motion library      | Not added yet: components animate with CSS transitions on the motion tokens (amends 10)  | Preparer                           |
+| 20  | Organisation        | Named by each request and checked on the server; never the session's active organisation | Preparer                           |
 
 ## Evidence
 
@@ -197,6 +198,19 @@ Decided while building TS-005. It amends entry 10, which named the Motion librar
 The twelve components animate with CSS transitions that read the motion tokens, including the spring, which `pnpm tokens` emits as a CSS `linear()` easing. A CSS transition can be interrupted and reversed part-way, which is what design rule 8 asks for, and it runs under the Content Security Policy as shipped. Adding a library the platform can do without would break the dependency rule in `docs/security.md`.
 
 Motion comes in with the first feature that needs what CSS cannot do: movement driven by a gesture, a spring that carries the velocity of an interrupted movement, or layout animation between two arrangements. The card that adds it says which. Route changes still use the View Transitions API, as entry 10 says.
+
+### 20. The organisation comes from the request, not from the session
+
+Decided while building TS-009.
+
+Every request that acts on an organisation names it: a page by the slug in its address (`/app/<slug>/…`), a call to Better Auth by the organisation's id in its body or query. The server reads the person's membership of that organisation from the database on that request and answers 404 when there is none.
+
+| Option                                   | Evidence                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The organisation is named by the request | What a request acts on can be read from the request alone, so a link, a second tab and a test all mean one thing. One check, in one place, covers every request. A person in two organisations can have both open at once.                                                                                                                                                                                             |
+| The plugin's active organisation         | Better Auth's organization plugin keeps `activeOrganizationId` on the session and, in 1.7.19, its endpoints fall back to it when a request names no organisation. It is state the page does not show: two tabs share one session, so switching in one changes what the other's next request acts on, and an invitation or a removal can land in the wrong organisation. Reading it also ties tenancy to a mutable row. |
+
+How it is held in place: the gate in `app/auth/organisations.server.ts` refuses, with 400, a request to an organisation endpoint that names no organisation, and answers 404 for the endpoint that sets the active organisation. The plugin still writes the column when a person creates or joins an organisation, because its schema requires the column to exist; nothing in the application reads it. `test/organisations/create.test.ts` proves a request without an organisation is refused even when the session has an active one.
 
 ## To verify when the code is scaffolded
 
