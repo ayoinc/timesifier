@@ -1,8 +1,11 @@
 import type { Page } from "@playwright/test";
 
+import { destinations, membersPath, NEW_ORGANISATION_PATH } from "../app/shell/destinations";
+
 import { openAuthPage } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { expect, test } from "./fixtures";
+import { homeOrganisation, homePath } from "./organisation";
 
 // Turnstile on the page: which pages may load it, where its widget runs, and
 // what it does to our document. The shared fixture fails any of these tests on a
@@ -88,10 +91,20 @@ test.describe("the pages that send a code", () => {
 });
 
 test.describe("every other page", () => {
-	// Signed in, as the setup project left it: the pages under /app are served.
-	for (const path of ["/", "/app", "/app/reports", "/app/projects", "/app/settings", "/design"]) {
-		test(`${path} keeps the policy it had: nothing of Turnstile's is allowed`, async ({ page }) => {
-			const policy = await policyOf(page, path);
+	// Signed in, as the setup project left it: the pages under /app are served,
+	// and the pages of that person's organisation are the destinations' own.
+	const pages: Record<string, () => string> = {
+		"/": () => "/",
+		"/app/new": () => NEW_ORGANISATION_PATH,
+		...Object.fromEntries(
+			destinations.map(({ id, label }) => [`${label}, in an organisation`, () => homePath(id)]),
+		),
+		"the members of an organisation": () => membersPath(homeOrganisation().slug),
+		"/design": () => "/design",
+	};
+	for (const [name, path] of Object.entries(pages)) {
+		test(`${name} keeps the policy it had: nothing of Turnstile's is allowed`, async ({ page }) => {
+			const policy = await policyOf(page, path());
 			expect(policy.join("; ")).not.toContain("cloudflare");
 			expect(policy.find((directive) => directive.startsWith("script-src "))).toMatch(
 				/^script-src 'self' 'nonce-[^']+'$/,

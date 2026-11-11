@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { expect } from "./fixtures";
 
@@ -38,4 +38,44 @@ export async function problems(page: Page, unmeasurable: string[] = []): Promise
 	expect(measured, "pieces of text whose contrast was measured").toBeGreaterThan(0);
 
 	return [...violations, ...unmeasured];
+}
+
+/** Text whose lines lie over different elements further down the stack, such as a dialog's. */
+export const OVER_SEVERAL_ELEMENTS = "elmPartiallyObscuring";
+
+/**
+ * The WCAG contrast ratio of an element's text against the nearest background
+ * behind it that is not transparent. For text axe could not measure.
+ */
+export function contrast(text: Locator): Promise<number> {
+	return text.evaluate((element) => {
+		// A canvas turns any colour CSS can write into red, green, blue and alpha.
+		const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+		if (!canvas) throw new Error("no canvas");
+		const channels = (colour: string) => {
+			canvas.clearRect(0, 0, 1, 1);
+			canvas.fillStyle = colour;
+			canvas.fillRect(0, 0, 1, 1);
+			return [...canvas.getImageData(0, 0, 1, 1).data];
+		};
+		const luminance = (colour: string) => {
+			const [red = 0, green = 0, blue = 0] = channels(colour).map((channel) => {
+				const share = channel / 255;
+				return share <= 0.04045 ? share / 12.92 : ((share + 0.055) / 1.055) ** 2.4;
+			});
+			return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+		};
+
+		let behind: Element | null = element;
+		while (behind && channels(getComputedStyle(behind).backgroundColor)[3] !== 255) {
+			behind = behind.parentElement;
+		}
+		if (!behind) throw new Error("no opaque background behind the text");
+
+		const [lighter = 0, darker = 0] = [
+			luminance(getComputedStyle(element).color),
+			luminance(getComputedStyle(behind).backgroundColor),
+		].sort((a, b) => b - a);
+		return (lighter + 0.05) / (darker + 0.05);
+	});
 }

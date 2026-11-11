@@ -1,15 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
-import { Outlet, useLocation, useNavigationType } from "react-router";
+import { Outlet, useLocation, useNavigationType, useParams } from "react-router";
 
-import { requireSession } from "~/routes/auth/session.server";
-import { destinationIndex } from "~/shell/destinations";
+import { cx } from "~/components/cx";
+import { requireSession, signedInContext } from "~/routes/auth/session.server";
+import { destinationIndex, ORGANISATION_PARAM } from "~/shell/destinations";
 import { Navigation } from "~/shell/Navigation";
 import { finishRunningTransition, TRANSITION, useTravel } from "~/shell/transitions";
 
 import type { Route } from "./+types/layout";
+import { SignedInAs } from "./SignedInAs";
 
 // The application shell: a skip link, the navigation and the main region every
 // destination renders into. docs/design-system.md, "Shell", describes it.
+//
+// The navigation belongs to an organisation, which is in the address. The two
+// pages under `/app` that have none, the chooser and the page that creates an
+// organisation, are drawn in the same main region without it, under the
+// product's name, like the pages a person signs in on.
 
 /**
  * The session guard. It runs before the loader or action of every route under
@@ -20,20 +27,23 @@ import type { Route } from "./+types/layout";
 export const middleware: Route.MiddlewareFunction[] = [requireSession];
 
 /**
- * Holds no data. It is here so that every move between destinations asks the
- * server, and so passes the guard: without a loader on the way, React Router
- * moves between pages that have none without a request, and a person whose
- * session has ended would go on seeing the shell.
+ * Whose session it is. Having a loader here also means that every move between
+ * pages asks the server, and so passes the guard: without a loader on the way,
+ * React Router moves between pages that have none without a request, and a
+ * person whose session has ended would go on seeing the shell.
  */
-export function loader() {
-	return null;
+export function loader({ context }: Route.LoaderArgs) {
+	return { email: context.get(signedInContext).user.email };
 }
 
 const MAIN_ID = "main";
 
-export default function Shell() {
+export default function Shell({ loaderData }: Route.ComponentProps) {
 	const { pathname } = useLocation();
-	const index = destinationIndex(pathname);
+	const organisation = useParams()[ORGANISATION_PARAM];
+	// No destination is on screen outside an organisation. Arriving in one from
+	// there is a move forward, and leaving one for there a move back.
+	const index = organisation ? destinationIndex(organisation, pathname) : -1;
 	const travel = useTravel(index);
 	const main = useRef<HTMLElement>(null);
 
@@ -58,28 +68,51 @@ export default function Shell() {
 	}, []);
 
 	return (
-		<div className="min-h-dvh max-medium:pb-16 medium:ps-24">
+		<div
+			className={
+				organisation
+					? "min-h-dvh max-medium:pb-16 medium:ps-24"
+					: "mx-auto flex min-h-dvh w-full max-w-110 flex-col gap-10 px-4 pt-12 pb-8 medium:pt-24"
+			}
+		>
 			{/* Off the top edge until it is focused. With script it moves the focus
 			    without adding a history entry; without, the browser follows the fragment. */}
-			<a
-				href={`#${MAIN_ID}`}
-				onClick={(event) => {
-					event.preventDefault();
-					main.current?.focus();
-				}}
-				className="fixed start-4 top-4 z-20 -translate-y-20 rounded-large-increased bg-primary px-4 py-2.5 text-label-large text-on-primary shadow-level2 outline-none focus:translate-y-0 focus-visible:focus-indicator"
-			>
-				Skip to main content
-			</a>
+			{organisation && (
+				<a
+					href={`#${MAIN_ID}`}
+					onClick={(event) => {
+						event.preventDefault();
+						main.current?.focus();
+					}}
+					className="fixed start-4 top-4 z-20 -translate-y-20 rounded-large-increased bg-primary px-4 py-2.5 text-label-large text-on-primary shadow-level2 outline-none focus:translate-y-0 focus-visible:focus-indicator"
+				>
+					Skip to main content
+				</a>
+			)}
 
 			{/* The navigation takes no part in a transition. An element in one cannot be
 			    pressed until the transition ends, and the next press on a destination
 			    must land (design rule 8). The boundary also keeps what changes in the
 			    navigation from counting as a change of the whole page. Its active
 			    indicator is the one part that travels (Navigation.tsx). */}
-			<ViewTransition default="none">
-				<Navigation activeIndex={index} />
-			</ViewTransition>
+			{organisation && (
+				<ViewTransition default="none">
+					<Navigation organisation={organisation} activeIndex={index} />
+				</ViewTransition>
+			)}
+
+			{/* Outside an organisation there is nothing to navigate, so the product's
+			    name stands where the pages a person signs in on have it. */}
+			{!organisation && (
+				<header>
+					<a
+						href="/"
+						className="rounded-extra-small font-brand text-title-large text-primary outline-none focus-visible:focus-indicator"
+					>
+						Timesifier
+					</a>
+				</header>
+			)}
 
 			{/* The content slides in the direction of travel, and only when the
 			    destination changes: React would otherwise start a transition for every
@@ -89,11 +122,16 @@ export default function Shell() {
 					id={MAIN_ID}
 					ref={main}
 					tabIndex={-1}
-					className="max-w-2xl p-4 outline-none focus-visible:focus-indicator-inner medium:p-6"
+					className={cx(
+						"outline-none focus-visible:focus-indicator-inner",
+						organisation && "max-w-2xl p-4 medium:p-6",
+					)}
 				>
 					<Outlet />
 				</main>
 			</ViewTransition>
+
+			{!organisation && <SignedInAs email={loaderData.email} />}
 		</div>
 	);
 }

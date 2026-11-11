@@ -1,6 +1,7 @@
-import { destination, destinations } from "../app/shell/destinations";
+import { destinations } from "../app/shell/destinations";
 import { problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
+import { homePath } from "./organisation";
 
 // Every destination of the shell, as a bar and as a rail, in the light scheme and
 // the dark scheme: no WCAG 2.2 A or AA violation, and every text's contrast measured.
@@ -15,7 +16,7 @@ for (const viewport of [
 
 			for (const destination of destinations) {
 				test(`${destination.label} has no accessibility violations`, async ({ page }) => {
-					await openShell(page, destination.path);
+					await openShell(page, homePath(destination.id));
 					await expect(
 						page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 					).toBeVisible();
@@ -34,7 +35,7 @@ test.describe("with the keyboard focus showing", () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
 	test("the skip link, shown, has no accessibility violations", async ({ page }) => {
-		await openShell(page, destination("today").path);
+		await openShell(page, homePath("today"));
 		await page.keyboard.press("Tab");
 		await expect(page.getByRole("link", { name: "Skip to main content" })).toBeInViewport();
 

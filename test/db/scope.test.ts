@@ -11,7 +11,12 @@ import { freshDatabase } from "./database";
 
 let database: D1Database;
 
-/** Two organisations with two members each; Dana belongs to both. */
+/**
+ * Two organisations with two members each; Dana belongs to both. None of them
+ * is an owner: the database itself keeps an organisation's last owner
+ * (migrations/0004, test/db/last-owner.test.ts), and these tests change and
+ * delete every row of an organisation to show which organisation a row is in.
+ */
 async function seed() {
 	const db = drizzle(database);
 	const [acme, globex] = await db
@@ -33,9 +38,9 @@ async function seed() {
 	if (!acme || !globex || !ada || !bola || !chidi || !dana) throw new Error("seed failed");
 
 	await db.insert(memberships).values([
-		{ organisationId: acme.id, userId: ada.id, role: "owner" },
+		{ organisationId: acme.id, userId: ada.id, role: "member" },
 		{ organisationId: acme.id, userId: dana.id, role: "member" },
-		{ organisationId: globex.id, userId: bola.id, role: "owner" },
+		{ organisationId: globex.id, userId: bola.id, role: "member" },
 		{ organisationId: globex.id, userId: dana.id, role: "member" },
 	]);
 	return { acme, globex, ada, bola, chidi, dana };

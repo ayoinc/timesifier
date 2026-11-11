@@ -48,3 +48,30 @@ export const roles = {
 		invitation: [],
 	}),
 } satisfies Record<Role, unknown>;
+
+type Wanted = { [Resource in keyof typeof actions]?: (typeof actions)[Resource][number][] };
+
+/**
+ * Whether a role may do everything in `wanted`, by the table above. The pages
+ * ask this to decide which controls to show. Showing a control is a courtesy:
+ * the server asks the same table again when the control is used.
+ */
+export function allows(role: Role, wanted: Wanted): boolean {
+	return roles[role].authorize(wanted).success;
+}
+
+/**
+ * The roles `actor` may give a member who holds `target`: every role for an
+ * owner, admin and member for an admin acting on anyone but an owner, and none
+ * otherwise. Only an owner makes or changes an owner.
+ */
+export function rolesToGive(actor: Role, target: Role): Role[] {
+	if (!allows(actor, { member: ["update"] })) return [];
+	if (actor === "owner") return [...Role.options];
+	return target === "owner" ? [] : ["admin", "member"];
+}
+
+/** Whether `actor` may remove a member who holds `target`. Only an owner removes an owner. */
+export function mayRemove(actor: Role, target: Role): boolean {
+	return allows(actor, { member: ["delete"] }) && (actor === "owner" || target !== "owner");
+}

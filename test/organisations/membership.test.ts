@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { findMembership, requireMembership } from "~/organisations/membership.server";
 import { captureEmail, type Mailbox, ORIGIN, post, signIn } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { createOrganisation, type Role, seedOrganisation, signInAs } from "./harness";
+import {
+	createOrganisation,
+	type Role,
+	seedMembership,
+	seedOrganisation,
+	signInAs,
+} from "./harness";
 
 let mailbox: Mailbox;
 
@@ -134,8 +140,13 @@ describe("the membership function", () => {
 	});
 
 	it("grants nothing for a stored role the application does not know", async () => {
-		const { ada } = await twoOrganisations();
-		await env.DB.prepare("update memberships set role = 'superuser'").run();
+		const { ada, grace, acme } = await twoOrganisations();
+		// The database keeps an organisation's last owner (migrations/0004), so
+		// Acme gets another before Ada's role is overwritten.
+		await seedMembership(acme.id, grace.user.id, "owner");
+		await env.DB.prepare("update memberships set role = 'superuser' where user_id = ?")
+			.bind(ada.user.id)
+			.run();
 
 		expect(await findMembership(pageRequest("acme", ada.cookie), "acme")).toBeNull();
 	});

@@ -200,9 +200,9 @@ The application shell is everything under `/app`: a skip link, the navigation an
 
 ### Destinations
 
-`app/shell/destinations.ts` is the one list: Today (`/app`), Reports (`/app/reports`), Projects (`/app/projects`), Settings (`/app/settings`), in that order, each with its label, its address and the name of its Material Symbol. `app/routes.ts` builds the route tree from the list, the navigation draws it, the direction of a transition is the order of it, and the tests read their addresses from it. Nothing else writes one of these addresses. To add a destination, add it to the list, add `app/routes/app/<id>.tsx` with a `PageHeading`, and give its symbol a drawing in `app/shell/Navigation.tsx`.
+`app/shell/destinations.ts` is the one list: Today, Reports, Projects, Settings, in that order, each with its label, what follows the organisation in its address, and the name of its Material Symbol. Every destination belongs to an organisation and the organisation is in the address: Today is `/app/<slug>`, Reports `/app/<slug>/reports`, Projects `/app/<slug>/projects`, Settings `/app/<slug>/settings`. `destinationPath(slug, id)` builds an address; `app/routes.ts` builds the route tree from the list, the navigation draws it, the direction of a transition is the order of it, and the tests read their addresses from it. Nothing else writes one of these addresses. To add a destination, add it to the list, add `app/routes/app/<id>.tsx` with a `PageHeading`, and give its symbol a drawing in `app/shell/Navigation.tsx`.
 
-Each destination's page is a placeholder until its own card: its heading and one sentence saying what will be there. Settings also holds the colour scheme.
+Today, Reports and Projects are placeholders until their own cards: a heading and one sentence saying what will be there. Settings holds the organisation's name and deletion, a link to its members, and the person's own name, colour scheme and sign-out.
 
 ### The 600px rule
 

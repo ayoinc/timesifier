@@ -34,7 +34,7 @@ const neverChanges = () => () => {};
  * browser's. The server does not know it, so the server and the first render in
  * the browser both use UTC, and the two agree.
  */
-function useTimeZone(): string {
+export function useTimeZone(): string {
 	return useSyncExternalStore(
 		neverChanges,
 		() => Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -87,9 +87,9 @@ export function Passkeys({ passkeys }: PasskeysProps) {
 
 	return (
 		<section aria-labelledby="passkeys" className="mt-8">
-			<h2 id="passkeys" className="text-title-large">
+			<h3 id="passkeys" className="text-title-medium">
 				Passkeys
-			</h2>
+			</h3>
 			<p className="mt-2 text-body-medium text-on-surface-variant">
 				A passkey signs you in with your fingerprint, your face or your screen lock. An email code
 				always works as well, so removing a passkey never locks you out.
@@ -211,9 +211,9 @@ function Leaving({ id, title, end, children }: LeavingProps) {
 
 	return (
 		<section aria-labelledby={id} className="mt-8">
-			<h2 id={id} className="text-title-large">
+			<h3 id={id} className="text-title-medium">
 				{title}
-			</h2>
+			</h3>
 			<p className="mt-2 text-body-medium text-on-surface-variant">{children}</p>
 			<div className="mt-4 flex flex-col items-start gap-4">
 				<NoticeLine notice={notice} />

@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
+	ARRIVAL,
 	addAuthenticator,
 	codeSentBy,
 	newPerson,
@@ -11,7 +12,8 @@ import {
 	TIME_WITH_TURNS,
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
-import { expect, openShell, test } from "./fixtures";
+import { expect, test } from "./fixtures";
+import { openSettings } from "./organisation";
 
 // Design rule 15: everything works by keyboard, with a visible focus indicator.
 // Both pages and the account part of Settings are walked here with the keyboard
@@ -77,7 +79,7 @@ test("signing up, the code and the passkey, with the keyboard alone", async ({ p
 	expect(await authenticator.passkeys()).toBe(1);
 	await tabTo(page, page.getByRole("button", { name: "Open Timesifier" }));
 	await page.keyboard.press("Enter");
-	await expect(page).toHaveURL("/app");
+	await expect(page).toHaveURL(ARRIVAL);
 });
 
 test("signing in with an email code, with the keyboard alone", async ({ page }) => {
@@ -102,7 +104,7 @@ test("signing in with an email code, with the keyboard alone", async ({ page }) 
 	await expect(page.getByLabel("Code")).toBeFocused();
 	await page.keyboard.type(code);
 	await page.keyboard.press("Enter");
-	await expect(page).toHaveURL("/app");
+	await expect(page).toHaveURL(ARRIVAL);
 });
 
 test("going back a step, with the keyboard alone, returns to the field that was filled", async ({
@@ -134,8 +136,8 @@ test("adding and removing a passkey, and signing out, from Settings with the key
 	await addAuthenticator(page);
 	await signUp(page, newPerson());
 	await page.getByRole("button", { name: "Not now" }).click();
-	await expect(page).toHaveURL("/app");
-	await openShell(page, "/app/settings");
+	await expect(page).toHaveURL(ARRIVAL);
+	await openSettings(page);
 
 	const add = page.getByRole("button", { name: "Add a passkey" });
 	await add.focus();

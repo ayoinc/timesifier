@@ -40,14 +40,14 @@ describe("an error on the server", () => {
 		const lines = logLines();
 
 		const response = await exports.default.fetch(
-			new Request(`${ORIGIN}/app/settings?invitation=0193a1b2-secret-in-the-query`, {
+			new Request(`${ORIGIN}/app/acme/settings?invitation=0193a1b2-secret-in-the-query`, {
 				headers: { Cookie: cookie },
 			}),
 		);
 
 		const page = await response.text();
 		expect(lines.filter((line) => !line.startsWith("auth: "))).toEqual([
-			"error: Error at /app/settings",
+			"error: Error at /app/:organisation/settings",
 		]);
 		expect(response.status).toBe(500);
 		expect(page).toContain("An unexpected error occurred.");

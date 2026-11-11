@@ -3,6 +3,7 @@ import { routes } from "virtual:react-router/server-build";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { captureEmail, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
+import { createOrganisation, invite } from "./organisations/harness";
 
 /**
  * One malformed request for every route that exports an `action`, keyed by the
@@ -28,22 +29,50 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			body: '{"email": "ada@example.com", "otp":',
 		});
 	},
-	// The colour scheme is one of three words; this is none of them. Settings is
-	// under /app, so the request carries the session of a person who has signed in.
-	"routes/app/settings": async () => {
+	// The colour scheme is one of three words; this is none of them.
+	"routes/app/settings": () => formFromAMember("/app/acme/settings", "scheme=sepia"),
+	// An organisation's name is 1 to 80 characters; this is none.
+	"routes/app/new": () => formFromAMember("/app/new", "name="),
+	// A role is one of three words; this is none of them.
+	"routes/app/members": () =>
+		formFromAMember("/app/acme/settings/members", "intent=role&memberId=m1&role=emperor"),
+	// An invitation is joined or declined; this asks for neither. The invitation
+	// is one the person could join, so only the input is wrong.
+	"routes/invitations.$id": async () => {
 		await freshDatabase();
-		const { cookie } = await signIn(captureEmail(), "ada@example.com");
-		return new Request("https://timesifier.com/app/settings", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/x-www-form-urlencoded",
-				Origin: "https://timesifier.com",
-				Cookie: cookie,
-			},
-			body: "scheme=sepia",
-		});
+		const mailbox = captureEmail();
+		const ada = await signIn(mailbox, "ada@example.com");
+		const acme = await createOrganisation(ada.cookie, "Acme");
+		const { id } = await invite(ada.cookie, acme.id, "bob@example.com");
+		const bob = await signIn(mailbox, "bob@example.com", { client: "203.0.113.8" });
+		return form(`/invitations/${id}`, "intent=keep", bob.cookie);
 	},
 };
+
+/** A form as a browser posts it from our own page, with the session of the person posting. */
+function form(path: string, body: string, cookie: string): Request {
+	return new Request(`https://timesifier.com${path}`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/x-www-form-urlencoded",
+			Origin: "https://timesifier.com",
+			Cookie: cookie,
+		},
+		body,
+	});
+}
+
+/**
+ * The same, from a person who has signed in and owns the organisation at
+ * `/app/acme`: everything under `/app` needs a session, and an organisation's
+ * pages need a member. Only the input is wrong.
+ */
+async function formFromAMember(path: string, body: string): Promise<Request> {
+	await freshDatabase();
+	const { cookie } = await signIn(captureEmail(), "ada@example.com");
+	await createOrganisation(cookie, "Acme");
+	return form(path, body, cookie);
+}
 
 const routesWithAction = Object.values(routes)
 	.filter((route) => route !== undefined && route.module.action !== undefined)

@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { type Destination, destinations } from "../app/shell/destinations";
 import { expect, openShell, test } from "./fixtures";
+import { homePath } from "./organisation";
 
 // How a change of destination moves (TS-006, criterion 2; design rules 5, 6, 8
 // and 9). The tests read the browser's own view transition: which parts of it
@@ -170,7 +171,7 @@ for (const { viewport, axis, leave, arrive } of [
 			page,
 		}) => {
 			await watchViewTransitions(page);
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 			// Loading the page starts no transition.
 			expect(await viewTransitions(page)).toEqual([]);
 
@@ -204,7 +205,7 @@ for (const { viewport, axis, leave, arrive } of [
 			page,
 		}) => {
 			await watchViewTransitions(page);
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 
 			const transition = await travel(page, second);
 			const content = part(transition, arrive).pseudo.replace("::view-transition-new", "");
@@ -243,22 +244,22 @@ for (const { viewport, axis, leave, arrive } of [
 			page,
 		}) => {
 			await watchViewTransitions(page);
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 			const pressed = part(await travel(page, last), arrive);
 
 			// Back is a move to an earlier destination, Forward to a later one.
 			const back = part(await travel(page, first, () => page.goBack()), arrive);
 			expect(back.from[axis]).toBe(-pressed.from[axis]);
-			await expect(page).toHaveURL(first.path);
+			await expect(page).toHaveURL(homePath(first.id));
 
 			const forward = part(await travel(page, last, () => page.goForward()), arrive);
 			expect(forward.from[axis]).toBe(pressed.from[axis]);
-			await expect(page).toHaveURL(last.path);
+			await expect(page).toHaveURL(homePath(last.id));
 		});
 
 		test("a second press during a transition interrupts it", async ({ page, context }) => {
 			await watchViewTransitions(page);
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 
 			// Animations run at a twentieth of their speed, so the first transition
 			// would take several seconds to play out.
@@ -281,7 +282,7 @@ for (const { viewport, axis, leave, arrive } of [
 			).toBeFocused();
 			// The slowed transition was cut short, not waited for.
 			expect(Date.now() - pressed).toBeLessThan(2000);
-			await expect(page).toHaveURL(last.path);
+			await expect(page).toHaveURL(homePath(last.id));
 			await expect(page).toHaveTitle(`${last.label} · Timesifier`);
 		});
 	});
@@ -291,7 +292,7 @@ for (const { viewport, axis, leave, arrive } of [
 
 		test("a change of destination fades and nothing moves", async ({ page }) => {
 			await watchViewTransitions(page);
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 			expect(
 				await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches),
 			).toBe(true);

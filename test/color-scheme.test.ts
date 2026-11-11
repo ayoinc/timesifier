@@ -1,22 +1,24 @@
 import { exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { destination } from "../app/shell/destinations";
+import { destinationPath } from "../app/shell/destinations";
 import { captureEmail, type Mailbox, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
+import { createOrganisation } from "./organisations/harness";
 
 // The colour scheme a person chooses in Settings: the action that stores it in
 // the `__Host-color-scheme` cookie, and the root loader that renders it on <html>.
 // Both are driven through the Worker's real fetch handler.
 
 const ORIGIN = "https://timesifier.com";
-const SETTINGS = destination("settings").path;
-const TODAY = destination("today").path;
+const SETTINGS = destinationPath("acme", "settings");
+const TODAY = destinationPath("acme", "today");
 
 const worker = exports.default;
 
-// Settings and Today are under /app, which needs a session: every request these
-// helpers make carries the session cookie of a person who has signed in. The
+// Settings and Today belong to an organisation, under /app/<slug>, which needs a
+// session and a member: every request these helpers make carries the session
+// cookie of a person who has signed in and created the organisation at /app/acme. The
 // sign-in happens in the test, not in a hook: the first request to the Worker
 // loads the whole application, and a hook is given less time than a test.
 let mailbox: Mailbox;
@@ -31,7 +33,9 @@ afterEach(() => {
 });
 
 async function session(): Promise<string> {
-	return (await signIn(mailbox, "ada@example.com")).cookie;
+	const { cookie } = await signIn(mailbox, "ada@example.com");
+	expect((await createOrganisation(cookie, "Acme")).slug).toBe("acme");
+	return cookie;
 }
 
 /** The Settings form as a browser posts it from our own page. */

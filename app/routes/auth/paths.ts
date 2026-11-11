@@ -14,11 +14,21 @@ export const NEXT_PARAM = "next";
 // names a host of its own resolves somewhere else and is told apart.
 const NOWHERE = "https://next.invalid";
 
+/** An invitation's own page: `/invitations/<id>`, where the id is letters, digits and hyphens. */
+const INVITATION = /^\/invitations\/[A-Za-z0-9-]{1,64}$/;
+
+/** The address of the page of the invitation with this id. */
+export function invitationPath(id: string): string {
+	return `/invitations/${id}`;
+}
+
 /**
  * Where a person goes after signing in. `next` is honoured only when it is a
- * path on our own origin at or under `/app`; anything else, or nothing, gives
- * `/app`. The path returned is the one the URL parser read, so `/app/../x`,
- * `//host/app` and `/\host/app` are judged as a browser would follow them.
+ * path on our own origin at or under `/app`, or the page of one invitation;
+ * anything else, or nothing, gives `/app`. The path returned is the one the
+ * URL parser read, so `/app/../x`, `//host/app` and `/\host/app` are judged as
+ * a browser would follow them. An invitation's page takes no query, so none is
+ * kept for it.
  */
 export function safeNext(next: string | null | undefined): string {
 	if (!next?.startsWith("/")) return APP_PATH;
@@ -31,6 +41,7 @@ export function safeNext(next: string | null | undefined): string {
 	}
 	if (url.origin !== NOWHERE) return APP_PATH;
 
+	if (INVITATION.test(url.pathname)) return url.pathname;
 	const inside = url.pathname === APP_PATH || url.pathname.startsWith(`${APP_PATH}/`);
 	return inside ? `${url.pathname}${url.search}` : APP_PATH;
 }

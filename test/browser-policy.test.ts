@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { POLICY_ADDITION_HEADER, withSecurityHeaders } from "../workers/security-headers";
 import { captureEmail, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
+import { createOrganisation, invite } from "./organisations/harness";
 
 const ORIGIN = "https://timesifier.com";
 
@@ -137,10 +138,31 @@ describe("the Turnstile addition to the policy", () => {
 		},
 	);
 
-	it("is on no page under /app", async () => {
+	it("is on no page under /app, nor on an invitation's page", async () => {
 		await freshDatabase();
-		const { cookie } = await signIn(captureEmail(), "ada@example.com");
-		for (const path of ["/app", "/app/reports", "/app/projects", "/app/settings"]) {
+		const mailbox = captureEmail();
+		const { cookie } = await signIn(mailbox, "ada@example.com");
+		// With two organisations, /app itself is a page: the chooser.
+		const acme = await createOrganisation(cookie, "Acme");
+		await createOrganisation(cookie, "Globex");
+		const { id } = await invite(cookie, acme.id, "bob@example.com");
+		const bob = await signIn(mailbox, "bob@example.com", { client: "203.0.113.8" });
+
+		const invitation = await worker.fetch(`${ORIGIN}/invitations/${id}`, {
+			headers: { Cookie: bob.cookie },
+		});
+		expect(invitation.status).toBe(200);
+		await expectBrowserPolicy(invitation);
+
+		for (const path of [
+			"/app",
+			"/app/new",
+			"/app/acme",
+			"/app/acme/reports",
+			"/app/acme/projects",
+			"/app/acme/settings",
+			"/app/acme/settings/members",
+		]) {
 			const response = await worker.fetch(`${ORIGIN}${path}`, { headers: { Cookie: cookie } });
 			expect(response.status, path).toBe(200);
 			await expectBrowserPolicy(response);
