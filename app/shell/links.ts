@@ -1,3 +1,4 @@
-/** A link inside a page's own text: the primary colour, underlined, with the shell's focus indicator. */
-export const TEXT_LINK =
-	"rounded-extra-small text-label-large text-primary underline underline-offset-4 outline-none focus-visible:focus-indicator";
+import { LINK } from "~/landing/Site";
+
+/** A link inside a page's own text: the public pages' underlined link, in the text's ink. */
+export const TEXT_LINK = `${LINK} text-body-large`;

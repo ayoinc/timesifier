@@ -5,6 +5,7 @@ import * as z from "zod";
 import { changeName } from "~/auth/auth.server";
 import { PERSON_NAME_MAX, PersonName } from "~/auth/person-name";
 import { Button } from "~/components/Button";
+import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { TextField } from "~/components/TextField";
 import { parseRequest } from "~/lib/validate";
@@ -28,7 +29,7 @@ import {
 } from "~/shell/color-scheme.server";
 import { APP_PATH, destination, membersPath, NEW_ORGANISATION_PATH } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-import { PageHeading } from "~/shell/PageHeading";
+import { PageHeading, Section } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/settings";
 import { FormSheet } from "./FormSheet";
@@ -130,10 +131,6 @@ const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
 	{ value: "system", label: "Match my device" },
 ];
 
-/** A fact with the control that changes it beside it. */
-const ROW =
-	"mt-4 flex items-center justify-between gap-4 rounded-medium bg-surface-container px-4 py-3";
-
 /** The sheets of this page. One is open at a time. */
 type Task = "rename" | "delete" | "name";
 
@@ -147,31 +144,36 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
-			<p role="status" className="mt-2 text-body-medium text-on-surface-variant empty:hidden">
+			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
 			</p>
 
-			<section aria-labelledby="organisation" className="mt-6">
-				<h2 id="organisation" className="text-title-large">
-					Organisation
-				</h2>
-				<p className="mt-2 text-body-medium text-on-surface-variant">
-					Shared by everyone in {organisation.name}. You are {AS_ROLE[organisation.role]}.
-				</p>
+			<Section
+				id="organisation"
+				heading="Organisation"
+				lead={
+					<>
+						Shared by everyone in {organisation.name}. You are {AS_ROLE[organisation.role]}.
+					</>
+				}
+				className="max-w-200"
+			>
+				<Ledger heading="Organisation name">
+					<LedgerRows>
+						<LedgerRow
+							title={<span className="wrap-anywhere">{organisation.name}</span>}
+							action={
+								organisation.canRename && (
+									<Button variant="text" onPress={() => setTask("rename")}>
+										Rename
+									</Button>
+								)
+							}
+						/>
+					</LedgerRows>
+				</Ledger>
 
-				<div className={ROW}>
-					<div className="min-w-0">
-						<p className="text-body-medium text-on-surface-variant">Organisation name</p>
-						<p className="wrap-anywhere text-body-large">{organisation.name}</p>
-					</div>
-					{organisation.canRename && (
-						<Button variant="text" onPress={() => setTask("rename")}>
-							Rename
-						</Button>
-					)}
-				</div>
-
-				<ul className="mt-4 flex flex-col items-start gap-3">
+				<ul className="mt-6 flex flex-col items-start gap-3">
 					<li>
 						<Link to={membersPath(params.organisation)} className={TEXT_LINK}>
 							Members and invitations
@@ -190,48 +192,53 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 						</Link>
 					</li>
 				</ul>
+			</Section>
 
-				{organisation.canDelete && (
-					<section aria-labelledby="delete-organisation" className="mt-8">
-						<h3 id="delete-organisation" className="text-title-medium">
-							Delete organisation
-						</h3>
-						<p className="mt-2 text-body-medium text-on-surface-variant">
-							Removes {organisation.name}, its members and its invitations for everyone. It cannot
-							be undone.
-						</p>
-						<div className="mt-4">
-							<Button variant="outlined" onPress={() => setTask("delete")}>
-								Delete organisation
-							</Button>
-						</div>
-					</section>
-				)}
-			</section>
-
-			<section aria-labelledby="account" className="mt-12">
-				<h2 id="account" className="text-title-large">
-					Your account
-				</h2>
-				<p className="mt-2 text-body-medium text-on-surface-variant">
-					Yours alone. These are the same in every organisation you belong to.
-				</p>
-
-				<div className={ROW}>
-					<div className="min-w-0">
-						<p className="text-body-medium text-on-surface-variant">Your name</p>
-						<p className="wrap-anywhere text-body-large">
-							{person.name ?? `Not set. People see your address, ${person.email}.`}
-						</p>
-					</div>
-					<Button variant="text" onPress={() => setTask("name")}>
-						{person.name ? "Change name" : "Add name"}
-					</Button>
-				</div>
+			<Section
+				id="account"
+				heading="Your account"
+				lead="Yours alone. These are the same in every organisation you belong to."
+				className="max-w-200"
+			>
+				<Ledger heading="Your name">
+					<LedgerRows>
+						<LedgerRow
+							title={
+								<span className="wrap-anywhere">
+									{person.name ?? `Not set. People see your address, ${person.email}.`}
+								</span>
+							}
+							action={
+								<Button variant="text" onPress={() => setTask("name")}>
+									{person.name ? "Change name" : "Add name"}
+								</Button>
+							}
+						/>
+					</LedgerRows>
+				</Ledger>
 
 				<Appearance />
 				<SignOut email={person.email} />
-			</section>
+			</Section>
+
+			{/* Deletion is last, under its own rule. */}
+			{organisation.canDelete && (
+				<Section
+					id="delete-organisation"
+					heading="Delete organisation"
+					lead={
+						<>
+							Removes {organisation.name}, its members and its invitations for everyone. It cannot
+							be undone.
+						</>
+					}
+					className="max-w-200"
+				>
+					<Button variant="outlined" onPress={() => setTask("delete")}>
+						Delete organisation
+					</Button>
+				</Section>
+			)}
 
 			<FormSheet
 				title="Rename the organisation"

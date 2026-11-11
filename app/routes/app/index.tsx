@@ -1,10 +1,11 @@
 import { Link, redirect } from "react-router";
 
+import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { listOrganisations } from "~/organisations/api.server";
 import { unavailable } from "~/organisations/outcome.server";
 import { NEW_ORGANISATION_PATH, organisationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-import { PageHeading } from "~/shell/PageHeading";
+import { PageHeading, PageLead } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/index";
 
@@ -30,22 +31,26 @@ export default function Organisations({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>Your organisations</PageHeading>
-			<p className="mt-2 text-body-large text-on-surface-variant">Choose one to open.</p>
+			<PageLead>Choose one to open.</PageLead>
 
-			<ul className="mt-6 flex flex-col gap-2">
-				{loaderData.organisations.map(({ name, slug }) => (
-					<li key={slug}>
-						<Link
-							to={organisationPath(slug)}
-							className="flex min-h-14 items-center rounded-medium px-4 py-3 text-body-large text-on-surface outline-none over-surface-container state-layer transition-control hover:state-hover focus-visible:focus-indicator focus-visible:state-focus active:state-pressed"
-						>
-							{name}
-						</Link>
-					</li>
-				))}
-			</ul>
+			<div className="mt-10">
+				<Ledger heading="Organisations" note={loaderData.organisations.length}>
+					<LedgerRows>
+						{loaderData.organisations.map(({ name, slug }) => (
+							<LedgerRow
+								key={slug}
+								title={
+									<Link to={organisationPath(slug)} className={`${TEXT_LINK} wrap-anywhere`}>
+										{name}
+									</Link>
+								}
+							/>
+						))}
+					</LedgerRows>
+				</Ledger>
+			</div>
 
-			<p className="mt-6">
+			<p className="mt-10">
 				<Link to={NEW_ORGANISATION_PATH} className={TEXT_LINK}>
 					Create an organisation
 				</Link>

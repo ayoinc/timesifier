@@ -126,8 +126,15 @@ async function travel(
 	).toBeFocused();
 	await expect.poll(async () => (await viewTransitions(page)).length).toBe(before + 1);
 	const transition = (await viewTransitions(page)).at(-1) ?? [];
-	// Let it finish, so the next press starts from a page at rest.
-	await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+	// Let it finish, so the next press starts from a page at rest. The band's
+	// animation runs on the scroll's timeline, not in time, and never finishes.
+	await expect
+		.poll(() =>
+			page.evaluate(
+				() => document.getAnimations().filter((each) => each.timeline === document.timeline).length,
+			),
+		)
+		.toBe(0);
 	return transition;
 }
 
@@ -271,7 +278,10 @@ for (const { viewport, axis, leave, arrive } of [
 			await links.getByRole("link", { name: second.label, exact: true }).click();
 			await expect.poll(async () => (await viewTransitions(page)).length).toBe(1);
 			expect(
-				await page.evaluate(() => document.getAnimations().length),
+				await page.evaluate(
+					() =>
+						document.getAnimations().filter((each) => each.timeline === document.timeline).length,
+				),
 				"the first transition is still running",
 			).toBeGreaterThan(0);
 

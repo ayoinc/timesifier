@@ -1,14 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
-import { Outlet, useLocation, useNavigationType, useParams } from "react-router";
+import {
+	Outlet,
+	useLocation,
+	useNavigationType,
+	useParams,
+	useRouteLoaderData,
+} from "react-router";
 
 import { cx } from "~/components/cx";
+import { PAGE, SiteHeader } from "~/landing/Site";
 import { requireSession, signedInContext } from "~/routes/auth/session.server";
 import { destinationIndex, NEW_ORGANISATION_PATH, ORGANISATION_PARAM } from "~/shell/destinations";
 import { Navigation } from "~/shell/Navigation";
-import { OUTSIDE_FRAME, ProductName } from "~/shell/Outside";
+import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { finishRunningTransition, TRANSITION, useTravel } from "~/shell/transitions";
 
 import type { Route } from "./+types/layout";
+import type { loader as organisationLoader } from "./organisation";
 import { SignedInAs } from "./SignedInAs";
 
 // The application shell: a skip link, the navigation and the main region every
@@ -68,10 +76,15 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 		return () => window.removeEventListener("popstate", finishRunningTransition);
 	}, []);
 
+	// The organisation's name stands in the band, at the other end from the product's.
+	const organisationName =
+		useRouteLoaderData<typeof organisationLoader>("routes/app/organisation")?.name;
+
 	return (
-		<div className={organisation ? "min-h-dvh max-medium:pb-16 medium:ps-24" : OUTSIDE_FRAME}>
+		<div className={cx(OUTSIDE_FRAME, organisation && "max-medium:pb-16")}>
 			{/* Off the top edge until it is focused. With script it moves the focus
-			    without adding a history entry; without, the browser follows the fragment. */}
+			    without adding a history entry; without, the browser follows the fragment.
+			    Drawn as the public pages' skip link. */}
 			{organisation && (
 				<a
 					href={`#${MAIN_ID}`}
@@ -79,43 +92,55 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 						event.preventDefault();
 						main.current?.focus();
 					}}
-					className="fixed start-4 top-4 z-20 -translate-y-20 rounded-large-increased bg-primary px-4 py-2.5 text-label-large text-on-primary shadow-level2 outline-none focus:translate-y-0 focus-visible:focus-indicator"
+					className="fixed start-4 top-4 z-20 -translate-y-20 rounded-small bg-inverse-surface px-4 py-2.5 text-label-large text-inverse-on-surface outline-none focus:translate-y-0 focus-visible:focus-indicator-inverse"
 				>
 					Skip to main content
 				</a>
 			)}
 
-			{/* The navigation takes no part in a transition. An element in one cannot be
-			    pressed until the transition ends, and the next press on a destination
-			    must land (design rule 8). The boundary also keeps what changes in the
-			    navigation from counting as a change of the whole page. Its active
-			    indicator is the one part that travels (Navigation.tsx). */}
-			{organisation && (
-				<ViewTransition default="none">
-					<Navigation organisation={organisation} activeIndex={index} />
+			{/* The public pages' band: the lockup, which leads home, and the
+			    organisation's name. Outside an organisation it holds the lockup alone,
+			    as on the sign-in page. */}
+			<SiteHeader
+				current={pathname}
+				end={
+					organisationName ? (
+						<p className="min-w-0 truncate text-title-medium">{organisationName}</p>
+					) : null
+				}
+			/>
+
+			<div className={cx("flex flex-1 flex-col", organisation && PAGE)}>
+				{/* The navigation takes no part in a transition. An element in one cannot be
+				    pressed until the transition ends, and the next press on a destination
+				    must land (design rule 8). The boundary also keeps what changes in the
+				    navigation from counting as a change of the whole page. Its rule under
+				    the current destination is the one part that travels (Navigation.tsx). */}
+				{organisation && (
+					<ViewTransition default="none">
+						<Navigation organisation={organisation} activeIndex={index} />
+					</ViewTransition>
+				)}
+
+				{/* The content slides in the direction of travel, and only when the
+				    destination changes: React would otherwise start a transition for every
+				    render that reaches it, and each would hold back the next. */}
+				<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
+					<main
+						id={MAIN_ID}
+						ref={main}
+						tabIndex={-1}
+						className={cx(
+							"outline-none focus-visible:focus-indicator-inner",
+							organisation ? "min-w-0 flex-1 pt-10 pb-24 medium:ms-32" : OUTSIDE_MAIN,
+						)}
+					>
+						<div className={organisation ? undefined : OUTSIDE_COLUMN}>
+							<Outlet />
+						</div>
+					</main>
 				</ViewTransition>
-			)}
-
-			{/* Outside an organisation there is nothing to navigate, so the product's
-			    name stands at the top (~/shell/Outside). */}
-			{!organisation && <ProductName />}
-
-			{/* The content slides in the direction of travel, and only when the
-			    destination changes: React would otherwise start a transition for every
-			    render that reaches it, and each would hold back the next. */}
-			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-				<main
-					id={MAIN_ID}
-					ref={main}
-					tabIndex={-1}
-					className={cx(
-						"outline-none focus-visible:focus-indicator-inner",
-						organisation && "max-w-2xl p-4 medium:p-6",
-					)}
-				>
-					<Outlet />
-				</main>
-			</ViewTransition>
+			</div>
 
 			{/* The page that creates an organisation is where a new account lands, and
 			    signing in with the wrong one of two addresses makes one: its way out says so. */}

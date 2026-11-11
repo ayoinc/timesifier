@@ -9,7 +9,7 @@ import { NAME_MAX_LENGTH, Name, nameProblem } from "~/organisations/name";
 import { refused, unavailable } from "~/organisations/outcome.server";
 import { APP_PATH, organisationPath, WELCOME_PARAM } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-import { PageHeading } from "~/shell/PageHeading";
+import { PageHeading, PageLead } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/new";
 
@@ -56,14 +56,14 @@ export default function NewOrganisation({ loaderData, actionData }: Route.Compon
 	return (
 		<>
 			<PageHeading>{titleFor(first)}</PageHeading>
-			<p className="mt-2 text-body-large text-on-surface-variant">
+			<PageLead>
 				An organisation holds the projects and tracked time of the people who work together. You
 				will be its owner, and you can invite the others once it exists.
-			</p>
+			</PageLead>
 
 			<Form
 				method="post"
-				className="mt-6 flex flex-col gap-4"
+				className="mt-10 flex flex-col gap-6"
 				onSubmit={(event) => {
 					if (busy) event.preventDefault();
 				}}

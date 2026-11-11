@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { useDateFormatter } from "react-aria";
 import { Link, useLocation, useNavigate } from "react-router";
-
 import { membershipContext } from "~/organisations/membership.server";
+import { useTimeZone } from "~/routes/auth/AccountSettings";
 import { DoneMark } from "~/routes/auth/AuthPage";
 import { destination, membersPath, WELCOME_PARAM } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-import { PageHeading } from "~/shell/PageHeading";
+import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/today";
 import { useOrganisation } from "./useOrganisation";
@@ -32,6 +33,12 @@ export default function Today({ loaderData }: Route.ComponentProps) {
 	// reloading the page or coming back to it does not mark it again, and the
 	// welcome stays until the person leaves the page.
 	const [welcome] = useState(loaderData.welcome);
+	const date = useDateFormatter({
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		timeZone: useTimeZone(),
+	});
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	useEffect(() => {
@@ -41,15 +48,13 @@ export default function Today({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<p className="mt-2 text-body-large text-on-surface-variant">
-				Your running timer and the entries you track today will appear here.
-			</p>
+			<PageLead>{date.format(new Date())}</PageLead>
 			{welcome && (
-				<div className="mt-6 flex items-center gap-4 rounded-large bg-surface-container p-4">
+				<div className="mt-10 flex max-w-160 items-start gap-4">
 					<DoneMark />
 					<div>
 						<p className="text-title-medium">{organisation.name} is ready</p>
-						<p className="mt-1 text-body-medium text-on-surface-variant">
+						<p className="mt-1 text-body-large text-on-surface-variant">
 							You are its owner. When you want company,{" "}
 							<Link to={membersPath(organisation.slug)} className={TEXT_LINK}>
 								invite the people you work with
@@ -59,6 +64,9 @@ export default function Today({ loaderData }: Route.ComponentProps) {
 					</div>
 				</div>
 			)}
+			<EmptySheet heading="Entries">
+				Your running timer and the entries you track today will appear here.
+			</EmptySheet>
 		</>
 	);
 }

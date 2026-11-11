@@ -49,7 +49,7 @@ Each rule can be checked in review or by a test.
 14. Light and dark schemes come from one seed colour. Text meets 4.5:1 contrast in both.
 15. Everything works by keyboard, with a visible focus indicator.
 16. Pages meet WCAG 2.2 AA; automated checks run in the pipeline and a manual keyboard pass is part of TS-023.
-17. Layout follows Material's window sizes: a navigation bar when the window is under 600px wide, a navigation rail from 600px.
+17. Layout follows Material's window sizes: the navigation is a bar along the bottom when the window is under 600px wide, and a column beside the page from 600px.
 
 ## Building blocks
 
@@ -220,13 +220,13 @@ The smallest page that shows it. The text turns red on focus in Chromium and sta
 
 ## Shell
 
-The application shell is everything under `/app`: a skip link, the navigation and the main region each destination renders into. The route is `app/routes/app/layout.tsx`; the parts are in `app/shell/`. The browser tests are `e2e/shell-*.spec.ts`.
+The application shell is everything under `/app`: a skip link, the public pages' band (`SiteHeader`) with the organisation's name, the navigation and the main region each destination renders into. Its pages are built from the landing page's pieces (`docs/design-direction.md`, "For the product screens"): `PageHeading`, `PageLead`, `Section` and `EmptySheet` in `app/shell/PageHeading.tsx`, `Ledger` for every list with an action. The route is `app/routes/app/layout.tsx`; the parts are in `app/shell/`. The browser tests are `e2e/shell-*.spec.ts`.
 
 ### Destinations
 
-`app/shell/destinations.ts` is the one list: Today, Reports, Projects, Settings, in that order, each with its label, what follows the organisation in its address, and the name of its Material Symbol. Every destination belongs to an organisation and the organisation is in the address: Today is `/app/<slug>`, Reports `/app/<slug>/reports`, Projects `/app/<slug>/projects`, Settings `/app/<slug>/settings`. `destinationPath(slug, id)` builds an address; `app/routes.ts` builds the route tree from the list, the navigation draws it, the direction of a transition is the order of it, and the tests read their addresses from it. Nothing else writes one of these addresses. To add a destination, add it to the list, add `app/routes/app/<id>.tsx` with a `PageHeading`, and give its symbol a drawing in `app/shell/Navigation.tsx`.
+`app/shell/destinations.ts` is the one list: Today, Reports, Projects, Settings, in that order, each with its label and what follows the organisation in its address. Every destination belongs to an organisation and the organisation is in the address: Today is `/app/<slug>`, Reports `/app/<slug>/reports`, Projects `/app/<slug>/projects`, Settings `/app/<slug>/settings`. `destinationPath(slug, id)` builds an address; `app/routes.ts` builds the route tree from the list, the navigation draws it, the direction of a transition is the order of it, and the tests read their addresses from it. Nothing else writes one of these addresses. To add a destination, add it to the list, add `app/routes/app/<id>.tsx` with a `PageHeading`, and give its symbol a drawing in `app/shell/Navigation.tsx`.
 
-Today, Reports and Projects are placeholders until their own cards: a heading and one sentence saying what will be there. Settings holds the organisation's name and deletion, a link to its members, and the person's own name, colour scheme and sign-out.
+Today, Reports and Projects are placeholders until their own cards: a heading and an empty sheet with one sentence saying what will be there. Settings holds the organisation's name and deletion, a link to its members, and the person's own name, colour scheme and sign-out.
 
 ### Pages inside a destination
 
@@ -249,12 +249,12 @@ Four constraints apply to every page, and bite hardest on a public page with pic
 
 One `nav` element with one list of links is drawn two ways, by CSS alone (rule 17). Tailwind's `medium:` variant is Material's medium window size, 600px (`--breakpoint-medium` in `app/app.css`); `max-medium:` is everything narrower.
 
-| Window      | Navigation      | Where                            | Drawn from                                                     |
-| ----------- | --------------- | -------------------------------- | -------------------------------------------------------------- |
-| Under 600px | Navigation bar  | Along the bottom edge, 64px tall | `md-comp-nav-bar`, `md-comp-nav-bar-item-vertical`             |
-| From 600px  | Navigation rail | Down the start edge, 96px wide   | `md-comp-nav-rail-collapsed`, `md-comp-nav-rail-item-vertical` |
+| Window      | Navigation | Where                                                  | Drawn                       |
+| ----------- | ---------- | ------------------------------------------------------ | --------------------------- |
+| Under 600px | Bar        | Along the bottom edge, 64px tall, under a 2px ink rule | The links side by side      |
+| From 600px  | Column     | Beside the page, under the band, 96px wide             | The links one under another |
 
-An item is the same in both: a 56 by 32px active indicator around a 24px icon, a `label-medium` label under it, 64px tall in all. The active destination has `aria-current="page"`, the filled drawing of its symbol and the indicator. No script measures the window: the server sends the same HTML to every width, and the navigation works with script off.
+An item is the same in both: its label in `label-large`, at least 48px tall. The active destination has `aria-current="page"` and a 2px ink rule, under its label in the bar and before it in the column; nothing is filled. No script measures the window: the server sends the same HTML to every width, and the navigation works with script off.
 
 ### How a change of destination moves
 
@@ -262,7 +262,7 @@ React's `<ViewTransition>` (in the installed React, 19.3.1) starts the browser's
 
 - **Direction (rule 5).** A destination later in the list is forward of an earlier one. `useTravel` in `app/shell/transitions.ts` compares the destination arriving with the one on screen and gives the content the class `shell-forward` or `shell-back`. Going forward the old page leaves towards the start and the new one arrives from the end; going back is the mirror image. It works the same for a press on a destination, a link inside a page and the browser's Back button, because it reads only where the page was and where it is going.
 - **Axis.** Under 600px the destinations lie side by side, so the content moves across. From 600px they are stacked, so it moves up and down. The distance is eight spacing units.
-- **What moves (rule 6).** Only the content. The active indicator is one element with one view-transition name: it travels from the old destination to the new one on the spring. The icons of the two destinations fade, above the indicator.
+- **What moves (rule 6).** Only the content. The active indicator is one element with one view-transition name: it travels from the old destination to the new one on the spring. The indicator is the 2px ink rule under or beside the current label.
 - **The navigation is not in the transition.** The browser does not deliver a press to an element that is part of a running view transition, so the navigation stays an ordinary part of the page and can be pressed at any moment.
 - **Interruption (rule 8).** React holds the next transition until the running one has finished. A press on a destination and the browser's Back and Forward therefore end the running transition first (`finishRunningTransition`, through `document.activeViewTransition`): its animations jump to their end and the new page arrives at once. In a browser without that property the next transition follows the running one, a third of a second later at most.
 - **Only a change of destination starts a transition.** The content's `<ViewTransition>` has the class `none` in every other render. Without that, React starts a transition for any render that reaches it, and each one holds back the next navigation.
@@ -273,7 +273,7 @@ React's `<ViewTransition>` (in the installed React, 19.3.1) starts the browser's
 ### Focus and landmarks
 
 - The first Tab stop is "Skip to main content", off the top edge until it has the focus. It moves the focus to the `main` element.
-- Landmarks: one `navigation` named "Main" and one `main`. There is no top bar, so there is no `banner`.
+- Landmarks: one `banner` (the band), one `navigation` named "Main" and one `main`.
 - After a move between pages the focus is on the new page's `h1`, and the title has changed. Every page in the shell renders its heading with `PageHeading`, which can take the focus from script and is not a Tab stop. A screen reader announces the new page, and Tab carries on from its top. The same happens on arriving in the shell by a link from a page outside it.
 - A page the browser loads whole leaves the focus alone.
 

@@ -52,15 +52,18 @@ async function expectBar(page: Page) {
 	expect(new Set(lefts).size).toBe(links.length);
 }
 
-/** A navigation rail: down the start edge, as tall as the window, its destinations stacked. */
+/** A column of links beside the page, under the band, its destinations stacked. */
 async function expectRail(page: Page) {
 	const window = page.viewportSize() ?? MEDIUM;
 	const { container, links } = await drawn(page);
+	const band = await box(page.getByRole("banner"));
 
-	expect(container.x).toBe(0);
-	expect(container.y).toBe(0);
-	expect(container.height).toBe(window.height);
+	// At the start of the page's column, under the band.
+	expect(container.x).toBeGreaterThan(0);
+	expect(container.x).toBeLessThan(window.width / 2);
+	expect(container.y).toBeGreaterThanOrEqual(band.y + band.height);
 	// No bar: nothing of the navigation runs along the bottom of the window.
+	expect(container.y + container.height).toBeLessThan(window.height);
 	expect(container.width).toBe(96);
 
 	expect(new Set(links.map((link) => link.x)).size, "the destinations are in one column").toBe(1);
@@ -206,8 +209,8 @@ for (const viewport of [COMPACT, MEDIUM]) {
 			await expect(navigation(page)).toBeVisible();
 			await expect(page.getByRole("main")).toHaveCount(1);
 			await expect(page.getByRole("main").getByRole("heading", { level: 1 })).toHaveCount(1);
-			// There is no top bar, so there is no banner.
-			await expect(page.getByRole("banner")).toHaveCount(0);
+			// The public pages' band is at the top, the one banner.
+			await expect(page.getByRole("banner")).toHaveCount(1);
 		});
 
 		test("after a move to each destination the focus is on its heading and the title has changed", async ({
@@ -243,7 +246,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 					await page.keyboard.press("Tab");
 				}
 				await expect(link).toBeFocused();
-				// The keyboard's focus indicator is drawn around the link's icon.
+				// The keyboard's focus indicator is drawn around the link's label.
 				await expect(link.locator("span").first()).toHaveCSS("outline-style", "solid");
 
 				await page.keyboard.press("Enter");

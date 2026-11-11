@@ -117,6 +117,11 @@ export interface SiteHeaderProps {
 	current: string;
 	/** The places on this page worth jumping to. They show from 600px. */
 	sections?: readonly SiteLink[];
+	/**
+	 * On a signed-in page, what stands at the right in place of the way in: the
+	 * organisation's name, or nothing (`null`). The band is otherwise the same.
+	 */
+	end?: ReactNode;
 }
 
 const HEADER_LINK =
@@ -130,8 +135,10 @@ const HEADER_LINK =
  * appears under the band (public.css). On the sign-in page it does not settle:
  * that page is short, its views change in place, and the band takes no part.
  */
-export function SiteHeader({ current, sections = [] }: SiteHeaderProps) {
-	const signIn = current !== SIGN_IN_PATH;
+export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
+	const signedIn = end !== undefined;
+	const signIn = current !== SIGN_IN_PATH && !signedIn;
+	const settles = current !== SIGN_IN_PATH;
 
 	return (
 		<header className="site-header sticky top-0 z-10 bg-sheet text-on-sheet">
@@ -140,11 +147,12 @@ export function SiteHeader({ current, sections = [] }: SiteHeaderProps) {
 				<a
 					href="/"
 					aria-current={current === "/" ? "page" : undefined}
-					className={`${signIn ? "site-name " : ""}inline-flex min-h-9.5 items-center rounded-extra-small outline-none focus-visible:focus-indicator`}
+					className={`${settles ? "site-name " : ""}inline-flex min-h-9.5 items-center rounded-extra-small outline-none focus-visible:focus-indicator`}
 				>
 					<Wordmark tone="one" />
 				</a>
-				{(signIn || sections.length > 0) && (
+				{signedIn && end}
+				{!signedIn && (signIn || sections.length > 0) && (
 					<nav aria-label="Site">
 						<ul className="flex items-center gap-8 text-label-large">
 							{sections.map(({ href, label }) => (
@@ -170,7 +178,7 @@ export function SiteHeader({ current, sections = [] }: SiteHeaderProps) {
 			</div>
 			<span
 				aria-hidden="true"
-				className={`${signIn ? "site-header-rule " : ""}absolute inset-x-0 bottom-0 h-0.5 bg-on-sheet opacity-0`}
+				className={`${settles ? "site-header-rule " : ""}absolute inset-x-0 bottom-0 h-0.5 bg-on-sheet opacity-0`}
 			/>
 		</header>
 	);

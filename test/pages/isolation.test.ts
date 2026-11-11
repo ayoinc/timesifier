@@ -104,7 +104,7 @@ describe("a member of one organisation asking for another organisation's address
 		expect(nobodys.status).toBe(404);
 		const body = await said(theirs, THEIRS);
 		expect(body).toBe(await said(nobodys, NOBODYS));
-		expect(body).toContain("The requested page could not be found.");
+		expect(body).toContain("There is no page at this address, or it is not yours to open.");
 		expect(body).not.toContain("Acme");
 	});
 

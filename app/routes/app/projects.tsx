@@ -1,5 +1,5 @@
 import { destination } from "~/shell/destinations";
-import { PageHeading } from "~/shell/PageHeading";
+import { EmptySheet, PageHeading } from "~/shell/PageHeading";
 
 const { label } = destination("projects");
 
@@ -11,9 +11,9 @@ export default function Projects() {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<p className="mt-2 text-body-large text-on-surface-variant">
+			<EmptySheet heading="Projects">
 				Your projects and the clients they belong to will appear here.
-			</p>
+			</EmptySheet>
 		</>
 	);
 }
