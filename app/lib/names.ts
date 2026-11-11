@@ -23,3 +23,30 @@ export const RecordName = z
 export function nameKey(name: string): string {
 	return name.normalize("NFKC").trim().toLowerCase();
 }
+
+/** What a person is told when a name of a record breaks the rule above. */
+export const RECORD_NAME_PROBLEM = `Enter a name of up to ${RECORD_NAME_MAX_LENGTH} characters.`;
+
+/** The name typed, as it is stored, or null when it is no name (`RECORD_NAME_PROBLEM`). */
+export function recordName(typed: string): string | null {
+	const parsed = RecordName.safeParse(typed);
+	return parsed.success ? parsed.data : null;
+}
+
+/** The same rule, for a field in the browser: the problem, or null. */
+export function recordNameProblem(typed: string): string | null {
+	return recordName(typed) === null ? RECORD_NAME_PROBLEM : null;
+}
+
+/**
+ * Whether a write failed on the unique index of `(organisation_id, name_key)`:
+ * another request gave the same name between the check and the write. D1's
+ * message names the columns; Drizzle wraps it in an error of its own.
+ */
+export function isNameClash(error: unknown): boolean {
+	for (let at: unknown = error; at instanceof Error; at = at.cause) {
+		if (/UNIQUE constraint failed: \w+\.organisation_id, \w+\.name_key/.test(at.message))
+			return true;
+	}
+	return false;
+}

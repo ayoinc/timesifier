@@ -39,6 +39,55 @@ Two questions the owner settled on 2026-11-11, recorded on their cards: approval
 - [ ] `docs/architecture.md` and `docs/security.md` describe the new tables and who sees which destination.
 - [ ] `pnpm typecheck`, `pnpm lint` and `pnpm test` pass, the shell's browser tests pass, and `pnpm db:migrate:local` applies the migration.
 
+### TS-011a · Projects
+
+Builder: an AI session on branch `ts-054-organize`, on TS-053's foundation, which made the table and the migration (`0006_heading_features`). In review: the pull request against `main`. Waiting on the owner for the screenshots.
+
+**Routes:** `/app/:organisation/projects`, module `routes/app/projects.tsx`. Its loader lists the projects, active and archived. Its action takes the intents `create`, `rename`, `archive` and `restore`. The tab is kept in the address, `?show=archived`. `app/projects/projects.server.ts` holds `activeProjects` and `findActiveProject`, which the timer reads, and the writes.
+
+**Who may** (the owner, 2026-11-11: every role manages projects)
+
+| Action                                               | owner | admin | member |
+| ---------------------------------------------------- | ----- | ----- | ------ |
+| See the organisation's projects, active and archived | yes   | yes   | yes    |
+| Create a project                                     | yes   | yes   | yes    |
+| Rename a project                                     | yes   | yes   | yes    |
+| Archive or restore a project                         | yes   | yes   | yes    |
+| Delete a project                                     | no    | no    | no     |
+
+- [x] A migration creates `projects`, and `projects` is in `tenantTables` (test: the scope of one organisation returns none of another's rows). _TS-053's `0006_heading_features`; `test/db/heading-tables.test.ts`._
+- [x] `create` with a name of 1 to 120 characters after trimming stores one row and the list shows it. An empty name, a name of spaces and a name of 121 characters each answer 400 with the text "Enter a name of up to 120 characters." and store nothing. _`test/pages/projects.test.ts`, "create"._
+- [x] A name is unique in its organisation ignoring case, archived projects included; the same name in another organisation is accepted. _`test/pages/projects.test.ts`, "refuses a name the organisation has in other letters, archived projects included", "accepts a name another organisation has"._
+- [x] `rename` obeys both rules, and renaming "Design" to "DESIGN" is accepted. _`test/pages/projects.test.ts`, "rename"._
+- [x] `archive` sets `archived_at`; the project leaves the default list and `activeProjects`, and appears under the tab "Archived". `restore` clears it. _`test/pages/projects.test.ts`, "archive and restore"; `e2e/organize.spec.ts`._
+- [x] The action answers 400 to any other intent, and no request removes a `projects` row. _`test/pages/projects.test.ts`, "what the action takes"; `test/action-validation.test.ts`._
+- [x] Every cell of the "Who may" table has a test through the real action, a manager's too. _`test/pages/projects.test.ts`, "who may"._
+- [x] 404 for another organisation's page, and 404 with nothing changed for an action naming a project of another. _`test/pages/isolation.test.ts` (the route and its form); `test/pages/projects.test.ts`, "answers 404 to a project of another organisation"._
+- [x] A new organisation has no projects. _`test/pages/projects.test.ts`, "a new organisation"._
+- [x] With no projects the page shows "No projects yet", the sentence, and exactly one button, "Create project". _Same test._
+- [x] A project can be created, renamed and archived with the keyboard alone. _`e2e/organize.spec.ts`, "a project is created, renamed and archived with the keyboard alone"._
+- [x] axe with WCAG 2.2 AA reports no violations, empty and filled, at 390px and 1280px in both schemes. _`e2e/organize.spec.ts`, "Projects, empty and filled, its tabs and its sheets"._
+- [ ] The pull request shows the page at 390px and 1280px in both schemes, and the owner has accepted the screenshots.
+
+### TS-011b · Clients
+
+Builder: an AI session on branch `ts-054-organize`. In review with TS-011a. Who sees Clients follows `docs/navigation.md`, which the owner approved after this card was written: owners and admins see and manage clients, and give a project its client; everybody else reads a project's client by its name on Projects and gets 404 at Clients. The organisation's switch (TS-048) hides Clients and every project's client from everyone.
+
+- [x] A table `clients` (the columns of `projects`, with the same name rules) and a nullable `client_id` on `projects`. _TS-053's migration; `test/db/heading-tables.test.ts`._
+- [x] Owners and admins can create, rename, archive and restore a client, see each client's projects, and give a project a client or none; a member and a manager get 404 for the page and every form, read a project's client on Projects, and cannot give one (403). _`test/pages/clients.test.ts`, "who may"; `test/pages/projects.test.ts`, "a project's client"._
+- [x] Names are required, at most 120 characters, and unique within the organisation ignoring case, archived clients included. _`test/pages/clients.test.ts`, "names"._
+- [x] An archived client is not offered when a project is created or edited, and its projects keep it, shown as "(archived client)". _`test/pages/projects.test.ts`, "an archived client is not offered, and the projects that have it keep it"; `test/pages/clients.test.ts`, "archiving a client keeps it on its projects"._
+- [x] A client of another organisation is 404 to the actions and is never given to a project here. _`test/pages/clients.test.ts`; `test/pages/projects.test.ts`, "a client of another organisation is no client here"; `test/pages/isolation.test.ts`._
+- [x] No accessibility violation, empty and filled, at 390px and 1280px in both schemes. _`e2e/organize.spec.ts`, "Clients and Workspace settings, with their sheets"._
+
+### TS-048 · Workspace settings: general
+
+Builder: an AI session on branch `ts-054-organize`. In review with TS-011a. General on Workspace settings holds the organisation's name (TS-009), its default time zone, the day its weeks start on, and the Clients switch; deletion stays below it.
+
+- [ ] An admin or owner sets the organisation's default time zone and the day its week starts; members see the values and cannot change them (a test per role). _Not ticked. Met: owners and admins change both (`test/pages/settings.test.ts`, "the general settings"); a member and a manager get 404 for the page and every form, and nothing changes (same file). Left: Workspace settings is 404 to members (`docs/navigation.md`), so a member sees the values only through their effect: the week their Timesheet shows and their days' zone. Showing them on My account is the Timesheet slice's page._
+- [ ] The week view and reports use the week start (test). _Not ticked. Met: the stored week start is the one `periodContaining` starts every period on, and the default zone is `zoneOfMember`'s for a person with none (`test/pages/settings.test.ts`). Left: the week view and reports are built on their own branches (TS-013, TS-014a), which read `membership.organisation.weekStartsOn`._
+- [x] An admin or owner turns Clients off or on; off hides the Clients link and the client field everywhere and deletes nothing. _`test/pages/settings.test.ts`, "Clients off hides the link and 404s the page for everyone, and deletes nothing"; `test/pages/projects.test.ts`, "while Clients is off"; `test/pages/destinations.test.ts`; `e2e/organize.spec.ts`, "Clients turned off with the keyboard leaves the navigation, and its page is 404"._
+
 ### TS-030 · A home page, a privacy page, a terms page, and the visual direction
 
 Built by an AI session on branch `ts-030-landing`; not yet deployed. The owner's verdict on what was first deployed: it works, but it does not look like a designed product. This card writes the direction the product follows in `docs/design-direction.md`, changes the tokens to carry it, and replaces the three-line home page. It also takes the home-page criterion that TS-025 held. Because sign-up stays open to the public (the owner, 2026-11-11), the privacy page and the terms page ship with it. It is in Review because three criteria wait for the owner, two wait for a later card, and one waits for the deploy; what is left is said on each open criterion.
@@ -129,57 +178,6 @@ The owner, 2026-11-11: "We don't really need create accounts per se. We just nee
 Not in this card: the signed-in shell and pages (TS-037), the sign-in and invitation emails, and any change to the server beyond the two above.
 
 What holds for the three cards below, from `app/db/schema.ts`: an id is a UUID version 7 stored as text; a time is an integer of milliseconds since the Unix epoch, in UTC; a table with an `organisation_id` is added to `tenantTables` and reached only through `organisationScope`. The organisation's slug is the route parameter `organisation`, so the addresses below are written `/app/:organisation/…`. The integrator gives each card its migration number before work starts.
-
-### TS-011a · Projects
-
-**Depends on:** TS-009 (Done); TS-037, which writes the convention for a list page and an empty state and has the owner's approval of it. Decision 25 is written.
-
-**Reference for the screen:** the convention for a list page in `docs/design-direction.md` (TS-037), and the members page as the nearest page already built: a list, with a sheet for quick editing.
-
-**Owns:** `app/routes/app/projects.tsx`, a new folder `app/projects/`, one migration, the `projects` table in `app/db/schema.ts` and its line in `tenantTables`, and the tests of this page.
-
-**Interfaces:** a function in `app/projects/` that returns the active projects of an organisation, by name. TS-012a's timer reads it.
-
-**Routes:** `/app/:organisation/projects`, module `routes/app/projects.tsx`, the existing Projects destination. Its loader lists the projects. Its action takes the intents `create`, `rename`, `archive` and `restore`. No new address.
-
-**Tables:** `projects`
-
-| Column                     | Type and constraint                                                             |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| `id`                       | text, primary key                                                               |
-| `organisation_id`          | text, not null, references `organisations.id`, cascade on delete                |
-| `name`                     | text, not null, 1 to 120 characters after trimming                              |
-| `name_key`                 | text, not null: `name` normalised (NFKC), trimmed and lower-cased in the Worker |
-| `archived_at`              | integer, null while the project is active                                       |
-| `created_at`, `updated_at` | integer, not null                                                               |
-
-A unique index on `(organisation_id, name_key)`. It covers archived projects, so a restore can never clash. There is no client column: TS-011b adds a nullable `client_id`.
-
-**Who may** (the owner, 2026-11-11: every role manages projects)
-
-| Action                                               | owner | admin | member |
-| ---------------------------------------------------- | ----- | ----- | ------ |
-| See the organisation's projects, active and archived | yes   | yes   | yes    |
-| Create a project                                     | yes   | yes   | yes    |
-| Rename a project                                     | yes   | yes   | yes    |
-| Archive or restore a project                         | yes   | yes   | yes    |
-| Delete a project                                     | no    | no    | no     |
-
-**Acceptance criteria**
-
-- [ ] A migration creates `projects` as above, and `projects` is in `tenantTables` (test: the scope of one organisation returns none of another's rows).
-- [ ] `create` with a name of 1 to 120 characters after trimming stores one row and the list shows it. An empty name, a name of spaces and a name of 121 characters each answer 400 with the text "Enter a name of up to 120 characters." and store nothing (test).
-- [ ] A name is unique in its organisation ignoring case, archived projects included. After "Design", `create` "design" answers 400 with "A project with this name already exists." and stores nothing. The same name in another organisation is accepted (test).
-- [ ] `rename` obeys both rules, and renaming "Design" to "DESIGN" is accepted (test).
-- [ ] `archive` sets `archived_at`. The project leaves the default list and the function the timer reads, and appears under a filter named "Archived". `restore` clears `archived_at` (test).
-- [ ] The action answers 400 to any intent other than the four, and no request removes a `projects` row (test).
-- [ ] Every cell of the "Who may" table has a test through the real action.
-- [ ] A member of organisation A receives 404 for `/app/<slug of B>/projects`, and 404 with nothing changed for an action that names a project of B. `test/pages/isolation.test.ts` reads the routes from the route configuration, so the page is covered by sitting under the organisation's layout; this card adds the test of the action (test).
-- [ ] A new organisation has no projects (test).
-- [ ] With no projects the page shows a heading "No projects yet", the sentence "A project is what you track time against, such as a client job or a piece of your own work.", and exactly one button, named "Create project" (test).
-- [ ] A project can be created, renamed and archived with the keyboard alone (browser test).
-- [ ] axe with WCAG 2.2 AA tags reports no violations on the page, empty and filled, in both schemes (browser test).
-- [ ] The pull request shows the page at 390px and 1280px in both schemes, and the owner has accepted the screenshots.
 
 ### TS-012a · Timer
 
@@ -338,14 +336,6 @@ Depends on: TS-046, TS-038.
 - [ ] Not submitted lists the people who have not submitted a closed period (test).
 - Decided by the owner on 2026-11-11: approval is always on for now. Whether an owner or admin can turn it off for the organisation, as Harvest allows, waits for a customer who asks. The evidence is in `docs/navigation.md`, "Gaps the flows show".
 
-### TS-048 · Workspace settings: general
-
-Depends on: TS-012a; the Clients switch TS-011b.
-
-- [ ] An admin or owner sets the organisation's default time zone and the day its week starts; members see the values and cannot change them (a test per role).
-- [ ] The week view and reports use the week start (test).
-- [ ] An admin or owner turns Clients off or on for the organisation; off hides the Clients link and the client field everywhere and deletes nothing (test).
-
 ### TS-049 · Notifications and reminders
 
 Depends on: TS-046, TS-047.
@@ -436,15 +426,6 @@ Depends on: TS-012a. Moved ahead of reports by the owner on 2026-11-11, because 
 - [ ] Time entries keep their `user_id`. The `users` row stays; its name becomes "Deleted person" and its address becomes a value that identifies nobody and can receive no mail. A test lists every table with a column that refers to a person and checks each; it fails when a table is added and not listed.
 - [ ] The last owner of an organisation with other members must hand it over first; the sheet says so and nothing is deleted (test).
 - [ ] The privacy page says how to delete an account, in the words of the Settings page.
-
-### TS-011b · Clients
-
-Depends on: TS-011a.
-
-- [ ] A table `clients` (the columns of `projects`, with the same name rules) and a nullable `client_id` on `projects`.
-- [ ] Every role can create, rename and archive a client, and give a project a client or none (a test for every cell, as TS-011a).
-- [ ] Names are required, at most 120 characters, and unique within the organisation ignoring case (tests).
-- [ ] An archived client is not offered when a project is edited, and its projects keep it.
 
 ### TS-012b · Manual entries
 
