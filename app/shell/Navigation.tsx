@@ -32,10 +32,12 @@ export interface NavigationProps {
 	visible: readonly DestinationId[];
 	/** The position in the whole list of the destination on screen, which is marked as the current page. */
 	activeIndex: number;
+	/** A number to show beside a destination's label, such as the periods waiting on Approvals; none when 0. */
+	counts?: Partial<Record<DestinationId, number>>;
 }
 
 /** The shell's navigation: the timer's control, then every destination the person is shown, as links. */
-export function Navigation({ organisation, visible, activeIndex }: NavigationProps) {
+export function Navigation({ organisation, visible, activeIndex, counts = {} }: NavigationProps) {
 	const active = destinations[activeIndex]?.id;
 	return (
 		// From 600px the column is fixed under the band at the start of the page's
@@ -73,6 +75,7 @@ export function Navigation({ organisation, visible, activeIndex }: NavigationPro
 													destination={each}
 													to={destinationPath(organisation, each.id)}
 													isActive={each.id === active}
+													count={counts[each.id] ?? 0}
 												/>
 											</li>
 										))}
@@ -91,11 +94,14 @@ function DestinationLink({
 	destination,
 	to,
 	isActive,
+	count,
 }: {
 	destination: Destination;
 	/** Its address in the organisation on screen. */
 	to: string;
 	isActive: boolean;
+	/** Shown after the label when more than 0, and read out as "N pending". */
+	count: number;
 }) {
 	return (
 		<Link
@@ -108,6 +114,13 @@ function DestinationLink({
 			{/* The keyboard's focus indicator is drawn around the label. */}
 			<span className="rounded-extra-small py-1 underline-offset-4 group-hover:underline group-focus-visible:focus-indicator">
 				{destination.label}
+				{count > 0 && (
+					<>
+						{" "}
+						<span className="tabular-nums">{count}</span>
+						<span className="sr-only"> pending</span>
+					</>
+				)}
 			</span>
 			{/* The one part of the navigation that travels when the destination changes. */}
 			{isActive && (

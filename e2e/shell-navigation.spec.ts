@@ -303,10 +303,12 @@ for (const viewport of [COMPACT, MEDIUM]) {
 
 			for (const destination of [...others, first]) {
 				const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
-				// Tab goes round the page; the link is one of a handful of stops.
+				// Shift+Tab goes back from the heading into the navigation, which comes
+				// before it: the link is one of a handful of stops, however much the
+				// page below the heading holds.
 				for (let presses = 0; presses < 12; presses++) {
 					if (await link.evaluate((element) => element === document.activeElement)) break;
-					await page.keyboard.press("Tab");
+					await page.keyboard.press("Shift+Tab");
 				}
 				await expect(link).toBeFocused();
 				// The keyboard's focus indicator is drawn around the link's label.

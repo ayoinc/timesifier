@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useDateFormatter } from "react-aria";
-import { Link } from "react-router";
 import * as z from "zod";
 
 import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
@@ -14,9 +13,8 @@ import { declined, done, refused, unavailable } from "~/organisations/outcome.se
 import { AS_ROLE } from "~/organisations/people";
 import { allows, InvitedRole } from "~/organisations/roles";
 import { useTimeZone } from "~/routes/auth/AccountSettings";
-import { destination, destinationPath } from "~/shell/destinations";
-import { TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
+import { TeamTabs } from "~/teams/TeamTabs";
 
 import type { Route } from "./+types/invitations";
 import { FormSheet } from "./FormSheet";
@@ -115,12 +113,8 @@ export default function Invitations({ loaderData }: Route.ComponentProps) {
 
 	return (
 		<>
-			<p>
-				<Link to={destinationPath(organisation.slug, "team")} className={TEXT_LINK}>
-					{destination("team").label}
-				</Link>
-			</p>
-			<div className="mt-4">
+			<TeamTabs slug={organisation.slug} current="invitations" />
+			<div className="mt-10">
 				<PageHeading>{TITLE}</PageHeading>
 			</div>
 			<PageLead>

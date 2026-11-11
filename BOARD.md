@@ -88,6 +88,38 @@ Builder: an AI session on branch `ts-054-organize`. In review with TS-011a. Gene
 - [ ] The week view and reports use the week start (test). _Not ticked. Met: the stored week start is the one `periodContaining` starts every period on, and the default zone is `zoneOfMember`'s for a person with none (`test/pages/settings.test.ts`). Left: the week view and reports are built on their own branches (TS-013, TS-014a), which read `membership.organisation.weekStartsOn`._
 - [x] An admin or owner turns Clients off or on; off hides the Clients link and the client field everywhere and deletes nothing. _`test/pages/settings.test.ts`, "Clients off hides the link and 404s the page for everyone, and deletes nothing"; `test/pages/projects.test.ts`, "while Clients is off"; `test/pages/destinations.test.ts`; `e2e/organize.spec.ts`, "Clients turned off with the keyboard leaves the navigation, and its page is 404"._
 
+### TS-038 · Teams and managers
+
+Builder: an AI session on branch `ts-054-people`. Team > Teams (`/app/<slug>/team?show=teams`): an owner or admin creates, renames and deletes teams, adds and removes people, and makes a person a team's manager or ends it; a manager sees the teams they manage and changes nothing. `app/teams/teams.server.ts`; the route is `app/routes/app/team.tsx`. Who creates a team and names its manager, open for the owner, is built as proposed: an owner or admin, never the manager.
+
+- [x] A team belongs to one organisation: the scope of one organisation returns none of another's teams (test). _`test/pages/team.test.ts`, "does not reach another organisation's team"; `test/pages/isolation.test.ts` posts to Team from another organisation and gets 404._
+- [x] A member of an organisation is in none, one or several of its teams. Adding a person who is not a member of the organisation is refused (test). _`test/pages/team.test.ts`, "an owner adds people, marks a manager, and takes people out"._
+- [ ] `manager` is a role a person holds for one team, between admin and member. The permission table in `docs/security.md`, "Roles", gains its rows, and a test covers every cell. _Not ticked. Met: the destinations table and `access.ts` rules (TS-053) with `test/organisations/access.test.ts`; the team-management rule in `docs/security.md`, and a manager's refusal for each change in `test/pages/team.test.ts`, "a manager sees the teams they manage and changes nothing". Left: the "Roles" table of the Better Auth endpoints has no manager column; a manager holds the role of a member there._
+- [ ] A manager sees and exports the entries of the members of the teams they manage, and nobody else's (test with two teams). _Not ticked. Met for seeing: `test/pages/team.test.ts`, "shows a manager only the members of the teams they manage". Left: the export is the Reports slice's (TS-014b)._
+- [x] A manager cannot change another person's entry (test). _`mayChangeTimeOf` in `test/organisations/access.test.ts`; a person's week on Team is read-only (`test/pages/team.test.ts`, "opens one person's week to read")._
+- [x] Taking a person out of a team, or ending their time as its manager, takes effect on their next request (test). _`test/pages/team.test.ts`, "an owner adds people, marks a manager, and takes people out": the next request is 404._
+
+### TS-045 · Team: this week, members and invitations
+
+Builder: an AI session on branch `ts-054-people`. `app/routes/app/team.tsx` with `app/teams/week.server.ts`; Members and Invitations carry the tabs (`app/teams/TeamTabs.tsx`).
+
+- [ ] Team > This week lists, for one week with arrows to earlier ones, each person the viewer may see: hours logged against their expected hours from TS-042, whether a timer is running, and the period's submission status (test). _Not ticked. Met: hours, running timer, status, arrows (`test/pages/team.test.ts`, "shows each visible person's hours, running timer and status"; `e2e/people.spec.ts`). Left: expected hours wait for TS-042, out of scope._
+- [x] A manager sees the members of the teams they manage, an admin or owner everyone; a member sees no Team link and gets 404 at its address (a test per role). _`test/pages/team.test.ts`, "shows a manager only…", "is not there for a member"; `test/pages/destinations.test.ts`._
+- [x] Opening a person shows their Week view, read-only; nothing on it can change their entries (test). _`test/pages/team.test.ts`, "opens one person's week to read, and nobody else's"; `e2e/people.spec.ts`._
+- [x] Members and Invitations move from Settings to tabs of Team, with the same rules and tests as TS-009; the old addresses redirect (test). _`test/pages/team.test.ts`, "links the tabs"; `test/pages/members.test.ts`; `e2e/organisations-keyboard.spec.ts`; the redirect is TS-053's (`test/pages/isolation.test.ts`)._
+
+### TS-047 · Approvals
+
+Builder: an AI session on branch `ts-054-people`. `app/routes/app/approvals.tsx` with `app/approvals/approvals.server.ts`; the count is on the link through the organisation's loader and `Navigation`'s `counts`. A decision goes through `statusAfter` and writes the period and its `period_events` row in one batch.
+
+- [x] A manager sees submitted periods of their team's members; an admin or owner sees everyone's; a member sees no Approvals link and gets 404 at its address (a test per role). _`test/pages/approvals.test.ts`, "sees and decides only their teams' people", "is not there for a member"; `test/pages/destinations.test.ts`._
+- [x] Approvals shows one period at a time with Previous and Next, in tabs Pending, Not submitted and Decided; the link shows the number pending (test). _`test/pages/approvals.test.ts`, "shows a period's pending, not submitted and decided people", "puts the pending count on the Approvals link"; `e2e/people.spec.ts`._
+- [x] Approve one, or all pending on the page, or return with a comment of at most 500 characters; each decision is recorded with who and when (tests). _`test/pages/approvals.test.ts`, "approve writes the status and an event in one go", "approve all…", "return needs a comment"._
+- [x] A manager's own period is decided by an admin or owner, never by the manager (test). _`test/pages/approvals.test.ts`, "whose own team manages them too still cannot decide their own"._
+- [x] An owner or admin reopens an approved period with a reason, which returns it to the person (test). _`test/pages/approvals.test.ts`, "an owner or admin reopens…; a manager cannot"._
+- [x] Not submitted lists the people who have not submitted a closed period (test). _`test/pages/approvals.test.ts`, first test._
+- Decided by the owner on 2026-11-11: approval is always on for now. Whether an owner or admin can turn it off for the organisation, as Harvest allows, waits for a customer who asks. The evidence is in `docs/navigation.md`, "Gaps the flows show".
+
 ### TS-030 · A home page, a privacy page, a terms page, and the visual direction
 
 Built by an AI session on branch `ts-030-landing`; not yet deployed. The owner's verdict on what was first deployed: it works, but it does not look like a designed product. This card writes the direction the product follows in `docs/design-direction.md`, changes the tokens to carry it, and replaces the three-line home page. It also takes the home-page criterion that TS-025 held. Because sign-up stays open to the public (the owner, 2026-11-11), the privacy page and the terms page ship with it. It is in Review because three criteria wait for the owner, two wait for a later card, and one waits for the deploy; what is left is said on each open criterion.
@@ -302,17 +334,6 @@ In priority order. Before a feature card enters Ready it gains "Routes", "Tables
 
 The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11, rearranged the same day after a check against Harvest). Cards TS-045 to TS-052 come from it; each gets routes, tables, a role table and a goldfish review when it comes up. The "Flows" section of that file names the card that builds each step.
 
-### TS-045 · Team: this week, members and invitations
-
-Depends on: TS-013, TS-046; expected hours TS-042; for managers TS-038 and TS-047.
-
-Replaces the Dashboard of the first version of `docs/navigation.md`: Harvest has no home page, and puts the team's week in Team ("Team overview") and missing submissions in Approvals.
-
-- [ ] Team > This week lists, for one week with arrows to earlier ones, each person the viewer may see: hours logged against their expected hours from TS-042, whether a timer is running, and the period's submission status (test).
-- [ ] A manager sees the members of the teams they manage, an admin or owner everyone; a member sees no Team link and gets 404 at its address (a test per role).
-- [ ] Opening a person shows their Week view, read-only; nothing on it can change their entries (test).
-- [ ] Members and Invitations move from Settings to tabs of Team, with the same rules and tests as TS-009; the old addresses redirect (test).
-
 ### TS-046 · Timesheet periods and submission
 
 Depends on: TS-012b, TS-013.
@@ -323,18 +344,6 @@ Depends on: TS-012b, TS-013.
 - [ ] The Today destination is renamed Timesheet, with Day and Week views and a History tab; History lists each past period with its status (draft, submitted, approved, returned) (test).
 - [ ] A returned period shows the reason and can be corrected and submitted again (test).
 - Open for the owner: the default period, and whether a submission requires a full set of expected hours.
-
-### TS-047 · Approvals
-
-Depends on: TS-046, TS-038.
-
-- [ ] A manager sees submitted periods of their team's members; an admin or owner sees everyone's; a member sees no Approvals link and gets 404 at its address (a test per role).
-- [ ] Approvals shows one period at a time with Previous and Next, in tabs Pending, Not submitted and Decided; the link shows the number pending (test).
-- [ ] Approve one, or all pending on the page, or return with a comment of at most 500 characters; each decision is recorded with who and when (tests).
-- [ ] A manager's own period is decided by an admin or owner, never by the manager (test).
-- [ ] An owner or admin reopens an approved period with a reason, which returns it to the person (test).
-- [ ] Not submitted lists the people who have not submitted a closed period (test).
-- Decided by the owner on 2026-11-11: approval is always on for now. Whether an owner or admin can turn it off for the organisation, as Harvest allows, waits for a customer who asks. The evidence is in `docs/navigation.md`, "Gaps the flows show".
 
 ### TS-049 · Notifications and reminders
 
@@ -459,21 +468,6 @@ Depends on: TS-014a.
 - [ ] A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` (test).
 - [ ] The response is streamed in pages keyed on `id`, and nothing is stored (test with more entries than one page).
 - [ ] A member exports their own entries; an owner or admin exports every member's (test). The export contains only the caller's organisation (test).
-
-### TS-038 · Teams and managers
-
-Depends on: TS-009 (Done) and TS-014b, because what a manager gains is a report and an export of their team. Decision 29 is settled on this card before anything is built.
-
-No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
-
-Open for the owner: who creates a team and names its manager (proposed: an owner or admin, never the manager); and whether creating teams should be split into a card of its own that comes before reports.
-
-- [ ] A team belongs to one organisation: the scope of one organisation returns none of another's teams (test).
-- [ ] A member of an organisation is in none, one or several of its teams. Adding a person who is not a member of the organisation is refused (test).
-- [ ] `manager` is a role a person holds for one team, between admin and member. The permission table in `docs/security.md`, "Roles", gains its rows, and a test covers every cell, as `test/organisations/permissions.test.ts` does today.
-- [ ] A manager sees and exports the entries of the members of the teams they manage, and nobody else's (test with two teams). An owner or admin still sees and exports everyone's, and a member only their own.
-- [ ] A manager cannot change another person's entry (test).
-- [ ] Taking a person out of a team, or ending their time as its manager, takes effect on their next request (test).
 
 ### TS-039 · Month and year views
 
