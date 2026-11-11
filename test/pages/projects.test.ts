@@ -1,7 +1,9 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
-import { activeProjects } from "~/projects/projects.server";
+import { timeScopeOf } from "~/organisations/access";
+import { groupedByClient } from "~/projects/projects";
+import { activeProjects, projectHours } from "~/projects/projects.server";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -185,11 +187,14 @@ describe("archive and restore", () => {
 		const main = mainOf(await pageBody(await open(`${PROJECTS}?show=archived`, ada)));
 		// The address picks the tab, and only the chosen tab's list is on the page.
 		expect(main).toMatch(/aria-selected="true"[^>]*><span[^>]*>Archived</);
-		const archivedList = main.match(/<ol aria-label="Archived projects"[\s\S]*?<\/ol>/)?.[0] ?? "";
+		// While Clients is on, each list is a client's group: these have none.
+		const archivedList =
+			main.match(/<ol aria-label="Archived projects: No client"[\s\S]*?<\/ol>/)?.[0] ?? "";
 		expect(textOf(archivedList)).toContain("Design");
-		expect(main).not.toContain('aria-label="Active projects"');
+		expect(main).not.toContain('aria-label="Active projects');
 		const active = mainOf(await pageBody(await open(PROJECTS, ada)));
-		const activeList = active.match(/<ol aria-label="Active projects"[\s\S]*?<\/ol>/)?.[0] ?? "";
+		const activeList =
+			active.match(/<ol aria-label="Active projects: No client"[\s\S]*?<\/ol>/)?.[0] ?? "";
 		expect(textOf(activeList)).toContain("Research");
 		expect(textOf(activeList)).not.toContain("Design");
 
@@ -360,4 +365,322 @@ describe("a project's client", () => {
 		expect(await value("select client_id from projects where name = 'Design'")).toBe(globex);
 		expect(await value("select count(*) from clients")).toBe(1);
 	});
+});
+
+// TS-057: the list searched by a project's or its client's name, in the
+// address; grouped under the clients; each project's hours to date.
+
+/** The headings of the client groups on the page, in its order. */
+const groupsIn = (main: string) =>
+	[...main.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>\s*<ol aria-label=/g)].map(([, heading]) =>
+		textOf(heading ?? ""),
+	);
+
+/** One entry of `who` on `projectId`, `minutes` long: ended `endedAgo` minutes ago, or running when null. */
+async function track(who: Person, projectId: string, minutes: number, endedAgo: number | null) {
+	const end = Date.now() - (endedAgo ?? 0) * 60_000;
+	await organisationScope(env.DB, acme.id).timeEntries.insert({
+		userId: who.user.id,
+		projectId,
+		startedAt: new Date(end - minutes * 60_000),
+		endedAt: endedAgo === null ? null : new Date(end),
+	});
+}
+
+/** The text of the page's `<main>` at `path`, as `who` sees it. */
+const mainText = async (path: string, who: Person = ada) =>
+	textOf(mainOf(await pageBody(await open(path, who))));
+
+describe("search (TS-057)", () => {
+	beforeEach(async () => {
+		const globex = await insertClient(acme.id, "Globex Corporation");
+		const initech = await insertClient(acme.id, "Initech");
+		await send({ intent: "create", name: "Website", clientId: globex });
+		await send({ intent: "create", name: "Payroll", clientId: initech });
+		await send({ intent: "create", name: "Office move" });
+		await send({ intent: "create", name: "Old site", clientId: globex });
+		await send({ intent: "archive", projectId: await projectId("Old site") });
+	});
+
+	const search = (query: string, who: Person = ada) =>
+		mainText(`${PROJECTS}?q=${encodeURIComponent(query)}`, who);
+
+	it("finds a project by a part of its name, in any letters, and leaves the others out of the page", async () => {
+		const text = await search("SITE");
+		expect(text).toContain("Website");
+		expect(text).not.toContain("Payroll");
+		expect(text).not.toContain("Office move");
+		// The archived tab keeps the search.
+		const archived = await mainText(`${PROJECTS}?q=SITE&show=archived`);
+		expect(archived).toContain("Old site");
+		expect(archived).not.toContain("Payroll");
+	});
+
+	it("finds every project of a client by a part of the client's name", async () => {
+		const text = await search("globex");
+		expect(text).toContain("Website");
+		expect(text).not.toContain("Payroll");
+		expect(text).not.toContain("Office move");
+		expect(await mainText(`${PROJECTS}?q=globex&show=archived`)).toContain("Old site");
+	});
+
+	it("reads the words searched for from the address, and shows them in the field", async () => {
+		const html = await pageBody(await open(`${PROJECTS}?q=pay`, ada));
+		expect(html).toMatch(/<form[^>]*role="search"[^>]*aria-label="Search projects"/);
+		const field = html.match(/<input[^>]*name="q"[^>]*>/)?.[0] ?? "";
+		expect(field).toContain('value="pay"');
+		expect(field).toContain('type="search"');
+		expect(textOf(mainOf(html))).toContain("Clear search");
+	});
+
+	it("takes % and _ as letters, not wildcards", async () => {
+		const text = await search("%");
+		expect(text).not.toContain("Website");
+		expect(text).toContain("No active project has “%” in its name or its client’s.");
+		expect(await search("_")).not.toContain("Payroll");
+	});
+
+	it("says when nothing matches, and keeps the field and the button to create one", async () => {
+		const text = await search("zzz");
+		expect(text).toContain("No active project has “zzz” in its name or its client’s.");
+		expect(text).not.toContain("No projects yet");
+		expect(text).toContain("Create project");
+	});
+
+	it("an empty search, or one of spaces, is every project", async () => {
+		for (const query of ["", "   "]) {
+			const text = await search(query);
+			for (const name of ["Website", "Payroll", "Office move"]) expect(text).toContain(name);
+			expect(text).not.toContain("Clear search");
+		}
+	});
+
+	it("a member searches too, by client name as well", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const text = await search("initech", linus);
+		expect(text).toContain("Payroll");
+		expect(text).not.toContain("Website");
+	});
+
+	it("while Clients is off, a client's name finds nothing and the field says project name", async () => {
+		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
+			.bind(acme.id)
+			.run();
+		const text = await search("globex");
+		expect(text).not.toContain("Website");
+		expect(text).toContain("No active project has “globex” in its name.");
+		expect(text).toContain("Search by project name");
+	});
+
+	it("never finds a project of another organisation", async () => {
+		const grace = await person(mailbox, "grace@example.com");
+		await createOrganisation(grace.cookie, "Hooli");
+		await send({ intent: "create", name: "Secret website" }, grace, "/app/hooli/projects");
+		const text = await search("website");
+		expect(text).toContain("Website");
+		expect(text).not.toContain("Secret website");
+	});
+});
+
+describe("groups (TS-057)", () => {
+	it("puts the projects under their client's name, by name, then No client last", async () => {
+		const zeta = await insertClient(acme.id, "Zeta");
+		const alpha = await insertClient(acme.id, "alpha");
+		await send({ intent: "create", name: "Bravo", clientId: zeta });
+		await send({ intent: "create", name: "Able", clientId: zeta });
+		await send({ intent: "create", name: "Own" });
+		await send({ intent: "create", name: "Charlie", clientId: alpha });
+
+		const main = mainOf(await pageBody(await open(PROJECTS, ada)));
+		expect(groupsIn(main)).toEqual(["alpha", "Zeta", "No client"]);
+		expect(main).toContain('aria-label="Active projects: Zeta"');
+		const text = textOf(main);
+		expect(text.indexOf("Able")).toBeLessThan(text.indexOf("Bravo"));
+	});
+
+	it("says when a group's client is archived", async () => {
+		const globex = await insertClient(acme.id, "Globex");
+		await send({ intent: "create", name: "Design", clientId: globex });
+		await env.DB.prepare("update clients set archived_at = ? where id = ?")
+			.bind(Date.now(), globex)
+			.run();
+		expect(groupsIn(mainOf(await pageBody(await open(PROJECTS, ada))))).toEqual([
+			"Globex (archived client)",
+		]);
+	});
+
+	it("has no groups while Clients is off", async () => {
+		const globex = await insertClient(acme.id, "Globex");
+		await send({ intent: "create", name: "Design", clientId: globex });
+		await send({ intent: "create", name: "Own" });
+		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
+			.bind(acme.id)
+			.run();
+		const main = mainOf(await pageBody(await open(PROJECTS, ada)));
+		expect(groupsIn(main)).toEqual([]);
+		expect(textOf(main)).not.toContain("No client");
+		expect(main).toContain('aria-label="Active projects"');
+	});
+
+	it("groupedByClient keeps one group per client, ordered by key, the clientless last", () => {
+		const client = (id: string, key: string) => ({ id, name: key, key, archived: false });
+		const projects = [
+			{ id: "1", client: null },
+			{ id: "2", client: client("z", "zeta") },
+			{ id: "3", client: client("a", "alpha") },
+			{ id: "4", client: client("z", "zeta") },
+		];
+		expect(
+			groupedByClient(projects).map((g) => [g.client?.key ?? null, g.projects.map((p) => p.id)]),
+		).toEqual([
+			["alpha", ["3"]],
+			["zeta", ["2", "4"]],
+			[null, ["1"]],
+		]);
+		expect(groupedByClient([])).toEqual([]);
+	});
+});
+
+describe("hours to date (TS-057)", () => {
+	it("shows each project's finished and running time, and 0:00 for none", async () => {
+		const design = await create("Design");
+		await create("Idle");
+		await track(ada, design, 90, 60 * 24);
+		await track(ada, design, 120, null);
+
+		const text = await mainText(PROJECTS);
+		expect(text).toMatch(/Design 3:30/);
+		expect(text).toMatch(/Idle 0:00/);
+	});
+
+	it("an owner or admin sees everyone's hours, a manager their own and their teams', a member their own", async () => {
+		const grace = await memberOfAcme("admin", "grace@example.com");
+		const hedy = await memberOfAcme("member", "hedy@example.com");
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const mallory = await memberOfAcme("member", "mallory@example.com");
+		await seedTeam(acme.id, "Design team", { members: [linus.user.id], managers: [hedy.user.id] });
+		const design = await create("Design");
+		await track(ada, design, 60, 10);
+		await track(hedy, design, 120, 10);
+		await track(linus, design, 240, 10);
+		await track(mallory, design, 480, 10);
+
+		const owner = await mainText(PROJECTS, ada);
+		expect(owner).toMatch(/Design 15:00/);
+		expect(owner).toContain(
+			"Each shows the hours tracked on it to date, a running timer included.",
+		);
+		expect(await mainText(PROJECTS, grace)).toMatch(/Design 15:00/);
+		const manager = await mainText(PROJECTS, hedy);
+		expect(manager).toMatch(/Design 6:00/);
+		expect(manager).toContain(
+			"Each shows the hours you and the people in your teams have tracked on it to date",
+		);
+		const member = await mainText(PROJECTS, mallory);
+		expect(member).toMatch(/Design 8:00/);
+		expect(member).toContain("Each shows the hours you have tracked on it to date");
+		expect(await mainText(PROJECTS, linus)).toMatch(/Design 4:00/);
+	});
+
+	it("counts no time of another organisation, on a project of the same name", async () => {
+		const design = await create("Design");
+		await track(ada, design, 60, 10);
+		const grace = await person(mailbox, "grace@example.com");
+		const hooli = await createOrganisation(grace.cookie, "Hooli");
+		const theirs = organisationScope(env.DB, hooli.id);
+		const [their] = await theirs.projects.insert({ name: "Design", nameKey: "design" });
+		await theirs.timeEntries.insert({
+			userId: grace.user.id,
+			projectId: their?.id ?? "",
+			startedAt: new Date(Date.now() - 600 * 60_000),
+			endedAt: new Date(),
+		});
+		expect(await mainText(PROJECTS)).toMatch(/Design 1:00/);
+	});
+
+	it("reads them in one statement, whatever the number of projects", async () => {
+		for (const name of ["A", "B", "C"]) await track(ada, await create(name), 30, 10);
+		const prepare = vi.spyOn(env.DB, "prepare");
+		const hours = await projectHours(
+			organisationScope(env.DB, acme.id),
+			{ everyone: true },
+			Date.now(),
+		);
+		expect(hours.size).toBe(3);
+		const statements = prepare.mock.calls.map(([text]) => String(text));
+		expect(statements).toHaveLength(1);
+		expect(statements[0]).toMatch(/sum\(/i);
+	});
+
+	/** A small, seeded generator (mulberry32), so a failing case can be run again. */
+	function random(seed: number) {
+		let state = seed >>> 0;
+		return () => {
+			state = (state + 0x6d2b79f5) >>> 0;
+			let t = state;
+			t = Math.imul(t ^ (t >>> 15), t | 1);
+			t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+			return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+		};
+	}
+
+	it("property: a project's hours are the time of the entries the viewer may see, a running one to now", async () => {
+		const scope = organisationScope(env.DB, acme.id);
+		const people = [ada];
+		for (const email of ["p1@example.com", "p2@example.com", "p3@example.com"]) {
+			people.push(await memberOfAcme("member", email));
+		}
+		const projects = await scope.projects.insert(
+			["P0", "P1", "P2", "P3"].map((name) => ({ name, nameKey: name.toLowerCase() })),
+		);
+		const now = Date.UTC(2026, 10, 11, 12);
+		for (let seed = 0; seed < 40; seed++) {
+			const next = random(seed);
+			const pick = <T>(list: readonly T[]) => list[Math.floor(next() * list.length)] as T;
+			await env.DB.prepare("delete from time_entries").run();
+			const entries: { userId: string; projectId: string; start: number; end: number | null }[] =
+				[];
+			const running = new Set<string>();
+			for (let i = Math.floor(next() * 25); i > 0; i--) {
+				const userId = pick(people).user.id;
+				const start = now - Math.floor(next() * 90 * 86_400_000);
+				// At most one running entry for each person, as the database insists.
+				const runs = !running.has(userId) && next() < 0.2;
+				if (runs) running.add(userId);
+				entries.push({
+					userId,
+					projectId: pick(projects).id,
+					start,
+					end: runs ? null : start + Math.floor(next() * 10 * 3_600_000),
+				});
+			}
+			// Ten rows at a time: D1 binds at most 100 values to a statement.
+			for (let at = 0; at < entries.length; at += 10) {
+				await scope.timeEntries.insert(
+					entries.slice(at, at + 10).map((e) => ({
+						userId: e.userId,
+						projectId: e.projectId,
+						startedAt: new Date(e.start),
+						endedAt: e.end === null ? null : new Date(e.end),
+					})),
+				);
+			}
+			const managed = new Set(people.filter(() => next() < 0.3).map((p) => p.user.id));
+			const whose = timeScopeOf({
+				userId: pick(people).user.id,
+				role: pick(["owner", "admin", "member"] as const),
+				managed,
+			});
+			const seen = entries.filter((e) => whose.everyone || whose.people.includes(e.userId));
+
+			const hours = await projectHours(scope, whose, now);
+			for (const project of projects) {
+				const mine = seen.filter((e) => e.projectId === project.id);
+				const ms = mine.reduce((total, e) => total + ((e.end ?? now) - e.start), 0);
+				expect(hours.get(project.id), `seed ${seed}, ${project.name}`).toBe(
+					mine.length > 0 ? Math.floor(ms / 1000) : undefined,
+				);
+			}
+		}
+	}, 60_000);
 });

@@ -183,6 +183,58 @@ describe("organisation scope", () => {
 		expect(await storedMemberships(acme.id)).toEqual(before);
 	});
 
+	it("adds up a column over its own organisation's rows, one total for each key, and none of another's", async () => {
+		const { acme, globex, ada, bola, dana } = await seed();
+		const scope = organisationScope(database, acme.id);
+		const other = organisationScope(database, globex.id);
+		const [build, design] = await scope.projects.insert([
+			{ name: "Build", nameKey: "build" },
+			{ name: "Design", nameKey: "design" },
+		]);
+		const [theirs] = await other.projects.insert({ name: "Build", nameKey: "build" });
+		if (!build || !design || !theirs) throw new Error("seed failed");
+		const at = (minutes: number) => new Date(Date.UTC(2026, 10, 2) + minutes * 60_000);
+		await scope.timeEntries.insert([
+			{ userId: ada.id, projectId: build.id, startedAt: at(0), endedAt: at(30) },
+			{ userId: dana.id, projectId: build.id, startedAt: at(0), endedAt: at(45) },
+			{ userId: ada.id, projectId: design.id, startedAt: at(60), endedAt: at(70) },
+		]);
+		await other.timeEntries.insert({
+			userId: bola.id,
+			projectId: theirs.id,
+			startedAt: at(0),
+			endedAt: at(600),
+		});
+		const minutes = (e: typeof schema.timeEntries) =>
+			sql<number>`(${e.endedAt} - ${e.startedAt}) / 60000`;
+
+		const totals = await scope.timeEntries.sum(minutes, (e) => e.projectId);
+		const adas = await scope.timeEntries.sum(
+			minutes,
+			(e) => e.projectId,
+			(e) => eq(e.userId, ada.id),
+		);
+		// A top-level OR in the filter stays inside the organisation, as a select's does.
+		const anyRow = await scope.timeEntries.sum(
+			minutes,
+			(e) => e.projectId,
+			(e) => sql`${e.userId} = 'nobody' or 1 = 1`,
+		);
+
+		const byKey = (rows: { key: string; total: number }[]) =>
+			Object.fromEntries(rows.map(({ key, total }) => [key, total]));
+		expect(byKey(totals)).toEqual({ [build.id]: 75, [design.id]: 10 });
+		expect(byKey(adas)).toEqual({ [build.id]: 30, [design.id]: 10 });
+		expect(byKey(anyRow)).toEqual({ [build.id]: 75, [design.id]: 10 });
+		expect(
+			await scope.timeEntries.sum(
+				minutes,
+				(e) => e.projectId,
+				(e) => eq(e.userId, bola.id),
+			),
+		).toEqual([]);
+	});
+
 	it("covers every table that has an organisation id, and exports none of them", () => {
 		const withOrganisation = Object.values<unknown>(schema).filter(
 			(table): table is SQLiteTable =>

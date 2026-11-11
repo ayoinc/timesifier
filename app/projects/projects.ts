@@ -1,6 +1,6 @@
 /**
  * What the pages of projects and clients share with the browser
- * (TS-011a, TS-011b). The rules that read the database are in
+ * (TS-011a, TS-011b, TS-057). The rules that read the database are in
  * `projects.server.ts` and `app/clients/clients.server.ts`.
  */
 
@@ -21,9 +21,16 @@ export function shownIn(search: URLSearchParams): Shown {
 	return search.get(SHOW_PARAM) === ARCHIVED ? ARCHIVED : ACTIVE;
 }
 
-/** The query for a tab: none for Active, the default. */
-export function searchFor(shown: Shown): Record<string, string> {
-	return shown === ARCHIVED ? { [SHOW_PARAM]: ARCHIVED } : {};
+/**
+ * The query that narrows a list to the records whose name has the words
+ * typed, kept in the address so a search can be linked to and reloaded:
+ * `?q=acme` (TS-057). The list is narrowed on the server.
+ */
+export const SEARCH_PARAM = "q";
+
+/** The words an address searches for, the space round them cut: "" when it searches for nothing. */
+export function searchIn(search: URLSearchParams): string {
+	return search.get(SEARCH_PARAM)?.trim() ?? "";
 }
 
 /**
@@ -38,4 +45,34 @@ export function onlyTabChanged(current: URL, next: URL): boolean {
 	a.delete(SHOW_PARAM);
 	b.delete(SHOW_PARAM);
 	return a.toString() === b.toString();
+}
+
+/** A project as Projects groups it: under its client, or none. `key` is the client's `name_key`. */
+export interface Grouped {
+	client: { id: string; name: string; key: string; archived: boolean } | null;
+}
+
+/** One client's projects, or (`client` null) the projects with none. */
+export interface ClientGroup<P extends Grouped> {
+	client: P["client"];
+	projects: P[];
+}
+
+/**
+ * The projects under their client: one group for each client, in the order of
+ * the clients' names, then the projects with no client. Within a group the
+ * projects keep the order they came in (TS-057).
+ */
+export function groupedByClient<P extends Grouped>(projects: readonly P[]): ClientGroup<P>[] {
+	const groups = new Map<string | null, ClientGroup<P>>();
+	for (const project of projects) {
+		const id = project.client?.id ?? null;
+		const group: ClientGroup<P> = groups.get(id) ?? { client: project.client, projects: [] };
+		group.projects.push(project);
+		groups.set(id, group);
+	}
+	return [...groups.values()].sort((a, b) => {
+		if (a.client === null || b.client === null) return a.client === null ? 1 : -1;
+		return a.client.key < b.client.key ? -1 : a.client.key > b.client.key ? 1 : 0;
+	});
 }

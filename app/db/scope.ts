@@ -6,7 +6,15 @@
  * and the organisation id of a row is written by the scope alone: an insert
  * cannot name another organisation and an update cannot move a row to one.
  */
-import { and, eq, type InferInsertModel, type InferSelectModel, type SQL, sql } from "drizzle-orm";
+import {
+	and,
+	eq,
+	type GetColumnData,
+	type InferInsertModel,
+	type InferSelectModel,
+	type SQL,
+	sql,
+} from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
 import type { AnySQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
@@ -58,6 +66,12 @@ export interface ScopedStatement<R> {
 	readonly rows?: R[];
 }
 
+/** One line of a `sum`: a value of the column summed by, and the total of the rows that have it. */
+export interface Sum<K> {
+	key: K;
+	total: number;
+}
+
 export interface ScopedAccessor<T extends TenantTable> {
 	/** Rows of this organisation, all of them or those the filter keeps. */
 	select(filter?: Filter<T>, options?: SelectOptions<T>): Promise<Row<T>[]>;
@@ -67,6 +81,16 @@ export interface ScopedAccessor<T extends TenantTable> {
 	update(changes: Partial<NewRow<T>>, filter: Filter<T>): Promise<Row<T>[]>;
 	/** Deletes the rows of this organisation that the filter keeps, and returns them. */
 	delete(filter: Filter<T>): Promise<Row<T>[]>;
+	/**
+	 * Adds up `amount` over the rows of this organisation that the filter keeps,
+	 * one total for each value of `by`, in one statement:
+	 * `SELECT by, SUM(amount) … GROUP BY by`. A value no row has is not listed.
+	 */
+	sum<C extends AnySQLiteColumn>(
+		amount: (table: T) => SQL<number>,
+		by: (table: T) => C,
+		filter?: Filter<T>,
+	): Promise<Sum<GetColumnData<C>>[]>;
 	/** The same three writes, built and not sent, for `OrganisationScope.batch`. */
 	statements: {
 		insert(rows: NewRow<T> | NewRow<T>[]): ScopedStatement<Row<T>>;
@@ -138,6 +162,18 @@ export function scopedAccessor<T extends TenantTable>(
 		},
 		async delete(filter) {
 			return (await statements.delete(filter).query) as Row<T>[];
+		},
+		async sum(amount, by, filter) {
+			const key = by(table);
+			const rows = await db
+				.select({ key, total: sql<number>`coalesce(sum(${amount(table)}), 0)` })
+				.from(tenantTable)
+				.where(within(filter))
+				.groupBy(key);
+			return rows.map((row) => ({
+				key: row.key as GetColumnData<typeof key>,
+				total: Number(row.total),
+			}));
 		},
 		statements,
 	};

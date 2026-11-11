@@ -181,6 +181,8 @@ Teams (TS-038) are made, renamed and deleted, filled and given managers by an ow
 
 A report and its export (`app/reports/reports.server.ts`) read the people of `timeScopeOf` as one JSON parameter, so a manager of many people stays inside D1's limit on bound parameters. A report narrowed to one person names them in its address; a person the viewer may not see, or who is not a member, gets the same 404 as another organisation's address. A cell of the export that a spreadsheet would read as a formula, one that starts with `=`, `+`, `-`, `@`, a tab or a carriage return, is prefixed with `'` (`app/reports/csv.ts`).
 
+Each project's hours on Projects (TS-057, `projectHours` in `app/projects/projects.server.ts`) are added up in SQL over the people of `timeScopeOf`, passed the same way, so every role sees every project but only the time it may see: an owner or admin everyone's, a manager their own and their teams' people's, a member their own; the page's sentence says which. They are one statement, `organisationScope`'s `sum`, which keeps the organisation's condition outside the caller's filter as `select` does. The words searched for on Projects and Clients are bound as one parameter and matched with `instr`, so `%` and `_` are letters.
+
 ### The gate in front of the plugin
 
 Every request to `/organization/*` passes one check of ours before the plugin sees it (`organisationRules` in `app/auth/organisations.server.ts`):

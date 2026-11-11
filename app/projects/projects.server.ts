@@ -1,8 +1,11 @@
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import { findActiveClient } from "~/clients/clients.server";
 import type { OrganisationScope } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
+import type { TimeScope } from "~/organisations/access";
+
+import { among, nameHas } from "./search.server";
 
 /**
  * The projects of one organisation, as more than one destination reads them:
@@ -33,12 +36,31 @@ export async function findActiveProject(scope: OrganisationScope, id: string) {
 	return project ?? null;
 }
 
-/** Every project of the organisation, active and archived, by name, each with its client. */
-export async function listProjects(scope: OrganisationScope) {
-	const [projects, clients] = await Promise.all([
-		scope.projects.select(undefined, { orderBy: (p) => [asc(p.nameKey)] }),
-		scope.clients.select(),
-	]);
+/** How Projects asks for its list: the words searched for, and whether a client's name is searched too. */
+export interface ProjectSearch {
+	/** The words typed in the search field; "" for every project. */
+	query: string;
+	/** Whether a project is found by its client's name: while the organisation has Clients on. */
+	byClient: boolean;
+}
+
+/**
+ * Every project of the organisation, active and archived, by name, each with
+ * its client; those whose name, or whose client's name, has the words
+ * searched for when there are some (TS-057). The projects are narrowed in
+ * SQL: the clients, read for their names anyway, give the ids of those whose
+ * name has the words, and the projects' query is passed them.
+ */
+export async function listProjects(scope: OrganisationScope, { query, byClient }: ProjectSearch) {
+	const clients = await scope.clients.select();
+	const key = nameKey(query);
+	const clientsFound = byClient
+		? clients.filter((client) => client.nameKey.includes(key)).map((client) => client.id)
+		: [];
+	const projects = await scope.projects.select(
+		key === "" ? undefined : (p) => or(nameHas(p.nameKey, query), among(p.clientId, clientsFound)),
+		{ orderBy: (p) => [asc(p.nameKey)] },
+	);
 	const byId = new Map(clients.map((client) => [client.id, client]));
 	return projects.map((project) => {
 		const client = project.clientId ? byId.get(project.clientId) : undefined;
@@ -47,10 +69,34 @@ export async function listProjects(scope: OrganisationScope) {
 			name: project.name,
 			archived: project.archivedAt !== null,
 			client: client
-				? { id: client.id, name: client.name, archived: client.archivedAt !== null }
+				? {
+						id: client.id,
+						name: client.name,
+						key: client.nameKey,
+						archived: client.archivedAt !== null,
+					}
 				: null,
 		};
 	});
+}
+
+/**
+ * The time tracked on each project to date, in seconds, by the people `whose`
+ * holds (docs/security.md, "Whose time"): finished entries whole, and a
+ * running one up to `now`. One statement adds them up for every project; a
+ * project nobody has tracked time on is not in the map.
+ */
+export async function projectHours(
+	scope: OrganisationScope,
+	whose: TimeScope,
+	now: number,
+): Promise<Map<string, number>> {
+	const totals = await scope.timeEntries.sum(
+		(e) => sql<number>`max(0, coalesce(${e.endedAt}, ${now}) - ${e.startedAt})`,
+		(e) => e.projectId,
+		whose.everyone ? undefined : (e) => among(e.userId, whose.people),
+	);
+	return new Map(totals.map(({ key, total }) => [key, Math.floor(total / 1000)]));
 }
 
 /** Whether another project of the organisation, archived or not, already has this name. */
