@@ -21,13 +21,17 @@ import type { AnySQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import {
 	clients,
 	invitations,
+	leaveKinds,
+	leaveRequests,
 	memberships,
 	periodEvents,
 	periods,
 	projects,
+	publicHolidays,
 	teamMembers,
 	teams,
 	timeEntries,
+	workingDays,
 } from "./schema";
 
 /** A table whose rows belong to one organisation. A table without the column is rejected by the compiler. */
@@ -190,6 +194,10 @@ export const tenantTables = {
 	periodEvents,
 	teams,
 	teamMembers,
+	leaveKinds,
+	leaveRequests,
+	publicHolidays,
+	workingDays,
 } as const;
 
 type Accessors = {

@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { useMemo, useState } from "react";
 import { Link, redirect, replace, useFetcher, useRouteLoaderData } from "react-router";
 import * as z from "zod";
@@ -9,6 +10,9 @@ import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
+import { organisationScope } from "~/db";
+import { workingWeekOf } from "~/leave/leave.server";
+import { minutesLabel, WEEKDAY_NAMES, workingWeekLabel } from "~/leave/words";
 import { parseRequest } from "~/lib/validate";
 import { leaveOrganisation, listOrganisations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -48,15 +52,22 @@ export function meta() {
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { role, user, organisation } = membership;
-	const [organisations, ownZone] = await Promise.all([
+	const [organisations, ownZone, week] = await Promise.all([
 		listOrganisations(request),
 		ownZoneOf(membership),
+		workingWeekOf(organisationScope(env.DB, organisation.id)),
 	]);
 	return {
 		role,
 		hasOthers: organisations.ok && organisations.data.length > 1,
 		person: { name: user.name?.trim() || null, email: user.email },
 		timeZone: { own: ownZone, organisation: organisation.timeZone },
+		/** The organisation's working week, which is the person's (TS-061). */
+		workingWeek: WEEKDAY_NAMES.map((name, index) => ({
+			name,
+			hours: (week[index] ?? 0) > 0 ? minutesLabel(week[index] ?? 0) : "Not a working day",
+		})),
+		workingWeekLabel: workingWeekLabel(week),
 	};
 }
 
@@ -137,7 +148,7 @@ const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
 type Task = "name" | "time-zone" | "leave";
 
 export default function Account({ loaderData }: Route.ComponentProps) {
-	const { person, role, hasOthers, timeZone } = loaderData;
+	const { person, role, hasOthers, timeZone, workingWeek } = loaderData;
 	const organisation = useOrganisation();
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -195,6 +206,21 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 
 				<Appearance />
 				<SignOut email={person.email} />
+			</Section>
+
+			<Section
+				id="working-week"
+				heading="Your working week"
+				lead={`${loaderData.workingWeekLabel}, as ${organisation.name} sets it for everyone. Owners and admins change it in Workspace settings.`}
+				className="max-w-200"
+			>
+				<Ledger heading="Hours expected">
+					<LedgerRows label="Your working week">
+						{workingWeek.map((day) => (
+							<LedgerRow key={day.name} title={day.name} value={day.hours} />
+						))}
+					</LedgerRows>
+				</Ledger>
 			</Section>
 
 			<Section

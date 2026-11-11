@@ -5,11 +5,13 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
 import { type OrganisationScope, organisationScope, users } from "~/db";
+import { expectedMinutes, leaveHalfDays, leaveMinutes } from "~/leave/days";
+import { calendarOf, leaveContext } from "~/leave/leave.server";
 import { type Access, type TimeScope, timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { type Membership, notFound } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
-import { bounds, dayOf } from "~/time/calendar";
+import { bounds, dayOf, daysFrom } from "~/time/calendar";
 
 import type { Grouping } from "./choices";
 import { parseReportQuery, type ReportDays, type ReportQuery, rangeDays } from "./query";
@@ -189,4 +191,53 @@ export async function piecesOfReport(request: ReportRequest): Promise<Piece[]> {
 			pieces.push(...piecesOf(entry, request.days, request.zone, request.now));
 	}
 	return pieces;
+}
+
+/** One person's line in a report: the time they worked, the time expected of them, and their leave (TS-061). */
+export interface PersonLine {
+	id: string;
+	name: string;
+	/** Seconds of tracked time in the range. Leave is never in it. */
+	worked: number;
+	/** Minutes expected over the range: the working week, less public holidays and approved leave. */
+	expectedMinutes: number;
+	/** Minutes of approved leave in the range, and the half days they make. */
+	leaveMinutes: number;
+	leaveHalfDays: number;
+}
+
+/**
+ * Each person the report holds, with what they worked, what was expected of
+ * them and their leave over its days. Worked time comes from `pieces`; leave
+ * is read beside it and never added to it.
+ */
+export async function peopleOfReport(
+	request: ReportRequest,
+	pieces: readonly Piece[],
+): Promise<PersonLine[]> {
+	const { people, choices, days, scope } = request;
+	const listed = people.everyone ? choices : choices.filter((c) => people.people.includes(c.id));
+	if (listed.length === 0) return [];
+	const context = await leaveContext(
+		scope,
+		listed.map((p) => p.id),
+		days.first,
+		days.last,
+	);
+	const range = daysFrom(days.first, days.last);
+	const worked = new Map<string, number>();
+	for (const piece of pieces) {
+		worked.set(piece.entry.userId, (worked.get(piece.entry.userId) ?? 0) + piece.seconds);
+	}
+	return listed.map((person) => {
+		const calendar = calendarOf(context, person.id);
+		return {
+			id: person.id,
+			name: person.name,
+			worked: worked.get(person.id) ?? 0,
+			expectedMinutes: expectedMinutes(calendar, range),
+			leaveMinutes: leaveMinutes(calendar, range),
+			leaveHalfDays: leaveHalfDays(calendar, range),
+		};
+	});
 }

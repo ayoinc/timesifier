@@ -71,11 +71,12 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the seven destinations, the pages of Team, the export of Reports, My account and the moved address", () => {
+	it("holds the layout, the eight destinations, the pages of Team, the export of Reports, My account and the moved address", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
 				"/app/acme",
+				"/app/acme/time-off",
 				"/app/acme/projects",
 				"/app/acme/clients",
 				"/app/acme/team",
@@ -101,6 +102,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/projects",
 			"routes/app/settings",
 			"routes/app/team",
+			"routes/app/time-off",
 			"routes/app/timesheet",
 		]);
 	});
@@ -155,6 +157,12 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/team": { intent: "create", name: "Taken over" },
 		"routes/app/approvals": { intent: "approve-all", startsOn: "2026-01-05" },
 		"routes/app/timesheet": { intent: "stop" },
+		"routes/app/time-off": {
+			intent: "request",
+			kindId: "k-annual",
+			startsOn: "2026-12-21",
+			endsOn: "2026-12-23",
+		},
 	};
 
 	it.each(withAction)(
@@ -178,6 +186,7 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from projects")).toBe(0);
 			expect(await value("select count(*) from clients")).toBe(0);
 			expect(await value("select count(*) from teams")).toBe(0);
+			expect(await value("select count(*) from leave_requests")).toBe(0);
 		},
 	);
 

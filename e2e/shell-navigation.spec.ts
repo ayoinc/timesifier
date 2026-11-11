@@ -93,7 +93,10 @@ async function expectRail(page: Page) {
 /** The same links, by role and name, in the order of the list, each to its own address. */
 async function expectDestinations(page: Page, current: Destination) {
 	const links = destinationLinks(page);
-	await expect(links).toHaveText(destinations.map((destination) => destination.label));
+	// A link with a bar label holds both words; its label alone is what is read out.
+	await expect(links).toHaveText(
+		destinations.map((destination) => `${destination.barLabel ?? ""}${destination.label}`),
+	);
 	for (const destination of destinations) {
 		const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
 		await expect(link).toHaveAttribute("href", homePath(destination.id));
@@ -179,12 +182,17 @@ test.describe("in a window 1280px wide", () => {
 test.describe("signed in as a member of the organisation", () => {
 	test.use({ storageState: SIGNED_IN_AS_MEMBER, viewport: MEDIUM });
 
-	test("the navigation shows Timesheet, Projects and Reports, each under its heading", async ({
+	test("the navigation shows Timesheet, Time off, Projects and Reports, each under its heading", async ({
 		page,
 	}) => {
 		await openShell(page, homePath(first.id));
 
-		await expect(destinationLinks(page)).toHaveText(["Timesheet", "Projects", "Reports"]);
+		await expect(destinationLinks(page)).toHaveText([
+			"Timesheet",
+			"Time off",
+			"Projects",
+			"Reports",
+		]);
 		for (const heading of HEADINGS) {
 			await expect(navigation(page).getByText(heading, { exact: true })).toBeVisible();
 		}

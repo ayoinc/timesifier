@@ -11,6 +11,7 @@ import {
 	value,
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
+import { seedHoliday, seedLeave } from "./leave-seed";
 import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Approvals (TS-047): one period at a time, its timesheets in one status
@@ -389,5 +390,148 @@ describe("status and grouping (TS-058)", () => {
 		const response = await open(`${APPROVALS}?tab=nothing`, ada);
 		expect(response.status).toBe(301);
 		expect(response.headers.get("location")).toBe(APPROVALS);
+	});
+});
+
+describe("time off waiting (TS-061)", () => {
+	/** Grace in Design, which Mona manages; Linus in Ops, which Nils manages; Bob in no team. */
+	async function seedPeople() {
+		const grace = await memberOfAcme("member", "grace@example.com");
+		const mona = await memberOfAcme("member", "mona@example.com");
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const nils = await memberOfAcme("member", "nils@example.com");
+		const bob = await memberOfAcme("member", "bob@example.com");
+		await seedTeam(acme.id, "Design", { members: [grace.user.id], managers: [mona.user.id] });
+		await seedTeam(acme.id, "Ops", { members: [linus.user.id], managers: [nils.user.id] });
+		return { grace, mona, linus, nils, bob };
+	}
+
+	const leaveStatusOf = (id: string) =>
+		value<string>("select status from leave_requests where id = ?", id);
+
+	it("lists the requests waiting for the person's decision, whatever week, and counts them on the link", async () => {
+		const { grace, linus, mona } = await seedPeople();
+		await seedLeave(acme.id, grace.user.id, "annual", "2026-12-14", "2026-12-18", {
+			status: "pending",
+		});
+		await seedLeave(acme.id, linus.user.id, "study", "2026-12-21", "2026-12-21", {
+			status: "pending",
+			startsHalf: true,
+		});
+		// Decided and own requests are not waiting.
+		await seedLeave(acme.id, grace.user.id, "sick", "2026-12-01", "2026-12-01");
+		await seedLeave(acme.id, ada.user.id, "annual", "2026-12-07", "2026-12-07", {
+			status: "pending",
+		});
+
+		const html = await pageBody(await open(`${APPROVALS}?week=${WEEK}`, ada));
+		const text = textOf(html);
+		expect(text).toContain("Time off waiting");
+		expect(text).toContain("grace@example.com · Annual leave 14 to 18 December 2026 · 5 days");
+		expect(text).toContain(
+			"linus@example.com · Study leave 21 December 2026, half day · half a day",
+		);
+		expect(text).not.toContain("ada@example.com · Annual leave");
+		expect(text).not.toContain("Sick leave");
+		expect(html).toContain('aria-label="Approve grace@example.com&#x27;s annual leave"');
+		expect(html).toContain('aria-label="Refuse linus@example.com&#x27;s study leave"');
+		expect(textOf(await pageBody(await open("/app/acme/projects", ada)))).toMatch(
+			/Approvals 2 pending/,
+		);
+
+		// A manager has their team's alone.
+		const theirs = textOf(await pageBody(await open(APPROVALS, mona)));
+		expect(theirs).toContain("grace@example.com · Annual leave");
+		expect(theirs).not.toContain("linus@example.com");
+		expect(textOf(await pageBody(await open("/app/acme/projects", mona)))).toMatch(
+			/Approvals 1 pending/,
+		);
+	});
+
+	it("is not there when nothing waits", async () => {
+		await seedPeople();
+		expect(textOf(await pageBody(await open(APPROVALS, ada)))).not.toContain("Time off waiting");
+	});
+
+	it("approve-leave and refuse-leave are for a manager of the person's team, an owner or an admin", async () => {
+		const { grace, mona, nils, linus } = await seedPeople();
+		const hedy = await memberOfAcme("admin", "hedy@example.com");
+		const first = await seedLeave(acme.id, grace.user.id, "annual", "2026-12-14", "2026-12-18", {
+			status: "pending",
+		});
+		const second = await seedLeave(acme.id, linus.user.id, "annual", "2026-12-14", "2026-12-18", {
+			status: "pending",
+		});
+		const third = await seedLeave(acme.id, grace.user.id, "unpaid", "2026-12-21", "2026-12-21", {
+			status: "pending",
+		});
+
+		for (const intent of ["approve-leave", "refuse-leave"]) {
+			const refused = await ask(nils, { intent, requestId: first });
+			expect(refused.status).toBe(403);
+			expect(refused.said).toContain(NOT_ALLOWED);
+		}
+		expect(await leaveStatusOf(first)).toBe("pending");
+
+		const approved = await ask(mona, {
+			intent: "approve-leave",
+			requestId: first,
+			comment: "Fine.",
+		});
+		expect(approved.status).toBe(200);
+		expect(approved.said).toContain("Leave approved.");
+		expect(
+			await row("select status, decided_by, comment from leave_requests where id = ?", first),
+		).toEqual({ status: "approved", decided_by: mona.user.id, comment: "Fine." });
+
+		const refused = await ask(hedy, { intent: "refuse-leave", requestId: second });
+		expect(refused.status).toBe(200);
+		expect(refused.said).toContain("Leave refused.");
+		expect(await leaveStatusOf(second)).toBe("refused");
+
+		expect((await ask(ada, { intent: "approve-leave", requestId: third })).status).toBe(200);
+		expect(await leaveStatusOf(third)).toBe("approved");
+
+		// Decided already: not again.
+		for (const [who, id] of [
+			[ada, first],
+			[mona, first],
+			[hedy, second],
+		] as const) {
+			expect((await ask(who, { intent: "approve-leave", requestId: id })).status).toBe(409);
+		}
+		expect((await ask(ada, { intent: "approve-leave", requestId: "nothing" })).status).toBe(404);
+	});
+
+	it("nobody decides their own, an owner included, and a member is not let in", async () => {
+		const { mona, bob } = await seedPeople();
+		const own = await seedLeave(acme.id, ada.user.id, "annual", "2026-12-14", "2026-12-18", {
+			status: "pending",
+		});
+		const monas = await seedLeave(acme.id, mona.user.id, "annual", "2026-12-14", "2026-12-18", {
+			status: "pending",
+		});
+		expect((await ask(ada, { intent: "approve-leave", requestId: own })).status).toBe(403);
+		expect((await ask(mona, { intent: "approve-leave", requestId: monas })).status).toBe(403);
+		expect((await ask(bob, { intent: "refuse-leave", requestId: monas })).status).toBe(404);
+		expect([await leaveStatusOf(own), await leaveStatusOf(monas)]).toEqual(["pending", "pending"]);
+	});
+
+	it("leaves out of Not submitted whoever had nothing to work in the week", async () => {
+		const { grace, linus, mona } = await seedPeople();
+		// Grace was on leave all week; Mona on leave until Thursday, and Friday a public holiday.
+		await seedLeave(acme.id, grace.user.id, "annual", WEEK, "2026-01-09");
+		await seedLeave(acme.id, mona.user.id, "sick", WEEK, "2026-01-08");
+		await seedHoliday(acme.id, "2026-01-09", "Founders' Day");
+		// Linus worked Thursday afternoon, the holiday aside; Ada's leave was never approved.
+		await seedLeave(acme.id, linus.user.id, "annual", WEEK, "2026-01-08", { endsHalf: true });
+		await seedLeave(acme.id, ada.user.id, "annual", WEEK, "2026-01-09", { status: "pending" });
+
+		const text = textOf(
+			await pageBody(await open(`${APPROVALS}?week=${WEEK}&status=not-submitted`, ada)),
+		);
+		expect(text).toContain("Not submitted (4)");
+		for (const listed of ["ada@", "linus@", "nils@", "bob@"]) expect(text).toContain(listed);
+		for (const away of ["grace@", "mona@"]) expect(text).not.toContain(away);
 	});
 });

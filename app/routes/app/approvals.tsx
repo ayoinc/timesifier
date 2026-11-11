@@ -26,6 +26,16 @@ import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger"
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { nothingExpected } from "~/leave/days";
+import { halfDaysLabel, LEAVE_TEXT_MAX_LENGTH } from "~/leave/kinds";
+import {
+	calendarOf,
+	decideLeave,
+	leaveContext,
+	leaveDecidablePeople,
+	requestsToDecide,
+} from "~/leave/leave.server";
+import { spanLabel } from "~/leave/words";
 import { parseRequest } from "~/lib/validate";
 import { mayReopenPeriods } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
@@ -35,11 +45,11 @@ import { NOT_ALLOWED } from "~/organisations/problems";
 import { PERIOD_COMMENT_MAX_LENGTH, periodContaining } from "~/periods/periods";
 import { destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
+import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
 import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
-import { Day } from "~/time/calendar";
+import { Day, dayOf, daysFrom } from "~/time/calendar";
 
 import type { Route } from "./+types/approvals";
 import { FormSheet } from "./FormSheet";
@@ -96,10 +106,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	// it leaves the page where it is; other weeks waiting are linked above.
 	const now = Date.now();
 	const viewed = await viewedPeriod(membership, url, -1, now);
-	const [approvals, time] = await Promise.all([
+	const leavePeople = await leaveDecidablePeople(scope, organisation, access);
+	const [approvals, time, leave, leaveRequests] = await Promise.all([
 		approvalsFor(scope, people, viewed.period, viewed.today),
 		timeByProject(scope, people, viewed.period, now),
+		leaveContext(
+			scope,
+			people.map((p) => p.id),
+			viewed.period.startsOn,
+			viewed.period.endsOn,
+		),
+		requestsToDecide(scope, access, leavePeople, (person) => dayOf(now, person.timeZone)),
 	]);
+	// A person whose whole period was leave, public holidays and days not worked
+	// had nothing to submit (TS-061).
+	const periodDays = daysFrom(viewed.period.startsOn, viewed.period.endsOn);
+	const notSubmitted =
+		approvals.notSubmitted?.filter(
+			(person) => !nothingExpected(calendarOf(leave, person.id), periodDays),
+		) ?? null;
 	const date = new Intl.DateTimeFormat("en-GB", {
 		day: "numeric",
 		month: "long",
@@ -158,7 +183,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			break;
 		case "not-submitted":
 			// Null while the period is open: who has not submitted it is known once it has closed.
-			rows = approvals.notSubmitted?.map((p) => row(p, "Not submitted")) ?? null;
+			rows = notSubmitted?.map((p) => row(p, "Not submitted")) ?? null;
 			break;
 	}
 
@@ -178,8 +203,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			pending: approvals.pending.length,
 			approved: approved.length,
 			returned: returned.length,
-			"not-submitted": approvals.notSubmitted?.length ?? null,
+			"not-submitted": notSubmitted?.length ?? null,
 		},
+		/** The requests for leave waiting for this person's decision, whatever their days (TS-061). */
+		leaveWaiting: leaveRequests.pending.map((r) => ({
+			id: r.id,
+			person: r.person.name,
+			kind: r.kindName,
+			days: spanLabel(r),
+			takes: halfDaysLabel(r.halfDays),
+			note: r.note,
+		})),
 		rows,
 		projects:
 			rows !== null && query.group === "project"
@@ -201,6 +235,11 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("approve-all"), startsOn: z.string() }),
 	z.object({ intent: z.literal("return"), periodId: Id, comment: z.string() }),
 	z.object({ intent: z.literal("reopen"), periodId: Id, comment: z.string() }),
+	z.object({
+		intent: z.enum(["approve-leave", "refuse-leave"]),
+		requestId: Id,
+		comment: z.string().trim().max(LEAVE_TEXT_MAX_LENGTH).optional(),
+	}),
 ]);
 
 const COMMENT_PROBLEM = `Say why, in 1 to ${PERIOD_COMMENT_MAX_LENGTH} characters.`;
@@ -217,6 +256,12 @@ function outcome(result: Decided, said: string) {
 	return declined(problem, status);
 }
 
+const LEAVE_DECIDED: Record<Exclude<Decided, "done">, [string, number]> = {
+	missing: ["That request is no longer there.", 404],
+	"not-allowed": [NOT_ALLOWED, 403],
+	stale: ["That request has changed since this page was opened. Look at it again.", 409],
+};
+
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
 	const membership = context.get(membershipContext);
@@ -224,6 +269,18 @@ export async function action({ request, context }: Route.ActionArgs) {
 	const scope = organisationScope(env.DB, membership.organisation.id);
 
 	switch (input.intent) {
+		case "approve-leave":
+		case "refuse-leave": {
+			const result = await decideLeave(scope, access, input.requestId, {
+				action: input.intent === "approve-leave" ? "approved" : "refused",
+				comment: input.comment || null,
+			});
+			if (result === "done") {
+				return done(input.intent === "approve-leave" ? "Leave approved." : "Leave refused.");
+			}
+			const [problem, status] = LEAVE_DECIDED[result];
+			return declined(problem, status);
+		}
 		case "approve":
 			return outcome(
 				await decide(scope, access, input.periodId, { action: "approved" }),
@@ -276,8 +333,11 @@ const NOTHING: Record<(typeof STATUSES)[number], string> = {
 
 export default function Approvals({ loaderData }: Route.ComponentProps) {
 	const organisation = useOrganisation();
-	const { query, keep, week, rows, projects, total, counts, canReopen, elsewhere } = loaderData;
-	const [task, setTask] = useState<"approve" | "all" | "return" | "reopen" | null>(null);
+	const { query, keep, week, rows, projects, total, counts, canReopen, elsewhere, leaveWaiting } =
+		loaderData;
+	const [task, setTask] = useState<
+		"approve" | "all" | "return" | "reopen" | "approve-leave" | "refuse-leave" | null
+	>(null);
 	const [target, setTarget] = useState<Target | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
@@ -419,6 +479,92 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 					</Ledger>
 				)}
 			</div>
+
+			{leaveWaiting.length > 0 && (
+				<Section
+					id="time-off-waiting"
+					heading="Time off waiting"
+					lead="Requests for leave waiting for your decision, whatever week they fall in."
+					className="max-w-200"
+				>
+					<Ledger heading="Time off" note={`${leaveWaiting.length}`}>
+						<LedgerRows label="Time off waiting for you">
+							{leaveWaiting.map((r) => {
+								const on = { id: r.id, name: `${r.person}'s ${r.kind.toLowerCase()}` };
+								return (
+									<LedgerRow
+										key={r.id}
+										title={
+											<span className="wrap-anywhere">
+												{r.person} <span className="text-on-surface-variant">· {r.kind}</span>
+											</span>
+										}
+										detail={
+											<>
+												{r.days} · {r.takes}
+												{r.note && <span className="block wrap-anywhere">“{r.note}”</span>}
+											</>
+										}
+										action={
+											<span className="flex gap-1">
+												<Button
+													variant="text"
+													aria-label={`Approve ${on.name}`}
+													onPress={() => open("approve-leave", on)}
+												>
+													Approve
+												</Button>
+												<Button
+													variant="text"
+													aria-label={`Refuse ${on.name}`}
+													onPress={() => open("refuse-leave", on)}
+												>
+													Refuse
+												</Button>
+											</span>
+										}
+									/>
+								);
+							})}
+						</LedgerRows>
+					</Ledger>
+				</Section>
+			)}
+
+			<FormSheet
+				title={`Approve ${target?.name ?? "this request"}?`}
+				intent="approve-leave"
+				submitLabel="Approve"
+				isOpen={task === "approve-leave"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="requestId" value={target?.id ?? ""} />
+				<TextField
+					label="Comment (optional)"
+					name="comment"
+					maxLength={LEAVE_TEXT_MAX_LENGTH}
+					description="They read this with the request."
+				/>
+			</FormSheet>
+
+			<FormSheet
+				title={`Refuse ${target?.name ?? "this request"}?`}
+				intent="refuse-leave"
+				submitLabel="Refuse"
+				isOpen={task === "refuse-leave"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="requestId" value={target?.id ?? ""} />
+				<TextField
+					label="Comment (optional)"
+					name="comment"
+					autoFocus
+					maxLength={LEAVE_TEXT_MAX_LENGTH}
+					description="They read this with the request."
+				/>
+			</FormSheet>
 
 			<FormSheet
 				title={`Approve ${target?.name ?? "this"} timesheet?`}

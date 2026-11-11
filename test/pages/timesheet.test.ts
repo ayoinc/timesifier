@@ -9,6 +9,7 @@ import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, type Role, seedMembership, value } from "../organisations/harness";
 import { open, openData, type Person, pageBody, person, submit, textOf } from "./harness";
+import { seedHoliday, seedLeave } from "./leave-seed";
 
 // Timesheet, /app/<slug>: the timer (TS-012a), the Day and Week views
 // (TS-013), entries by hand (TS-012b), the week's grid (TS-052), a week's
@@ -842,7 +843,14 @@ describe("the week's days above the day (TS-056)", () => {
 			days: [...group.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map(
 				([, attributes = "", inner = ""]) => ({
 					day: /href="\/app\/acme\?day=([\d-]+)"/.exec(attributes)?.[1],
-					total: textOf(inner).split(" ").at(-1),
+					// The day's total is its last duration: a day off, a holiday or leave is named after it (TS-061).
+					total: textOf(inner)
+						.match(/\d+:\d\d/g)
+						?.at(-1),
+					away:
+						/<span class="sr-only">, <\/span><span aria-hidden="true">[^<]*<\/span><span class="sr-only">([^<]+)<\/span>/.exec(
+							inner,
+						)?.[1] ?? null,
 					shown: /aria-current="date"/.test(attributes),
 				}),
 			),
@@ -883,6 +891,7 @@ describe("the week's days above the day (TS-056)", () => {
 			[0, 1, 2, 3, 4, 5, 6].map((step) => ({
 				day: addDays("2026-11-09", step),
 				total: ["2:00", "1:00", "0:45", "0:00", "0:00", "0:00", "1:00"][step],
+				away: step < 5 ? null : "Not a working day",
 				shown: step === 2,
 			})),
 		);
@@ -1090,5 +1099,66 @@ describe("an error while starting", () => {
 		expect(lines.filter((line) => line.startsWith("error: "))).toEqual([
 			"error: Error at /app/:organisation.data",
 		]);
+	});
+});
+
+describe("days not worked (TS-061)", () => {
+	it("names a public holiday and a day the week does not work, with the time expected on each", async () => {
+		clockAt(T0);
+		await seedHoliday(acme.id, "2026-12-25", "Christmas Day");
+
+		// Track time's warning on such a day is drawn only once its sheet opens, which no page test does.
+		expect(await textAt(`${PAGE}?day=2026-12-25`)).toContain("Christmas Day. 0:00 expected.");
+		expect(await textAt(`${PAGE}?day=2026-12-26`)).toContain("Not a working day. 0:00 expected.");
+		const eve = await textAt(`${PAGE}?day=2026-12-24`);
+		expect(eve).toContain("7:30 expected.");
+		// The days above name Christmas Day; the line of Christmas Eve itself names nothing.
+		expect(eve).not.toContain("Christmas Day. ");
+	});
+
+	it("names approved leave on its days, half a day expecting half the time, and leave not approved nowhere", async () => {
+		clockAt(T0);
+		await seedLeave(acme.id, ada.user.id, "annual", "2026-11-12", "2026-11-12");
+		await seedLeave(acme.id, ada.user.id, "annual", "2026-11-13", "2026-11-13", {
+			startsHalf: true,
+		});
+		await seedLeave(acme.id, ada.user.id, "study", "2026-11-10", "2026-11-10", {
+			status: "pending",
+		});
+
+		expect(await textAt(`${PAGE}?day=2026-11-12`)).toContain("Annual leave. 0:00 expected.");
+		expect(await textAt(`${PAGE}?day=2026-11-13`)).toContain(
+			"Annual leave (half day). 3:45 expected.",
+		);
+		const pending = await textAt(`${PAGE}?day=2026-11-10`);
+		expect(pending).toContain("7:30 expected.");
+		expect(pending).not.toContain("Study leave");
+		// The week's total says what the week expects.
+		expect(pending).toContain("Week total 0:00 of 26:15 expected");
+
+		// The days above the day mark them, by name to a screen reader.
+		const strip = await mainOf(`${PAGE}?day=2026-11-11`);
+		expect(strip).toContain('<span class="sr-only">Annual leave</span>');
+		expect(strip).toContain('<span class="sr-only">Annual leave (half day)</span>');
+		expect(strip).toContain('<span class="sr-only">Not a working day</span>');
+		expect(strip).not.toContain('<span class="sr-only">Study leave</span>');
+
+		// The Week view marks each day and adds a row of the time expected.
+		const week = await textAt(`${PAGE}?view=week&start=2026-11-09`);
+		expect(week).toMatch(
+			/Annual leave .*Annual leave \(half day\) .*Not a working day .*Not a working day/,
+		);
+		expect(week).toContain("Expected 7:30 7:30 7:30 0:00 3:45 0:00 0:00 Week expected 26:15");
+	});
+
+	it("a working week that works Sundays expects 7:30 on the day the clocks go back", async () => {
+		clockAt(Date.parse("2026-10-25T12:00:00Z"));
+		await env.DB.prepare("update working_days set minutes = 450 where organisation_id = ?")
+			.bind(acme.id)
+			.run();
+		expect(await textAt(`${PAGE}?day=2026-10-25`)).toContain("7:30 expected.");
+		expect(await textAt(`${PAGE}?view=week&start=2026-10-19`)).toContain(
+			"Expected 7:30 7:30 7:30 7:30 7:30 7:30 7:30 Week expected 52:30",
+		);
 	});
 });

@@ -4,6 +4,7 @@ import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { Select } from "~/components/Select";
+import { minutesLabel } from "~/leave/words";
 import type { Outcome } from "~/organisations/problems";
 import { periodAfter } from "~/periods/periods";
 import { TRANSITION, useTravel } from "~/shell/transitions";
@@ -125,7 +126,7 @@ function Grid({
 	onSaved: (said: string) => void;
 	onProblem: (problem: string) => void;
 }) {
-	const { days, lockedDays, projects, sheet } = data;
+	const { days, lockedDays, projects, sheet, away } = data;
 	const formatDay = useDayFormat("short");
 	const formatLong = useDayFormat();
 	const nameOf = (id: string) => {
@@ -142,16 +143,24 @@ function Grid({
 						<th scope="col" className="px-4 py-3 text-start">
 							Project
 						</th>
-						{days.map((day) => (
-							<th key={day} scope="col" className="px-2 py-3 text-end">
-								<Link
-									to={dayPath(slug, day)}
-									className="rounded-extra-small underline-offset-4 outline-none hover:underline focus-visible:focus-indicator"
-								>
-									{formatDay(day)}
-								</Link>
-							</th>
-						))}
+						{days.map((day, index) => {
+							const marked = away.days[index];
+							return (
+								<th key={day} scope="col" className="px-2 py-3 text-end">
+									<Link
+										to={dayPath(slug, day)}
+										className="rounded-extra-small underline-offset-4 outline-none hover:underline focus-visible:focus-indicator"
+									>
+										{formatDay(day)}
+									</Link>
+									{marked?.label && (
+										<span className="block max-w-24 truncate text-label-small font-normal text-on-surface-variant ms-auto">
+											{marked.label}
+										</span>
+									)}
+								</th>
+							);
+						})}
 						<th scope="col" className="px-4 py-3 text-end">
 							Total
 						</th>
@@ -202,6 +211,20 @@ function Grid({
 						<td className="px-4 py-3 text-end text-title-large tabular-nums">
 							<span className="sr-only">Week total </span>
 							{formatDuration(sheet.total)}
+						</td>
+					</tr>
+					<tr className="text-on-surface-variant">
+						<th scope="row" className="px-4 pb-3 text-start text-label-large font-normal">
+							Expected
+						</th>
+						{away.days.map((each) => (
+							<td key={each.day} className="px-2 pb-3 text-end tabular-nums">
+								{minutesLabel(each.expectedMinutes)}
+							</td>
+						))}
+						<td className="px-4 pb-3 text-end tabular-nums">
+							<span className="sr-only">Week expected </span>
+							{minutesLabel(away.expectedMinutes)}
 						</td>
 					</tr>
 				</tfoot>

@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
 
 import { type Filter, type OrganisationScope, organisationScope, type ScopedAccessor } from "~/db";
+import { type DayKind, dayLabel } from "~/leave/days";
+import { daysOf } from "~/leave/leave.server";
 import type { Membership } from "~/organisations/membership.server";
 import { lockedDays } from "~/periods/locks.server";
 import {
@@ -134,6 +136,40 @@ export interface PeriodSubmission {
 	started: boolean;
 }
 
+/** One day of the person's week as leave sees it (TS-061). */
+export interface DayAway {
+	day: Day;
+	/** What the day is: leave, a public holiday, a day not worked, or a working day. */
+	kind: DayKind["kind"];
+	/** Its name: "Annual leave", "Annual leave (half day)", the holiday's name, "Not a working day"; null for a working day. */
+	label: string | null;
+	/** The minutes expected of the person on it. */
+	expectedMinutes: number;
+}
+
+/** The person's week as leave sees it: each day, and the minutes expected over it. */
+export interface WeekAway {
+	days: DayAway[];
+	expectedMinutes: number;
+}
+
+async function weekAway(
+	scope: OrganisationScope,
+	userId: string,
+	period: PeriodDays,
+): Promise<WeekAway> {
+	const statuses = await daysOf(scope, userId, period.startsOn, period.endsOn);
+	return {
+		days: statuses.map((status) => ({
+			day: status.day,
+			kind: status.is.kind,
+			label: dayLabel(status),
+			expectedMinutes: status.expectedMinutes,
+		})),
+		expectedMinutes: statuses.reduce((sum, s) => sum + s.expectedMinutes, 0),
+	};
+}
+
 export interface DayData extends TimesheetBase {
 	view: "day";
 	day: Day;
@@ -148,6 +184,8 @@ export interface DayData extends TimesheetBase {
 	submission: PeriodSubmission;
 	/** The steps of getting started and whether each is done, or null when the list is not shown (TS-056). */
 	gettingStarted: GettingStarted | null;
+	/** The days of the period as leave sees them, and the time expected over it (TS-061). */
+	away: WeekAway;
 }
 
 export interface WeekData extends TimesheetBase, PeriodSubmission {
@@ -158,6 +196,8 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	lastWeekProjects: string[];
 	/** The days of the week in a submitted or approved period: all of them, or none. */
 	lockedDays: Day[];
+	/** The days of the week as leave sees them, and the time expected over it (TS-061). */
+	away: WeekAway;
 }
 
 export interface HistoryData extends TimesheetBase {
@@ -247,9 +287,10 @@ async function dayData(
 	zone: string,
 	now: number,
 ): Promise<Omit<DayData, keyof TimesheetBase | "gettingStarted">> {
-	const [{ entries: ofPeriod, submission }, locked] = await Promise.all([
+	const [{ entries: ofPeriod, submission }, locked, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
 		lockedDays(scope, userId, [day]),
+		weekAway(scope, userId, period),
 	]);
 	const entries = ofPeriod.filter((entry) => dayOf(entry.startedAt, zone) === day);
 	const { days, total } = weekSheet(ofPeriod, daysFrom(period.startsOn, period.endsOn), zone, now);
@@ -261,6 +302,7 @@ async function dayData(
 		locked: locked.has(day),
 		week: { days, total },
 		submission,
+		away,
 	};
 }
 
@@ -274,10 +316,11 @@ async function weekData(
 ): Promise<Omit<WeekData, keyof TimesheetBase>> {
 	const days = daysFrom(period.startsOn, period.endsOn);
 	const before = periodAfter(period, -1);
-	const [{ entries, submission }, previous, locked] = await Promise.all([
+	const [{ entries, submission }, previous, locked, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
 		entriesStartingIn(scope, userId, periodBounds(before, zone)),
 		lockedDays(scope, userId, days),
+		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
 	return {
@@ -287,6 +330,7 @@ async function weekData(
 		sheet: weekSheet(entries, days, zone, now, { projectOrder: projects.map((p) => p.id) }),
 		lastWeekProjects: [...new Set(previous.map((e) => e.projectId))].filter((id) => active.has(id)),
 		lockedDays: days.filter((day) => locked.has(day)),
+		away,
 	};
 }
 

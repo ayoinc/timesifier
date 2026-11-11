@@ -91,7 +91,7 @@ Builder: an AI session on branch `ts-054-people`. Team > Teams (`/app/<slug>/tea
 
 Builder: an AI session on branch `ts-054-people`. `app/routes/app/team.tsx` with `app/teams/week.server.ts`; Members and Invitations carry the tabs (`app/teams/TeamTabs.tsx`).
 
-- [ ] Team > This week lists, for one week with arrows to earlier ones, each person the viewer may see: hours logged against their expected hours from TS-042, whether a timer is running, and the period's submission status (test). _Not ticked. Met: hours, running timer, status, arrows (`test/pages/team.test.ts`, "shows each visible person's hours, running timer and status"; `e2e/people.spec.ts`). Left: expected hours wait for TS-042, out of scope._
+- [ ] Team > This week lists, for one week with arrows to earlier ones, each person the viewer may see: hours logged against their expected hours from TS-061 (which replaced TS-042), whether a timer is running, and the period's submission status (test). _Not ticked. Met: hours, running timer, status, arrows (`test/pages/team.test.ts`, "shows each visible person's hours, running timer and status"; `e2e/people.spec.ts`). Left: expected hours come with TS-061, in review._
 - [x] A manager sees the members of the teams they manage, an admin or owner everyone; a member sees no Team link and gets 404 at its address (a test per role). _`test/pages/team.test.ts`, "shows a manager only…", "is not there for a member"; `test/pages/destinations.test.ts`._
 - [x] Opening a person shows their Week view, read-only; nothing on it can change their entries (test). _`test/pages/team.test.ts`, "opens one person's week to read, and nobody else's"; `e2e/people.spec.ts`._
 - [x] Members and Invitations move from Settings to tabs of Team, with the same rules and tests as TS-009; the old addresses redirect (test). _`test/pages/team.test.ts`, "links the tabs"; `test/pages/members.test.ts`; `e2e/organisations-keyboard.spec.ts`; the redirect is TS-053's (`test/pages/isolation.test.ts`)._
@@ -160,6 +160,42 @@ Added while the card was built, each with its evidence:
 - [x] `docs/design-direction.md` gives the convention for the signed-in screens, concrete enough to restyle the shell and the existing pages, and the mindset as rules for every screen. _"For the product screens", "The mindset, on every screen". Guidance only: no signed-in screen is changed on this card._
 - [ ] The privacy notice names who runs Timesifier. _The owner's to supply: `CONTROLLER` in `app/routes/privacy.tsx`. Until then the notice says it is incomplete._
 - [ ] `privacy@timesifier.com`, the address both notices give, receives mail and is read.
+
+### TS-061 · Leave and working week
+
+Builder: an AI session on branch `ts-061-leave`, migration `0007_leave`. In review: the pull request against `main`. It replaces TS-040 (Leave) and TS-042 (Policies), which are gone from Backlog: the owner settled their open questions on 2026-11-11, as below, and a person who is not working is now shown wherever time is, which neither card asked for. Code in `app/leave/`, the destination `app/routes/app/time-off.tsx`; `docs/navigation.md`, flow 7, `docs/security.md`, "Whose time", and `docs/architecture.md`, "Tables", describe it.
+
+The owner's decisions (2026-11-11):
+
+- Six kinds of leave in each organisation: Annual, Sick, Study, Parental, Unpaid leave and Public holiday. An owner or admin renames a kind or switches it off. Public holidays are days the organisation lists, and apply to everyone in it.
+- Leave is taken in whole days, with a half day at either end.
+- Sick leave and public holidays need no approval: a request is approved as it is made. Any other kind waits for a manager of a team the person is in, or an owner or admin. Nobody decides their own. A decided request is not decided again. A pending request can be withdrawn by its person. Approved leave that has not begun can be cancelled by an owner or admin, with a reason, never on their own leave.
+- Each kind has an allowance a year: Annual leave 25 days, the others none, which is no limit. The leave year is the calendar year, and nothing is carried over. What is left is the allowance less the approved and the pending days of that year; a request for more is refused.
+- Everyone may be told that a colleague is on leave, never the kind. The person, the managers of their teams, owners and admins see the kind.
+- Each organisation has one working week, days and hours: Monday to Friday, 7.5 hours a day, to start with.
+
+- [ ] Every organisation, new or existing, has the six kinds and the working week of Monday to Friday at 7.5 hours; a new one gets them from the trigger `organisations_leave_defaults` however its row is made (test).
+- [ ] The four tables are in `tenantTables`; the database refuses a request of another organisation's kind or for a person who is not a member, and a request goes with its person's membership (test).
+- [ ] Time off is under Track, after Timesheet, for every role; a member sees four main links, a manager six, an owner or admin eight, and the eight fit the bar at 390px with the number on Approvals (tests, browser test).
+- [ ] A person asks for a kind that is on, from a first to a last day, with a half day at either end; a kind switched off, the public holidays, a last day before the first, days that hold no working day, days already asked for, and more than is left of the allowance are each refused (tests).
+- [ ] Sick leave is approved as it is made; a kind that needs approval waits, and its days come off what is left at once (tests).
+- [ ] A pending request is withdrawn by its person and by nobody else (test).
+- [ ] A request is approved or refused, with an optional comment, by a manager of a team the person is in, an owner or an admin, from Time off's Requests tab or Approvals' "Time off waiting"; never by the person, whatever their role, nor by a manager of none of their teams; a decided request answers 409 and does not change (a test for every role).
+- [ ] An owner or admin cancels approved leave that has not begun, with a reason; never their own, never leave that has begun or is not approved (tests).
+- [ ] The number on the Approvals link counts the periods and the requests for leave waiting for the person (test).
+- [ ] An owner or admin sets the working week (hours as `7.5` or `7:30`, empty for a day not worked), renames a kind, switches it off, sets whether it needs approval and its allowance in whole or half days, and adds and removes public holidays; a manager or member is not shown Workspace settings and gets 404 there, and a kind or holiday of another organisation is 404 (a test for every role). My account shows the working week to everyone.
+- [ ] Where a person stands is worked out on each request from the data, never stored: Working while their timer runs, else On leave (or on leave for half the day), Not working today on a public holiday or a day not worked, or Available (test). Whoever may not see the kind is shown "On leave" (test).
+- [ ] Timesheet names each day of leave, public holiday and day not worked in the week's days and on the day, with the time expected; a whole day of leave or a public holiday says so on the Day view and still takes time; the Week view has an Expected row (tests).
+- [ ] Team > This week shows each person's hours of the hours expected of them, their days of leave, and on the current week where they stand now; a person's week marks the same days (test, browser test).
+- [ ] Approvals' Not submitted leaves out a person whose whole period is leave, public holidays and days not worked (test).
+- [ ] Reports has a People section: each person's time worked beside the time expected of them and their leave; leave is never in a total of worked time (test).
+- [ ] Every new route and form joins the cross-organisation 404 test of TS-009 (`test/pages/isolation.test.ts`).
+- [ ] Keyboard alone and axe with WCAG 2.2 AA on Time off, its sheet, and leave on Timesheet, Team and My account, at 390px and 1280px in both schemes (browser test).
+- [ ] typecheck, lint, the tests and the browser tests pass in the pipeline; the pull request shows Time off and the Requests tab at 390px and 1280px, and the owner has accepted them.
+
+What follows from the decisions, and is not a defect: a change to the working week, a holiday or an allowance changes what is worked out for every day, past days included, because nothing of it is stored; no request changes its status. A request from a person nobody else may decide for (the organisation's only owner, with no other owner or admin and no manager of a team they are in) is approved as it is made, recorded as decided by them with the comment "Approved automatically: nobody else can decide it", and the request sheet tells them so before they send it (decision of 2026-11-11).
+
+Not in this card: leave accrued month by month, carry-over, hours of leave rather than half days, a working week or holiday calendar per person or team, and the team calendar (TS-041).
 
 ## Ready (limit 3)
 
@@ -558,48 +594,19 @@ The owner, 2026-11-11: a focus rhythm in the Pomodoro manner, stretches of work 
 - [ ] A block that overlaps a calendar event shows the text "This block overlaps" followed by the event's title before it is saved, and it can still be saved (test).
 - [ ] At the end of the day the view shows planned focus time beside the time actually tracked during those blocks; the two figures are covered by a test.
 
-### TS-040 · Leave
-
-Depends on: TS-038.
-
-No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
-
-Open for the owner: the kinds of leave, and whether leave is counted in days, half days or hours; and who decides a request from a person who is in no team, or who is the only owner.
-
-- [ ] A person can ask for time off from a first day to a last day, in their time zone. A last day before the first is refused (test).
-- [ ] A request waits until a manager of a team the person is in, an owner or an admin approves or refuses it. A member who manages none of the person's teams cannot decide it (a test for every cell of this card's role table).
-- [ ] A request that has been approved or refused cannot be decided a second time (test).
-- [ ] Approved leave is shown beside worked time in the person's day and week views, and no total of worked time includes it (test).
-- [ ] A person sees their own requests, a manager their team's, an owner or admin everyone's, and a member nobody else's (a test for every cell).
-- [ ] A request of one organisation is never shown or decided in another (test).
-
 ### TS-041 · The team calendar
 
-Depends on: TS-040 and TS-013. It does not need TS-016: events read from an outside calendar are that card's.
+Depends on: TS-061 and TS-013. It does not need TS-016: events read from an outside calendar are that card's.
 
 No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
 
-Open for the owner: whether a member sees when the others in their team are on leave, or only the manager does.
+Settled by the owner on 2026-11-11, on TS-061: everyone may be told that a colleague is on leave; the person, the managers of their teams, owners and admins see the kind.
 
 - [ ] A person's calendar shows, for a chosen week or month in their time zone, their tracked entries and their approved leave, each on the local day it belongs to (test).
 - [ ] A team's calendar shows the same for every member of the team, to a manager of that team and to an owner or admin (a test for every cell of this card's role table).
 - [ ] A manager's calendar shows nobody from a team they do not manage (test with two teams).
 - [ ] The hours shown for a person's day on the calendar equal that day's total in their week view (property test).
 - [ ] The calendar can be moved through with the keyboard alone, and axe with WCAG 2.2 AA tags reports no violations (browser test).
-
-### TS-042 · Policies
-
-Depends on: TS-040.
-
-No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
-
-Open for the owner: how leave accrues (a fixed number of days a year, or earned month by month); and whether a policy is one for the organisation or may differ by team.
-
-- [ ] An owner or admin sets the organisation's working week: the days worked and the hours in each. A manager or a member cannot (a test for every cell of this card's role table).
-- [ ] An owner or admin sets how leave accrues. For random policies and requests, a person's balance on any day equals what has accrued by that day less the approved leave taken (property test).
-- [ ] The policy says which requests for leave need approval. A request that needs none is approved when it is made, and one that needs it waits (test).
-- [ ] A change to a policy applies from the day it is made, and no request already decided changes (test).
-- [ ] The policy of one organisation is never read or changed from another (test).
 
 ### TS-018 · Weekly summary
 

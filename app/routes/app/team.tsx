@@ -10,6 +10,9 @@ import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { dayLabel as leaveDayLabel, personStatusLabel } from "~/leave/days";
+import { leaveOfPeople } from "~/leave/leave.server";
+import { minutesLabel, shortDay } from "~/leave/words";
 import { RECORD_NAME_MAX_LENGTH, RecordName } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import { isAdministrator } from "~/organisations/access";
@@ -109,7 +112,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		// Somebody this person may not see is as absent as somebody who does not exist.
 		const person = people.find((p) => p.id === personId);
 		if (!person) throw notFound();
-		const shown = await personWeek(scope, person, viewed.period, now);
+		const [shown, leave] = await Promise.all([
+			personWeek(scope, person, viewed.period, now),
+			leaveOfPeople(scope, access, [person], viewed.period.startsOn, viewed.period.endsOn, now),
+		]);
+		const theirs = leave.get(person.id);
 		const time = new Intl.DateTimeFormat("en-GB", {
 			hour: "2-digit",
 			minute: "2-digit",
@@ -123,10 +130,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			status: shown.status,
 			comment: shown.comment,
 			seconds: shown.seconds,
-			days: shown.days.map((d) => ({
+			expected: minutesLabel(theirs?.expectedMinutes ?? 0),
+			days: shown.days.map((d, index) => ({
 				day: d.day,
 				label: dayLabel(d.day),
 				seconds: d.seconds,
+				away: theirs?.days[index] ? leaveDayLabel(theirs.days[index]) : null,
+				expected: minutesLabel(theirs?.days[index]?.expectedMinutes ?? 0),
 				entries: d.entries.map((e) => ({
 					id: e.id,
 					project: e.project,
@@ -145,12 +155,35 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		(p) =>
 			p.name.toLocaleLowerCase("en").includes(key) || p.email.toLocaleLowerCase("en").includes(key),
 	);
+	const listed = await teamWeek(scope, shown, viewed.period, now);
+	const leave = await leaveOfPeople(
+		scope,
+		access,
+		shown,
+		viewed.period.startsOn,
+		viewed.period.endsOn,
+		now,
+		new Set(listed.filter((p) => p.running).map((p) => p.id)),
+	);
+	const isCurrent = viewed.period.startsOn === viewed.current.startsOn;
 	return {
 		view: "week" as const,
 		week,
 		filter,
 		everyone: people.length,
-		people: await teamWeek(scope, shown, viewed.period, now),
+		people: listed.map((p) => {
+			const theirs = leave.get(p.id);
+			return {
+				...p,
+				// Where they stand now, shown on the current week alone.
+				now: isCurrent && theirs ? personStatusLabel(theirs.now) : null,
+				expected: minutesLabel(theirs?.expectedMinutes ?? 0),
+				leaveDays:
+					theirs?.days
+						.filter((d) => d.is.kind === "leave")
+						.map((d) => `${shortDay(d.day)} ${leaveDayLabel(d) ?? ""}`.trim()) ?? [],
+			};
+		}),
 	};
 }
 
@@ -345,11 +378,23 @@ function ThisWeek({ data }: { data: WeekData }) {
 											}
 											detail={
 												<>
+													{p.now && <span className="block text-on-surface">{p.now}</span>}
 													{statusLabel(p.status)}
 													{p.running && " · Timer running"}
+													{p.leaveDays.length > 0 && (
+														<span className="block">Leave: {p.leaveDays.join(", ")}</span>
+													)}
 												</>
 											}
-											value={hours(p.seconds)}
+											value={
+												<>
+													{hours(p.seconds)}
+													<span className="text-body-medium text-on-surface-variant">
+														{" "}
+														of {p.expected} expected
+													</span>
+												</>
+											}
 										/>
 									))}
 								</LedgerRows>
@@ -364,7 +409,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 
 function PersonWeek({ data }: { data: PersonData }) {
 	const organisation = useOrganisation();
-	const { week, person, days, seconds, status, comment } = data;
+	const { week, person, days, seconds, status, comment, expected } = data;
 	return (
 		<>
 			<TeamTabs slug={organisation.slug} current="week" />
@@ -380,8 +425,8 @@ function PersonWeek({ data }: { data: PersonData }) {
 				<PageHeading>{person.name}</PageHeading>
 			</div>
 			<PageLead>
-				Their week of {week.label}, in {person.timeZone}: {statusLabel(status)}. You can read it
-				here; only they can change it.
+				Their week of {week.label}, in {person.timeZone}: {statusLabel(status)}, {expected}{" "}
+				expected. You can read it here; only they can change it.
 			</PageLead>
 			{status === "returned" && comment && (
 				<p className="mt-2 max-w-160 text-body-medium text-on-surface-variant">
@@ -391,10 +436,14 @@ function PersonWeek({ data }: { data: PersonData }) {
 			<PeriodArrows week={week} extra={`&${PERSON_PARAM}=${person.id}`} />
 			<div className="mt-6 flex max-w-200 flex-col gap-6">
 				{days.map((d) => (
-					<Ledger key={d.day} heading={d.label} note={hours(d.seconds)}>
+					<Ledger
+						key={d.day}
+						heading={d.away ? `${d.label} · ${d.away}` : d.label}
+						note={`${hours(d.seconds)} of ${d.expected}`}
+					>
 						{d.entries.length === 0 ? (
 							<p className="border-t border-outline-variant px-4 py-3 text-body-medium text-on-surface-variant @sm:px-5">
-								No time.
+								{d.away ?? "No time."}
 							</p>
 						) : (
 							<LedgerRows label={`Entries on ${d.label}`}>

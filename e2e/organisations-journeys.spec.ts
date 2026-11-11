@@ -83,7 +83,10 @@ test.describe("a person who has just signed in for the first time", () => {
 
 				// Every destination, for its owner, each at its address in this organisation.
 				const links = destinationLinks(page);
-				await expect(links).toHaveText(destinations.map(({ label }) => label));
+				// A link with a bar label holds both words; its label alone is what is read out.
+				await expect(links).toHaveText(
+					destinations.map(({ label, barLabel }) => `${barLabel ?? ""}${label}`),
+				);
 				for (const { id, label } of destinations) {
 					await expect(links.filter({ hasText: label })).toHaveAttribute(
 						"href",
@@ -232,10 +235,15 @@ test.describe("a person who has just signed in for the first time", () => {
 		// Until he gives a name, the others see his address. He gives one on My account.
 		await setName(other, bob.name);
 
-		// Bob, a member, is shown Timesheet, Projects and Reports. Team and
+		// Bob, a member, is shown Timesheet, Time off, Projects and Reports. Team and
 		// Workspace settings are not his to open: their addresses are the 404 page.
 		await openShell(other, organisationPath(slug));
-		await expect(destinationLinks(other)).toHaveText(["Timesheet", "Projects", "Reports"]);
+		await expect(destinationLinks(other)).toHaveText([
+			"Timesheet",
+			"Time off",
+			"Projects",
+			"Reports",
+		]);
 		for (const address of [members, invitations, settings]) {
 			expect((await other.goto(address))?.status(), address).toBe(404);
 			await expect(other.getByText(NOT_FOUND)).toBeVisible();

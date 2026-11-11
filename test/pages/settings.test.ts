@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { membershipOf } from "~/organisations/membership.server";
 import { periodContaining } from "~/periods/periods";
@@ -433,5 +434,315 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 		await submit(SETTINGS, { intent: "clients", clientsEnabled: "on" }, grace, { byScript: true });
 		expect(await pageBody(await open(SETTINGS, ada))).toMatch(/<a[^>]*href="\/app\/acme\/clients"/);
 		expect(textOf(await pageBody(await open("/app/acme/clients", ada)))).toContain("Globex");
+	});
+});
+
+describe("the working week, the kinds of leave and the public holidays (TS-061)", () => {
+	const kindOf = (key: string) =>
+		value<string>("select id from leave_kinds where organisation_id = ? and key = ?", acme.id, key);
+	const kindRow = (key: string) =>
+		row(
+			"select name, enabled, needs_approval, allowance_half_days from leave_kinds where organisation_id = ? and key = ?",
+			acme.id,
+			key,
+		);
+	const week = async () =>
+		(
+			await env.DB.prepare(
+				"select minutes from working_days where organisation_id = ? order by weekday",
+			)
+				.bind(acme.id)
+				.all<{ minutes: number }>()
+		).results.map((d) => d.minutes);
+	const holidays = async () =>
+		(
+			await env.DB.prepare(
+				"select day, name from public_holidays where organisation_id = ? order by day",
+			)
+				.bind(acme.id)
+				.all()
+		).results;
+	const DEFAULT_WEEK = [450, 450, 450, 450, 450, 0, 0];
+
+	it("are shown to an owner and an admin, and the working week on everyone's My account", async () => {
+		const grace = await memberOfAcme("admin", "grace@example.com");
+		for (const who of [ada, grace]) {
+			const text = textOf(await pageBody(await open(SETTINGS, who)));
+			expect(text).toContain("Annual leave");
+			expect(text).toContain("Public holiday");
+			expect(text).toContain("No public holidays are set.");
+		}
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const text = textOf(await pageBody(await open(ACCOUNT, linus)));
+		expect(text).toContain("Your working week");
+		expect(text).toContain("Monday to Friday, 7:30 a day, as Acme sets it for everyone.");
+		expect(text).toMatch(/Monday 7:30 .*Saturday Not a working day Sunday Not a working day/);
+	});
+
+	it.each(["owner", "admin"] as const)(
+		"an %s sets the working week, in hours as 7.5 or 7:30, and empty is no working day",
+		async (role) => {
+			const who = role === "owner" ? ada : await memberOfAcme("admin", "grace@example.com");
+			const answer = await outcome(
+				await submit(
+					SETTINGS,
+					{
+						intent: "working-week",
+						day1: "8",
+						day2: "7:30",
+						day3: "7,5",
+						day4: "6.25",
+						day5: "",
+						day6: "",
+						day7: "4",
+					},
+					who,
+					{ byScript: true },
+				),
+			);
+			expect(answer.status).toBe(200);
+			expect(answer.said).toContain("The working week is saved.");
+			expect(await week()).toEqual([480, 450, 450, 375, 0, 0, 240]);
+			expect(textOf(await pageBody(await open(ACCOUNT, who)))).toContain(
+				"Monday 8:00, Tuesday 7:30, Wednesday 7:30, Thursday 6:15, Sunday 4:00",
+			);
+		},
+	);
+
+	it("refuses hours that are not hours, and more than a day", async () => {
+		for (const day1 of ["eight", "25", "7:75"]) {
+			const fields = {
+				intent: "working-week",
+				day1,
+				day2: "",
+				day3: "",
+				day4: "",
+				day5: "",
+				day6: "",
+				day7: "",
+			};
+			expect((await submit(SETTINGS, fields, ada, { byScript: true })).status, day1).toBe(400);
+		}
+		expect(await week()).toEqual(DEFAULT_WEEK);
+	});
+
+	it.each(["owner", "admin"] as const)(
+		"an %s renames a kind, switches it off, says it needs no approval and sets its allowance",
+		async (role) => {
+			const who = role === "owner" ? ada : await memberOfAcme("admin", "grace@example.com");
+			const answer = await outcome(
+				await submit(
+					SETTINGS,
+					{
+						intent: "kind",
+						kindId: (await kindOf("study")) ?? "",
+						name: " Training ",
+						allowanceDays: "5.5",
+					},
+					who,
+					{ byScript: true },
+				),
+			);
+			expect(answer.status).toBe(200);
+			expect(answer.said).toContain("Training is saved.");
+			expect(await kindRow("study")).toEqual({
+				name: "Training",
+				enabled: 0,
+				needs_approval: 0,
+				allowance_half_days: 11,
+			});
+
+			await submit(
+				SETTINGS,
+				{
+					intent: "kind",
+					kindId: (await kindOf("annual")) ?? "",
+					name: "Annual leave",
+					enabled: "on",
+					needsApproval: "on",
+					allowanceDays: "",
+				},
+				who,
+				{ byScript: true },
+			);
+			expect(await kindRow("annual")).toEqual({
+				name: "Annual leave",
+				enabled: 1,
+				needs_approval: 1,
+				allowance_half_days: null,
+			});
+		},
+	);
+
+	it("never gives public holidays an allowance or a decision", async () => {
+		const answer = await outcome(
+			await submit(
+				SETTINGS,
+				{
+					intent: "kind",
+					kindId: (await kindOf("holiday")) ?? "",
+					name: "Bank holiday",
+					enabled: "on",
+					needsApproval: "on",
+					allowanceDays: "8",
+				},
+				ada,
+				{ byScript: true },
+			),
+		);
+		expect(answer.status).toBe(200);
+		expect(await kindRow("holiday")).toEqual({
+			name: "Bank holiday",
+			enabled: 1,
+			needs_approval: 0,
+			allowance_half_days: null,
+		});
+	});
+
+	it.each([
+		["an allowance that is not a number", { allowanceDays: "lots" }],
+		["an allowance of a quarter day", { allowanceDays: "2.25" }],
+		["an allowance over a year", { allowanceDays: "366" }],
+		["no name", { name: "  " }],
+		["a name too long", { name: "x".repeat(61) }],
+	])("refuses %s, and changes nothing", async (_, change) => {
+		const fields = {
+			intent: "kind",
+			kindId: (await kindOf("annual")) ?? "",
+			name: "Annual leave",
+			enabled: "on",
+			needsApproval: "on",
+			allowanceDays: "25",
+			...change,
+		};
+		expect((await submit(SETTINGS, fields, ada, { byScript: true })).status).toBe(400);
+		expect(await kindRow("annual")).toEqual({
+			name: "Annual leave",
+			enabled: 1,
+			needs_approval: 1,
+			allowance_half_days: 50,
+		});
+	});
+
+	it("does not change a kind of another organisation", async () => {
+		const other = await createOrganisation(ada.cookie, "Other");
+		const theirs = await value<string>(
+			"select id from leave_kinds where organisation_id = ? and key = 'annual'",
+			other.id,
+		);
+		const response = await submit(
+			SETTINGS,
+			{ intent: "kind", kindId: theirs ?? "", name: "Stolen", enabled: "on" },
+			ada,
+			{ byScript: true },
+		);
+		expect(response.status).toBe(404);
+		expect(await value("select name from leave_kinds where id = ?", theirs)).toBe("Annual leave");
+	});
+
+	it.each(["owner", "admin"] as const)(
+		"an %s adds a public holiday, once a day, and removes it",
+		async (role) => {
+			const who = role === "owner" ? ada : await memberOfAcme("admin", "grace@example.com");
+			const added = await outcome(
+				await submit(
+					SETTINGS,
+					{ intent: "add-holiday", day: "2026-12-25", name: "Christmas Day" },
+					who,
+					{ byScript: true },
+				),
+			);
+			expect(added.status).toBe(200);
+			expect(added.said).toContain("Christmas Day is a public holiday.");
+			expect(await holidays()).toEqual([{ day: "2026-12-25", name: "Christmas Day" }]);
+			expect(textOf(await pageBody(await open(SETTINGS, who)))).toContain(
+				"Christmas Day 25 December 2026",
+			);
+
+			const again = await submit(
+				SETTINGS,
+				{ intent: "add-holiday", day: "2026-12-25", name: "Christmas" },
+				who,
+				{ byScript: true },
+			);
+			expect(again.status).toBe(409);
+			expect(
+				(
+					await submit(
+						SETTINGS,
+						{ intent: "add-holiday", day: "2026-02-30", name: "No day" },
+						who,
+						{
+							byScript: true,
+						},
+					)
+				).status,
+			).toBe(400);
+
+			const id = await value<string>(
+				"select id from public_holidays where organisation_id = ?",
+				acme.id,
+			);
+			const removed = await outcome(
+				await submit(SETTINGS, { intent: "remove-holiday", holidayId: id ?? "" }, who, {
+					byScript: true,
+				}),
+			);
+			expect(removed.status).toBe(200);
+			expect(removed.said).toContain("Public holiday removed.");
+			expect(await holidays()).toEqual([]);
+			expect(
+				(
+					await submit(SETTINGS, { intent: "remove-holiday", holidayId: id ?? "" }, who, {
+						byScript: true,
+					})
+				).status,
+			).toBe(404);
+		},
+	);
+
+	it("a member and a manager change none of it, and the page stays 404", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const mary = await memberOfAcme("member", "mary@example.com");
+		await seedTeam(acme.id, "Design", { members: [linus.user.id], managers: [mary.user.id] });
+		await submit(
+			SETTINGS,
+			{ intent: "add-holiday", day: "2026-12-25", name: "Christmas Day" },
+			ada,
+			{
+				byScript: true,
+			},
+		);
+		const holidayId = await value<string>(
+			"select id from public_holidays where organisation_id = ?",
+			acme.id,
+		);
+
+		for (const who of [linus, mary]) {
+			const forms: Record<string, string>[] = [
+				{
+					intent: "working-week",
+					day1: "1",
+					day2: "",
+					day3: "",
+					day4: "",
+					day5: "",
+					day6: "",
+					day7: "",
+				},
+				{ intent: "kind", kindId: (await kindOf("annual")) ?? "", name: "Mine", enabled: "on" },
+				{ intent: "add-holiday", day: "2026-12-26", name: "Boxing Day" },
+				{ intent: "remove-holiday", holidayId: holidayId ?? "" },
+			];
+			for (const fields of forms) {
+				expect(
+					(await submit(SETTINGS, fields, who, { byScript: true })).status,
+					fields.intent,
+				).toBe(404);
+			}
+		}
+		expect(await week()).toEqual(DEFAULT_WEEK);
+		expect((await kindRow("annual"))?.name).toBe("Annual leave");
+		expect(await holidays()).toEqual([{ day: "2026-12-25", name: "Christmas Day" }]);
 	});
 });

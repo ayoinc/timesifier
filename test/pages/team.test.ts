@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
@@ -10,6 +10,7 @@ import {
 	value,
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
+import { seedHoliday, seedLeave } from "./leave-seed";
 import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Team (TS-045, TS-038): This week, one person's week, and the teams. Owners
@@ -312,5 +313,78 @@ describe("Teams", () => {
 		);
 		expect((await ask(ada, { intent: "delete", teamId: theirs })).status).toBe(409);
 		expect(await value("select name from teams where id = ?", theirs)).toBe("Theirs");
+	});
+});
+
+describe("who is not working (TS-061)", () => {
+	/** A Wednesday: the server's clock once everyone has signed in. */
+	const T0 = Date.parse("2026-11-11T10:00:00Z");
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it("shows where each person stands now, the time expected of them and their days of leave", async () => {
+		const mona = await memberOfAcme("member", "mona@example.com");
+		const grace = await memberOfAcme("member", "grace@example.com");
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const bob = await memberOfAcme("member", "bob@example.com");
+		await seedTeam(acme.id, "Design", { members: [grace.user.id], managers: [mona.user.id] });
+		vi.spyOn(Date, "now").mockReturnValue(T0);
+		const project = await seedProject(acme.id, "Website");
+		// Grace is on annual leave today and half of Friday.
+		await seedLeave(acme.id, grace.user.id, "annual", "2026-11-11", "2026-11-11");
+		await seedLeave(acme.id, grace.user.id, "annual", "2026-11-13", "2026-11-13", {
+			startsHalf: true,
+		});
+		// Linus is on sick leave, but his timer runs: he is working.
+		await seedLeave(acme.id, linus.user.id, "sick", "2026-11-11", "2026-11-11");
+		await seedEntry(acme.id, linus.user.id, project, T0 - 3_600_000, null);
+		// Bob's leave waits: he is expected as ever.
+		await seedLeave(acme.id, bob.user.id, "annual", "2026-11-11", "2026-11-11", {
+			status: "pending",
+		});
+
+		const text = textOf(await pageBody(await open(TEAM, ada)));
+		expect(text).toMatch(
+			/grace@example\.com On leave · Annual leave Not submitted Leave: Wed 11 Annual leave, Fri 13 Annual leave \(half day\) 0:00 of 26:15 expected/,
+		);
+		expect(text).toMatch(
+			/linus@example\.com Working Not submitted · Timer running Leave: Wed 11 Sick leave 1:00 of 30:00 expected/,
+		);
+		expect(text).toMatch(/bob@example\.com Available Not submitted 0:00 of 37:30 expected/);
+
+		// Her manager sees the same of her.
+		const managed = textOf(await pageBody(await open(TEAM, mona)));
+		expect(managed).toMatch(/grace@example\.com On leave · Annual leave/);
+		expect(managed).not.toContain("linus@example.com");
+
+		// Her week marks the days, each with the time expected.
+		const week = textOf(await pageBody(await open(`${TEAM}?person=${grace.user.id}`, ada)));
+		expect(week).toContain("Not submitted, 26:15 expected");
+		expect(week).toMatch(/Wednesday 11 November · Annual leave 0:00 of 0:00 Annual leave/);
+		expect(week).toMatch(/Friday 13 November · Annual leave \(half day\) 0:00 of 3:45/);
+		expect(week).toMatch(/Thursday 12 November 0:00 of 7:30 No time\./);
+		expect(week).toMatch(/Saturday 14 November · Not a working day 0:00 of 0:00/);
+	});
+
+	it("says a public holiday or a day off is not a working day, and shows no status on an earlier week", async () => {
+		await memberOfAcme("member", "bob@example.com");
+		vi.spyOn(Date, "now").mockReturnValue(T0);
+		await seedHoliday(acme.id, "2026-11-11", "Armistice Day");
+
+		let text = textOf(await pageBody(await open(TEAM, ada)));
+		expect(text).toMatch(
+			/bob@example\.com Not working today · Armistice Day Not submitted 0:00 of 30:00 expected/,
+		);
+
+		// A Saturday.
+		vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-14T10:00:00Z"));
+		text = textOf(await pageBody(await open(TEAM, ada)));
+		expect(text).toMatch(/bob@example\.com Not working today Not submitted/);
+
+		text = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, ada)));
+		expect(text).toMatch(/bob@example\.com Not submitted 0:00 of 37:30 expected/);
+		expect(text).not.toContain("Not working today");
 	});
 });
