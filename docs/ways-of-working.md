@@ -6,16 +6,27 @@ Kanban: work is pulled one card at a time, and a card is finished when its accep
 
 `BOARD.md` has these columns, in the order work flows.
 
-| Column      | Meaning                                                   | Limit |
-| ----------- | --------------------------------------------------------- | ----- |
-| Backlog     | Refined cards, in priority order                          | None  |
-| Ready       | The next cards to pull; dependencies are done             | 3     |
-| In progress | Being worked on                                           | 1     |
-| Review      | Criteria met, waiting for the owner to check the evidence | 2     |
-| Done        | Merged and, once TS-003 exists, deployed                  | None  |
-| Later       | Ideas that have no acceptance criteria yet                | None  |
+| Column      | Meaning                                                   | Limit        |
+| ----------- | --------------------------------------------------------- | ------------ |
+| Backlog     | Refined cards, in priority order                          | None         |
+| Ready       | The next cards to pull; dependencies are done             | 3            |
+| In progress | Being worked on                                           | 1 per worker |
+| Review      | Merged or ready to merge, with a criterion still to prove | 2            |
+| Done        | Merged and deployed, every criterion ticked               | None         |
+| Later       | Ideas that have no acceptance criteria yet                | None         |
 
-Finish the card in progress before pulling the next. If a card is blocked, write the blocker on the card and fix the blocker first.
+A worker, human or AI, has one card in progress and finishes it before pulling the next. If a card is blocked, write the blocker on the card and fix the blocker first.
+
+A card sits in Review for one of two reasons, written on the card: a criterion can only be proven once the change is live, or a criterion waits for a decision from the owner.
+
+## Working in parallel
+
+Cards that do not depend on each other may be built at the same time, each by its own worker, on its own branch, in its own git worktree. One integrator owns `main`:
+
+- before work starts, the integrator names the files each card owns and the interfaces between the cards;
+- workers do not push, merge, deploy or edit `BOARD.md`; they report the evidence for each criterion;
+- the integrator checks the evidence, rebases one branch at a time onto `main`, runs the checks, opens the pull request, verifies the preview, merges, and watches the deploy;
+- evidence that only exists after the deploy (a production scan, a migration applied by the pipeline) is recorded on the card in the next pull request.
 
 ## Definition of Ready
 
@@ -51,8 +62,8 @@ A card is Done when all of these hold:
 2. Create a branch named after it, for example `ts-012-timer`.
 3. Build in small commits. Commit messages start with the card number: `TS-012 add running-timer constraint`.
 4. Tick each criterion as its evidence exists.
-5. Open a pull request that links the card. Move the card to Review.
-6. The owner checks the evidence and merges. The card moves to Done.
+5. Open a pull request that links the card. If every criterion is proven, move the card to Done in that pull request; otherwise move it to Review and say what is still to prove.
+6. When the checks pass and the preview has been looked at, merge. The pipeline deploys. `main` is not protected (see TS-002), so this discipline is the only gate.
 
 ## Decisions
 

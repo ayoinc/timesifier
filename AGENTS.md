@@ -4,7 +4,7 @@ A productivity and time platform on Cloudflare Workers. The documents and the bo
 
 ## How work flows
 
-1. Take the top card in **Ready** in `BOARD.md`. One card is in progress at a time.
+1. Take the top card in **Ready** in `BOARD.md`. Each worker has one card in progress at a time; `docs/ways-of-working.md` says how cards run in parallel.
 2. Work on a branch named after the card, for example `ts-012-timer`.
 3. A card is done when every acceptance criterion is ticked with its evidence (a command and its result, a test name, or a URL) and the Definition of Done in `docs/ways-of-working.md` holds.
 4. Move the card and date it in the same pull request.
