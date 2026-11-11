@@ -1,5 +1,7 @@
 import type { Day } from "~/time/calendar";
 
+import type { Range } from "./choices";
+
 /**
  * How a report puts its figures into words (docs/design-direction.md, "Totals
  * and figures"): a length as hours and minutes, a time of day on the 24-hour
@@ -40,6 +42,26 @@ export function rangeLabel(first: Day, last: Day): string {
 	return first === last
 		? rangeFormat.format(asUtc(first))
 		: rangeFormat.formatRange(asUtc(first), asUtc(last));
+}
+
+/**
+ * What Previous and Next move a range by, as their words end: "week", "month",
+ * "day", "10 days".
+ */
+export function stepUnit(range: Range, { first, last }: { first: Day; last: Day }): string {
+	switch (range) {
+		case "this-week":
+		case "last-week":
+		case "week":
+			return "week";
+		case "this-month":
+		case "month":
+			return "month";
+		case "custom": {
+			const length = (asUtc(last).getTime() - asUtc(first).getTime()) / 86_400_000 + 1;
+			return length === 1 ? "day" : `${length} days`;
+		}
+	}
 }
 
 const clockFormats = new Map<string, Intl.DateTimeFormat>();

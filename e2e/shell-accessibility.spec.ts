@@ -1,5 +1,5 @@
 import { destinations } from "../app/shell/destinations";
-import { problems } from "./axe";
+import { EMPTY_INPUT, problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { homePath } from "./organisation";
 
@@ -24,7 +24,8 @@ for (const viewport of [
 						colorScheme,
 					);
 
-					expect(await problems(page)).toEqual([]);
+					// Projects, Clients and Team have a search field, empty until used.
+					expect(await problems(page, [EMPTY_INPUT])).toEqual([]);
 				});
 			}
 		});

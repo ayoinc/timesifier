@@ -84,7 +84,9 @@ describe("This week", () => {
 		expect(text).toContain("5 to 11 January 2026");
 		expect(text).toMatch(/grace@example\.com Submitted 8:30/);
 		expect(text).toMatch(/linus@example\.com Not submitted · Timer running 0:00/);
-		expect(text).toContain("Week 8:30");
+		// The week's total stands above the people (TS-058).
+		expect(text).toContain("Week's total 8:30");
+		expect(text.indexOf("Week's total")).toBeLessThan(text.indexOf("grace@example.com Submitted"));
 		expect(html).toContain('href="/app/acme/team?week=2025-12-29"');
 		expect(html).toContain('href="/app/acme/team?week=2026-01-12"');
 		expect(html).toContain(`href="/app/acme/team?week=${WEEK}&amp;person=${grace.user.id}"`);
@@ -130,6 +132,76 @@ describe("This week", () => {
 		expect(text).not.toContain("ada@example.com");
 		expect((await open(`${TEAM}?person=${linus.user.id}`, mona)).status).toBe(404);
 		expect((await open(`${TEAM}?person=${grace.user.id}`, mona)).status).toBe(200);
+	});
+
+	describe("filtered by name in the address (TS-058)", () => {
+		async function seedWeek() {
+			const grace = await memberOfAcme("member", "grace@example.com");
+			const linus = await memberOfAcme("member", "linus@example.com");
+			const project = await seedProject(acme.id, "Website");
+			await seedEntry(
+				acme.id,
+				grace.user.id,
+				project,
+				"2026-01-06T10:00:00Z",
+				"2026-01-06T12:00:00Z",
+			);
+			await seedEntry(
+				acme.id,
+				linus.user.id,
+				project,
+				"2026-01-07T10:00:00Z",
+				"2026-01-07T13:00:00Z",
+			);
+			return { grace, linus };
+		}
+
+		it("narrows the people and the total on the server, by name or address, in any case", async () => {
+			await seedWeek();
+			const all = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, ada)));
+			expect(all).toContain("Week's total 5:00");
+
+			const response = await open(`${TEAM}?week=${WEEK}&q=GRA`, ada);
+			expect(response.status).toBe(200);
+			const html = await pageBody(response);
+			const text = textOf(html);
+			expect(text).toContain("grace@example.com");
+			expect(text).not.toContain("linus@example.com");
+			expect(text).toContain("Total for “GRA” 2:00");
+			expect(text).toContain("1 of 3");
+			// The field holds the filter, and the arrows keep it.
+			expect(html).toMatch(/<input[^>]*name="q"[^>]*value="GRA"/);
+			expect(html).toContain('href="/app/acme/team?week=2025-12-29&amp;q=GRA"');
+		});
+
+		it("says when nobody matches, with a way back to everyone", async () => {
+			await seedWeek();
+			const html = await pageBody(await open(`${TEAM}?week=${WEEK}&q=nobody`, ada));
+			const text = textOf(html);
+			expect(text).toContain("Nobody's name or address holds “nobody”.");
+			expect(text).toContain("Total for “nobody” 0:00");
+			expect(html).toMatch(new RegExp(`href="/app/acme/team\\?week=${WEEK}"[^>]*>Show everyone`));
+		});
+
+		it("finds a manager only among the members of the teams they manage", async () => {
+			const { grace, linus } = await seedWeek();
+			const mona = await memberOfAcme("member", "mona@example.com");
+			await seedTeam(acme.id, "Design", { members: [grace.user.id], managers: [mona.user.id] });
+
+			const theirs = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}&q=grace`, mona)));
+			expect(theirs).toContain("Total for “grace” 2:00");
+			const outside = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}&q=linus`, mona)));
+			expect(outside).not.toContain(linus.user.email);
+			expect(outside).toContain("Total for “linus” 0:00");
+			expect(textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, mona)))).toContain(
+				"Week's total 2:00",
+			);
+		});
+
+		it("is not there for a member, filtered or not", async () => {
+			const bob = await memberOfAcme("member", "bob@example.com");
+			expect((await open(`${TEAM}?q=bob`, bob)).status).toBe(404);
+		});
 	});
 
 	it("is not there for a member", async () => {
