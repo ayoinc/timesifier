@@ -7,6 +7,7 @@ import { createContext, type MiddlewareFunction, redirectDocument } from "react-
 
 import { getSession, type SignedIn } from "~/auth/auth.server";
 
+import { required } from "~/lib/deployment";
 import { NEXT_PARAM, safeNext, signInPath } from "./paths";
 
 /**
@@ -34,10 +35,11 @@ export const requireSession: MiddlewareFunction<Response> = async ({ request, ur
 /**
  * What the sign-in and sign-up pages load: Turnstile's public site key and
  * where to go afterwards. A person who already has a session is sent there at
- * once, again as a whole page load.
+ * once, again as a whole page load. A deployment without a site key has no
+ * widget to show, so neither page is served.
  */
 export async function loadAuthPage(request: Request, url: URL) {
 	const next = safeNext(url.searchParams.get(NEXT_PARAM));
 	if (await getSession(request)) throw redirectDocument(next);
-	return { next, turnstileSiteKey: env.TURNSTILE_SITE_KEY };
+	return { next, turnstileSiteKey: required(env, "TURNSTILE_SITE_KEY") };
 }

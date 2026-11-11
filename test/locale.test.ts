@@ -56,7 +56,7 @@ describe("the locale negotiated from Accept-Language", () => {
 describe("the locale the root loader hands to the page", () => {
 	async function page(acceptLanguage?: string): Promise<string> {
 		const response = await exports.default.fetch(
-			new Request("https://timesifier.com/", {
+			new Request("https://timesifier.example/", {
 				headers: acceptLanguage ? { "Accept-Language": acceptLanguage } : {},
 			}),
 		);

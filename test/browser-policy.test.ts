@@ -5,7 +5,7 @@ import { captureEmail, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
 import { createOrganisation, invite } from "./organisations/harness";
 
-const ORIGIN = "https://timesifier.com";
+const ORIGIN = "https://timesifier.example";
 
 // `exports.default.fetch` calls the Worker's real fetch handler (workers/app.ts).
 const worker = exports.default;
@@ -113,7 +113,7 @@ describe("browser policy headers", () => {
 	});
 
 	it("redirects www to the apex with HSTS, so the alias is never served over plain HTTP again", async () => {
-		const response = await worker.fetch("https://www.timesifier.com/reports?week=46", {
+		const response = await worker.fetch("https://www.timesifier.example/reports?week=46", {
 			redirect: "manual",
 		});
 		expect(response.status).toBe(308);
@@ -122,7 +122,7 @@ describe("browser policy headers", () => {
 	});
 
 	it("answers 404 on the workers.dev address Cloudflare gives each production version", async () => {
-		const response = await worker.fetch("https://41b1b1d9-timesifier.ayoinc.workers.dev/");
+		const response = await worker.fetch("https://41b1b1d9-timesifier.acme.workers.dev/");
 		expect(response.status).toBe(404);
 		expect(await response.text()).not.toContain("Timesifier");
 	});

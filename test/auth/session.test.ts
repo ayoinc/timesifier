@@ -110,7 +110,7 @@ describe("ending all sessions", () => {
 describe("hosts", () => {
 	// `ENVIRONMENT` says which hosts are the application's own (app/auth/hosts.ts).
 	it.each([
-		["a pull request's preview", "preview", "https://pr-12-timesifier.ayoinc.workers.dev"],
+		["a pull request's preview", "preview", "https://pr-12-timesifier.acme.workers.dev"],
 		["a developer's machine", "development", "http://localhost:5173"],
 	])("signs a person in on %s", async (_name, environment, origin) => {
 		setBinding("ENVIRONMENT", environment);
@@ -126,8 +126,8 @@ describe("hosts", () => {
 	it.each([
 		["production", "a developer's machine", "http://localhost:5173"],
 		["preview", "a developer's machine", "http://localhost:5173"],
-		["preview", "production", "https://timesifier.com"],
-		["development", "production", "https://timesifier.com"],
+		["preview", "production", "https://timesifier.example"],
+		["development", "production", "https://timesifier.example"],
 	])("in %s, answers 404 on the host of %s", async (environment, _name, origin) => {
 		setBinding("ENVIRONMENT", environment);
 
@@ -143,17 +143,17 @@ describe("hosts", () => {
 	});
 
 	it.each([
-		["production", "https://timesifier.com", "https://pr-12-timesifier.ayoinc.workers.dev/app"],
-		["production", "https://timesifier.com", "http://localhost:5173/app"],
+		["production", "https://timesifier.example", "https://pr-12-timesifier.acme.workers.dev/app"],
+		["production", "https://timesifier.example", "http://localhost:5173/app"],
 		[
 			"preview",
-			"https://pr-12-timesifier.ayoinc.workers.dev",
-			"https://pr-13-timesifier.ayoinc.workers.dev/app",
+			"https://pr-12-timesifier.acme.workers.dev",
+			"https://pr-13-timesifier.acme.workers.dev/app",
 		],
-		["preview", "https://pr-12-timesifier.ayoinc.workers.dev", "https://timesifier.com/app"],
-		["production", "https://timesifier.com", "https://timesifier.com/app"],
-		["production", "https://timesifier.com", "//evil.example/app"],
-		["production", "https://timesifier.com", "/\\evil.example/app"],
+		["preview", "https://pr-12-timesifier.acme.workers.dev", "https://timesifier.example/app"],
+		["production", "https://timesifier.example", "https://timesifier.example/app"],
+		["production", "https://timesifier.example", "//evil.example/app"],
+		["production", "https://timesifier.example", "/\\evil.example/app"],
 	])(
 		"in %s on %s, refuses to be given %s as a place to send the browser",
 		async (environment, origin, url) => {
@@ -186,12 +186,12 @@ describe("hosts", () => {
 		expect(response.status).toBe(200);
 	});
 
-	// In production the Worker itself answers only on timesifier.com. A preview
+	// In production the Worker itself answers only on timesifier.example. A preview
 	// answers on any host it is given, so there the refusal is Better Auth's mount.
 	it.each(["production", "preview"])(
 		"sets no session cookie and makes no session for a host that is not ours (%s)",
 		async (environment) => {
-			const origin = "https://timesifier.com.evil.example";
+			const origin = "https://timesifier.example.evil.example";
 			const { cookie } = await signIn(mailbox, EMAIL);
 			await requestCode(EMAIL);
 			const code = await mailbox.codeFor(EMAIL);

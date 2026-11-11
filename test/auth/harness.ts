@@ -3,7 +3,7 @@ import { expect, type MockInstance, onTestFinished, vi } from "vitest";
 import * as z from "zod";
 import { SIGN_IN_CODE_LENGTH } from "~/auth/code";
 
-export const ORIGIN = "https://timesifier.com";
+export const ORIGIN = "https://timesifier.example";
 
 /** A client address from the block reserved for documentation (RFC 5737). */
 export const CLIENT = "203.0.113.7";

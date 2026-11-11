@@ -69,9 +69,11 @@ How the shell looks, moves and takes the focus is in `docs/design-system.md`, "S
 | Preview     | `https://pr-<number>-timesifier.ayoinc.workers.dev`, one per pull request | D1 database `timesifier-preview`, shared by all previews |
 | Production  | `https://timesifier.com`                                                  | D1 database `timesifier`                                 |
 
-Both remote databases were created on 2026-11-11 with `wrangler d1 create <name> --jurisdiction eu`. `wrangler.jsonc` binds `DB` to `timesifier` at the top level and to `timesifier-preview` in its `previews` block. The local database is built from the same migrations with `pnpm db:migrate:local`, and tests build their own copy inside the Workers runtime.
+Those two addresses and the two databases are this project's own deployment. None of them is in the code or in `wrangler.jsonc`: the host, the account's workers.dev subdomain, the two database ids, the Turnstile site key and the sender address are repository variables in GitHub, which the pipeline checks and writes into the Wrangler configuration before it builds (`scripts/deploy-config.ts`). The committed `wrangler.jsonc` is a developer's machine's, with database ids that are no database's, so nothing run from a clone reaches a remote one. `docs/security.md`, "Secrets", lists every setting; `README.md`, "Deploying your own", is how another deployment is made.
 
-Authentication differs by environment in three ways, all set in `wrangler.jsonc`. Production has the `EMAIL` binding, which may send only from `no-reply@mail.timesifier.com`; a preview has no such binding and sends nothing, because its address is public; locally Wrangler simulates the binding, printing the envelope and writing the message under `.wrangler/tmp/email/`. Production uses its own Turnstile widget; previews, local development and tests use Cloudflare's published test keys. `BETTER_AUTH_SECRET` is a different value in each environment.
+Both remote databases were created on 2026-11-11 with `wrangler d1 create <name> --jurisdiction eu`. The deployed configuration binds `DB` to `timesifier` at the top level and to `timesifier-preview` in its `previews` block. The local database is built from the same migrations with `pnpm db:migrate:local`, and tests build their own copy inside the Workers runtime.
+
+Authentication differs by environment in three ways. Production has the `EMAIL` binding, which may send only from the address in its `EMAIL_FROM`, here `no-reply@mail.timesifier.com`; a preview has no such binding and sends nothing, because its address is public; locally Wrangler simulates the binding, printing the envelope and writing the message under `.wrangler/tmp/email/`. Production uses its own Turnstile widget; previews, local development and tests use Cloudflare's published test keys. `BETTER_AUTH_SECRET` is a different value in each environment.
 
 ## Data rules
 
@@ -91,8 +93,8 @@ Authentication differs by environment in three ways, all set in `wrangler.jsonc`
 One workflow, `.github/workflows/ci.yml`, does all of it.
 
 1. A pull request runs install with a frozen lockfile, typecheck, lint, tests, build, the browser tests, a secret scan and a dependency audit that fails on a moderate or worse advisory.
-2. When those pass, the migrations are applied to the preview database, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
-3. Merging to `main` runs the same checks, then applies the migrations to the production database, then `wrangler deploy`, then the smoke test against production.
+2. When those pass, the preview job checks the deployment's settings and writes them into the Wrangler configuration (`node scripts/deploy-config.ts --write`; a setting that is missing fails the job there, by name, before anything is built). Then the migrations are applied to the preview database, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
+3. Merging to `main` runs the same checks, then the same check and rewrite of the settings, then applies the migrations to the production database, then `wrangler deploy`, then the smoke test against production.
 4. The smoke test is `scripts/smoke.sh`: the home page must answer 200 and contain the product name. Against production it also requires `www` to redirect to the apex, plain HTTP to redirect to HTTPS, and the workers.dev address of the version just deployed to answer 404 (see `docs/security.md`, "One host in production"). A failure fails the workflow; it does not roll back by itself.
 5. Migrations are applied before the new code is live, so each one must work with the code already running: add a column in one release, stop using the old one in the next, remove it in a third. All previews share one database, so a migration on an open pull request reaches the other previews too.
 
@@ -125,16 +127,7 @@ Rehearsed on 2026-11-11: at 02:36:49 UTC production was rolled back from version
 
 `timesifier.com` is a zone in the owner's Cloudflare account. Before 2026-11-11 it held 27 DNS records and served no website: the apex and `www` had no address records. TS-003 attached both names to the Worker as custom domains. `www` redirects to the apex with status 308.
 
-The zone carries **live email configuration** and one other service that the application must leave alone:
-
-| Name                                                                  | What is there                                                             |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `timesifier.com`                                                      | MX to Microsoft 365, SPF, a Microsoft verification record, DMARC `p=none` |
-| `autodiscover`                                                        | Outlook autodiscover                                                      |
-| `*._domainkey`, `send`, `send.updates`, `plunk`, `resend._domainkey*` | DKIM and bounce records for Amazon SES, Resend, Plunk and iCloud mail     |
-| `trade`                                                               | Cloudflare email routing and sending records with DMARC `p=reject`        |
-| Two `_…` CNAMEs                                                       | AWS certificate validation                                                |
-| `paperclip`                                                           | Another Worker of the owner's, on its own custom domain                   |
+The zone also carries the owner's other mail and services, which the deploy never touches; the record-by-record listings are kept outside the repository.
 
 The application adds only the Worker custom domains for the apex and `www`, and later one dedicated subdomain for its own outgoing email. TS-003 checked the zone after the first deploy: of its 29 records, the only two created or changed that day were the Worker records for the apex and `www`.
 
@@ -144,7 +137,7 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 
 | Tool                     | Version    |
 | ------------------------ | ---------- |
-| Node                     | 26         |
+| Node                     | 26.13.0    |
 | pnpm                     | 12.18.0    |
 | Wrangler                 | 4.159.0    |
 | React Router             | 8.5.1      |
@@ -165,3 +158,4 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 | React Aria Components    | 1.22.1     |
 | Playwright               | 1.65.0     |
 | `compatibility_date`     | 2026-11-09 |
+| Runner image, Ubuntu     | 24.04      |

@@ -12,6 +12,8 @@
 .wrangler
 .dev.vars*
 worker-configuration.d.ts
+# Written for one deployment by scripts/deploy-config.ts, in the pipeline.
+wrangler.preview-migrations.jsonc
 
 !.dev.vars.example
 !.env.example

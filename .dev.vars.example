@@ -1,20 +1,20 @@
 # Local secrets for `pnpm dev`. Copy to `.dev.vars` (ignored by git) and
 # `chmod 600 .dev.vars`. Names only here; never commit a value.
 # See docs/security.md, "Secrets".
-
-# Not a secret. wrangler.jsonc says "production", and production trusts only
-# timesifier.com: without this line sign-in answers 404 on localhost.
-# See app/auth/hosts.ts.
-ENVIRONMENT=development
+#
+# These two are all a developer's machine needs. Everything else the Worker
+# reads is a variable with a local value in wrangler.jsonc: an ENVIRONMENT of
+# `development`, which trusts localhost and nothing else, Turnstile's published
+# test site key, and a sender address that is never used, because locally no
+# mail is sent. A line here that has one of those variables' names replaces its
+# value on this machine; Wrangler ignores any other name.
 
 # Signs session cookies. Any random value of 32 characters or more:
 #   openssl rand -base64 32
 BETTER_AUTH_SECRET=
 
-# Turnstile. Locally, use Cloudflare's published test keys, which are not
-# secrets: https://developers.cloudflare.com/turnstile/troubleshooting/testing/
-#   secret key that passes every check: 1x0000000000000000000000000000000AA
-#   site key that passes every check:   1x00000000000000000000AA
+# Turnstile's secret key. Locally, use Cloudflare's published test secret that
+# passes every check. It is the same for everyone and is not a secret:
+# https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+#   1x0000000000000000000000000000000AA
 TURNSTILE_SECRET_KEY=
-# Public, and set in wrangler.jsonc for production; this line overrides it locally.
-TURNSTILE_SITE_KEY=

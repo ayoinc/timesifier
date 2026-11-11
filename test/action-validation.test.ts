@@ -19,11 +19,11 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	"routes/api.auth.$": async () => {
 		// Its rate limit reads the database before it reads the body.
 		await freshDatabase();
-		return new Request("https://timesifier.com/api/auth/sign-in/email-otp", {
+		return new Request("https://timesifier.example/api/auth/sign-in/email-otp", {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				Origin: "https://timesifier.com",
+				Origin: "https://timesifier.example",
 				"CF-Connecting-IP": "203.0.113.7",
 			},
 			body: '{"email": "ada@example.com", "otp":',
@@ -51,11 +51,11 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 
 /** A form as a browser posts it from our own page, with the session of the person posting. */
 function form(path: string, body: string, cookie: string): Request {
-	return new Request(`https://timesifier.com${path}`, {
+	return new Request(`https://timesifier.example${path}`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/x-www-form-urlencoded",
-			Origin: "https://timesifier.com",
+			Origin: "https://timesifier.example",
 			Cookie: cookie,
 		},
 		body,

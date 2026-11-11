@@ -14,7 +14,7 @@ import {
 	value,
 } from "./harness";
 
-const SENDER = { name: "Timesifier", email: "no-reply@mail.timesifier.com" };
+const SENDER = { name: "Timesifier", email: "no-reply@mail.timesifier.example" };
 
 let mailbox: Mailbox;
 
@@ -428,7 +428,7 @@ describe("inviting a person", () => {
 		const invitation = await invite(ada.cookie, organisation.id, "Grace@Example.com", "admin");
 
 		const message = await invitationTo("grace@example.com");
-		const link = `https://timesifier.com/invitations/${invitation.id}`;
+		const link = `https://timesifier.example/invitations/${invitation.id}`;
 		expect(message.from).toEqual(SENDER);
 		expect(message.subject).toBe("You are invited to join an organisation on Timesifier");
 		expect(message.text.split(link)).toHaveLength(2);
@@ -445,7 +445,7 @@ describe("inviting a person", () => {
 
 	// `ENVIRONMENT` says which hosts are the application's own (app/auth/hosts.ts).
 	it.each([
-		["a pull request's preview", "preview", "https://pr-12-timesifier.ayoinc.workers.dev"],
+		["a pull request's preview", "preview", "https://pr-12-timesifier.acme.workers.dev"],
 		["a developer's machine", "development", "http://localhost:5173"],
 	])(
 		"puts the link on the host the invitation was made on: %s",

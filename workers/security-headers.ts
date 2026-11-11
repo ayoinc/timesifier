@@ -1,7 +1,7 @@
 // The policy as shipped is described in docs/security.md, "Browser policy".
 
-// Two years. No `includeSubDomains` and no `preload`: other subdomains of
-// timesifier.com belong to other services.
+// Two years. No `includeSubDomains` and no `preload`: the other subdomains of
+// a deployment's domain may belong to other services.
 const STRICT_TRANSPORT_SECURITY = "max-age=63072000";
 
 // Every policy-controlled feature is denied.

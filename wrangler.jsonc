@@ -1,6 +1,14 @@
 /**
- * Wrangler configuration.
+ * Wrangler configuration, as a developer's machine and the tests use it.
  * https://developers.cloudflare.com/workers/wrangler/configuration/
+ *
+ * Nothing in this file belongs to one deployment: it holds no domain, no
+ * database id, no key and no address. The pipeline writes those in from its
+ * settings with scripts/deploy-config.ts before it builds, and deploys the
+ * result; docs/security.md, "Secrets", lists every one. Wrangler has no way
+ * to read a value of this file from the environment, and it reads this file
+ * itself for migrations, so the file is what the pipeline rewrites.
+ *
  * Bindings are added by the cards that need them; see docs/architecture.md.
  */
 {
@@ -10,18 +18,29 @@
 	// Selected by create-cloudflare on the day the project was scaffolded.
 	"compatibility_date": "2026-11-09",
 	"compatibility_flags": ["nodejs_compat"],
-	// Production is served only on its own domain. Wrangler creates the DNS
-	// records for these two hostnames and touches no other record in the zone.
+	// Production is served only on its own domain. The pipeline adds `routes`:
+	// the deployment's host and `www.` in front of it, as custom domains. Wrangler
+	// creates the DNS records for those two names and touches no other record.
 	"workers_dev": false,
-	"routes": [
-		{ "pattern": "timesifier.com", "custom_domain": true },
-		{ "pattern": "www.timesifier.com", "custom_domain": true }
-	],
-	// ENVIRONMENT tells the Worker it is production: it then answers only on
-	// timesifier.com. See workers/canonical-host.ts.
-	// TURNSTILE_SITE_KEY is the public key of the Turnstile widget named
-	// "timesifier"; its secret half is the secret TURNSTILE_SECRET_KEY.
-	"vars": { "ENVIRONMENT": "production", "TURNSTILE_SITE_KEY": "0x4AAAAAAF8PS8In2mqeEI2o" },
+	// Every variable the Worker reads, with the value a developer's machine and
+	// the browser tests run with. The pipeline replaces the whole list for
+	// production; none of these values is ever deployed.
+	// ENVIRONMENT: `production`, `preview` or `development`. It decides which
+	//   hosts are the Worker's own; see app/auth/hosts.ts.
+	// APP_HOST: the one host production answers on. Only production has one.
+	// PREVIEW_HOST_SUFFIX: what the host of every preview ends with. Only a
+	//   preview has one.
+	// TURNSTILE_SITE_KEY: the public key of the Turnstile widget. Here it is
+	//   Cloudflare's published test key, which passes every check:
+	//   https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+	// EMAIL_FROM: the address every message comes from. Locally nothing is sent.
+	"vars": {
+		"ENVIRONMENT": "development",
+		"APP_HOST": "",
+		"PREVIEW_HOST_SUFFIX": "",
+		"TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+		"EMAIL_FROM": "no-reply@localhost"
+	},
 	// Each pull request gets a preview on workers.dev. Without this line a preview
 	// has no URL, because turning workers_dev off turns preview URLs off too. It
 	// also gives every production version a workers.dev address; the Worker
@@ -29,8 +48,8 @@
 	"preview_urls": true,
 	// Previews do not inherit production settings; preview-safe bindings go here.
 	// https://developers.cloudflare.com/workers/previews/configuration/
-	// Every preview shares one database. wrangler.preview-migrations.jsonc names the
-	// same database, so the pipeline can migrate it; change the two together.
+	// Every preview shares one database. The pipeline writes its id here and into
+	// wrangler.preview-migrations.jsonc, the file it migrates that database with.
 	//
 	// A preview has no `send_email` binding on purpose: its URL is public, and it
 	// must not be able to send mail to any address typed into it. Without the
@@ -39,6 +58,7 @@
 		// The two Turnstile values are Cloudflare's published test keys, which pass
 		// every check. They are the same for everyone and are not secrets:
 		// https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+		// The pipeline adds PREVIEW_HOST_SUFFIX.
 		// BETTER_AUTH_SECRET is not here: it is set once for all previews with
 		// `wrangler preview base-config secret put BETTER_AUTH_SECRET`.
 		"vars": {
@@ -50,7 +70,7 @@
 			{
 				"binding": "DB",
 				"database_name": "timesifier-preview",
-				"database_id": "f0f2fead-b929-44ff-8165-dba382743beb"
+				"database_id": "00000000-0000-0000-0000-000000000000"
 			}
 		]
 	},
@@ -60,20 +80,25 @@
 		"traces": { "enabled": true, "head_sampling_rate": 0.1 }
 	},
 	"upload_source_maps": true,
-	// Production database, created with `--jurisdiction eu`; see docs/architecture.md.
+	// The database. Its id here is no database's: `pnpm dev` and the tests keep
+	// their data in a local file, and a command given `--remote` by mistake finds
+	// nothing to reach. The pipeline writes in the id of the deployment's own,
+	// which was created with `--jurisdiction eu`; see docs/architecture.md.
 	// Schema changes are the SQL files in migrations/, generated by `pnpm db:generate`.
 	"d1_databases": [
 		{
 			"binding": "DB",
 			"database_name": "timesifier",
-			"database_id": "b6ab20fa-794f-43a5-bd7e-d80b7eca88db",
+			"database_id": "00000000-0000-0000-0000-000000000000",
 			"migrations_dir": "migrations"
 		}
 	],
 	// Set with `wrangler secret put`; locally they are read from .dev.vars. A deploy
 	// fails while either is missing. See docs/security.md, "Secrets".
 	"secrets": { "required": ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY"] },
-	// Cloudflare Email Service. The binding may send from the application's one
-	// address and no other; app/auth/email.server.ts is the only code that uses it.
-	"send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["no-reply@mail.timesifier.com"] }]
+	// Cloudflare Email Service. app/auth/email.server.ts is the only code that
+	// uses the binding. The pipeline adds `allowed_sender_addresses`: the binding
+	// may send from the deployment's one address and no other. Locally Wrangler
+	// writes each message to a file and sends nothing.
+	"send_email": [{ "name": "EMAIL" }]
 }

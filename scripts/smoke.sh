@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test run after every deploy. Exits non-zero unless the home page at the
 # given origin answers 200 with the product name in the body.
-# Usage: scripts/smoke.sh https://timesifier.com [--production [version-host]]
+# Usage: scripts/smoke.sh <origin> [--production [version-host]]
+#   <origin> is where the deployment is served, such as https://app.example.org.
 #   --production also requires: https://www.<host> redirects to the origin;
 #   http://<host> redirects to https; and, when a version host is given (the
 #   workers.dev address of the version just deployed), that it answers 404.

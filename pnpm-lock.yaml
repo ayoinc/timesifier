@@ -252,7 +252,7 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@22.20.5)(vite@8.3.7(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
       wrangler:
-        specifier: ^4.159.0
+        specifier: 4.159.0
         version: 4.159.0(@types/node@22.20.5)
 
 packages:
