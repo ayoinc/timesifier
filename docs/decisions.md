@@ -26,6 +26,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
 | 19  | Motion library      | Not added yet: components animate with CSS transitions on the motion tokens (amends 10)  | Preparer                           |
 | 20  | Organisation        | Named by each request and checked on the server; never the session's active organisation | Preparer                           |
+| 21  | Route transitions   | React's `<ViewTransition>`, not React Router's `viewTransition` props (refines 10)       | Preparer                           |
 
 ## Evidence
 
@@ -211,6 +212,18 @@ Every request that acts on an organisation names it: a page by the slug in its a
 | The plugin's active organisation         | Better Auth's organization plugin keeps `activeOrganizationId` on the session and, in 1.7.19, its endpoints fall back to it when a request names no organisation. It is state the page does not show: two tabs share one session, so switching in one changes what the other's next request acts on, and an invitation or a removal can land in the wrong organisation. Reading it also ties tenancy to a mutable row. |
 
 How it is held in place: the gate in `app/auth/organisations.server.ts` refuses, with 400, a request to an organisation endpoint that names no organisation, and answers 404 for the endpoint that sets the active organisation. The plugin still writes the column when a person creates or joins an organisation, because its schema requires the column to exist; nothing in the application reads it. `test/organisations/create.test.ts` proves a request without an organisation is refused even when the session has an active one.
+
+### 21. Route transitions use React's `<ViewTransition>`
+
+Decided while building TS-006. It refines entry 10, which named the View Transitions API for route changes without saying through which interface.
+
+| Option                                         | Evidence                                                                                                                                                                                                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| React's `<ViewTransition>` component           | Exported by the installed React 19.3.1 with `addTransitionType`. React Router 8.5.1's own guide (`docs/how-to/view-transitions.md` in the package) names it as the way to do this. A class per kind of change, and named shared elements, with no inline style. |
+| React Router's `viewTransition` props and hook | Marked deprecated in React Router 8.5.1 in favour of React's component.                                                                                                                                                                                         |
+| Calling `document.startViewTransition` by hand | Works, but the application would have to coordinate it with React's rendering itself.                                                                                                                                                                           |
+
+Two things found while building it, both now rules in `docs/design-system.md`: a boundary whose class is not `none` starts a transition on every render that reaches it, so boundaries are `none` except on a change of destination; and an element taking part in a running transition cannot be pressed, so the navigation stays out of it.
 
 ## To verify when the code is scaffolded
 

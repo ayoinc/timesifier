@@ -43,7 +43,7 @@ pnpm exec playwright install chromium webkit   # once, and again after Playwrigh
 pnpm test:e2e                                  # about 20 seconds
 ```
 
-`pnpm test:e2e` builds for production with `DESIGN_ROUTE=1`, serves that build on port 5385, and runs the tests in `e2e/` against it with Playwright: each component by keyboard, an accessibility scan, reduced motion, and the overlays in WebKit as iOS runs them. Every test fails if the page breaks the Content Security Policy or logs an error. When the tests end the build is deleted, because it contains the component gallery; run `pnpm build` again before anything else uses `build/`.
+`pnpm test:e2e` builds for production with `DESIGN_ROUTE=1`, serves that build on port 5385, and runs the tests in `e2e/` against it with Playwright: each component by keyboard, the application shell at 390px and 1280px (navigation, view transitions, focus, the colour scheme), accessibility scans, reduced motion, and the overlays in WebKit as iOS runs them. Every test fails if the page breaks the Content Security Policy or logs an error. When the tests end the build is deleted, because it contains the component gallery; run `pnpm build` again before anything else uses `build/`.
 
 The component gallery is at `/design` under `pnpm dev`: every component in every state, in both colour schemes. A normal build leaves the route out, so production answers 404. `docs/design-system.md` describes the components and how to add one.
 
