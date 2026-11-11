@@ -58,6 +58,9 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: 0,
+	// Playwright uses half the cores unless told otherwise; the pipeline's
+	// machine has few, and nothing else runs on it.
+	workers: process.env.CI ? "100%" : undefined,
 	reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
 	use: {
 		baseURL: ORIGIN,
