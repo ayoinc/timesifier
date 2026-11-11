@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button as AriaButton, RouterProvider } from "react-aria-components";
 import { useHref, useNavigate } from "react-router";
 
@@ -41,6 +41,8 @@ const AVATAR =
 export function ProfileMenu({ name, email, accountHref, wayOut = "Sign out" }: ProfileMenuProps) {
 	const navigate = useNavigate();
 	const [notice, setNotice] = useState<Notice | null>(null);
+	// Where Account settings leads, held until the menu has gone (`WhenGone`).
+	const pending = useRef<string | null>(null);
 	const once = useOneAtATime();
 
 	function leave() {
@@ -56,11 +58,13 @@ export function ProfileMenu({ name, email, accountHref, wayOut = "Sign out" }: P
 	// who speaks to their computer can say what they see (WCAG 2.5.3, label in name).
 	const initials = initialsOf(name, email);
 	return (
-		// Account settings is a link the router follows, as every other link in the shell.
+		// Account settings is a link the router follows, as every other link in the
+		// shell, once the menu has faded out. Followed at once, the new page's heading
+		// takes the focus while the menu is still on screen, and React Aria pulls it
+		// back into the menu and then hands it to this button as the menu goes.
 		<RouterProvider
 			navigate={(to) => {
-				finishRunningTransition();
-				navigate(to);
+				pending.current = to;
 			}}
 			useHref={useHref}
 		>
@@ -81,6 +85,19 @@ export function ProfileMenu({ name, email, accountHref, wayOut = "Sign out" }: P
 							{name && <p className="wrap-anywhere text-title-small">{name}</p>}
 							<p className="wrap-anywhere text-body-medium text-on-surface-variant">{email}</p>
 							<NoticeLine notice={notice} />
+							<WhenGone
+								run={() => {
+									const to = pending.current;
+									pending.current = null;
+									if (to === null) return;
+									// A frame later: React Aria gives the focus back to this button in
+									// the frame after the menu goes, and the new page's heading takes it after.
+									requestAnimationFrame(() => {
+										finishRunningTransition();
+										navigate(to);
+									});
+								}}
+							/>
 						</div>
 					}
 				>
@@ -96,4 +113,14 @@ export function ProfileMenu({ name, email, accountHref, wayOut = "Sign out" }: P
 			</MenuTrigger>
 		</RouterProvider>
 	);
+}
+
+/** Calls `run` when it leaves the page: put inside the menu, when the menu has gone. */
+function WhenGone({ run }: { run: () => void }) {
+	const latest = useRef(run);
+	useEffect(() => {
+		latest.current = run;
+	});
+	useEffect(() => () => latest.current(), []);
+	return null;
 }
