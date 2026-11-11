@@ -39,6 +39,20 @@ Built in two passes, like TS-008. The first, the server, is merged: the organisa
 
 An organisation always has at least one owner: the last owner cannot leave, be removed or be demoted.
 
+### TS-030 · A home page, and the visual direction
+
+The owner's verdict on the first release: it works, but it does not look like a designed product. This card is the first visible step: the direction the product follows, the tokens that carry it, and a real home page in place of three lines of text. Built on branch `ts-030-landing`; not yet deployed.
+
+- [x] The direction is written down before anything is built: who the product is for, the feeling, the typefaces, the palette, how imagery is used, three things the design refuses to do, and the shipped products it was checked against. _`docs/design-direction.md`. Decision 23 replaces decision 16._
+- [x] The tokens carry the direction and still come from one seed: `#FFD400` in the fidelity scheme, Sofia Sans in two widths, corners of 2 to 24px. Every text role is at least 4.5:1 on its background in both schemes. _`scripts/tokens.test.ts`, "colour roles": 101 cases pass, with `primary` on every surface and the sheet's pairs added. The fonts are files under the SIL Open Font License 1.1 in `app/fonts/`, with `OFL.txt`; `@fontsource-variable/roboto-flex` is removed._
+- [x] `/` says what Timesifier does for a person, offers one primary action, "Create an account", with "Sign in" beside it, and shows the product above the fold. _`e2e/landing.spec.ts`, at 390px and 1280px in both schemes: "the primary action and the product are on show before any scrolling, and nothing runs off the side"; "Sign in, beside the primary action, opens the sign-in page"._
+- [x] Four sections each make one point (track, the week, accuracy, privacy), then a closing action and a footer. The page shows nothing the product will not do, and every total on it is the sum of what is shown above it. _The example is `app/landing/example-week.ts`. `test/landing-example.test.ts`: "the day's entries are what the week shows for that day, project by project"; "the week's total is the sum of its rows and of its columns"._
+- [x] The page is server rendered and works without script. _`e2e/landing.spec.ts`, "without script": "the page is all there, and its primary action still opens sign-up"._
+- [x] No accessibility violation at 390px and 1280px, in the light and the dark scheme; the keyboard reaches the primary action, which shows its focus. _`e2e/landing.spec.ts`: "the home page has no accessibility violations" (four cases); "the keyboard reaches the primary action, which shows where the focus is and opens sign-up"; "the skip link moves the focus into the main region". Each also runs in WebKit._
+- [x] Every photograph is our own file, in AVIF and WebP, with its size, a description and its source on record; nothing moves when one arrives. _Four photographs under the Unsplash licence, 20 files, 1.0 MB in all, in `public/images/` with `CREDITS.md`. `test/node/landing-images.test.ts`: "every file the page asks for exists, and no other image is served"; "every file is in the credits, with its author, its source page and the licence". `e2e/landing.spec.ts`: "every image has its size, a description, and comes from our own host"; "nothing on the page moves when its images arrive", which first failed on a one-pixel difference between two widths of one photograph._
+- [x] The components still pass their own tests on the new tokens. _`pnpm test:e2e`: every earlier browser test passes. Two things changed for it: `on-secondary-container` is placed on a darker role, because Material's fell to 4.02:1 under a pressed state layer on a tonal button; and a selected switch keeps its handle's colour, which was the track's in the dark scheme._
+- [ ] Deployed, and seen by the owner at `https://timesifier.com`.
+
 ## Review (limit 2)
 
 ### TS-002 · Pipeline: checks on every pull request
