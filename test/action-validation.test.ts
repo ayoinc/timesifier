@@ -27,6 +27,16 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			body: '{"email": "ada@example.com", "otp":',
 		});
 	},
+	// The colour scheme is one of three words; this is none of them.
+	"routes/app/settings": () =>
+		new Request("https://timesifier.com/app/settings", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/x-www-form-urlencoded",
+				Origin: "https://timesifier.com",
+			},
+			body: "scheme=sepia",
+		}),
 };
 
 const routesWithAction = Object.values(routes)

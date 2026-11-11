@@ -100,7 +100,7 @@ Bracketed variants that only select a state, such as `data-[state=open]:`, are a
 
 ## Components
 
-Twelve components live in `app/components/`, one file each. They are built on React Aria, drawn to Material 3 Expressive, and styled only with token utilities. `/design` shows every one in every state, in the light scheme and the dark scheme.
+Thirteen components live in `app/components/`, one file each. They are built on React Aria, drawn to Material 3 Expressive, and styled only with token utilities. `/design` shows every one in every state, in the light scheme and the dark scheme.
 
 | Component  | File             | Variants and states                                                                                                                 | Keyboard                                                                                                        | Specification                                                                  |
 | ---------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -109,6 +109,7 @@ Twelve components live in `app/components/`, one file each. They are built on Re
 | TextField  | `TextField.tsx`  | Filled field. Label, supporting text, error text, required (asterisk). Empty, filled, hover, focus, invalid, disabled.              | Type. Tab moves on.                                                                                             | `md-comp-filled-text-field`                                                    |
 | Checkbox   | `Checkbox.tsx`   | Unselected, selected, indeterminate; hover, focus, pressed, invalid, disabled.                                                      | Space toggles.                                                                                                  | `md-comp-checkbox`                                                             |
 | Switch     | `Switch.tsx`     | Off, on; hover, focus, pressed (handle grows), disabled.                                                                            | Space toggles.                                                                                                  | `md-comp-switch`                                                               |
+| RadioGroup | `Radio.tsx`      | `RadioGroup` with a `label`, holding `Radio` choices. Chosen, not chosen; hover, focus, pressed, disabled.                          | Tab enters at the chosen radio. Arrow keys move and choose. Tab leaves.                                         | `md-comp-radio-button`                                                         |
 | Select     | `Select.tsx`     | Filled field with a list. Empty, with a value, open, hover, focus, required, invalid, disabled; options can be disabled.            | Enter, Space or an arrow key opens. Arrows, Home, End and typing move. Enter chooses. Escape closes.            | `md-comp-filled-text-field`, `md-comp-menus`, `-menus-standard`                |
 | Menu       | `Menu.tsx`       | `MenuTrigger`, `Menu`, `MenuItem`; items can have an icon and can be disabled.                                                      | Enter, Space or an arrow key on the button opens. Arrows, Home, End and typing move. Enter acts. Escape closes. | `md-comp-menus`, `-menus-standard`                                             |
 | Dialog     | `Dialog.tsx`     | `DialogTrigger`, `Dialog`: title, content, actions. `role="alertdialog"` for a message that must be answered.                       | Focus moves in and stays in. Escape closes. Focus returns to the button.                                        | `md-comp-dialog`, `md-comp-scrim`                                              |
@@ -138,13 +139,13 @@ Where a component departs from those files:
 | Overlay motion  | `app/components/motion.ts` | How a menu, a tooltip, a dialog, a sheet and a scrim enter and leave.                                                                                                                                                                                                                                                                    |
 | Icons           | `app/components/icons/`    | Material Symbols, Rounded, weight 400: one module per icon, each an inline SVG, so a page ships only the icons it uses. The paths are copied from the SVG sources in github.com/google/material-design-icons (commit `10ecc14`), licence Apache-2.0. `Icon.tsx` says how to add one.                                                     |
 
-State is read from the attributes React Aria sets (`data-hovered`, `data-pressed`, `data-focus-visible`, `data-selected`, `data-disabled`, `data-invalid`), with Tailwind's `data-…:` variants. Checkbox, Switch and Select are built on React Aria's hooks and set the same attributes themselves; `docs/security.md` says why.
+State is read from the attributes React Aria sets (`data-hovered`, `data-pressed`, `data-focus-visible`, `data-selected`, `data-disabled`, `data-invalid`), with Tailwind's `data-…:` variants. Checkbox, Switch, RadioGroup and Select are built on React Aria's hooks and set the same attributes themselves; `docs/security.md` says why.
 
 ### How the components move
 
 - **Overlays enter and leave with movement.** A menu and a select's list grow out of their button; a dialog rises and grows; a sheet slides up from the bottom edge; a snackbar rises; a tooltip grows. The spring (`ease-spring duration-spring`) carries what arrives; leaving is short and accelerates away.
 - **A change of selection moves the thing that marks it.** The tab indicator slides to the selected tab, the switch handle travels along its track, and a field's label floats up when the field takes focus.
-- **Everything is a CSS transition that reads the motion tokens**, so the next input turns a movement around from where it is (rule 8) and nothing waits for an animation to end (rule 12). The Motion library is not installed yet: nothing in these twelve needs what a transition cannot do. It joins with the first component that does, such as a gesture or a shared element.
+- **Everything is a CSS transition that reads the motion tokens**, so the next input turns a movement around from where it is (rule 8) and nothing waits for an animation to end (rule 12). The Motion library is not installed yet: none of these components needs what a transition cannot do. It joins with the first component that does, such as a gesture.
 - **With reduced motion requested, only opacity and colour change.** Classes that move or scale sit under `motion-safe:`, and each moving element has a `motion-reduce:` class that narrows what it transitions. `e2e/reduced-motion.spec.ts` operates every component and fails if anything animates position or size.
 
 ### The gallery
@@ -164,3 +165,54 @@ State is read from the attributes React Aria sets (`data-hovered`, `data-pressed
 5. Add a test to `e2e/components.spec.ts` that finds it by role and accessible name and operates it by keyboard alone. If it opens, add it to the list in `e2e/accessibility.spec.ts`; if it moves, operate it in `e2e/reduced-motion.spec.ts`.
 6. Add a row to the table above.
 7. Run `pnpm lint && pnpm test && pnpm test:e2e`.
+
+## Shell
+
+The application shell is everything under `/app`: a skip link, the navigation and the main region each destination renders into. The route is `app/routes/app/layout.tsx`; the parts are in `app/shell/`. The browser tests are `e2e/shell-*.spec.ts`.
+
+### Destinations
+
+`app/shell/destinations.ts` is the one list: Today (`/app`), Reports (`/app/reports`), Projects (`/app/projects`), Settings (`/app/settings`), in that order, each with its label, its address and the name of its Material Symbol. `app/routes.ts` builds the route tree from the list, the navigation draws it, the direction of a transition is the order of it, and the tests read their addresses from it. Nothing else writes one of these addresses. To add a destination, add it to the list, add `app/routes/app/<id>.tsx` with a `PageHeading`, and give its symbol a drawing in `app/shell/Navigation.tsx`.
+
+Each destination's page is a placeholder until its own card: its heading and one sentence saying what will be there. Settings also holds the colour scheme.
+
+### The 600px rule
+
+One `nav` element with one list of links is drawn two ways, by CSS alone (rule 17). Tailwind's `medium:` variant is Material's medium window size, 600px (`--breakpoint-medium` in `app/app.css`); `max-medium:` is everything narrower.
+
+| Window      | Navigation      | Where                            | Drawn from                                                     |
+| ----------- | --------------- | -------------------------------- | -------------------------------------------------------------- |
+| Under 600px | Navigation bar  | Along the bottom edge, 64px tall | `md-comp-nav-bar`, `md-comp-nav-bar-item-vertical`             |
+| From 600px  | Navigation rail | Down the start edge, 96px wide   | `md-comp-nav-rail-collapsed`, `md-comp-nav-rail-item-vertical` |
+
+An item is the same in both: a 56 by 32px active indicator around a 24px icon, a `label-medium` label under it, 64px tall in all. The active destination has `aria-current="page"`, the filled drawing of its symbol and the indicator. No script measures the window: the server sends the same HTML to every width, and the navigation works with script off.
+
+### How a change of destination moves
+
+React's `<ViewTransition>` (React 19.3) starts the browser's view transition when React Router commits a navigation; the animations are CSS in `app/app.css` and read the motion tokens. There is no `style` attribute in the HTML: React names the parts through the CSSOM when a transition starts.
+
+- **Direction (rule 5).** A destination later in the list is forward of an earlier one. `useTravel` in `app/shell/transitions.ts` compares the destination arriving with the one on screen and gives the content the class `shell-forward` or `shell-back`. Going forward the old page leaves towards the start and the new one arrives from the end; going back is the mirror image. It works the same for a press on a destination, a link inside a page and the browser's Back button, because it reads only where the page was and where it is going.
+- **Axis.** Under 600px the destinations lie side by side, so the content moves across. From 600px they are stacked, so it moves up and down. The distance is eight spacing units.
+- **What moves (rule 6).** Only the content. The active indicator is one element with one view-transition name: it travels from the old destination to the new one on the spring. The icons of the two destinations fade, above the indicator.
+- **The navigation is not in the transition.** The browser does not deliver a press to an element that is part of a running view transition, so the navigation stays an ordinary part of the page and can be pressed at any moment.
+- **Interruption (rule 8).** React holds the next transition until the running one has finished. A press on a destination and the browser's Back and Forward therefore end the running transition first (`finishRunningTransition`, through `document.activeViewTransition`): its animations jump to their end and the new page arrives at once. In a browser without that property the next transition follows the running one, a third of a second later at most.
+- **Only a change of destination starts a transition.** The content's `<ViewTransition>` has the class `none` in every other render. Without that, React starts a transition for any render that reaches it, and each one holds back the next navigation.
+- **Reduced motion (rule 9).** Nothing moves or changes size: each part takes its new place at once and the content cross-fades.
+- **A browser without view transitions** navigates with no animation.
+
+### Focus and landmarks
+
+- The first Tab stop is "Skip to main content", off the top edge until it has the focus. It moves the focus to the `main` element.
+- Landmarks: one `navigation` named "Main" and one `main`. There is no top bar, so there is no `banner`.
+- After a move between pages the focus is on the new page's `h1`, and the title has changed. Every page in the shell renders its heading with `PageHeading`, which can take the focus from script and is not a Tab stop. A screen reader announces the new page, and Tab carries on from its top. The same happens on arriving in the shell by a link from a page outside it.
+- A page the browser loads whole leaves the focus alone.
+
+### Colour scheme
+
+Settings offers System, Light and Dark as one radio group. Light and Dark are stored in the cookie `__Host-color-scheme` (`docs/security.md`); System deletes it. The root loader reads the cookie and the server renders `data-color-scheme` on `html`, so a page arrives in the chosen scheme with no flash and no inline script. With script the choice is saved as it is made and the page changes without loading again; without script the form has a Save button and the page loads again.
+
+### Locale
+
+The root loader chooses a locale from `Accept-Language` (`app/shell/locale.ts`; `en-GB` when the request names none the server can format) and `app/root.tsx` gives it to React Aria's `I18nProvider`. Dates and numbers are therefore formatted the same way on the server and in the browser. The interface text is English and `<html lang="en">` does not change.
+
+A right-to-left language is passed over for the next one in the header. React Aria takes the direction of its arrow keys from the locale, and the interface is not mirrored; when a translated, mirrored interface arrives, this rule goes and `html` gets its `dir`.

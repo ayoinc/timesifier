@@ -9,6 +9,7 @@ import { IconButton, type IconButtonVariant } from "~/components/IconButton";
 import { AddIcon } from "~/components/icons/AddIcon";
 import { MoreVertIcon } from "~/components/icons/MoreVertIcon";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { Sheet } from "~/components/Sheet";
 import { createSnackbarQueue, SnackbarRegion, showSnackbar } from "~/components/Snackbar";
@@ -270,6 +271,31 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 						<Switch isDisabled defaultSelected>
 							Disabled on
 						</Switch>
+					</Row>
+				</Component>
+
+				<Component name="RadioGroup">
+					<Row label="one chosen; hover, focus, pressed; disabled">
+						<RadioGroup label="Week starts on" defaultValue="monday">
+							<Radio value="monday">Monday</Radio>
+							<Radio value="sunday">Sunday</Radio>
+							<Radio value="saturday">Saturday</Radio>
+						</RadioGroup>
+						<RadioGroup label="Radio states" defaultValue="focus">
+							<Forced state="hovered">
+								<Radio value="hover">Hover</Radio>
+							</Forced>
+							<Forced state="focused">
+								<Radio value="focus">Focus</Radio>
+							</Forced>
+							<Forced state="pressed">
+								<Radio value="pressed">Pressed</Radio>
+							</Forced>
+						</RadioGroup>
+						<RadioGroup label="Disabled group" defaultValue="chosen" isDisabled>
+							<Radio value="chosen">Disabled and chosen</Radio>
+							<Radio value="other">Disabled choice</Radio>
+						</RadioGroup>
 					</Row>
 				</Component>
 

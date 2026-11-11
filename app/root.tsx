@@ -1,3 +1,4 @@
+import { I18nProvider } from "react-aria";
 import {
 	isRouteErrorResponse,
 	Links,
@@ -5,18 +6,51 @@ import {
 	Outlet,
 	Scripts,
 	ScrollRestoration,
+	type ShouldRevalidateFunctionArgs,
+	useRouteLoaderData,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { readColorScheme } from "./shell/color-scheme.server";
+import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
 
 // Fonts are self-hosted: app.css imports the font files through styles/tokens.css,
 // so nothing in our own markup asks another origin for anything.
 export const links: Route.LinksFunction = () => [];
 
+/**
+ * What the server works out from the request for every page: the colour scheme
+ * the person has chosen (`null` follows the device) and the locale dates and
+ * numbers are formatted in.
+ */
+export function loader({ request }: Route.LoaderArgs) {
+	return {
+		colorScheme: readColorScheme(request.headers.get("Cookie")),
+		locale: negotiateLocale(request.headers.get("Accept-Language")),
+	};
+}
+
+/**
+ * Moving to another page changes neither value, so it asks the server nothing.
+ * A submitted form may have changed the colour scheme; the answer to one arrives
+ * as a load of the page it was sent from.
+ */
+export function shouldRevalidate({
+	formMethod,
+	currentUrl,
+	nextUrl,
+}: ShouldRevalidateFunctionArgs) {
+	const submitted = formMethod !== undefined && formMethod.toUpperCase() !== "GET";
+	return submitted || currentUrl.pathname === nextUrl.pathname;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
+	// Missing when the root loader itself failed and the error page is shown.
+	const data = useRouteLoaderData<typeof loader>("root");
+
 	return (
-		<html lang="en">
+		<html lang="en" data-color-scheme={data?.colorScheme ?? undefined}>
 			<head>
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -28,7 +62,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<Links nonce="" />
 			</head>
 			<body>
-				{children}
+				{/* The language of the interface is English; the locale is how React Aria
+				    formats dates and numbers, the same on the server and in the browser. */}
+				<I18nProvider locale={data?.locale ?? DEFAULT_LOCALE}>{children}</I18nProvider>
 				<ScrollRestoration />
 				<Scripts />
 			</body>

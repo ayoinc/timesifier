@@ -4,16 +4,6 @@ How the board works, and what Ready and Done mean, is in `docs/ways-of-working.m
 
 ## In progress (limit 1 per worker)
 
-### TS-006 · Application shell
-
-Depends on: TS-005.
-
-- [ ] Below 600px the shell shows a navigation bar; from 600px it shows a navigation rail with the same destinations.
-- [ ] Moving between destinations animates in the direction of travel using view transitions; with reduced motion requested there is no movement.
-- [ ] The page has a skip link and landmarks, and after navigation focus is on the main heading (test).
-- [ ] The colour scheme follows the system, can be overridden, and the override survives a reload.
-- [ ] Lighthouse reports an accessibility score of 100 for the shell.
-
 ### TS-008 · Authentication
 
 Built in two passes. The first, the server, is merged: everything that needs no page. The second adds the pages, passkeys in a browser and the `/app` guard, once the components (TS-005) and the shell (TS-006) are in. The dependency on TS-006 applies to the second pass.
@@ -199,6 +189,18 @@ Depends on: TS-006.
 - [ ] Each public page has a title, a description and a social preview image, and is server rendered (the text is present in `curl` output).
 
 ## Done
+
+### TS-006 · Application shell
+
+Done 2026-11-11. Pull request #16.
+
+- [x] Below 600px the shell shows a navigation bar; from 600px it shows a navigation rail with the same destinations. _`e2e/shell-navigation.spec.ts`: "in a window 390px wide › the navigation is a bar along the bottom with the four destinations"; "in a window 1280px wide › the navigation is a rail down the side with the same four destinations"; "the bar becomes the rail at 600px, and back, without the page loading again"; and without script the server's one navigation is right at both widths. One `nav` element, drawn either way by CSS._
+- [x] Moving between destinations animates in the direction of travel using view transitions; with reduced motion requested there is no movement. _`e2e/shell-transitions.spec.ts`, at both widths: "the content moves across, one way going forward and the other way going back" (up and down in the rail); "the navigation stays still and its active indicator travels as one element"; "a second press during a transition interrupts it"; "with reduced motion requested › a change of destination fades and nothing moves". Removing the interrupt and the reduced-motion rule makes exactly those tests fail._
+- [x] The page has a skip link and landmarks, and after navigation focus is on the main heading (test). _`e2e/shell-navigation.spec.ts`, at both widths: "the first Tab reaches a skip link, and Enter moves the focus into the main region"; "the page has one navigation landmark with a name and one main landmark"; "after a move to each destination the focus is on its heading and the title has changed"; "every destination is reached with Tab and Enter alone"._
+- [x] The colour scheme follows the system, can be overridden, and the override survives a reload. _`e2e/shell-color-scheme.spec.ts`: "the page follows the device until a scheme is chosen"; "choosing Light makes the page light at once, and it stays light" (the cookie sent is `__Host-color-scheme=light; Max-Age=31536000; Path=/; Secure; SameSite=Lax`, and the server renders the scheme after a reload and in a new page); "choosing System deletes the cookie and the page follows the device again"; the form also works without script. `test/color-scheme.test.ts` covers the action and the root loader._
+- [x] Lighthouse reports an accessibility score of 100 for the shell. _Lighthouse 13.6.0 with Chrome 158 against `/app` on a production build served by `vite preview`: 100 on the mobile form factor and 100 on desktop, no audit below 1. Command: `pnpm dlx lighthouse http://localhost:5391/app --only-categories=accessibility --chrome-flags="--headless=new"`, and the same with `--preset=desktop`. Not in the pipeline; TS-023 and TS-024 put such measurements there._
+
+Beyond the criteria: an axe scan of the four destinations at both widths in both schemes finds no violation; React Aria's locale is negotiated on the server; a RadioGroup component joined the library for the colour-scheme choice. Three things look slightly off and are left for a design pass: in the rail the travelling indicator passes over the labels between the old and the new destination; the skip link, while focused, covers the top of the rail; the radio rings in Settings sit 12px in from the headings above them. `/app` is open to anyone until TS-008's second pass adds the guard; it holds no data.
 
 ### TS-005 · Component foundation
 

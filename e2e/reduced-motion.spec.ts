@@ -33,6 +33,10 @@ async function operateEveryComponent(page: Page) {
 	await gallery.getByText("Weekly summary", { exact: true }).click();
 	await expect(toggle).not.toBeChecked();
 
+	// RadioGroup: the dot leaves one ring and arrives in another.
+	await gallery.getByText("Sunday", { exact: true }).click();
+	await expect(gallery.getByRole("radio", { name: "Sunday" })).toBeChecked();
+
 	// Select: open, choose, open again, leave.
 	await gallery.getByRole("button", { name: "Project", exact: true }).click();
 	await page.getByRole("option", { name: "Borealis" }).click();
@@ -119,6 +123,7 @@ test.describe("with motion allowed", () => {
 			/^transition of translate on <div> in "(Day|Week|Month)"/, // the tab indicator slides
 			/^transition of translate on <span> in "Weekly summary"/, // the switch handle travels
 			/^transition of scale on <span> in "Billable"/, // the tick grows
+			/^transition of scale on <span> in "Sunday"/, // the radio's dot grows
 			/^transition of top on <label> "Project name"/, // the field's label floats
 		]) {
 			expect(seen).toContainEqual(expect.stringMatching(moved));

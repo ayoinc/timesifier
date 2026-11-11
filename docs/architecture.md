@@ -34,6 +34,24 @@ flowchart LR
 | Real-time       | Durable Objects                                  | Only when a feature needs live coordination                                | Not planned yet |
 | Observability   | Workers Logs and Traces                          | Structured logs, traces, alerts                                            | TS-001, TS-022  |
 
+## Routes
+
+`app/routes.ts` is the route tree. The shell's destinations come from the one list in `app/shell/destinations.ts`.
+
+| Address         | Module                    | What it is                                                                                                                          |
+| --------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| every page      | `app/root.tsx`            | The document. Its loader reads the colour-scheme cookie and negotiates the locale; it runs again only after a form is submitted.    |
+| `/`             | `routes/home.tsx`         | The home page, with a link to `/app`. Public pages are a later card.                                                                |
+| `/app`          | `routes/app/layout.tsx`   | The application shell: skip link, navigation, main region. No `loader` and no `middleware` yet: TS-008 adds the session guard here. |
+| `/app` (index)  | `routes/app/today.tsx`    | Today. A placeholder.                                                                                                               |
+| `/app/reports`  | `routes/app/reports.tsx`  | Reports. A placeholder.                                                                                                             |
+| `/app/projects` | `routes/app/projects.tsx` | Projects. A placeholder.                                                                                                            |
+| `/app/settings` | `routes/app/settings.tsx` | Settings. Its `action` stores the colour scheme.                                                                                    |
+| `/api/auth/*`   | `routes/api.auth.$.ts`    | Better Auth.                                                                                                                        |
+| `/design`       | `routes/design.tsx`       | The component gallery. Registered under `pnpm dev` and in a build made with `DESIGN_ROUTE=1` only.                                  |
+
+How the shell looks, moves and takes the focus is in `docs/design-system.md`, "Shell".
+
 ## Environments
 
 | Environment | Where                                                                     | Data                                                     |
