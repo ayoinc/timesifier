@@ -14,8 +14,9 @@ import { finishRunningTransition } from "./transitions";
 /**
  * The timer's control at the top of the navigation, before its first heading
  * (docs/navigation.md, "The navigation, top to bottom"; TS-051), on every page
- * of an organisation. With nothing running it is "Start timer", a link to the
- * Day view's timer form; with an entry running it shows the project, the time
+ * of an organisation. With nothing running it is "Start timer", a link to
+ * today's Day view that opens its "Track time" sheet (TS-056); with an entry
+ * running it shows the project, the time
  * elapsed and "Stop", which stops it through the Day view's own `stop` and
  * leaves the person on the page they are on.
  *

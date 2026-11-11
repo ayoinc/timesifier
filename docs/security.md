@@ -349,6 +349,10 @@ A body larger than 64 KiB is answered 413 and is not read past the limit; an act
 
 `__Host-color-scheme` holds the word `light`, `dark` or `system`, the choice a person made in Settings, with `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` and a life of one year; it is not `HttpOnly` because it identifies nobody and grants nothing, so there is nothing for a script to steal. It is not set until a person chooses. The server writes it only from the validated Settings form and reads from it only one of those three words: no cookie, or any other value, is `light` (`app/shell/color-scheme.server.ts`, `test/color-scheme.test.ts`).
 
+### The getting-started cookie
+
+`__Host-timesifier.getting_started` keeps two marks of the Timesheet's getting started (TS-056): that a person has opened the Week view, and that they put the list away. Each mark is a letter and the person's user id, newest first, at most ten, so that two people who sign in on one browser keep their own; there is no database column for either, and adding one would need a migration for a hint. It has `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` and a life of one year. It grants nothing: a forged mark ticks a step or hides the list for whoever forged it. The server writes it only from the Timesheet's loader, when the Week view is opened, and from its `put-away` action, and reads from it only marks of the person signed in; anything that is not a mark is dropped (`app/timesheet/getting-started.server.ts`, `test/pages/timesheet.test.ts`).
+
 ### Turnstile on the page
 
 Turnstile loads a script from Cloudflare and runs in a frame. One page shows the widget, `/sign-in`, and only its policy has the two sources it needs:

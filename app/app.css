@@ -412,7 +412,11 @@ body {
  */
 
 /* The page stays usable under a running transition: the next press lands on the
-   page, not on the picture of it, and can interrupt the transition (rule 8). */
+   page, not on the picture of it, and can interrupt the transition (rule 8). That
+   holds for what is not in the transition. Chromium takes no press on an element
+   whose picture is shown, and none on the page at all while the whole document's
+   is: the content's outer boundary in app/routes/app/layout.tsx keeps the
+   document out of the transition when a page of another height arrives. */
 ::view-transition {
 	pointer-events: none;
 }

@@ -15,6 +15,9 @@ import { bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { runningEntry } from "~/time/entries.server";
 import { zoneOfMember } from "~/time/zones.server";
 
+import type { GettingStarted } from "./GettingStarted";
+import { gettingStarted, type Marks } from "./getting-started.server";
+
 import {
 	HISTORY_LENGTH,
 	type HistoryRow,
@@ -29,7 +32,7 @@ import {
 import type { ChosenView } from "./views.server";
 
 /**
- * What the views of Timesheet read (TS-012a, TS-013, TS-046, TS-052). Every
+ * What the views of Timesheet read (TS-012a, TS-013, TS-046, TS-052, TS-056). Every
  * query is the person's own entries and periods: these pages show nobody
  * else's time, whatever the role (TS-013, "Who may").
  */
@@ -118,25 +121,9 @@ export interface TimesheetBase {
 	running: SheetEntry | null;
 }
 
-export interface DayData extends TimesheetBase {
-	view: "day";
-	day: Day;
-	/** The day's entries, earliest first. */
-	entries: SheetEntry[];
-	total: number;
-	/** Whether the day is in a submitted or approved period. */
-	locked: boolean;
-}
-
-export interface WeekData extends TimesheetBase {
-	view: "week";
+/** Where a period stands, and what its one submission action reads (TS-046): the Week view's and the Day view's. */
+export interface PeriodSubmission {
 	period: PeriodDays;
-	days: Day[];
-	sheet: WeekSheet;
-	/** The active projects with time in the week before, which "Copy last week's rows" adds (TS-052). */
-	lastWeekProjects: string[];
-	/** The days of the week in a submitted or approved period: all of them, or none. */
-	lockedDays: Day[];
 	state: PeriodState;
 	status: PeriodStatus | null;
 	/** Why it was returned, while it stands returned. */
@@ -147,6 +134,32 @@ export interface WeekData extends TimesheetBase {
 	started: boolean;
 }
 
+export interface DayData extends TimesheetBase {
+	view: "day";
+	day: Day;
+	/** The day's entries, earliest first. */
+	entries: SheetEntry[];
+	total: number;
+	/** Whether the day is in a submitted or approved period. */
+	locked: boolean;
+	/** The seven days of the period the day is in, each with its total, and the period's: the Week view's sums (TS-056). */
+	week: Pick<WeekSheet, "days" | "total">;
+	/** The period the day is in, for the submission at the view's foot (TS-056). */
+	submission: PeriodSubmission;
+	/** The steps of getting started and whether each is done, or null when the list is not shown (TS-056). */
+	gettingStarted: GettingStarted | null;
+}
+
+export interface WeekData extends TimesheetBase, PeriodSubmission {
+	view: "week";
+	days: Day[];
+	sheet: WeekSheet;
+	/** The active projects with time in the week before, which "Copy last week's rows" adds (TS-052). */
+	lastWeekProjects: string[];
+	/** The days of the week in a submitted or approved period: all of them, or none. */
+	lockedDays: Day[];
+}
+
 export interface HistoryData extends TimesheetBase {
 	view: "history";
 	rows: HistoryRow[];
@@ -154,11 +167,15 @@ export interface HistoryData extends TimesheetBase {
 
 export type TimesheetData = DayData | WeekData | HistoryData;
 
-/** The data of the view `chosen` for the person behind `membership`, at `now`. */
+/**
+ * The data of the view `chosen` for the person behind `membership`, at `now`.
+ * `marks` are what their browser holds of getting started.
+ */
 export async function timesheetData(
 	membership: Membership,
 	chosen: ChosenView,
 	now: number,
+	marks: Marks,
 ): Promise<TimesheetData> {
 	const { user, organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
@@ -168,8 +185,19 @@ export async function timesheetData(
 	const base: TimesheetBase = { zone, now, today, projects, running };
 
 	switch (chosen.view) {
-		case "day":
-			return { ...base, ...(await dayData(scope, user.id, chosen.day ?? today, zone, now)) };
+		case "day": {
+			const day = chosen.day ?? today;
+			const period = periodContaining(day, organisation.weekStartsOn);
+			const [ofDay, steps] = await Promise.all([
+				dayData(scope, user.id, day, period, zone, now),
+				gettingStarted(scope, user.id, {
+					hasActiveProject: projects.some((p) => !p.archived),
+					weekOpened: marks.week,
+					putAway: marks.away,
+				}),
+			]);
+			return { ...base, ...ofDay, gettingStarted: steps };
+		}
 		case "week": {
 			const period = periodContaining(chosen.start ?? today, organisation.weekStartsOn);
 			return { ...base, ...(await weekData(scope, user.id, period, zone, now, projects)) };
@@ -181,23 +209,58 @@ export async function timesheetData(
 	}
 }
 
+/**
+ * The entries of `userId` in `period`, and where the period stands. The Week
+ * view and the Day view read both from here, so the totals and the
+ * submission each shows are the same.
+ */
+async function periodWithEntries(
+	scope: OrganisationScope,
+	userId: string,
+	period: PeriodDays,
+	zone: string,
+	now: number,
+): Promise<{ entries: SheetEntry[]; submission: PeriodSubmission }> {
+	const [entries, row] = await Promise.all([
+		entriesStartingIn(scope, userId, periodBounds(period, zone)),
+		periodOf(scope, userId, period.startsOn),
+	]);
+	const status = row?.status ?? null;
+	return {
+		entries,
+		submission: {
+			period,
+			state: periodState(status),
+			status,
+			comment: row?.status === "returned" ? row.comment : null,
+			runsInWeek: entries.some((entry) => entry.endedAt === null),
+			started: period.startsOn <= dayOf(now, zone),
+		},
+	};
+}
+
 async function dayData(
 	scope: OrganisationScope,
 	userId: string,
 	day: Day,
+	period: PeriodDays,
 	zone: string,
 	now: number,
-): Promise<Omit<DayData, keyof TimesheetBase>> {
-	const [entries, locked] = await Promise.all([
-		entriesStartingIn(scope, userId, bounds(day, day, zone)),
+): Promise<Omit<DayData, keyof TimesheetBase | "gettingStarted">> {
+	const [{ entries: ofPeriod, submission }, locked] = await Promise.all([
+		periodWithEntries(scope, userId, period, zone, now),
 		lockedDays(scope, userId, [day]),
 	]);
+	const entries = ofPeriod.filter((entry) => dayOf(entry.startedAt, zone) === day);
+	const { days, total } = weekSheet(ofPeriod, daysFrom(period.startsOn, period.endsOn), zone, now);
 	return {
 		view: "day" as const,
 		day,
 		entries,
 		total: totalOf(entries, now),
 		locked: locked.has(day),
+		week: { days, total },
+		submission,
 	};
 }
 
@@ -211,25 +274,19 @@ async function weekData(
 ): Promise<Omit<WeekData, keyof TimesheetBase>> {
 	const days = daysFrom(period.startsOn, period.endsOn);
 	const before = periodAfter(period, -1);
-	const [entries, previous, row, locked] = await Promise.all([
-		entriesStartingIn(scope, userId, periodBounds(period, zone)),
+	const [{ entries, submission }, previous, locked] = await Promise.all([
+		periodWithEntries(scope, userId, period, zone, now),
 		entriesStartingIn(scope, userId, periodBounds(before, zone)),
-		periodOf(scope, userId, period.startsOn),
 		lockedDays(scope, userId, days),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
 	return {
 		view: "week" as const,
-		period,
+		...submission,
 		days,
 		sheet: weekSheet(entries, days, zone, now, { projectOrder: projects.map((p) => p.id) }),
 		lastWeekProjects: [...new Set(previous.map((e) => e.projectId))].filter((id) => active.has(id)),
 		lockedDays: days.filter((day) => locked.has(day)),
-		state: periodState(row?.status ?? null),
-		status: row?.status ?? null,
-		comment: row?.status === "returned" ? row.comment : null,
-		runsInWeek: entries.some((entry) => entry.endedAt === null),
-		started: period.startsOn <= dayOf(now, zone),
 	};
 }
 

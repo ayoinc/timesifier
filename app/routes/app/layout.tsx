@@ -151,21 +151,28 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 
 				{/* The content slides in the direction of travel, and only when the
 				    destination changes: React would otherwise start a transition for every
-				    render that reaches it, and each would hold back the next. */}
-				<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-					<main
-						id={MAIN_ID}
-						ref={main}
-						tabIndex={-1}
-						className={cx(
-							"outline-none focus-visible:focus-indicator-inner",
-							organisation ? "min-w-0 flex-1 pt-10 pb-24 medium:ms-32" : OUTSIDE_MAIN,
-						)}
-					>
-						<div className={organisation ? undefined : OUTSIDE_COLUMN}>
-							<Outlet />
-						</div>
-					</main>
+				    render that reaches it, and each would hold back the next.
+				    The outer boundary, which never animates, owns the content's change of
+				    size. When the new page is taller or shorter than the old one, React
+				    otherwise counts the whole document as changed and captures it in the
+				    transition too, and the browser then takes no press on anything, the
+				    navigation included, until the transition has played (design rule 8). */}
+				<ViewTransition default="none">
+					<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
+						<main
+							id={MAIN_ID}
+							ref={main}
+							tabIndex={-1}
+							className={cx(
+								"outline-none focus-visible:focus-indicator-inner",
+								organisation ? "min-w-0 flex-1 pt-10 pb-24 medium:ms-32" : OUTSIDE_MAIN,
+							)}
+						>
+							<div className={organisation ? undefined : OUTSIDE_COLUMN}>
+								<Outlet />
+							</div>
+						</main>
+					</ViewTransition>
 				</ViewTransition>
 			</div>
 

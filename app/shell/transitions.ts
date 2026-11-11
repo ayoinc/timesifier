@@ -40,7 +40,9 @@ export function useTravel(index: number): "forward" | "back" | null {
  * Ends a running view transition at once: its animations jump to their end. React
  * holds the next transition until the running one finishes, so the input that
  * starts a navigation calls this and the new page never waits for the old
- * animation (design rule 8). Does nothing where the browser has no
+ * animation (design rule 8). The press itself reaches the page because the
+ * document is never part of the transition (the content's outer boundary in
+ * app/routes/app/layout.tsx). Does nothing where the browser has no
  * `document.activeViewTransition`; there the next transition follows the running one.
  */
 export function finishRunningTransition() {

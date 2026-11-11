@@ -102,8 +102,12 @@ async function expectDestinations(page: Page, current: Destination) {
 	}
 }
 
-/** The content is beside or above the navigation, never under it. */
+/**
+ * The content is beside or above the navigation, never under it: scrolled to
+ * its end, the last of a page taller than the window still clears the bar.
+ */
 async function expectContentClearOfNavigation(page: Page) {
+	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 	const content = await box(page.getByRole("main"));
 	const { container } = await drawn(page);
 	const apart =

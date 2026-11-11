@@ -18,7 +18,7 @@ export type View = (typeof VIEWS)[number];
 
 export const VIEW_LABELS: Record<View, string> = { day: "Day", week: "Week", history: "History" };
 
-/** Where on the Day view the timer's form is: "Start timer" in the navigation opens it. */
+/** Where on the Day view "Track time" is: "Start timer" in the navigation leads here, and the sheet opens. */
 export const TIMER_ANCHOR = "timer";
 
 /** The address of the Day view, of `day` or of today. */

@@ -3,7 +3,6 @@ import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
-import { Dialog } from "~/components/Dialog";
 import { Select } from "~/components/Select";
 import type { Outcome } from "~/organisations/problems";
 import { periodAfter } from "~/periods/periods";
@@ -12,6 +11,7 @@ import { TRANSITION, useTravel } from "~/shell/transitions";
 import { cellText, formatDuration } from "./durations";
 import { dayNumber, useDayFormat, usePeriodFormat } from "./format";
 import { PeriodLinks } from "./PeriodLinks";
+import { Submission } from "./Submission";
 import { type GridCell, isTypable, PERIOD_STATE_LABELS, weekSheet } from "./sheets";
 import type { WeekData } from "./timesheet.server";
 import { dayPath, weekPath } from "./views";
@@ -19,7 +19,8 @@ import { dayPath, weekPath } from "./views";
 /**
  * The Week view (TS-013, TS-052, TS-046): the period's seven days as a grid of
  * projects by days, hours typed into a cell, a total per day, per project and
- * for the week, and "Submit week" at its foot. Its header says where the
+ * for the week, and "Submit week" at its foot (`Submission`, which the Day
+ * view's foot shares). Its header says where the
  * period stands; a returned one shows why.
  */
 export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
@@ -103,7 +104,7 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 						/>
 					)}
 
-					<Submission data={data} onSaid={setSaid} />
+					<Submission submission={data} onSaid={setSaid} />
 				</div>
 			</ViewTransition>
 		</>
@@ -317,71 +318,6 @@ function AddRows({
 					Copy last week's rows
 				</Button>
 			)}
-		</div>
-	);
-}
-
-/**
- * "Submit week" at the foot, with a confirmation, or "Withdraw submission"
- * while nobody has decided it (TS-046).
- */
-function Submission({ data, onSaid }: { data: WeekData; onSaid: (said: string) => void }) {
-	const fetcher = useFetcher<Outcome>();
-	const [confirming, setConfirming] = useState(false);
-	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
-	const handled = useRef<Outcome | undefined>(undefined);
-	useEffect(() => {
-		if (!answer || handled.current === answer) return;
-		handled.current = answer;
-		if (answer.ok) onSaid(answer.said);
-	}, [answer, onSaid]);
-	const { status, period, runsInWeek, started } = data;
-	const submittable = status === null || status === "withdrawn" || status === "returned";
-	const send = (intent: "submit" | "withdraw") =>
-		fetcher.submit({ intent, startsOn: period.startsOn }, { method: "post" });
-
-	let note: string | null = null;
-	if (submittable && !started) note = "This week can be submitted once it has begun.";
-	else if (submittable && runsInWeek) note = "Stop the timer before you submit the week.";
-	else if (status === "submitted") note = "Submitted. Its entries are locked until it is decided.";
-	else if (status === "approved") note = "Approved. Its entries are locked.";
-
-	return (
-		<div className="mt-10 flex flex-col items-start gap-3 border-t-2 border-on-surface pt-6">
-			{note && <p className="text-body-large text-on-surface-variant">{note}</p>}
-			{submittable && started && !runsInWeek && (
-				<Button onPress={() => setConfirming(true)}>Submit week</Button>
-			)}
-			{status === "submitted" && (
-				<Button variant="outlined" onPress={() => send("withdraw")}>
-					Withdraw submission
-				</Button>
-			)}
-			<p role="alert" className="text-body-medium text-error empty:hidden">
-				{answer && !answer.ok ? answer.problem : null}
-			</p>
-			<Dialog
-				title="Submit this week?"
-				isOpen={confirming}
-				onOpenChange={setConfirming}
-				actions={
-					<>
-						<Button variant="text" slot="close">
-							Cancel
-						</Button>
-						<Button
-							onPress={() => {
-								setConfirming(false);
-								send("submit");
-							}}
-						>
-							Submit week
-						</Button>
-					</>
-				}
-			>
-				Its entries are locked until it is approved or returned. You can withdraw it until then.
-			</Dialog>
 		</div>
 	);
 }
