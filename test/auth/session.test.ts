@@ -5,6 +5,7 @@ import {
 	captureEmail,
 	countRows,
 	get,
+	KNOWN_COOKIE,
 	type Mailbox,
 	ORIGIN,
 	post,
@@ -33,7 +34,10 @@ describe("the session cookie", () => {
 		const { response } = await signIn(mailbox, EMAIL);
 
 		const cookies = response.headers.getSetCookie();
-		expect(cookies, "sign-in sets the session cookie and nothing else").toHaveLength(1);
+		expect(
+			cookies.map((cookie) => cookie.slice(0, cookie.indexOf("="))),
+			"sign-in sets the session cookie, the proof that this browser has signed in, and nothing else",
+		).toEqual([SESSION_COOKIE, KNOWN_COOKIE]);
 		const [nameAndValue = "", ...attributes] = (cookies[0] ?? "").split("; ");
 
 		expect(nameAndValue.startsWith(`${SESSION_COOKIE}=`)).toBe(true);

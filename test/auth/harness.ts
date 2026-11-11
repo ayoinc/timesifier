@@ -19,6 +19,8 @@ export const TURNSTILE_SECRET_THAT_FAILS = "2x0000000000000000000000000000000AA"
 export const SESSION_COOKIE = "__Host-timesifier.session_token";
 /** Proves that a browser asked for a code for an address (app/auth/sign-in-code.server.ts). */
 export const CODE_COOKIE = "__Host-timesifier.sign_in_code";
+/** Proves that a browser has signed in as an address before (app/auth/known-browser.server.ts). */
+export const KNOWN_COOKIE = "__Host-timesifier.known_browser";
 
 /** A sign-in code where it stands alone in a message. */
 const CODE = new RegExp(`\\b\\d{${SIGN_IN_CODE_LENGTH}}\\b`);
@@ -139,6 +141,14 @@ export function codeCookie(response: Response): string {
 	return cookieNamed(CODE_COOKIE, response);
 }
 
+/**
+ * The `name=value` of the cookie that the answer to a sign-in sets: what makes
+ * the browser one the address has been signed in from before.
+ */
+export function knownCookie(response: Response): string {
+	return cookieNamed(KNOWN_COOKIE, response);
+}
+
 const SignedIn = z.object({ user: z.object({ id: z.string(), email: z.string() }) });
 
 let journeys = 0;
@@ -149,6 +159,9 @@ let journeys = 0;
  * Each journey comes from a client address of its own (TEST-NET-2, RFC 5737)
  * unless the test names one: a client may ask for three codes a minute, and a
  * test that signs four people in is not one client asking four times.
+ *
+ * A `cookie` in the options is what the browser already holds, and goes with
+ * both requests.
  */
 export async function signIn(mailbox: Mailbox, email: string, options: RequestOptions = {}) {
 	const from = { ...options, client: options.client ?? `198.51.100.${(journeys++ % 250) + 1}` };
@@ -157,7 +170,7 @@ export async function signIn(mailbox: Mailbox, email: string, options: RequestOp
 	const response = await post(
 		"/sign-in/email-otp",
 		{ email, otp: await mailbox.codeFor(email) },
-		{ ...from, cookie: codeCookie(asked) },
+		{ ...from, cookie: [options.cookie, codeCookie(asked)].filter(Boolean).join("; ") },
 	);
 	expect(response.status).toBe(200);
 	const { user } = SignedIn.parse(await response.clone().json());

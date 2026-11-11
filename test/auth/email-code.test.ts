@@ -195,7 +195,7 @@ describe("the codes one address can be sent", () => {
 	let clients = 0;
 	const ask = (email: string) => requestCode(email, { client: `192.0.2.${++clients}` });
 
-	it("are five in an hour, whoever asks and however the address is written: the sixth request is answered like the first and nothing is issued or sent", async () => {
+	it("are five in an hour to browsers that have never signed in as it, whoever asks and however the address is written: the sixth request is answered like the first and nothing is issued or sent", async () => {
 		const first = await ask(EMAIL);
 		for (const written of ["ADA@example.com", "Ada@Example.COM", EMAIL, EMAIL]) await ask(written);
 		await vi.waitFor(() => expect(codesSentTo(EMAIL)).toBe(5));
@@ -238,7 +238,7 @@ describe("the codes one address can be sent", () => {
 		expect(sent).toEqual([1, 2, 3, 4, 5, 5, 6, 6]);
 	});
 
-	it("keeps no address in the row that counts them", async () => {
+	it("keeps no address in the rows that count them and remember who asked", async () => {
 		await ask(EMAIL);
 		await mailbox.codeFor(EMAIL);
 
@@ -246,7 +246,7 @@ describe("the codes one address can be sent", () => {
 			"select identifier, value from verifications where identifier not like 'sign-in-otp-%'",
 		).all<{ identifier: string; value: string }>();
 
-		expect(results).toHaveLength(1);
+		expect(results).toHaveLength(2);
 		expect(JSON.stringify(results)).not.toMatch(/ada|example/i);
 	});
 
@@ -274,7 +274,9 @@ describe("a code is used in the browser that asked for it", () => {
 		const cookies = response.headers.getSetCookie();
 		expect(cookies).toHaveLength(1);
 		const [nameAndValue = "", ...attributes] = (cookies[0] ?? "").split("; ");
-		expect(nameAndValue).toMatch(/^__Host-timesifier\.sign_in_code=\d+\.[0-9a-f]{64}$/);
+		expect(nameAndValue).toMatch(
+			/^__Host-timesifier\.sign_in_code=\d+\.[0-9a-f-]{36}\.[0-9a-f]{64}$/,
+		);
 		expect(attributes.sort()).toEqual([
 			"HttpOnly",
 			"Max-Age=3600",
@@ -331,10 +333,32 @@ describe("a code is used in the browser that asked for it", () => {
 		expect((await guess(right, victim)).status).toBe(200);
 	});
 
+	it("refuses the cookie of a browser that asked for an earlier code, and its guesses use up none of the newer code's attempts", async () => {
+		const earlier = codeCookie(await requestCode(EMAIL, { client: "203.0.113.66" }));
+		await vi.waitFor(() => expect(mailbox.sent()).toHaveLength(1));
+		const later = codeCookie(await requestCode(EMAIL));
+		await vi.waitFor(() => expect(mailbox.sent()).toHaveLength(2));
+		const right = await mailbox.codeFor(EMAIL);
+
+		const fromTheEarlier = [];
+		for (let n = 0; n < 4; n++) fromTheEarlier.push(await guess(wrongCode(right), earlier));
+		const rightFromTheEarlier = await guess(right, earlier);
+
+		for (const refused of [...fromTheEarlier, rightFromTheEarlier]) {
+			expect(refused.status).toBe(400);
+			expect(await refused.json()).toMatchObject({ code: "INVALID_OTP" });
+		}
+		expect((await guess(right, later)).status).toBe(200);
+	});
+
 	it.each([
 		[
 			"a later expiry written into it",
 			(value: string) => value.replace(/^\d+/, (expiry) => `${Number(expiry) + 3600}`),
+		],
+		[
+			"another browser's number written into it",
+			(value: string) => value.replace(/\.[0-9a-f-]{36}\./, `.${crypto.randomUUID()}.`),
 		],
 		["another hash", (value: string) => value.replace(/[0-9a-f]{64}$/, "0".repeat(64))],
 		["no hash", (value: string) => value.replace(/\..*$/, "")],
