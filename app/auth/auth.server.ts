@@ -20,7 +20,6 @@ import { env, waitUntil } from "cloudflare:workers";
 import { passkey } from "@better-auth/passkey";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth/minimal";
-import { captcha } from "better-auth/plugins/captcha";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import type { Session, User } from "better-auth/types";
 import { drizzle } from "drizzle-orm/d1";
@@ -47,6 +46,7 @@ import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.s
 import { redirectRules } from "./redirects.server";
 import { signInCodeRules } from "./sign-in-code.server";
 import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
+import { turnstile } from "./turnstile.server";
 
 /** Attempts one client may make on one sign-in path in `window` seconds; the next is answered 429. */
 const SIGN_IN_LIMIT = { window: 60, max: 10 };
@@ -151,13 +151,8 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 		},
 
 		plugins: [
-			// Turnstile guards the one request that sends email, which is also the
-			// only way to start an account. The token arrives in `x-captcha-response`.
-			captcha({
-				provider: "cloudflare-turnstile",
-				secretKey: TURNSTILE_SECRET_KEY,
-				endpoints: ["/email-otp/send-verification-otp"],
-			}),
+			// Asking for a code needs a Turnstile token solved on this very host.
+			turnstile(TURNSTILE_SECRET_KEY, "/email-otp/send-verification-otp"),
 			emailOTP({
 				// A code is stored as an HMAC under the secret. The plugin's own "hashed"
 				// is a plain SHA-256, and there are few enough codes to try them all:
