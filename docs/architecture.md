@@ -20,19 +20,19 @@ flowchart LR
 
 ## Parts
 
-| Part            | Cloudflare product                               | Used for                                                | Arrives with    |
-| --------------- | ------------------------------------------------ | ------------------------------------------------------- | --------------- |
-| Application     | Workers, React Router v8, Cloudflare Vite plugin | Pages, loaders, actions                                 | TS-001          |
-| Static files    | Workers Static Assets                            | Scripts, styles, images                                 | TS-001          |
-| Database        | D1 (binding `DB`), Drizzle ORM, SQL migrations   | Users, organisations, time entries, everything durable  | TS-007          |
-| Authentication  | Better Auth in the Worker, data in D1            | Passkeys, email sign-in, sessions, organisations, roles | TS-008          |
-| Bot protection  | Turnstile                                        | Sign-up                                                 | TS-008          |
-| Email           | Cloudflare email sending, from its own subdomain | Verification and summaries                              | TS-008          |
-| AI              | Workers AI behind AI Gateway                     | Category suggestions                                    | TS-015          |
-| Background work | Queues, Workflows, Cron Triggers                 | Weekly summaries, batches                               | TS-018          |
-| Files           | R2                                               | Data exports                                            | TS-021          |
-| Real-time       | Durable Objects                                  | Only when a feature needs live coordination             | Not planned yet |
-| Observability   | Workers Logs and Traces                          | Structured logs, traces, alerts                         | TS-001, TS-022  |
+| Part            | Cloudflare product                               | Used for                                                                    | Arrives with    |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------------------------- | --------------- |
+| Application     | Workers, React Router v8, Cloudflare Vite plugin | Pages, loaders, actions                                                     | TS-001          |
+| Static files    | Workers Static Assets                            | Scripts, styles, images                                                     | TS-001          |
+| Database        | D1 (binding `DB`), Drizzle ORM, SQL migrations   | Users, organisations, time entries, everything durable                      | TS-007          |
+| Authentication  | Better Auth in the Worker, data in D1            | Email-code sign-in, passkeys, sessions; organisations and roles with TS-009 | TS-008          |
+| Bot protection  | Turnstile, checked by the Worker                 | The request that sends a sign-in code, which is also how an account starts  | TS-008          |
+| Email           | Cloudflare Email Service (binding `EMAIL`)       | Sign-in codes now, summaries later, all from `no-reply@mail.timesifier.com` | TS-008          |
+| AI              | Workers AI behind AI Gateway                     | Category suggestions                                                        | TS-015          |
+| Background work | Queues, Workflows, Cron Triggers                 | Weekly summaries, batches                                                   | TS-018          |
+| Files           | R2                                               | Data exports                                                                | TS-021          |
+| Real-time       | Durable Objects                                  | Only when a feature needs live coordination                                 | Not planned yet |
+| Observability   | Workers Logs and Traces                          | Structured logs, traces, alerts                                             | TS-001, TS-022  |
 
 ## Environments
 
@@ -44,6 +44,8 @@ flowchart LR
 
 Both remote databases were created on 2026-11-11 with `wrangler d1 create <name> --jurisdiction eu`. `wrangler.jsonc` binds `DB` to `timesifier` at the top level and to `timesifier-preview` in its `previews` block. The local database is built from the same migrations with `pnpm db:migrate:local`, and tests build their own copy inside the Workers runtime.
 
+Authentication differs by environment in three ways, all set in `wrangler.jsonc`. Production has the `EMAIL` binding, which may send only from `no-reply@mail.timesifier.com`; a preview has no such binding and sends nothing, because its address is public; locally Wrangler simulates the binding, printing the envelope and writing the message under `.wrangler/tmp/email/`. Production uses its own Turnstile widget; previews, local development and tests use Cloudflare's published test keys. `BETTER_AUTH_SECRET` is a different value in each environment.
+
 ## Data rules
 
 - Every table that holds customer data has an `organisation_id`. Code reads and writes it only through the organisation-scoped data layer, `organisationScope` in `app/db/`. The scope sets the organisation of every row it writes and adds it to every statement, and it accepts only tables that have the column. An update or delete must name its rows with a filter, or pass `everyRow`. The linter refuses an import of the tables anywhere outside `app/db/` and `app/auth/`.
@@ -51,6 +53,7 @@ Both remote databases were created on 2026-11-11 with `wrangler d1 create <name>
 - Foreign keys are enforced: D1 checks them on every query and migration, as SQLite does with `PRAGMA foreign_keys = on`. A migration can defer the check to the end of its transaction with `PRAGMA defer_foreign_keys = on`, but cannot switch it off (<https://developers.cloudflare.com/d1/sql-api/foreign-keys/>).
 - The schema is `app/db/schema.ts`. A schema change is a SQL migration generated from it by `pnpm db:generate` and committed in `migrations/`; a test fails when the two disagree. Migrations are applied to remote databases by the pipeline only.
 - Both remote databases are restricted to the `eu` jurisdiction. Cloudflare's D1 documentation says a jurisdiction creates a database that "only run[s] and store[s] data within a region", and that read replicas are created only inside it. This differs from a location hint such as `--location weur`, which "does not guarantee that D1 runs in your preferred location". A jurisdiction can be set only when the database is created and cannot be changed afterwards. It governs where the database runs and keeps its data, not where the Worker that queries it runs. The binding needs no extra field: it names the database by id. Source: <https://developers.cloudflare.com/d1/configuration/data-location/>, read 2026-11-11.
+- Better Auth owns five tables: `sessions`, `accounts`, `verifications`, `passkeys` and `rate_limits`, and it writes `users`. They follow the same rules for names, ids and times, and are created by the same migrations. None has an `organisation_id`: a session or a passkey belongs to a person, not to an organisation, so they are reached through Better Auth and not through `organisationScope`. `verifications` holds a hash of each emailed code and the challenge of a passkey ceremony in progress; `rate_limits` holds one counter per client address and sign-in path. `accounts` is required by Better Auth and stays empty until a sign-in method that uses it is added.
 
 ## Delivery
 
@@ -127,4 +130,5 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 | Drizzle Kit              | 0.31.11    |
 | Material Color Utilities | 0.4.0      |
 | Roboto Flex (Fontsource) | 5.3.0      |
+| Better Auth              | 1.7.19     |
 | `compatibility_date`     | 2026-11-09 |

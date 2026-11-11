@@ -43,6 +43,24 @@ pnpm tokens        # regenerate app/styles/tokens.css after changing scripts/tok
 pnpm check:tokens  # fail if a file under app/ holds a hex colour or an arbitrary Tailwind value
 ```
 
+## Signing in locally
+
+Sign-in needs three values in `.dev.vars` and the local database:
+
+```sh
+cp .dev.vars.example .dev.vars && chmod 600 .dev.vars   # then fill in the three values as the file explains
+pnpm db:migrate:local
+```
+
+- `BETTER_AUTH_SECRET`: any random value, for example from `openssl rand -base64 32`.
+- `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY`: Cloudflare's published test keys, which pass every check. They are written in `.dev.vars.example`.
+
+Local email is not sent. When the application emails a sign-in code, Wrangler prints the sender, recipient and subject in the terminal running `pnpm dev` and writes the message to a file under `.wrangler/tmp/email/`; the code is in that file. Tests replace the sender and need neither `.dev.vars` nor a mailbox, but the Turnstile tests call Cloudflare's `siteverify` and so need the network.
+
+The session cookie is `Secure` with the `__Host-` prefix. Chrome keeps it from `http://localhost`; Safari does not, so sign-in will not stick there.
+
+Everything under `/api/auth/` is Better Auth; `app/auth/auth.server.ts` holds its configuration and `docs/security.md` ("Authentication") says what it does.
+
 ## Database
 
 The schema is `app/db/schema.ts`. Changes reach a database only as the SQL migrations in `migrations/`.

@@ -17,9 +17,11 @@
 		{ "pattern": "timesifier.com", "custom_domain": true },
 		{ "pattern": "www.timesifier.com", "custom_domain": true }
 	],
-	// Tells the Worker it is production: it then answers only on timesifier.com.
-	// See workers/canonical-host.ts.
-	"vars": { "ENVIRONMENT": "production" },
+	// ENVIRONMENT tells the Worker it is production: it then answers only on
+	// timesifier.com. See workers/canonical-host.ts.
+	// TURNSTILE_SITE_KEY is the public key of the Turnstile widget named
+	// "timesifier"; its secret half is the secret TURNSTILE_SECRET_KEY.
+	"vars": { "ENVIRONMENT": "production", "TURNSTILE_SITE_KEY": "0x4AAAAAAF8PS8In2mqeEI2o" },
 	// Each pull request gets a preview on workers.dev. Without this line a preview
 	// has no URL, because turning workers_dev off turns preview URLs off too. It
 	// also gives every production version a workers.dev address; the Worker
@@ -29,8 +31,21 @@
 	// https://developers.cloudflare.com/workers/previews/configuration/
 	// Every preview shares one database. wrangler.preview-migrations.jsonc names the
 	// same database, so the pipeline can migrate it; change the two together.
+	//
+	// A preview has no `send_email` binding on purpose: its URL is public, and it
+	// must not be able to send mail to any address typed into it. Without the
+	// binding the application sends nothing; see app/auth/email.server.ts.
 	"previews": {
-		"vars": { "ENVIRONMENT": "preview" },
+		// The two Turnstile values are Cloudflare's published test keys, which pass
+		// every check. They are the same for everyone and are not secrets:
+		// https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+		// BETTER_AUTH_SECRET is not here: it is set once for all previews with
+		// `wrangler preview base-config secret put BETTER_AUTH_SECRET`.
+		"vars": {
+			"ENVIRONMENT": "preview",
+			"TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+			"TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA"
+		},
 		"d1_databases": [
 			{
 				"binding": "DB",
@@ -54,5 +69,11 @@
 			"database_id": "b6ab20fa-794f-43a5-bd7e-d80b7eca88db",
 			"migrations_dir": "migrations"
 		}
-	]
+	],
+	// Set with `wrangler secret put`; locally they are read from .dev.vars. A deploy
+	// fails while either is missing. See docs/security.md, "Secrets".
+	"secrets": { "required": ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY"] },
+	// Cloudflare Email Service. The binding may send from the application's one
+	// address and no other; app/auth/email.server.ts is the only code that uses it.
+	"send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["no-reply@mail.timesifier.com"] }]
 }

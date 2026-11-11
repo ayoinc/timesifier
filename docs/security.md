@@ -6,24 +6,72 @@ Timesifier holds personal data: who worked on what, and when. The owner is in th
 
 ## Controls
 
-| Area          | Control                                                                                                                                                   | Card   |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Identity      | Passkeys first, email as the fallback, optional two-factor                                                                                                | TS-008 |
-| Sessions      | Cookie is `HttpOnly`, `Secure`, `SameSite=Lax` with the `__Host-` prefix. A person can end all their sessions.                                            | TS-008 |
-| Abuse         | Sign-in and sign-up are rate limited. Sign-up is checked by Turnstile on the server.                                                                      | TS-008 |
-| Authorisation | Denied unless allowed. Roles are checked on the server for every action.                                                                                  | TS-009 |
-| Tenancy       | Customer data is reached only through the organisation-scoped data layer. A test proves one organisation cannot read another's rows.                      | TS-007 |
-| Input         | Every loader and action validates its input against a schema. Every action starts with `parseRequest`, which answers 400 when the body does not match.    | TS-010 |
-| Browser       | Content Security Policy with nonces, HSTS, `frame-ancestors 'none'`, Referrer-Policy, Permissions-Policy. State-changing requests are checked for origin. | TS-010 |
-| Secrets       | None in the repository. A secret scan runs on every pull request.                                                                                         | TS-002 |
-| Supply chain  | Frozen lockfile, dependency audit, third-party actions pinned to a commit, workflows with read-only permissions by default                                | TS-002 |
-| Deployment    | The pipeline's token reaches this Worker, this zone's Worker routes and the account's D1 databases. Scope and expiry: `docs/architecture.md`.             | TS-003 |
-| AI            | Text from users is data, never instructions. Output is a suggestion a person accepts. Spend is capped.                                                    | TS-015 |
-| Audit         | Sign-in, role changes, exports and deletions are recorded.                                                                                                | TS-020 |
-| Data rights   | A person can export their data and delete their account. Retention is written down.                                                                       | TS-021 |
-| Logging       | Structured logs with no secrets and no entry text.                                                                                                        | TS-022 |
-| Recovery      | The database can be restored to a point in time; one restore has been rehearsed.                                                                          | TS-022 |
-| Review        | A threat model covers each part of the system; high findings are fixed.                                                                                   | TS-019 |
+| Area          | Control                                                                                                                                                                                                                                           | Card   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Identity      | Passkeys first, email as the fallback: a one-time code sent to the address, which is also how the address is first proved. No passwords. Optional two-factor is not built yet.                                                                    | TS-008 |
+| Sessions      | Cookie is `HttpOnly`, `Secure`, `SameSite=Lax` with the `__Host-` prefix. A person can end all their sessions, and that takes effect on the next request.                                                                                         | TS-008 |
+| Abuse         | Sending a sign-in code, signing in with a code and signing in with a passkey each allow one client 10 requests a minute; the 11th gets 429. The request that sends a code, which is how an account starts, is checked by Turnstile on the server. | TS-008 |
+| Authorisation | Denied unless allowed. Roles are checked on the server for every action.                                                                                                                                                                          | TS-009 |
+| Tenancy       | Customer data is reached only through the organisation-scoped data layer. A test proves one organisation cannot read another's rows.                                                                                                              | TS-007 |
+| Input         | Every loader and action validates its input against a schema. Every action starts with `parseRequest`, which answers 400 when the body does not match.                                                                                            | TS-010 |
+| Browser       | Content Security Policy with nonces, HSTS, `frame-ancestors 'none'`, Referrer-Policy, Permissions-Policy. State-changing requests are checked for origin.                                                                                         | TS-010 |
+| Secrets       | None in the repository. A secret scan runs on every pull request.                                                                                                                                                                                 | TS-002 |
+| Supply chain  | Frozen lockfile, dependency audit, third-party actions pinned to a commit, workflows with read-only permissions by default                                                                                                                        | TS-002 |
+| Deployment    | The pipeline's token reaches this Worker, this zone's Worker routes and the account's D1 databases. Scope and expiry: `docs/architecture.md`.                                                                                                     | TS-003 |
+| AI            | Text from users is data, never instructions. Output is a suggestion a person accepts. Spend is capped.                                                                                                                                            | TS-015 |
+| Audit         | Sign-in, role changes, exports and deletions are recorded.                                                                                                                                                                                        | TS-020 |
+| Data rights   | A person can export their data and delete their account. Retention is written down.                                                                                                                                                               | TS-021 |
+| Logging       | Structured logs with no secrets and no entry text.                                                                                                                                                                                                | TS-022 |
+| Recovery      | The database can be restored to a point in time; one restore has been rehearsed.                                                                                                                                                                  | TS-022 |
+| Review        | A threat model covers each part of the system; high findings are fixed.                                                                                                                                                                           | TS-019 |
+
+## Authentication
+
+Better Auth runs inside the Worker (`app/auth/auth.server.ts`) and answers every request under `/api/auth/`. The tests in `test/auth/` drive it through the Worker and hold what is written here in place.
+
+### Flows
+
+- **Email code.** A person asks for a code for an address; the request carries a Turnstile token. A six-digit code is emailed. Sending it back signs the person in and, the first time, creates their account with the address marked verified. The answer to "send me a code" is the same whether or not the address has an account.
+- **Passkey.** A signed-in person can add a passkey; after that they sign in with it, and the email code remains the fallback. The relying party is the host the request was made to.
+- **Sign-out** ends the session the cookie belongs to. **Ending all sessions** ends every session the person has, this one included.
+- There are no passwords. Better Auth's password endpoints answer 400, and the email-code plugin's password-reset and change-of-address endpoints are switched off.
+
+### What is stored
+
+| Table           | Holds                                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `users`         | Name, email address, whether the address is verified                                                                            |
+| `sessions`      | The session token, its expiry, the client address and user agent it was created from                                            |
+| `verifications` | A hash of each emailed code with its count of attempts, for five minutes; the challenge of a passkey ceremony, for five minutes |
+| `passkeys`      | The public key, credential id and counter of each passkey. The private key never leaves the person's device                     |
+| `rate_limits`   | One counter per client address and sign-in path                                                                                 |
+
+A code is stored only as a hash, works once, and stops working after three wrong attempts or five minutes. The session cookie holds the token and a signature made with `BETTER_AUTH_SECRET`; the session itself is read from the database on every request, never from a copy in a cookie, so an ended session is refused at once.
+
+### The cookie
+
+`__Host-timesifier.session_token`, with `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/` and no `Domain`. The `__Host-` prefix makes the browser accept the cookie only over HTTPS and send it only to the exact host that set it. Better Auth has no option for this prefix yet; how it is configured, and what to do when one arrives, is in `docs/decisions.md` entry 8. Do not rewrite the `Set-Cookie` header in the Worker: Better Auth would stop recognising its own cookie.
+
+### Hosts
+
+Better Auth takes the application's address from the request only when the host is `timesifier.com`, a preview (`*-timesifier.ayoinc.workers.dev`) or `localhost`. A request for any other host gets 404 from the mount before Better Auth sees it: no cookie is set and no session is read (`app/auth/hosts.ts`).
+
+### Abuse
+
+- **Rate limit.** Counted in D1 per client address and path. The address is `CF-Connecting-IP`, which Cloudflare sets and a client cannot forge; `X-Forwarded-For` is ignored. The count starts again 60 seconds after the last request that was let through. The limit applies only to requests that arrive at `/api/auth/`: server code that calls Better Auth directly is not limited, so sign-in must never be offered through another route.
+- **Turnstile.** The token is sent in the `x-captcha-response` header and verified with Cloudflare before a code is created. A missing token gets 400 and a rejected one 403; neither creates nor sends a code. Passkey sign-in is not behind Turnstile: it sends no email and cannot create an account.
+
+### Email
+
+`sendEmail` in `app/auth/email.server.ts` is the only code that touches the `EMAIL` binding. Every message comes from `Timesifier <no-reply@mail.timesifier.com>`, and `wrangler.jsonc` allows the binding that sender and no other. The code email is plain text and plain HTML with no link, image or tracking. Sending is handed to `waitUntil`, so how long it takes does not show in the response. A preview has no `EMAIL` binding and sends nothing; locally Wrangler simulates the binding and sends nothing either.
+
+### Never logged
+
+No log line carries an email address, a code, a cookie or a session token. The email sender logs the recipient's domain only, and the error code of a failed send without its message. `test/auth/email.test.ts` reads every line logged during a whole sign-in and fails if one of those values appears.
+
+### The one action without `parseRequest`
+
+`app/routes/api.auth.$.ts` hands the request to Better Auth untouched. Better Auth checks each endpoint's body against its own Zod schema and answers 400 for a body that is not JSON or does not match, and 415 for a content type other than JSON; reading the body first with `parseRequest` would consume it. `test/action-validation.test.ts` holds the 400 in place like any other action.
 
 ## Browser policy
 
@@ -118,7 +166,7 @@ Turnstile loads a script from Cloudflare and runs in a frame. On the pages that 
 - `script-src`: `https://challenges.cloudflare.com`, and the page's nonce on the Turnstile `<script>` element. The nonce alone is not enough: without `strict-dynamic`, the scripts Turnstile loads for itself need the host to be listed.
 - `frame-src https://challenges.cloudflare.com` (today frames fall back to `default-src 'self'`).
 
-Checked on 2026-11-11 against <https://developers.cloudflare.com/turnstile/reference/content-security-policy/>. `connect-src 'self'` is already enough for pre-clearance mode. TS-008 confirms the widget puts no inline style on our page, and adds a test for the pages that show it. The token is verified on the server, in the action, after `parseRequest`.
+Checked on 2026-11-11 against <https://developers.cloudflare.com/turnstile/reference/content-security-policy/>. `connect-src 'self'` is already enough for pre-clearance mode. The pages that show the widget confirm it puts no inline style on our page, and add a test. The token is verified on the server by Better Auth before a code is created; see "Authentication" above.
 
 ## Known gaps and accepted risks
 
@@ -145,6 +193,14 @@ Secrets are stored once, in a place built for them, and read directly from there
 | Wrangler on the owner's machine | Wrangler's own login                                                                        |
 
 No command fetches a secret from a password manager each time it runs. A new secret is added to all the places it is needed in the same change, and its name (never its value) is listed in `.dev.vars.example`.
+
+| Name                   | What it is                                    | Production                   | Previews                                                           | Local and tests                                          |
+| ---------------------- | --------------------------------------------- | ---------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`   | Secret. Signs session cookies                 | Wrangler secret              | Secret in the previews' base configuration, a different value      | `.dev.vars`; tests use a throwaway value in their config |
+| `TURNSTILE_SECRET_KEY` | Secret. Verifies Turnstile tokens             | Wrangler secret              | Cloudflare's published test key, in `wrangler.jsonc`: not a secret | The same published test key                              |
+| `TURNSTILE_SITE_KEY`   | Public. The widget's key, sent to the browser | Variable in `wrangler.jsonc` | Cloudflare's published test key, in `wrangler.jsonc`               | The same published test key                              |
+
+`wrangler.jsonc` lists the two secrets as required, so a deploy fails while either is missing, and the Worker refuses to build Better Auth without them. Changing `BETTER_AUTH_SECRET` signs everyone out.
 
 ## Rules for anyone changing the code, human or AI
 

@@ -15,6 +15,18 @@ Depends on: TS-004.
 - [ ] An automated accessibility scan of `/design` reports no violations.
 - [ ] With reduced motion requested, a test finds no animation of position or scale in any component.
 
+### TS-008 · Authentication
+
+Built in two passes. The first, the server, is merged: everything that needs no page. The second adds the pages, passkeys in a browser and the `/app` guard, once the components (TS-005) and the shell (TS-006) are in. The dependency on TS-006 applies to the second pass.
+
+- [x] The supported way to run Better Auth on D1 is confirmed against its documentation and written in `docs/decisions.md` entry 8. _The Drizzle adapter over `drizzle-orm/d1`, one of the two routes the documentation gives. `test/auth/schema.test.ts`: "pass Better Auth's own schema check; rename a property there and this fails". Every test in `test/auth/` drives the Worker against a local D1 built from `migrations/`. Built on `better-auth` 1.7.19._
+- [ ] A person can sign up and sign in with a passkey and with email, sign out, and end all their sessions; each has a test. _Server side proven in `test/auth/email-code.test.ts` (sign-up, sign-in, wrong, exhausted, expired and reused codes, no account enumeration) and `test/auth/session.test.ts` (sign-out; "ends the person's other session as well, from the very next request"). Still to do: the pages, and passkeys with an authenticator in a browser._
+- [x] The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax` and uses the `__Host-` prefix (test reads the `Set-Cookie` header). _`test/auth/session.test.ts`, the test of the cookie's attributes, prefix, path and absent domain. The header sent: `__Host-timesifier.session_token=…; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax`. With the three cookie options removed the test fails: the library's default is not even `Secure`._
+- [x] The 11th sign-in attempt in one minute from one client returns status 429 (test). _`test/auth/rate-limit.test.ts`: "the 11th attempt in a minute from one client is answered 429, the first ten are not", for email-code sign-in, passkey sign-in and the sending of a code. The minute is measured from the last attempt that was let through._
+- [x] Sign-up without a valid Turnstile token is rejected by the server (test with Turnstile's test keys). _`test/auth/turnstile.test.ts`, against Cloudflare's real `siteverify`: the always-pass key gives 200; the always-fail key gives 403; a missing token gives 400; neither refusal creates or sends a code. The check guards the request for a code, which is the only way into sign-up._
+- [ ] A test lists every route under `/app` and shows each redirects to sign-in without a session. _Second pass. `getSession(request)` exists for the guard to call._
+- [ ] Verification email is sent from a dedicated subdomain; the zone comparison from TS-003 shows no other record changed. _The subdomain is `mail.timesifier.com`, onboarded to Cloudflare Email Service on 2026-11-11 at 03:03 UTC: the zone went from 29 records to 35, the six new ones all under `mail.timesifier.com` (three MX and an SPF record at `cf-bounce.mail`, DKIM at `cf-bounce._domainkey.mail`, DMARC at `_dmarc.mail`), and no other record changed. `test/auth/email.test.ts`: "comes from no-reply@mail.timesifier.com and carries the code once". Still to do: one real message received, which needs the sign-up page._
+
 ## Review (limit 2)
 
 ### TS-002 · Pipeline: checks on every pull request
@@ -42,18 +54,6 @@ Depends on: TS-005.
 - [ ] The page has a skip link and landmarks, and after navigation focus is on the main heading (test).
 - [ ] The colour scheme follows the system, can be overridden, and the override survives a reload.
 - [ ] Lighthouse reports an accessibility score of 100 for the shell.
-
-### TS-008 · Authentication
-
-Depends on: TS-006, TS-007.
-
-- [ ] The supported way to run Better Auth on D1 is confirmed against its documentation and written in `docs/decisions.md` entry 8.
-- [ ] A person can sign up and sign in with a passkey and with email, sign out, and end all their sessions; each has a test.
-- [ ] The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax` and uses the `__Host-` prefix (test reads the `Set-Cookie` header).
-- [ ] The 11th sign-in attempt in one minute from one client returns status 429 (test).
-- [ ] Sign-up without a valid Turnstile token is rejected by the server (test with Turnstile's test keys).
-- [ ] A test lists every route under `/app` and shows each redirects to sign-in without a session.
-- [ ] Verification email is sent from a dedicated subdomain; the zone comparison from TS-003 shows no other record changed.
 
 ### TS-009 · Organisations, teams and roles
 
