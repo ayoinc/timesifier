@@ -12,6 +12,15 @@ import {
 } from "~/landing/example-week";
 import { Photo } from "~/landing/Photo";
 import { PHOTOS } from "~/landing/photos";
+import {
+	LINK,
+	MAIN_ID,
+	PAGE,
+	PRIVACY_PATH,
+	SiteFooter,
+	SiteHeader,
+	SkipLink,
+} from "~/landing/Site";
 import { TimerStates } from "~/landing/TimerStates";
 import { WeekReport } from "~/landing/WeekReport";
 import { SIGN_IN_PATH, SIGN_UP_PATH } from "~/routes/auth/paths";
@@ -19,9 +28,8 @@ import { SIGN_IN_PATH, SIGN_UP_PATH } from "~/routes/auth/paths";
 import type { Route } from "./+types/home";
 
 // The home page: what Timesifier does, for someone who has not used it. The
-// direction it follows is docs/design-direction.md. It is plain HTML and CSS:
-// nothing on it needs script, and every link is an ordinary one, because the
-// pages it leads to carry a different Content Security Policy (docs/security.md).
+// direction it follows is docs/design-direction.md, and what it shares with the
+// other public pages is in ~/landing/Site.
 
 export function meta(_: Route.MetaArgs) {
 	return [
@@ -34,21 +42,16 @@ export function meta(_: Route.MetaArgs) {
 	];
 }
 
-const MAIN_ID = "main";
-
 const SECTIONS = [
-	{ id: "track", label: "Track" },
-	{ id: "week", label: "The week" },
-	{ id: "accuracy", label: "Accuracy" },
-	{ id: "privacy", label: "Privacy" },
+	{ href: "#track", label: "Track" },
+	{ href: "#week", label: "The week" },
+	{ href: "#accuracy", label: "Accuracy" },
+	{ href: "#privacy", label: "Privacy" },
 ] as const;
 
-const PAGE = "mx-auto w-full max-w-300 px-5 medium:px-8";
 const SECTION = `${PAGE} scroll-mt-8 py-16 expanded:py-24`;
 const HEADING = "text-headline-large text-balance medium:text-display-small";
 const LEAD = "mt-4 max-w-136 text-body-large text-on-surface-variant";
-const LINK =
-	"rounded-extra-small underline decoration-1 underline-offset-4 outline-none hover:decoration-2 focus-visible:focus-indicator";
 
 /** The page's one primary action. It stands on the sheet, in the sheet's two colours swapped. */
 function CreateAccount() {
@@ -76,38 +79,8 @@ export default function Home() {
 
 	return (
 		<>
-			<a
-				href={`#${MAIN_ID}`}
-				className="fixed start-4 top-4 z-20 -translate-y-20 rounded-small bg-inverse-surface px-4 py-2.5 text-label-large text-inverse-on-surface outline-none focus:translate-y-0 focus-visible:focus-indicator-inverse"
-			>
-				Skip to main content
-			</a>
-
-			<header className="bg-sheet text-on-sheet">
-				<div className={`${PAGE} flex items-center justify-between gap-6 py-5`}>
-					<a
-						href="/"
-						aria-current="page"
-						className="rounded-extra-small text-headline-small outline-none focus-visible:focus-indicator"
-					>
-						Timesifier
-					</a>
-					<nav aria-label="On this page" className="max-medium:hidden">
-						<ul className="flex gap-8 text-label-large">
-							{SECTIONS.map(({ id, label }) => (
-								<li key={id}>
-									<a
-										href={`#${id}`}
-										className="inline-block rounded-extra-small py-2 underline-offset-4 outline-none hover:underline focus-visible:focus-indicator"
-									>
-										{label}
-									</a>
-								</li>
-							))}
-						</ul>
-					</nav>
-				</div>
-			</header>
+			<SkipLink />
+			<SiteHeader isHome label="On this page" links={SECTIONS} />
 
 			<main id={MAIN_ID} tabIndex={-1} className="outline-none">
 				<div className="bg-sheet text-on-sheet">
@@ -248,6 +221,11 @@ export default function Home() {
 									Timesifier never asks for one. You sign in with a code sent to your email address.
 								</Fact>
 							</dl>
+							<p className="mt-6 text-body-large">
+								<a href={PRIVACY_PATH} className={LINK}>
+									Read exactly what is stored
+								</a>
+							</p>
 						</div>
 					</div>
 				</section>
@@ -278,35 +256,11 @@ export default function Home() {
 				</section>
 			</main>
 
-			<footer className={`${PAGE} grid gap-8 py-12 text-body-medium medium:grid-cols-12`}>
-				<div className="medium:col-span-5">
-					<p className="text-headline-small">Timesifier</p>
-					<p className="mt-2 max-w-80 text-on-surface-variant">
-						Time tracking for people and small teams who bill or account for their hours.
-					</p>
-				</div>
-				<ul className="flex flex-col gap-1 medium:col-span-3">
-					{SECTIONS.map(({ id, label }) => (
-						<li key={id}>
-							<a href={`#${id}`} className={`${LINK} inline-block py-1`}>
-								{label}
-							</a>
-						</li>
-					))}
-					<li>
-						<a href={SIGN_IN_PATH} className={`${LINK} inline-block py-1`}>
-							Sign in
-						</a>
-					</li>
-				</ul>
-				<div className="text-on-surface-variant medium:col-span-4">
-					<p>
-						Photographs by Karri Heiskanen, Bob van Aubel, vũ tuấn and Nikolai Kolosov, from
-						Unsplash.
-					</p>
-					<p className="mt-2">© 2026 Timesifier</p>
-				</div>
-			</footer>
+			<SiteFooter links={SECTIONS}>
+				<p>
+					Photographs by Karri Heiskanen, Bob van Aubel, vũ tuấn and Nikolai Kolosov, from Unsplash.
+				</p>
+			</SiteFooter>
 		</>
 	);
 }
