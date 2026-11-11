@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# A pull request's runs share one group, named after its number, so a newer push
+# replaces the run in progress. Pushes to main use their own group and are never
+# cancelled: a production deploy always finishes.
 concurrency:
-  group: ci-${{ github.ref }}
-  # A newer push replaces a pull request's run. A production deploy always finishes.
+  group: ${{ github.event_name == 'pull_request' && format('ci-pr-{0}', github.event.pull_request.number) || format('ci-{0}', github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

@@ -8,10 +8,13 @@ on:
 permissions:
   contents: read
 
-# The same group as the pull request's ci run. Starting the clean-up cancels a
-# preview that is still being created, so it cannot appear after the delete.
+# The group of this pull request's ci runs, named after its number. Starting the
+# clean-up cancels a preview that is still being created, so it cannot appear
+# after the delete. The group must never be built from github.ref: when a pull
+# request is merged that is the base branch, and the clean-up would cancel the
+# production deploy the merge has just started. It did, once, on 2026-11-11.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
