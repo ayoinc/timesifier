@@ -39,7 +39,7 @@ export function AuthPage({ step, children }: AuthPageProps) {
 	}, [step]);
 
 	return (
-		<div className="mx-auto flex min-h-dvh w-full max-w-100 flex-col gap-10 px-4 pt-12 pb-8 medium:pt-24">
+		<div className="mx-auto flex min-h-dvh w-full max-w-110 flex-col gap-10 px-4 pt-12 pb-8 medium:pt-24">
 			<header>
 				{/* A plain link: leaving these pages loads the next one whole (./client.ts, `leaveFor`). */}
 				<a
