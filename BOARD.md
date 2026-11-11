@@ -18,14 +18,15 @@ Blocked on one criterion; the rest is merged.
 - [x] A throwaway pull request with a failing test shows a failed check; it is then closed. _Pull request #3: `checks` failed in 35 s; closed and its branch deleted._
 - [ ] `main` is protected: the check must pass before merging. _Blocked: GitHub answered "Upgrade to GitHub Pro or make this repository public to enable this feature." The owner decides. Until then, TS-003 deploys only after `checks` passes in the same workflow run._
 
-### TS-010 · Security headers and request checks
+### TS-007 · Database foundation
 
-Three criteria are merged with this card's pull request. The fourth needs the change to be live, and is ticked in the next pull request.
+Four criteria are merged with this card's pull request. The pipeline's part of the fifth is proven by that pull request and its merge, and is ticked in the next pull request.
 
-- [x] Every HTML response carries a Content Security Policy with a per-request nonce and no `unsafe-inline`, plus HSTS, `frame-ancestors 'none'`, Referrer-Policy and Permissions-Policy (test). _`test/browser-policy.test.ts`, run against the Worker's real handler: "sends the full policy on an HTML page, with the page's scripts carrying the nonce", "uses a different nonce for every request", "sends the same policy on a 404 page". In headless Chrome against a production build, `/` and a 404 page raised no policy violation and hydrated._
-- [x] A state-changing request whose `Origin` is not the application's is rejected with 403 (test). _`test/browser-policy.test.ts`, "origin check on state-changing requests": POST, PUT, PATCH and DELETE with a foreign `Origin`, `Origin: null`, or `Sec-Fetch-Site: cross-site` or `same-site` receive 403; the application's own origin, a request with neither header, and a GET pass._
-- [x] Every action validates its input with a schema; a test sends malformed input to each and receives 400. _`app/lib/validate.test.ts` (10 tests) proves the helper: typed data for valid input, 400 for malformed form data and JSON, submitted values never echoed. `test/action-validation.test.ts` finds every route with an action and fails for one without a malformed-input case; it was shown failing with a temporary action. The application has no actions yet, so the list of cases is empty._
-- [ ] securityheaders.com grades production A or better, once TS-003 is done.
+- [x] The D1 database is created in the EU; the option used is confirmed against Cloudflare's documentation and written in `docs/architecture.md`. _`wrangler d1 create <name> --jurisdiction eu`; `wrangler d1 list --json` reports `"jurisdiction":"eu"` for `timesifier` and `timesifier-preview`. Confirmed against <https://developers.cloudflare.com/d1/configuration/data-location/>: a jurisdiction keeps the database running and storing data inside the region, where a location hint is only a preference._
+- [x] `pnpm db:migrate:local` builds the schema from an empty database using committed SQL migrations. _After `rm -rf .wrangler/state/v3/d1`, the command applied `0000_init.sql` ("8 commands executed successfully"); `sqlite_master` then listed `users`, `organisations` and `memberships`; a second run printed "No migrations to apply!"._
+- [x] Tables `users`, `organisations` and `memberships` exist with time-sortable ids and UTC timestamps. _`test/db/schema.test.ts`: "has the users, organisations and memberships tables", "gives each new row a UUIDv7 id that carries its creation time", "stores timestamps as integer milliseconds since the Unix epoch". `test/db/uuidv7.test.ts`: ids from later milliseconds sort after earlier ones; 10,000 ids are unique._
+- [x] A test seeds two organisations and shows that the organisation-scoped data layer returns no rows of one to a caller scoped to the other. _`test/db/scope.test.ts`: "selects the rows of its own organisation and none of another's", and the same for update and delete; "cannot insert into another organisation, even when the values name it"; "cannot move a row to another organisation with an update". Removing the organisation filter from the code failed five of them._
+- [ ] Remote migrations run only from the pipeline; the README says so. _The README says so, and `package.json` has no script that migrates a remote database._
 
 ## Ready (limit 3)
 
@@ -63,16 +64,6 @@ Depends on: TS-005.
 - [ ] The page has a skip link and landmarks, and after navigation focus is on the main heading (test).
 - [ ] The colour scheme follows the system, can be overridden, and the override survives a reload.
 - [ ] Lighthouse reports an accessibility score of 100 for the shell.
-
-### TS-007 · Database foundation
-
-Depends on: TS-001.
-
-- [ ] The D1 database is created in the EU; the option used is confirmed against Cloudflare's documentation and written in `docs/architecture.md`.
-- [ ] `pnpm db:migrate:local` builds the schema from an empty database using committed SQL migrations.
-- [ ] Tables `users`, `organisations` and `memberships` exist with time-sortable ids and UTC timestamps.
-- [ ] A test seeds two organisations and shows that the organisation-scoped data layer returns no rows of one to a caller scoped to the other.
-- [ ] Remote migrations run only from the pipeline; the README says so.
 
 ### TS-008 · Authentication
 
@@ -227,6 +218,15 @@ Depends on: TS-006.
 - [ ] Each public page has a title, a description and a social preview image, and is server rendered (the text is present in `curl` output).
 
 ## Done
+
+### TS-010 · Security headers and request checks
+
+Done 2026-11-11. Pull request #5.
+
+- [x] Every HTML response carries a Content Security Policy with a per-request nonce and no `unsafe-inline`, plus HSTS, `frame-ancestors 'none'`, Referrer-Policy and Permissions-Policy (test). _`test/browser-policy.test.ts`, run against the Worker's real handler: "sends the full policy on an HTML page, with the page's scripts carrying the nonce", "uses a different nonce for every request", "sends the same policy on a 404 page". In headless Chrome against a production build, `/` and a 404 page raised no policy violation and hydrated._
+- [x] A state-changing request whose `Origin` is not the application's is rejected with 403 (test). _`test/browser-policy.test.ts`, "origin check on state-changing requests": POST, PUT, PATCH and DELETE with a foreign `Origin`, `Origin: null`, or `Sec-Fetch-Site: cross-site` or `same-site` receive 403; the application's own origin, a request with neither header, and a GET pass._
+- [x] Every action validates its input with a schema; a test sends malformed input to each and receives 400. _`app/lib/validate.test.ts` (10 tests) proves the helper: typed data for valid input, 400 for malformed form data and JSON, submitted values never echoed. `test/action-validation.test.ts` finds every route with an action and fails for one without a malformed-input case; it was shown failing with a temporary action. The application has no actions yet, so the list of cases is empty._
+- [x] securityheaders.com grades production A or better, once TS-003 is done. _Grade A+ for `https://timesifier.com/`, report time 11 Nov 2026 02:49:04 UTC, after run 42948361495 deployed version `41b1b1d9`. The scanner calls six Permissions-Policy directives invalid, among them `publickey-credentials-create`; they are features its list does not know, and Chrome logged no complaint about them._
 
 ### TS-003 · Pipeline: preview and production deploys to timesifier.com
 
