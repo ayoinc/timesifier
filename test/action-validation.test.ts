@@ -1,6 +1,7 @@
 import { exports } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { captureEmail, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
 
 /**
@@ -27,22 +28,30 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			body: '{"email": "ada@example.com", "otp":',
 		});
 	},
-	// The colour scheme is one of three words; this is none of them.
-	"routes/app/settings": () =>
-		new Request("https://timesifier.com/app/settings", {
+	// The colour scheme is one of three words; this is none of them. Settings is
+	// under /app, so the request carries the session of a person who has signed in.
+	"routes/app/settings": async () => {
+		await freshDatabase();
+		const { cookie } = await signIn(captureEmail(), "ada@example.com");
+		return new Request("https://timesifier.com/app/settings", {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/x-www-form-urlencoded",
 				Origin: "https://timesifier.com",
+				Cookie: cookie,
 			},
 			body: "scheme=sepia",
-		}),
+		});
+	},
 };
 
 const routesWithAction = Object.values(routes)
 	.filter((route) => route !== undefined && route.module.action !== undefined)
 	.map((route) => route?.id ?? "");
 
+afterEach(() => {
+	vi.restoreAllMocks();
+});
 describe("every action validates its input", () => {
 	it("has a malformed-input case for every route that exports an action", () => {
 		const missing = routesWithAction.filter((id) => !(id in malformedInput));
