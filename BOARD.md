@@ -26,6 +26,29 @@ Built in two passes. The first, the server, is merged: everything that needs no 
 - [ ] A test lists every route under `/app` and shows each redirects to sign-in without a session. _Second pass. `getSession(request)` exists for the guard to call._
 - [ ] Verification email is sent from a dedicated subdomain; the zone comparison from TS-003 shows no other record changed. _The subdomain is `mail.timesifier.com`, onboarded to Cloudflare Email Service on 2026-11-11 at 03:03 UTC: the zone went from 29 records to 35, the six new ones all under `mail.timesifier.com` (three MX and an SPF record at `cf-bounce.mail`, DKIM at `cf-bounce._domainkey.mail`, DMARC at `_dmarc.mail`), and no other record changed. `test/auth/email.test.ts`: "comes from no-reply@mail.timesifier.com and carries the code once". Still to do: one real message received, which needs the sign-up page._
 
+### TS-009 · Organisations, teams and roles
+
+Built in two passes, like TS-008. The first, the server, is merged: the organisations, invitations and roles behind Better Auth's organization plugin, with one gate in front of every organisation endpoint. The second adds the pages under `/app/<organisation>/…` and the invitation page, once the shell (TS-006) and the sign-in pages (TS-008) are in. Teams are not built: no criterion asks for them.
+
+- [ ] A signed-in person can create an organisation and becomes its owner. _Server side proven in `test/organisations/create.test.ts`: "makes the signed-in person its only member, with the role owner"; refused without a session (401) and for an unverified address (403); the slug is derived on the server, is never a reserved word, and gets a number when taken. Still to do: the page._
+- [ ] An invitation link works once, expires after 7 days, and a test shows a used or expired link is rejected. _Server side proven in `test/organisations/invitations.test.ts`: "is accepted once, and makes its recipient a member as it said" (the second attempt is refused and adds no membership); "works for exactly seven days" (accepted one second before, refused one second after); refused when cancelled, declined, or opened by a person with another address; and "answers the same whether it is unknown, used, cancelled, expired or somebody else's". Still to do: the link's own page._
+- [x] Roles are owner, admin and member. A table in this card lists which role may do what, and a test covers every cell. _The table is below. `test/organisations/permissions.test.ts`: "has 27 cells, each with a trial, and no trial contradicts its cell", with 43 trials through the real endpoints, each asserting the status and what is stored. With a member wrongly allowed to invite, the test fails. The last-owner rule has six tests of its own, and a person who is not a member gets, for each of 15 attempts, the answer given about an organisation that does not exist._
+- [ ] A member of one organisation receives 404 for any URL of another organisation (test). _The function the pages will call, `requireMembership`, is proven in `test/organisations/membership.test.ts`: "says the same 'not found' for somebody else's organisation as for one that does not exist". Still to do: the routes, and the test that walks every one of them._
+
+| Action                                               | owner                      | admin                | member |
+| ---------------------------------------------------- | -------------------------- | -------------------- | ------ |
+| See the organisation and its members                 | yes                        | yes                  | yes    |
+| Rename the organisation                              | yes                        | yes                  | no     |
+| Delete the organisation                              | yes                        | no                   | no     |
+| Invite a person                                      | yes                        | yes                  | no     |
+| Cancel an invitation                                 | yes                        | yes                  | no     |
+| Change a member's role between admin and member      | yes                        | yes                  | no     |
+| Make another person owner, or change an owner's role | yes                        | no                   | no     |
+| Remove a member                                      | yes                        | yes, except an owner | no     |
+| Leave the organisation                               | yes, unless the last owner | yes                  | yes    |
+
+An organisation always has at least one owner: the last owner cannot leave, be removed or be demoted.
+
 ## Review (limit 2)
 
 ### TS-002 · Pipeline: checks on every pull request
@@ -43,15 +66,6 @@ Blocked on one criterion; the rest is merged.
 _Empty._
 
 ## Backlog
-
-### TS-009 · Organisations, teams and roles
-
-Depends on: TS-008.
-
-- [ ] A signed-in person can create an organisation and becomes its owner.
-- [ ] An invitation link works once, expires after 7 days, and a test shows a used or expired link is rejected.
-- [ ] Roles are owner, admin and member. A table in this card lists which role may do what, and a test covers every cell.
-- [ ] A member of one organisation receives 404 for any URL of another organisation (test).
 
 ### TS-011 · Projects and clients
 

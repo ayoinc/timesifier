@@ -11,8 +11,8 @@ Timesifier holds personal data: who worked on what, and when. The owner is in th
 | Identity      | Passkeys first, email as the fallback: a one-time code sent to the address, which is also how the address is first proved. No passwords. Optional two-factor is not built yet.                                                                    | TS-008 |
 | Sessions      | Cookie is `HttpOnly`, `Secure`, `SameSite=Lax` with the `__Host-` prefix. A person can end all their sessions, and that takes effect on the next request.                                                                                         | TS-008 |
 | Abuse         | Sending a sign-in code, signing in with a code and signing in with a passkey each allow one client 10 requests a minute; the 11th gets 429. The request that sends a code, which is how an account starts, is checked by Turnstile on the server. | TS-008 |
-| Authorisation | Denied unless allowed. Roles are checked on the server for every action.                                                                                                                                                                          | TS-009 |
-| Tenancy       | Customer data is reached only through the organisation-scoped data layer. A test proves one organisation cannot read another's rows.                                                                                                              | TS-007 |
+| Authorisation | Denied unless allowed. A person's role is read from the database on every request and decides what they may do. An organisation a person does not belong to answers them exactly as one that does not exist. See "Organisations and roles".       | TS-009 |
+| Tenancy       | Customer data is reached only through the organisation-scoped data layer. A test proves one organisation cannot read another's rows. The organisation of a request comes from the request, never from the session (TS-009).                       | TS-007 |
 | Input         | Every loader and action validates its input against a schema. Every action starts with `parseRequest`, which answers 400 when the body does not match.                                                                                            | TS-010 |
 | Browser       | Content Security Policy with nonces, HSTS, `frame-ancestors 'none'`, Referrer-Policy, Permissions-Policy. State-changing requests are checked for origin.                                                                                         | TS-010 |
 | Secrets       | None in the repository. A secret scan runs on every pull request.                                                                                                                                                                                 | TS-002 |
@@ -72,6 +72,80 @@ No log line carries an email address, a code, a cookie or a session token. The e
 ### The one action without `parseRequest`
 
 `app/routes/api.auth.$.ts` hands the request to Better Auth untouched. Better Auth checks each endpoint's body against its own Zod schema and answers 400 for a body that is not JSON or does not match, and 415 for a content type other than JSON; reading the body first with `parseRequest` would consume it. `test/action-validation.test.ts` holds the 400 in place like any other action.
+
+## Organisations and roles
+
+Better Auth's organization plugin keeps organisations, memberships and invitations in our tables, and is configured in `app/auth/organisations.server.ts`. It is reached through the same mount, at `/api/auth/organization/*`. The tests in `test/organisations/` drive it through the Worker and hold what is written here in place. Teams, and roles made up at run time, are switched off.
+
+### Roles
+
+A member of an organisation is an owner, an admin or a member. The roles and what each may do are in `app/organisations/roles.ts`, which the plugin checks on the server for every request; nothing a browser sends decides it.
+
+| Action                                               | owner                      | admin                | member |
+| ---------------------------------------------------- | -------------------------- | -------------------- | ------ |
+| See the organisation and its members                 | yes                        | yes                  | yes    |
+| Rename the organisation                              | yes                        | yes                  | no     |
+| Delete the organisation                              | yes                        | no                   | no     |
+| Invite a person                                      | yes                        | yes                  | no     |
+| Cancel an invitation                                 | yes                        | yes                  | no     |
+| Change a member's role between admin and member      | yes                        | yes                  | no     |
+| Make another person owner, or change an owner's role | yes                        | no                   | no     |
+| Remove a member                                      | yes                        | yes, except an owner | no     |
+| Leave the organisation                               | yes, unless the last owner | yes                  | yes    |
+
+An organisation always has at least one owner: the last owner cannot leave, be removed or be demoted. A member holds exactly one role; a request that names a list of roles, or a role that is not one of the three, gets 400. Pending invitations are shown only to those who may invite, because an invitation's id is its link.
+
+`test/organisations/permissions.test.ts` holds a copy of this table and has a trial through the real endpoint for each of its 27 cells; it fails when a cell has no trial or a trial contradicts its cell. Change the table here, in the test and in `roles.ts` together.
+
+### The gate in front of the plugin
+
+Every request to `/organization/*` passes one check of ours before the plugin sees it (`organisationRules` in `app/auth/organisations.server.ts`):
+
+- **Only the endpoints we use exist.** The 16 listed in that file are answered; every other endpoint of the plugin gets 404, including the ones that set an "active organisation", check whether a slug is taken or look an organisation up by its slug. An upgrade of Better Auth cannot add an endpoint unnoticed.
+- **Input is exact.** Each endpoint has a strict Zod 4 schema. A missing field, a wrong type or a field that is not listed gets 400 and nothing is stored.
+- **The organisation comes from the request.** Every endpoint that acts on an organisation must be given its id. The plugin records an "active organisation" on the session when a person creates or joins one; nothing reads it (`docs/decisions.md` entry 20).
+- **"Not found" for anyone who is not a member.** The gate reads the person's membership through `organisationScope`. Without one the answer is `404 {"code":"ORGANIZATION_NOT_FOUND"}`, byte for byte the same whether the organisation does not exist or belongs to other people, and the plugin is not reached.
+
+A signed-out request to one of the 16 gets 401 before its input is read.
+
+### Creating an organisation
+
+Any signed-in person whose email address is verified may create an organisation, and becomes its only member, as owner. The request carries a name and nothing else. A name is 1 to 80 characters, with no line break, no other control character and none that reverses the direction of text, because it is shown in pages and in the subject of the invitation email.
+
+The slug is derived from the name on the server (`app/organisations/slug.ts`): lowercase letters, digits and hyphens, 3 to 40 characters, no hyphen at either end. It is never `new`, `settings`, `api`, `auth`, `app`, `admin`, `www`, `invitations`, `sign-in` or `sign-up`. When the slug is taken or reserved the organisation gets the next free number instead of an error: `acme`, `acme-2`, `acme-3`. Renaming an organisation does not change its slug, and no request can set one.
+
+### Invitations
+
+- An owner or admin invites an email address as `admin` or `member`. Ownership is never given by invitation.
+- An address that is already a member, or already has a pending invitation to the same organisation, is refused. There is no "send again": that would extend the invitation's life.
+- An invitation works for exactly 7 days and once. Accepting it needs a session whose verified email address is the invited one, compared without regard to capitals.
+- An invitation that does not exist, has been accepted, declined or cancelled, has expired, or was sent to somebody else gets one answer, `404 {"code":"INVITATION_NOT_FOUND"}`, whether the request reads, accepts or declines it. The id tells nobody but its recipient anything.
+- Cancelling names the organisation as well as the invitation, and only a pending invitation of that organisation can be cancelled.
+- The email is sent with `sendEmail`, from the application's one sender, as plain text and plain HTML with no image or other remote content. Its one link is `https://<host>/invitations/<id>`, where the host is the one the invitation was made on, which `app/auth/hosts.ts` has already checked is ours. The organisation's name, which a person chose, is escaped in the HTML.
+- The id in the link is a UUID version 7 with 74 random bits. It is not the only thing needed: the session of the invited address is.
+
+### "Not found" for pages
+
+A page under `/app/<slug>/` calls `requireMembership(request, slug)` from `app/organisations/membership.server.ts`. It returns the organisation, the person's role and the person, read from the database on that request, or throws React Router's 404. The 404 is the same for a slug no organisation has, for an organisation the person does not belong to, and for a request with no session, and the same two queries run in the first two cases.
+
+### Abuse
+
+Creating an organisation and sending an invitation each allow one client 10 requests a minute; the 11th gets 429. They are counted by the limiter described under "Authentication", and like it they apply only to requests that arrive at `/api/auth/`. The plugin's own ceilings are left at their defaults: 100 members and 100 pending invitations for an organisation.
+
+### What is stored
+
+| Table           | Holds                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------- |
+| `organisations` | Name and slug                                                                                  |
+| `memberships`   | Which person belongs to which organisation, and their role                                     |
+| `invitations`   | The invited address, the role offered, who sent it, when it expires and what became of it      |
+| `sessions`      | One more column, the plugin's "active organisation", which the plugin writes and nothing reads |
+
+Deleting an organisation deletes its memberships and invitations with it.
+
+### Never logged
+
+No log line carries an email address or an invitation's id. `test/organisations/invitations.test.ts` reads every line logged while an invitation is sent, accepted and refused, and fails if one appears.
 
 ## Browser policy
 
@@ -200,6 +274,9 @@ From the review of the foundation on 2026-11-11 (card TS-026). Each is open on p
 | Versions of the Worker uploaded before TS-026 still answer on their workers.dev addresses.                                                                                                                                                 | They contain no sign-in and read no data.                                                                                                         | Deleting those versions, or Cloudflare Access on version addresses.                                                                                                    |
 | Cloudflare injects its Web Analytics script, from `static.cloudflareinsights.com`, into every page (the zone's RUM setting is on). It carries the page's nonce, so the policy allows it, and it reports to `/cdn-cgi/rum` on our own host. | It is a zone-wide setting that other services on this zone may rely on.                                                                           | The owner turns it off for the zone, or excludes this host. Until then the pages do make one request to another origin.                                                |
 | The zone accepts TLS 1.0 (minimum TLS version is 1.0).                                                                                                                                                                                     | Zone-wide setting shared with other services.                                                                                                     | The owner raises the minimum to 1.2.                                                                                                                                   |
+| TS-009. Two owners who demote or remove each other, or both leave, in the same instant could leave an organisation with no owner: the plugin counts the owners and then writes, in separate statements.                                    | It needs two owners acting against each other within milliseconds.                                                                                | A database trigger, or a single conditional statement, that refuses to remove or demote the last owner.                                                                |
+| TS-009. Two organisations of the same name created in the same instant can be given the same slug; the unique index then refuses the second, which gets a server error instead of the next number.                                         | Nothing wrong is stored, and trying again succeeds.                                                                                               | Retrying the insert with the next number when the index refuses it.                                                                                                    |
+| TS-009. A person who creates an organisation and is given `acme-2` learns that some organisation has the slug `acme`.                                                                                                                      | It follows from giving a number instead of an error. It says nothing about that organisation, and creation is limited to 10 a minute.             | Random slugs, which would make addresses unreadable. Not planned.                                                                                                      |
 
 ## Secrets
 

@@ -10,6 +10,9 @@
  * signs them in and, the first time, creates their account. Once signed in
  * they can add a passkey and use it from then on, with the code as the
  * fallback. There are no passwords.
+ *
+ * The same instance holds organisations, memberships and invitations, which
+ * `organisations.server.ts` configures.
  */
 
 import { env, waitUntil } from "cloudflare:workers";
@@ -20,9 +23,22 @@ import { captcha } from "better-auth/plugins/captcha";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import type { Session, User } from "better-auth/types";
 import { drizzle } from "drizzle-orm/d1";
-import { accounts, passkeys, rateLimits, sessions, users, uuidv7, verifications } from "~/db";
+import {
+	accounts,
+	organisations,
+	passkeys,
+	rateLimits,
+	sessions,
+	users,
+	uuidv7,
+	verifications,
+} from "~/db";
+// The two tenant tables are absent from `~/db` on purpose. Better Auth is the
+// one writer that reaches them without `organisationScope`.
+import { invitations, memberships } from "~/db/schema";
 import { sendEmail } from "./email.server";
 import { ALLOWED_HOSTS, isOurHost } from "./hosts";
+import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.server";
 import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
 
 /** Attempts one client may make on one sign-in path in `window` seconds; the next is answered 429. */
@@ -66,6 +82,9 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 				verification: verifications,
 				passkey: passkeys,
 				rateLimit: rateLimits,
+				organization: organisations,
+				member: memberships,
+				invitation: invitations,
 			},
 		}),
 
@@ -82,6 +101,7 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 				"/email-otp/send-verification-otp": SIGN_IN_LIMIT,
 				"/sign-in/email-otp": SIGN_IN_LIMIT,
 				"/passkey/verify-authentication": SIGN_IN_LIMIT,
+				...ORGANISATION_RATE_LIMITS,
 			},
 		},
 
@@ -124,6 +144,7 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 			// The relying party is the host of the request, one of ALLOWED_HOSTS, so
 			// a passkey made on a preview works on that preview and nowhere else.
 			passkey({ rpName: "Timesifier" }),
+			...organisationPlugins(),
 		],
 	});
 }

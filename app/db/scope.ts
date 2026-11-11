@@ -9,7 +9,7 @@
 import { and, eq, type InferInsertModel, type InferSelectModel, type SQL, sql } from "drizzle-orm";
 import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
 import type { AnySQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
-import { memberships } from "./schema";
+import { invitations, memberships } from "./schema";
 
 /** A table whose rows belong to one organisation. A table without the column is rejected by the compiler. */
 export type TenantTable = SQLiteTable & {
@@ -98,7 +98,7 @@ export function scopedAccessor<T extends TenantTable>(
 }
 
 /** Every table whose rows belong to one organisation. A new one is added here and nowhere else. */
-export const tenantTables = { memberships } as const;
+export const tenantTables = { memberships, invitations } as const;
 
 /** Accessors for every tenant table, each limited to one organisation. */
 export type OrganisationScope = { readonly organisationId: string } & {
@@ -110,5 +110,6 @@ export function organisationScope(database: D1Database, organisationId: string):
 	return {
 		organisationId,
 		memberships: scopedAccessor(db, tenantTables.memberships, organisationId),
+		invitations: scopedAccessor(db, tenantTables.invitations, organisationId),
 	};
 }
