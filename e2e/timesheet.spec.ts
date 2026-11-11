@@ -219,7 +219,11 @@ test.describe("the Day view", () => {
 		await expect(page).toHaveURL(/\?day=\d{4}-\d{2}-\d{2}$/);
 		const next = new URL(page.url()).searchParams.get("day");
 		await days.getByRole("link", { name: "Previous day" }).click();
+		await expect(page).not.toHaveURL(new RegExp(`day=${next}$`));
+		const today = new URL(page.url()).searchParams.get("day");
 		await days.getByRole("link", { name: "Previous day" }).click();
+		await expect(page).toHaveURL(/\?day=\d{4}-\d{2}-\d{2}$/);
+		await expect(page).not.toHaveURL(new RegExp(`day=${today ?? "none"}$`));
 		const previous = new URL(page.url()).searchParams.get("day");
 		expect(previous && next && previous < next).toBe(true);
 		await days.getByRole("link", { name: "Today" }).click();

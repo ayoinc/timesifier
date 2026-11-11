@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 import { COLOR_SCHEME_COOKIE, type ColorSchemeChoice } from "../app/shell/color-scheme.server";
 
@@ -138,6 +138,11 @@ export async function takenOver(page: Page, within = "nav") {
 export async function openShell(page: Page, path: string, within = "nav") {
 	await page.goto(path);
 	await takenOver(page, within);
+}
+
+/** The destinations' links: the main navigation's list, after the timer's control (TS-051). */
+export function destinationLinks(page: Page): Locator {
+	return page.getByRole("navigation", { name: "Main" }).locator("ul").first().getByRole("link");
 }
 
 export { expect };

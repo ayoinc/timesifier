@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { accountPath, type Destination, destinations, HEADINGS } from "../app/shell/destinations";
 import { SIGNED_IN_AS_MEMBER } from "./auth-state";
-import { expect, openShell, test } from "./fixtures";
+import { destinationLinks, expect, openShell, test } from "./fixtures";
 import { homeOrganisation, homePath } from "./organisation";
 
 // The shell's navigation, landmarks and focus (TS-006, criteria 1 and 3), and
@@ -18,11 +18,6 @@ const last = destinations.at(-1) as Destination;
 
 function navigation(page: Page): Locator {
 	return page.getByRole("navigation", { name: "Main" });
-}
-
-/** The destinations' links: the navigation's list, after the timer's control (TS-051). */
-function destinationLinks(page: Page): Locator {
-	return navigation(page).locator("ul").first().getByRole("link");
 }
 
 function title(destination: Destination): string {
