@@ -23,13 +23,13 @@ export const OFFERED_ENDPOINTS: Record<string, true> = {
 	"POST /sign-out": true,
 	"POST /revoke-sessions": true,
 
-	// Passkeys: adding one, signing in with one, and looking after one's own.
+	// Passkeys: adding one, signing in with one, and listing and deleting one's
+	// own. No page renames a passkey, so the endpoint that would is not here.
 	"GET /passkey/generate-register-options": true,
 	"POST /passkey/verify-registration": true,
 	"GET /passkey/generate-authenticate-options": true,
 	"POST /passkey/verify-authentication": true,
 	"GET /passkey/list-user-passkeys": true,
-	"POST /passkey/update-passkey": true,
 	"POST /passkey/delete-passkey": true,
 
 	// Organisations: the sixteen that the gate in organisations.server.ts admits.

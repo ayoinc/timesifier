@@ -28,23 +28,32 @@ import { CODE_LIFETIME_SECONDS } from "./sign-in-code-email";
 const ASK_PATH = "/email-otp/send-verification-otp";
 const USE_PATH = "/sign-in/email-otp";
 
-/** Whether `email` is an address is the plugin's to say, in its own words. */
-const Asking = z.strictObject({ email: z.string().max(254), type: z.literal("sign-in") });
-const Using = z.strictObject({ email: z.string().max(254), otp: z.string().max(64) });
+/**
+ * What each request may carry: these keys and no other, and the one kind of
+ * code. What the values must be is the plugin's to say, in its own words.
+ */
+const Asking = z.strictObject({ email: z.unknown(), type: z.literal("sign-in") });
+const Using = z.strictObject({ email: z.unknown(), otp: z.unknown() });
 
 const CODES_PER_ADDRESS: Cap = { max: 5, seconds: 60 * 60 };
 
 /**
  * The cookie that proves a browser asked. Better Auth puts the application's
  * prefix and attributes on it: `__Host-timesifier.sign_in_code`, `HttpOnly`,
- * `Secure`, `SameSite=Lax`, `Path=/`. It lasts as long as a code.
+ * `Secure`, `SameSite=Lax`, `Path=/`.
  *
- * Its value is `<expiry>.<hash>`: when it stops counting, in seconds since the
- * epoch, and the keyed hash of the lower-cased address and that expiry. There
- * is no address in it, and nobody without the secret can make one.
+ * Its value is `<expiry>.<hash>`: when the proof stops counting, in seconds
+ * since the epoch, which is when the code does; and the keyed hash of the
+ * lower-cased address and that expiry. There is no address in it, and nobody
+ * without the secret can make one or move its expiry.
+ *
+ * The browser keeps it for an hour, longer than it counts, for one reason: a
+ * person who types their code too late is then told that it has expired, in
+ * the plugin's words for that, and not that it is wrong.
  */
 const PROOF_COOKIE = "sign_in_code";
 const PROOF_PURPOSE = "sign-in-code-proof";
+const PROOF_KEPT_SECONDS = 60 * 60;
 
 type Bindings = { DB: D1Database; secret: string };
 
@@ -54,6 +63,7 @@ export function signInCodeRules({ DB, secret }: Bindings): BetterAuthPlugin {
 		const { email } = await valid(Asking, ctx.body);
 		// The plugin lower-cases the address and then refuses what is not one.
 		// The same two steps here, so a code is counted only where one would be issued.
+		if (typeof email !== "string") return;
 		const address = email.toLowerCase();
 		if (!z.email().safeParse(address).success) return;
 
@@ -61,7 +71,7 @@ export function signInCodeRules({ DB, secret }: Bindings): BetterAuthPlugin {
 		const expiry = Math.ceil(Date.now() / 1000) + CODE_LIFETIME_SECONDS;
 		const proof = await keyedHash(secret, PROOF_PURPOSE, `${address}\n${expiry}`);
 		const { name, attributes } = ctx.context.createAuthCookie(PROOF_COOKIE, {
-			maxAge: CODE_LIFETIME_SECONDS,
+			maxAge: PROOF_KEPT_SECONDS,
 		});
 		ctx.setCookie(name, `${expiry}.${proof}`, attributes);
 
@@ -76,15 +86,22 @@ export function signInCodeRules({ DB, secret }: Bindings): BetterAuthPlugin {
 
 	const using = createAuthMiddleware(async (ctx) => {
 		const { email } = await valid(Using, ctx.body);
+		// Not an address at all: the plugin refuses it, and no code is compared.
+		if (typeof email !== "string") return;
+
 		const { name } = ctx.context.createAuthCookie(PROOF_COOKIE);
 		const [expiry = "", proof = ""] = (ctx.getCookie(name) ?? "").split(".");
 		const asked =
 			/^\d+$/.test(expiry) &&
-			Number(expiry) * 1000 > Date.now() &&
 			(await isKeyedHash(secret, PROOF_PURPOSE, `${email.toLowerCase()}\n${expiry}`, proof));
-		// The plugin's answer to a wrong code, key for key, given before the plugin
-		// counts a guess.
+		// Each refusal is the plugin's own answer, key for key, given before the
+		// plugin counts a guess. A browser that never asked gets the answer to a
+		// wrong code. One that asked more than five minutes ago gets the answer to
+		// an expired code, whatever newer code somebody else has asked for since.
 		if (!asked) throw new APIError("BAD_REQUEST", { message: "Invalid OTP", code: "INVALID_OTP" });
+		if (Number(expiry) * 1000 <= Date.now()) {
+			throw new APIError("BAD_REQUEST", { message: "OTP expired", code: "OTP_EXPIRED" });
+		}
 	});
 
 	return {

@@ -210,7 +210,7 @@ describe("the two passkey ceremonies", () => {
 });
 
 describe("the passkeys table", () => {
-	it("is read, renamed and deleted by Better Auth, for the passkey's owner only", async () => {
+	it("is read and deleted by Better Auth, for the passkey's owner only", async () => {
 		const ada = await signIn(mailbox, EMAIL);
 		const grace = await signIn(mailbox, "grace@example.com");
 		// What a completed registration stores; the ceremony itself needs a browser.
@@ -234,16 +234,13 @@ describe("the passkeys table", () => {
 		]);
 		expect(await list(grace.cookie)).toEqual([]);
 
-		const notHers = { id: "passkey-1", name: "Grace's now" };
-		const refused = await post("/passkey/update-passkey", notHers, { cookie: grace.cookie });
-		const renamed = await post(
-			"/passkey/update-passkey",
-			{ id: "passkey-1", name: "Work laptop" },
-			{ cookie: ada.cookie },
+		const notHers = await post(
+			"/passkey/delete-passkey",
+			{ id: "passkey-1" },
+			{ cookie: grace.cookie },
 		);
-		expect(refused.status).toBeGreaterThanOrEqual(400);
-		expect(renamed.status).toBe(200);
-		expect(await list(ada.cookie)).toMatchObject([{ name: "Work laptop" }]);
+		expect(notHers.status).toBeGreaterThanOrEqual(400);
+		expect(await countRows("passkeys")).toBe(1);
 
 		const deleted = await post(
 			"/passkey/delete-passkey",

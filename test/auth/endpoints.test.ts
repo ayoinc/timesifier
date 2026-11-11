@@ -35,7 +35,7 @@ beforeEach(async () => {
 });
 
 describe("the endpoints under /api/auth", () => {
-	it("are these 28 and no other", () => {
+	it("are these 27 and no other", () => {
 		expect([...offered].sort()).toEqual([
 			"GET /get-session",
 			"GET /organization/get-full-organization",
@@ -59,7 +59,6 @@ describe("the endpoints under /api/auth", () => {
 			"POST /organization/update",
 			"POST /organization/update-member-role",
 			"POST /passkey/delete-passkey",
-			"POST /passkey/update-passkey",
 			"POST /passkey/verify-authentication",
 			"POST /passkey/verify-registration",
 			"POST /revoke-sessions",
@@ -92,7 +91,7 @@ describe("the endpoints under /api/auth", () => {
 					: [endpoint],
 			)
 			.filter((endpoint) => !offered.includes(endpoint));
-		// Better Auth 1.7.19 registers 70 under this configuration, 42 of them not
+		// Better Auth 1.7.19 registers 70 under this configuration, 43 of them not
 		// offered. Far fewer would mean the walk no longer sees the library's list.
 		expect(others.length).toBeGreaterThan(30);
 		const touched: string[] = [];
@@ -124,6 +123,7 @@ describe("the endpoints under /api/auth", () => {
 			"GET /error?error=probe&error_description=text+of+a+stranger's+choosing",
 		],
 		["a person's name and image", "POST /update-user"],
+		["renaming a passkey, which no page does", "POST /passkey/update-passkey"],
 		["a person's sessions, tokens included", "GET /list-sessions"],
 		["the password-reset link, which redirects", "GET /reset-password/x?callbackURL=/app"],
 		["a path nothing registers", "GET /no-such-endpoint"],

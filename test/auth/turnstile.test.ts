@@ -44,6 +44,7 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		const response = await requestCode(EMAIL);
 
 		expect(response.status).toBe(403);
+		expect(await response.json()).toMatchObject({ code: "VERIFICATION_FAILED" });
 		expect(await countRows("codes")).toBe(0);
 		expect(mailbox.sent()).toEqual([]);
 	});
@@ -55,6 +56,7 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		});
 
 		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ code: "MISSING_RESPONSE" });
 		expect(await countRows("codes")).toBe(0);
 		expect(mailbox.sent()).toEqual([]);
 	});

@@ -68,6 +68,7 @@ describe("signing in with a code sent by email", () => {
 		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: wrong }, browser);
 
 		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ code: "INVALID_OTP" });
 		expect(response.headers.getSetCookie()).toEqual([]);
 		expect(await countRows("users")).toBe(0);
 		expect(await countRows("sessions")).toBe(0);
@@ -85,21 +86,45 @@ describe("signing in with a code sent by email", () => {
 		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: right }, browser);
 
 		expect(response.status).toBe(403);
+		expect(await response.json()).toMatchObject({ code: "TOO_MANY_ATTEMPTS" });
 		expect(response.headers.getSetCookie()).toEqual([]);
 		expect(await countRows("sessions")).toBe(0);
 	});
 
-	it("refuses a code that is more than five minutes old", async () => {
+	it("refuses a code that is more than five minutes old, in the library's words for an expired code", async () => {
 		vi.useFakeTimers({ toFake: ["Date"] });
+		// Asked for at half past a second. The proof in the cookie is good to the
+		// end of its last second, so for half a second the library is the one that
+		// answers for the expired code; after that the answer is made for it.
+		const asked = Math.floor(Date.now() / 1000) * 1000 + 500;
+		vi.setSystemTime(asked);
 		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const code = await mailbox.codeFor(EMAIL);
+		const signInWith = () => post("/sign-in/email-otp", { email: EMAIL, otp: code }, browser);
 
-		vi.setSystemTime(Date.now() + 5 * 60_000 + 1000);
-		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: code }, browser);
+		vi.setSystemTime(asked + 5 * 60_000 + 100);
+		const fromTheLibrary = await signInWith();
+		vi.setSystemTime(asked + 5 * 60_000 + 1000);
+		const afterwards = await signInWith();
+
+		expect(fromTheLibrary.status).toBe(400);
+		expect(await fromTheLibrary.clone().json()).toEqual({
+			code: "OTP_EXPIRED",
+			message: "OTP expired",
+		});
+		expect(afterwards.status).toBe(400);
+		expect(await afterwards.text()).toBe(await fromTheLibrary.text());
+		expect(afterwards.headers.getSetCookie()).toEqual([]);
+		expect(await countRows("sessions")).toBe(0);
+	});
+
+	it("refuses what is not an address, in the library's words, and sets no cookie", async () => {
+		const response = await requestCode("not an address");
 
 		expect(response.status).toBe(400);
+		expect(await response.json()).toMatchObject({ code: "INVALID_EMAIL" });
 		expect(response.headers.getSetCookie()).toEqual([]);
-		expect(await countRows("sessions")).toBe(0);
+		expect(await countRows("codes")).toBe(0);
 	});
 
 	it("accepts a code once", async () => {
@@ -243,7 +268,7 @@ describe("a code is used in the browser that asked for it", () => {
 	const guess = (otp: string, cookie?: string) =>
 		post("/sign-in/email-otp", { email: EMAIL, otp }, { cookie });
 
-	it("answers a request for a code with a cookie that script cannot read, for this host alone, lasting as long as the code, with no address in it", async () => {
+	it("answers a request for a code with a cookie that script cannot read, for this host alone, with no address in it", async () => {
 		const response = await requestCode(EMAIL);
 
 		const cookies = response.headers.getSetCookie();
@@ -252,7 +277,7 @@ describe("a code is used in the browser that asked for it", () => {
 		expect(nameAndValue).toMatch(/^__Host-timesifier\.sign_in_code=\d+\.[0-9a-f]{64}$/);
 		expect(attributes.sort()).toEqual([
 			"HttpOnly",
-			"Max-Age=300",
+			"Max-Age=3600",
 			"Path=/",
 			"SameSite=Lax",
 			"Secure",
@@ -325,7 +350,7 @@ describe("a code is used in the browser that asked for it", () => {
 		expect((await guess(right, browser)).status).toBe(200);
 	});
 
-	it("stops accepting the cookie when the code's five minutes are over", async () => {
+	it("says the code has expired once its five minutes are over, even with a newer code asked for elsewhere", async () => {
 		vi.useFakeTimers({ toFake: ["Date"] });
 		const early = codeCookie(await requestCode(EMAIL));
 		await mailbox.codeFor(EMAIL);
@@ -337,6 +362,7 @@ describe("a code is used in the browser that asked for it", () => {
 		const response = await guess(await mailbox.codeFor(EMAIL), early);
 
 		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({ code: "OTP_EXPIRED", message: "OTP expired" });
 		expect(await countRows("sessions")).toBe(0);
 	});
 });
