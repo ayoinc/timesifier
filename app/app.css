@@ -69,6 +69,7 @@
 	--font-brand: var(--md-ref-typeface-brand);
 
 	/* Type scale: text-body-large sets size, line height, weight and tracking together */
+	--text-*: initial;
 	--text-display-large: var(--md-sys-typescale-display-large-size);
 	--text-display-large--line-height: var(--md-sys-typescale-display-large-line-height);
 	--text-display-large--font-weight: var(--md-sys-typescale-display-large-weight);
