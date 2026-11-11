@@ -1,0 +1,13 @@
+# Image credits
+
+Every photograph on the site is a file in this directory, served from our own host. Each was downloaded from Unsplash on 11 November 2026, when its page read "Free to use under the Unsplash License".
+
+The [Unsplash License](https://unsplash.com/license) allows the photographs to be downloaded and used for free, for commercial and non-commercial purposes, with no permission needed and no attribution required. We credit the photographers anyway, here and in the footer of the home page.
+
+| Files                                                                                      | Subject                                                                  | Author                                                  | Source                                                                                        | Changes                             |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `departure-600.avif`/`.webp`, `departure-1200.avif`/`.webp`, `departure-1800.avif`/`.webp` | A yellow U-Bahn train passing a station clock, Berlin-Tempelhof, Germany | [Karri Heiskanen](https://unsplash.com/@karriheiskanen) | https://unsplash.com/photos/a-yellow-train-rushes-past-in-the-station-g8iM4-OhTkM             | Cropped to 3:2, resized, re-encoded |
+| `workshop-480.avif`/`.webp`, `workshop-800.avif`/`.webp`, `workshop-1200.avif`/`.webp`     | Gloved hands working a piece of metal on a bench, Utrecht, Netherlands   | [Bob van Aubel](https://unsplash.com/@bobvanaubel)      | https://unsplash.com/photos/a-man-working-on-a-piece-of-metal-AUloiE6rsP8                     | Cropped to 4:5, resized, re-encoded |
+| `platform-600.avif`/`.webp`, `platform-1200.avif`/`.webp`                                  | A platform with a station clock, Amsterdam Sloterdijk, Netherlands       | [Nikolai Kolosov](https://unsplash.com/@nikolaikolosov) | https://unsplash.com/photos/train-station-platform-with-tracks-and-overhead-clock-UbUyehq7DH0 | Cropped to 3:2, resized, re-encoded |
+
+To add an image: download the original, crop and resize it, encode AVIF and WebP at each width (`avifenc -q 52`, `cwebp -q 76`; every width of one photograph must have exactly the same shape), add a row here, and give the `img` its width, height and alternative text. No image is loaded from another host.

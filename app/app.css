@@ -63,6 +63,10 @@
 	--color-surface-tint: var(--md-sys-color-surface-tint);
 	--color-shadow: var(--md-sys-color-shadow);
 	--color-scrim: var(--md-sys-color-scrim);
+	/* The sheet: the yellow page in the light scheme, the lit board in the dark scheme */
+	--color-sheet: var(--md-sys-color-sheet);
+	--color-on-sheet: var(--md-sys-color-on-sheet);
+	--color-on-sheet-variant: var(--md-sys-color-on-sheet-variant);
 
 	/* Typeface: font-sans is the default for the page, font-brand is for display text */
 	--font-sans: var(--md-ref-typeface-plain);
@@ -198,12 +202,15 @@
 }
 
 /*
- * Material's window sizes: compact under 600px, medium from 600px (design rule 17).
- * `medium:` and `max-medium:` are the variants. A media query cannot read a custom
- * property, so this is the one size that is written here and not in the tokens.
+ * Material's window sizes: compact under 600px, medium from 600px (design rule 17),
+ * expanded from 840px and large from 1200px. `medium:`, `expanded:` and `large:` are
+ * the variants, each with its `max-` form. A media query cannot read a custom
+ * property, so these are the sizes that are written here and not in the tokens.
  */
 @theme {
 	--breakpoint-medium: 37.5rem;
+	--breakpoint-expanded: 52.5rem;
+	--breakpoint-large: 75rem;
 }
 
 /* Tailwind has no theme namespace for durations; this utility reads the tokens above. */
@@ -215,6 +222,45 @@
 html,
 body {
 	@apply bg-surface text-on-surface;
+}
+
+/* Selected text takes the sheet's yellow, in both schemes. */
+::selection {
+	background-color: var(--md-sys-color-primary-container);
+	color: var(--md-sys-color-on-primary-fixed);
+}
+
+/*
+ * A type role sets its typeface as well. Tailwind's theme has no place for a font
+ * beside a size, so the roles set in the brand typeface are completed here; the
+ * others are in the page's default.
+ */
+@utility text-display-large {
+	font-family: var(--md-sys-typescale-display-large-font);
+}
+
+@utility text-display-medium {
+	font-family: var(--md-sys-typescale-display-medium-font);
+}
+
+@utility text-display-small {
+	font-family: var(--md-sys-typescale-display-small-font);
+}
+
+@utility text-headline-large {
+	font-family: var(--md-sys-typescale-headline-large-font);
+}
+
+@utility text-headline-medium {
+	font-family: var(--md-sys-typescale-headline-medium-font);
+}
+
+@utility text-headline-small {
+	font-family: var(--md-sys-typescale-headline-small-font);
+}
+
+@utility text-title-large {
+	font-family: var(--md-sys-typescale-title-large-font);
 }
 
 /*
@@ -485,5 +531,28 @@ body {
 	::view-transition-new(.shell-forward),
 	::view-transition-new(.shell-back) {
 		animation-name: shell-fade-in;
+	}
+}
+
+/*
+ * A time that changes while it is looked at (app/components/Digits.tsx). A digit
+ * that changes arrives from below, as a clock's does; a digit that stays is the
+ * same element and does not move. With reduced motion the digit simply changes.
+ */
+.tick-digit {
+	display: inline-block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.tick-digit {
+		animation: tick-in var(--md-sys-motion-duration-short4)
+			var(--md-sys-motion-easing-emphasized-decelerate);
+	}
+}
+
+@keyframes tick-in {
+	from {
+		opacity: 0;
+		transform: translateY(40%);
 	}
 }

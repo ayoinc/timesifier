@@ -19,6 +19,9 @@ const COMPONENTS = [
 	"Tabs",
 	"Snackbar",
 	"Tooltip",
+	"Digits",
+	"TimerMark",
+	"Ledger",
 ];
 
 async function style(element: Locator, property: string): Promise<string> {

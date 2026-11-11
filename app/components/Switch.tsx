@@ -47,12 +47,15 @@ export function Switch(props: SwitchProps) {
 			: "border-outline bg-surface-container-highest";
 	// The colour of the state layer around the handle.
 	const tone = isDisabled ? "text-disabled" : isSelected ? "text-primary" : "text-on-surface";
+	// Material turns a selected handle to `primary-container` under the pointer. Here
+	// `primary` is that same yellow in the dark scheme, so the handle keeps its colour
+	// and the state shows in its size and in the layer around it.
 	const handle = isDisabled
 		? isSelected
 			? "bg-surface"
 			: "bg-current"
 		: isSelected
-			? "bg-on-primary group-data-hovered:bg-primary-container group-data-focus-visible:bg-primary-container group-data-pressed:bg-primary-container"
+			? "bg-on-primary"
 			: "bg-outline group-data-hovered:bg-on-surface-variant group-data-focus-visible:bg-on-surface-variant group-data-pressed:bg-on-surface-variant";
 
 	return (

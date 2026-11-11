@@ -4,8 +4,8 @@ import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react
 import { cx } from "./cx";
 
 // Material 3 Expressive button, small size: 40px tall, 16px either side, label-large.
-// Resting it is a pill; pressed, its corners settle to 8px on the spring.
-// The pill is the 20px corner and not `rounded-full`, so the corner can animate.
+// Its corners are the corner scale's `large-increased` step; pressed, they settle
+// to the `small` step on the spring.
 
 const BASE =
 	"relative inline-flex h-10 shrink-0 cursor-pointer select-none items-center justify-center gap-2 " +

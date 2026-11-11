@@ -1,0 +1,323 @@
+/*
+ * What moves on the public pages: the home page, the privacy notice and the terms.
+ * docs/design-direction.md, "The mindset, on every screen", says why each thing
+ * moves. The rules it is held to:
+ *
+ * - Only `transform` and `opacity` animate. The one exception is the whole number
+ *   behind a total that counts up, which redraws that total's own text.
+ *   Nothing animates a size or a position in the layout, so nothing beside a
+ *   moving thing moves.
+ * - What follows the scrolling is tied to it by the browser (`animation-timeline`),
+ *   not by script. Where the browser cannot do that, and when reduced motion is
+ *   asked for, every element simply stands where it ends up.
+ * - Durations and easings are the motion tokens.
+ */
+
+/* The band at the top stays in the window, so a place on the page that is jumped
+   to, or takes the focus, must stop below it. */
+html {
+	scroll-padding-top: calc(var(--md-sys-spacing-unit) * 20);
+}
+
+.count-up {
+	position: relative;
+	display: inline-block;
+}
+
+/* The whole number of minutes a counting total has reached. Registered, so that
+   it can be animated. */
+@property --counted {
+	syntax: "<integer>";
+	inherits: false;
+	initial-value: 0;
+}
+
+/* The number it counts to. Script sets it on the total, and the drawing of the
+   total, which is its `::after`, inherits it. */
+@property --count-to {
+	syntax: "<integer>";
+	inherits: true;
+	initial-value: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	/* When the page opens, the day's entries take their places on the sheet one
+	   after another, and the total last. */
+	.sheet-arrive {
+		animation: sheet-arrive var(--md-sys-motion-duration-long2)
+			var(--md-sys-motion-easing-emphasized-decelerate) backwards;
+	}
+
+	.sheet-arrive:nth-child(1) {
+		animation-delay: var(--md-sys-motion-duration-medium2);
+	}
+
+	.sheet-arrive:nth-child(2) {
+		animation-delay: var(--md-sys-motion-duration-medium4);
+	}
+
+	.sheet-arrive:nth-child(3) {
+		animation-delay: var(--md-sys-motion-duration-long2);
+	}
+
+	p.sheet-arrive {
+		animation-delay: var(--md-sys-motion-duration-extra-long1);
+	}
+
+	/*
+	 * The week arrives once, when its table comes into the window (WeekReport.tsx
+	 * says when): each project's bar grows from nothing to its hours and its total
+	 * counts up beside it, one row after another, and the week's total last. They
+	 * run on time, not on the scrolling, so that a total is only ever on its way
+	 * to the sum and never rests short of it.
+	 */
+	.grow-bar {
+		transform-box: fill-box;
+		transform-origin: left center;
+	}
+
+	.week-report[data-arrival="waiting"] .grow-bar {
+		transform: scaleX(0);
+	}
+
+	.week-report[data-arrival="arrived"] .grow-bar {
+		animation: grow-bar var(--md-sys-motion-duration-extra-long2)
+			var(--md-sys-motion-easing-emphasized-decelerate) backwards;
+	}
+
+	@supports (width: calc(round(down, 5px, 2px))) and (width: calc(mod(5px, 2px))) {
+		/* The value in the markup keeps its room and is what is read out; the
+		   counting total is drawn over it. */
+		.week-report[data-arrival] .count-up-value {
+			opacity: 0;
+		}
+
+		.week-report[data-arrival] .count-up::after {
+			position: absolute;
+			inset-block-start: 0;
+			inset-inline-end: 0;
+			white-space: nowrap;
+			counter-reset: hours calc(round(down, var(--counted) / 60, 1)) minutes
+				calc(mod(var(--counted), 60));
+			content: counter(hours) ":" counter(minutes, decimal-leading-zero);
+		}
+
+		.week-report[data-arrival="arrived"] .count-up::after {
+			--counted: var(--count-to);
+			animation: count-up var(--md-sys-motion-duration-extra-long2)
+				var(--md-sys-motion-easing-emphasized-decelerate) backwards;
+		}
+	}
+
+	.week-report[data-arrival="arrived"] tfoot .count-up::after {
+		animation-delay: var(--md-sys-motion-duration-medium4);
+	}
+
+	.week-report[data-arrival="arrived"] tr:nth-child(2) .grow-bar,
+	.week-report[data-arrival="arrived"] tr:nth-child(2) .count-up::after {
+		animation-delay: var(--md-sys-motion-duration-short2);
+	}
+
+	.week-report[data-arrival="arrived"] tr:nth-child(3) .grow-bar,
+	.week-report[data-arrival="arrived"] tr:nth-child(3) .count-up::after {
+		animation-delay: var(--md-sys-motion-duration-short4);
+	}
+
+	.week-report[data-arrival="arrived"] tr:nth-child(4) .grow-bar,
+	.week-report[data-arrival="arrived"] tr:nth-child(4) .count-up::after {
+		animation-delay: var(--md-sys-motion-duration-medium2);
+	}
+
+	@supports (animation-timeline: view()) {
+		/* The band settles as the page leaves the top. */
+		.site-header-rule,
+		.site-name {
+			animation-duration: auto;
+			animation-timing-function: linear;
+			animation-fill-mode: both;
+			animation-timeline: scroll(root block);
+			animation-range: 0 calc(var(--md-sys-spacing-unit) * 24);
+		}
+
+		.site-header-rule {
+			animation-name: settle-rule;
+		}
+
+		.site-name {
+			transform-origin: left center;
+			animation-name: settle-name;
+		}
+
+		/* Everything below follows its own passage up the window, and has settled
+		   by the time it is three tenths of the way up. */
+		.timer-steps > li,
+		.day-sum > span,
+		.drift {
+			animation-duration: auto;
+			animation-timing-function: linear;
+			animation-fill-mode: both;
+			animation-timeline: view();
+		}
+
+		/* Ready, running, logged: each state of the timer arrives after the one
+		   before, because it stands below it. */
+		.timer-steps > li {
+			animation-name: step-in;
+			animation-range: entry 50% cover 28%;
+		}
+
+		/* The day is added up term by term, and the total comes last. */
+		.day-sum > span {
+			animation-name: term-in;
+		}
+
+		.day-sum > span:nth-child(1) {
+			animation-range: cover 6% cover 12%;
+		}
+
+		.day-sum > span:nth-child(2) {
+			animation-range: cover 10% cover 16%;
+		}
+
+		.day-sum > span:nth-child(3) {
+			animation-range: cover 14% cover 20%;
+		}
+
+		.day-sum > span:nth-child(4) {
+			animation-range: cover 18% cover 24%;
+		}
+
+		.day-sum > span:nth-child(5) {
+			animation-range: cover 23% cover 30%;
+		}
+
+		/*
+		 * The anatomy of a working day is put together as it comes into the window,
+		 * in the order its parts are numbered: the running stretch, the finished
+		 * ones and the breaks between them, the day added up, the week's strips a day
+		 * at a time, and the total last. The bench and the machine are there from the
+		 * start. All of it is in place just after the drawing is wholly in the window.
+		 */
+		.anatomy[data-stepping] .anatomy-drawing {
+			view-timeline: --anatomy block;
+		}
+
+		.anatomy[data-stepping] [data-step] {
+			animation-name: part-in;
+			animation-duration: auto;
+			animation-timing-function: linear;
+			animation-fill-mode: both;
+			animation-timeline: --anatomy;
+		}
+
+		.anatomy[data-stepping] [data-step="1"] {
+			animation-range: entry 20% entry 32%;
+		}
+
+		.anatomy[data-stepping] [data-step="2"] {
+			animation-range: entry 30% entry 42%;
+		}
+
+		.anatomy[data-stepping] [data-step="3"] {
+			animation-range: entry 40% entry 52%;
+		}
+
+		.anatomy[data-stepping] [data-step="4"] {
+			animation-range: entry 50% entry 62%;
+		}
+
+		.anatomy[data-stepping] [data-step="5"] {
+			animation-range: entry 60% entry 74%;
+		}
+
+		.anatomy[data-stepping] [data-day="0"] {
+			animation-range: entry 74% entry 84%;
+		}
+
+		.anatomy[data-stepping] [data-day="1"] {
+			animation-range: entry 78% entry 88%;
+		}
+
+		.anatomy[data-stepping] [data-day="2"] {
+			animation-range: entry 82% entry 92%;
+		}
+
+		.anatomy[data-stepping] [data-day="3"] {
+			animation-range: entry 86% entry 96%;
+		}
+
+		.anatomy[data-stepping] [data-day="4"] {
+			animation-range: entry 90% entry 100%;
+		}
+
+		.anatomy[data-stepping] [data-step="7"] {
+			animation-range: entry 100% contain 20%;
+		}
+
+		/* A photograph moves a little slower than the page, inside its frame. */
+		.drift {
+			animation-name: drift;
+			animation-range: cover;
+		}
+	}
+}
+
+@keyframes sheet-arrive {
+	from {
+		opacity: 0;
+		transform: translateY(calc(var(--md-sys-spacing-unit) * 3));
+	}
+}
+
+@keyframes settle-rule {
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes settle-name {
+	to {
+		transform: scale(0.86);
+	}
+}
+
+@keyframes grow-bar {
+	from {
+		transform: scaleX(0);
+	}
+}
+
+@keyframes count-up {
+	from {
+		--counted: 0;
+	}
+}
+
+@keyframes step-in {
+	from {
+		opacity: 0;
+		transform: translateY(calc(var(--md-sys-spacing-unit) * 4));
+	}
+}
+
+@keyframes part-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes term-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes drift {
+	from {
+		transform: translateY(-4%) scale(1.1);
+	}
+
+	to {
+		transform: translateY(4%) scale(1.1);
+	}
+}

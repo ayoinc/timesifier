@@ -5,9 +5,11 @@ import { useSearchParams } from "react-router";
 import { Button, type ButtonVariant } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
 import { Dialog, DialogTrigger } from "~/components/Dialog";
+import { Digits } from "~/components/Digits";
 import { IconButton, type IconButtonVariant } from "~/components/IconButton";
 import { AddIcon } from "~/components/icons/AddIcon";
 import { MoreVertIcon } from "~/components/icons/MoreVertIcon";
+import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
@@ -16,6 +18,7 @@ import { createSnackbarQueue, SnackbarRegion, showSnackbar } from "~/components/
 import { Switch } from "~/components/Switch";
 import { Tab, TabList, TabPanel, Tabs } from "~/components/Tabs";
 import { TextField } from "~/components/TextField";
+import { TimerMark } from "~/components/TimerMark";
 import { Tooltip } from "~/components/Tooltip";
 
 // The component gallery: every component in every state, in the light scheme and
@@ -110,6 +113,12 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 	);
 }
 
+/** Seconds as a stopwatch shows them: 0:59:58. */
+function stopwatchOf(seconds: number): string {
+	const two = (value: number) => String(value).padStart(2, "0");
+	return `${Math.floor(seconds / 3600)}:${two(Math.floor(seconds / 60) % 60)}:${two(seconds % 60)}`;
+}
+
 const BUTTON_VARIANTS: ButtonVariant[] = ["filled", "tonal", "outlined", "text"];
 const ICON_BUTTON_VARIANTS: IconButtonVariant[] = ["standard", "filled", "tonal", "outlined"];
 
@@ -119,6 +128,7 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 	const [snackbars] = useState(createSnackbarQueue);
 	const [choice, setChoice] = useState("Nothing chosen yet");
 	const [presses, setPresses] = useState(0);
+	const [seconds, setSeconds] = useState(3598);
 	const title = scheme === "light" ? "Light scheme" : "Dark scheme";
 
 	useEffect(() => {
@@ -457,6 +467,65 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 						<Tooltip label="Opens the weekly report" placement="bottom">
 							<Button variant="text">Report</Button>
 						</Tooltip>
+					</Row>
+				</Component>
+
+				<Component name="Digits">
+					<Row label="a time that changes: only the digit that changes is drawn again">
+						<p role="timer" aria-label="Elapsed time" className="text-headline-medium">
+							<Digits value={stopwatchOf(seconds)} />
+						</p>
+						<Button variant="tonal" onPress={() => setSeconds(seconds + 1)}>
+							Add a second
+						</Button>
+					</Row>
+				</Component>
+
+				<Component name="TimerMark">
+					<Row label="ready, running, and the two states of the control">
+						<TimerMark running={false} />
+						<TimerMark running />
+						<span className="rounded-small bg-primary-container p-2">
+							<TimerMark running={false} tone="filled" size="large" />
+						</span>
+						<span className="rounded-small bg-primary-container p-2">
+							<TimerMark running tone="filled" size="large" />
+						</span>
+					</Row>
+				</Component>
+
+				<Component name="Ledger">
+					<Row label="a sheet of rows: heading, rows with a figure, one total">
+						<div className="w-full max-w-120">
+							<Ledger heading="Today, Wednesday 11 November" note="3 entries">
+								<LedgerRows>
+									<LedgerRow
+										title="Inbox and invoices"
+										detail="Admin"
+										value="0:10"
+										aside="08:10–08:20"
+									/>
+									<LedgerRow
+										title="Navigation and page templates"
+										detail="Website rebuild"
+										value="1:05"
+										aside="08:20–09:25"
+									/>
+									<LedgerRow title="Receipts" detail="Admin" value="0:35" aside="09:30–10:05" />
+								</LedgerRows>
+								<LedgerTotal label="Today" value="1:50" />
+							</Ledger>
+						</div>
+					</Row>
+					<Row label="without figures: people, with a state at the end of the heading">
+						<div className="w-full max-w-120">
+							<Ledger heading="Members" note="2 people">
+								<LedgerRows>
+									<LedgerRow title="Ada Okafor" detail="ada@example.com" value="Owner" />
+									<LedgerRow title="Jonas Meyer" detail="jonas@example.com" value="Member" />
+								</LedgerRows>
+							</Ledger>
+						</div>
 					</Row>
 				</Component>
 

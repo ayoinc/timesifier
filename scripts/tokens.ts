@@ -1,5 +1,7 @@
-// Generates app/styles/tokens.css: every design token as a CSS custom property.
-// Run with `pnpm tokens`; `--print` writes to standard output instead of the file.
+// Generates app/styles/tokens.css: every design token as a CSS custom property,
+// and app/styles/theme-colour.ts, the one colour a page's markup has to name.
+// Run with `pnpm tokens`; `--print` and `--print-theme-colour` write one of them
+// to standard output instead.
 import { writeFileSync } from "node:fs";
 import { material } from "./material-color.ts";
 
@@ -7,50 +9,107 @@ import { material } from "./material-color.ts";
 // Sources. Change a value here, run `pnpm tokens`, commit the result.
 // ---------------------------------------------------------------------------------
 
-/** The one colour every colour role in both schemes is derived from. */
-const SEED_COLOUR = "#4F5BD5";
+/**
+ * The colour every colour role in both schemes is derived from: the amber of the
+ * arrowhead in the product's mark, sampled from the owner's drawing of it
+ * (docs/design-direction.md, "The mark"). It is the yellow of the sheet.
+ */
+const SEED_COLOUR = "#FEAD05";
 
-/** The typeface, and the self-hosted package its font files come from. */
-const TYPEFACE = {
-	family: "Roboto Flex Variable",
-	stylesheet: "@fontsource-variable/roboto-flex/index.css",
+/**
+ * The charcoal of the T in the mark, sampled from the same drawing. It is the one
+ * colour that is not derived from the seed: the ink of the light scheme, and of
+ * anything set on the amber in either scheme. `ink` stands for it in the table
+ * below; it is not a role of its own.
+ */
+const INK_COLOUR = "#252a2f";
+
+/**
+ * Roles this product places itself. Each takes one Material role, or the ink, in
+ * the light scheme and another in the dark scheme.
+ * [role, in the light scheme, in the dark scheme]
+ *
+ * `primary` is what an action is drawn in. Material's own primary for an amber
+ * seed is a brown in the light scheme and a cream in the dark one; here it is
+ * the ink of the sheet by day and the amber of the lit board by night.
+ * The sheet is the amber page by day and the board by night.
+ * Text on paper by day, and on the amber at any hour, is the mark's ink.
+ * Material's `on-secondary-container` measures 4.55:1 at rest and under 4.5:1
+ * beneath a state layer; the role it is placed on keeps a tonal button above
+ * 5.6:1 in every state.
+ */
+const PLACED_ROLES = [
+	["primary", "ink", "primary-container"],
+	["on-primary", "primary-container", "ink"],
+	["on-primary-fixed", "ink", "ink"],
+	["on-primary-container", "ink", "ink"],
+	["on-surface", "ink", "on-surface"],
+	["on-background", "ink", "on-background"],
+	["on-secondary-container", "on-secondary-fixed-variant", "secondary-fixed"],
+	["sheet", "primary-container", "surface-container-lowest"],
+	["on-sheet", "ink", "primary-container"],
+	["on-sheet-variant", "on-primary-fixed-variant", "on-surface-variant"],
+] as const;
+
+/**
+ * The design has one accent. Material gives a yellow seed a cyan tertiary; every
+ * tertiary role takes the value of the secondary role of the same name instead.
+ */
+const ONE_ACCENT = { from: "tertiary", to: "secondary" };
+
+/**
+ * The typefaces: one family in two widths, as a timetable is set. The condensed
+ * width is for display text and columns of times, the normal width for reading.
+ * The font files are in app/fonts/ and app/styles/fonts.css declares them.
+ */
+const TYPEFACES = {
+	brand: "Sofia Sans Condensed Variable",
+	plain: "Sofia Sans Variable",
 };
-const FALLBACK_FONTS =
-	'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+const FONT_STYLESHEET = "./fonts.css";
+const FALLBACK_FONTS = 'system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
 /** Material 3 Expressive "default spatial" spring, with a mass of 1. */
 const SPRING = { stiffness: 380, dampingRatio: 0.8 };
 
-/** Material 3 type scale: [role, size px, line height px, weight, tracking px, typeface]. */
+/**
+ * The type scale: Material 3's roles, [role, size px, line height px, weight, tracking px, typeface].
+ * Display and headline are the condensed width, heavy and set tight; title, body and
+ * label keep Material's sizes and line heights, with the tracking this typeface needs.
+ */
 const TYPE_SCALE = [
-	["display-large", 57, 64, 400, -0.25, "brand"],
-	["display-medium", 45, 52, 400, 0, "brand"],
-	["display-small", 36, 44, 400, 0, "brand"],
-	["headline-large", 32, 40, 400, 0, "brand"],
-	["headline-medium", 28, 36, 400, 0, "brand"],
-	["headline-small", 24, 32, 400, 0, "brand"],
-	["title-large", 22, 28, 400, 0, "brand"],
-	["title-medium", 16, 24, 500, 0.15, "plain"],
-	["title-small", 14, 20, 500, 0.1, "plain"],
-	["body-large", 16, 24, 400, 0.5, "plain"],
-	["body-medium", 14, 20, 400, 0.25, "plain"],
-	["body-small", 12, 16, 400, 0.4, "plain"],
-	["label-large", 14, 20, 500, 0.1, "plain"],
-	["label-medium", 12, 16, 500, 0.5, "plain"],
-	["label-small", 11, 16, 500, 0.5, "plain"],
+	["display-large", 88, 84, 800, -0.5, "brand"],
+	["display-medium", 64, 64, 800, -0.25, "brand"],
+	["display-small", 44, 46, 800, 0, "brand"],
+	["headline-large", 36, 40, 700, 0, "brand"],
+	["headline-medium", 28, 32, 700, 0, "brand"],
+	["headline-small", 24, 30, 700, 0, "brand"],
+	["title-large", 22, 28, 700, 0, "brand"],
+	["title-medium", 16, 24, 600, 0.1, "plain"],
+	["title-small", 14, 20, 600, 0.1, "plain"],
+	["body-large", 16, 24, 400, 0.1, "plain"],
+	["body-medium", 14, 20, 400, 0.15, "plain"],
+	["body-small", 12, 16, 400, 0.2, "plain"],
+	["label-large", 14, 20, 600, 0.1, "plain"],
+	["label-medium", 12, 16, 600, 0.3, "plain"],
+	["label-small", 11, 16, 600, 0.3, "plain"],
 ] as const;
 
-/** Material 3 corner scale in px, including the Expressive additions. */
+/**
+ * The corner scale in px. Material 3's step names with tighter values: a printed
+ * sheet and the plates of a sign have small corners, and only what must read as
+ * round (a switch, an active indicator) uses `full`.
+ */
 const CORNERS = [
 	["none", 0],
-	["extra-small", 4],
-	["small", 8],
-	["medium", 12],
-	["large", 16],
-	["large-increased", 20],
-	["extra-large", 28],
-	["extra-large-increased", 32],
-	["extra-extra-large", 48],
+	["extra-small", 2],
+	["small", 4],
+	["medium", 6],
+	["large", 8],
+	["large-increased", 10],
+	["extra-large", 12],
+	["extra-large-increased", 16],
+	["extra-extra-large", 24],
 ] as const;
 
 /** Every space and size is a multiple of this unit. */
@@ -131,13 +190,14 @@ const FOCUS_INDICATOR = [
 // ---------------------------------------------------------------------------------
 
 function colourRoles(): string[] {
-	const { Hct, MaterialDynamicColors, SchemeTonalSpot, argbFromHex, hexFromArgb } = material;
+	const { Hct, MaterialDynamicColors, SchemeFidelity, argbFromHex, hexFromArgb } = material;
 	const seed = Hct.fromInt(argbFromHex(SEED_COLOUR));
-	// Tonal spot at standard contrast, in the 2025 (Expressive) colour specification.
-	const light = new SchemeTonalSpot(seed, false, 0, "2025", "phone");
-	const dark = new SchemeTonalSpot(seed, true, 0, "2025", "phone");
+	// Fidelity keeps the seed itself as the primary container, in both schemes;
+	// standard contrast, in the 2025 (Expressive) colour specification.
+	const light = new SchemeFidelity(seed, false, 0, "2025", "phone");
+	const dark = new SchemeFidelity(seed, true, 0, "2025", "phone");
 
-	const roles = new Map<string, InstanceType<typeof material.DynamicColor>>();
+	const material3 = new Map<string, { light: string; dark: string }>();
 	for (const role of [
 		...new MaterialDynamicColors().allColors,
 		MaterialDynamicColors.surfaceVariant,
@@ -145,12 +205,28 @@ function colourRoles(): string[] {
 		MaterialDynamicColors.shadow,
 		MaterialDynamicColors.scrim,
 	]) {
-		roles.set(role.name.replaceAll("_", "-"), role);
+		material3.set(role.name.replaceAll("_", "-"), {
+			light: hexFromArgb(role.getArgb(light)),
+			dark: hexFromArgb(role.getArgb(dark)),
+		});
+	}
+	const roles = new Map(material3);
+	const sources = new Map(material3).set("ink", { light: INK_COLOUR, dark: INK_COLOUR });
+	for (const [name, inLight, inDark] of PLACED_ROLES) {
+		const day = sources.get(inLight);
+		const night = sources.get(inDark);
+		if (!day || !night) throw new Error(`No Material role for the placed role ${name}`);
+		roles.set(name, { light: day.light, dark: night.dark });
+	}
+	for (const name of material3.keys()) {
+		if (!name.includes(ONE_ACCENT.from)) continue;
+		const twin = roles.get(name.replace(ONE_ACCENT.from, ONE_ACCENT.to));
+		if (!twin) throw new Error(`No ${ONE_ACCENT.to} role to stand in for ${name}`);
+		roles.set(name, twin);
 	}
 
 	return [...roles].map(
-		([name, role]) =>
-			`--md-sys-color-${name}: light-dark(${hexFromArgb(role.getArgb(light))}, ${hexFromArgb(role.getArgb(dark))});`,
+		([name, { light, dark }]) => `--md-sys-color-${name}: light-dark(${light}, ${dark});`,
 	);
 }
 
@@ -163,8 +239,9 @@ function rem(px: number): string {
 }
 
 function typeScale(): string[] {
-	const stack = `"${TYPEFACE.family}", ${FALLBACK_FONTS}`;
-	const lines = [`--md-ref-typeface-brand: ${stack};`, `--md-ref-typeface-plain: ${stack};`];
+	const lines = Object.entries(TYPEFACES).map(
+		([name, family]) => `--md-ref-typeface-${name}: "${family}", ${FALLBACK_FONTS};`,
+	);
 	for (const [role, size, lineHeight, weight, tracking, typeface] of TYPE_SCALE) {
 		const name = `--md-sys-typescale-${role}`;
 		lines.push(
@@ -284,7 +361,7 @@ function render(): string {
 	const body = groups.map(([title, lines]) => block(title, lines)).join("\n\n");
 
 	return `/* Generated by \`pnpm tokens\` from scripts/tokens.ts. Do not edit this file: change the script and run the command again. */
-@import "${TYPEFACE.stylesheet}";
+@import "${FONT_STYLESHEET}";
 
 :root {
 	color-scheme: light dark;
@@ -316,10 +393,29 @@ ${body}
 `;
 }
 
+/**
+ * The colour of the band at the top of every page, in each scheme, for the one
+ * place a style sheet cannot reach: the `theme-color` a browser paints its own
+ * frame in. Written beside the tokens so that the two cannot drift apart.
+ */
+function renderThemeColour(): string {
+	const sheet = /--md-sys-color-sheet: light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\);/.exec(
+		colourRoles().join("\n"),
+	);
+	if (!sheet) throw new Error("No sheet role to take the theme colour from");
+	return `// Generated by scripts/tokens.ts. Do not edit: change the sources there and run \`pnpm tokens\`.
+
+/** The \`sheet\` colour role in each scheme, for \`<meta name="theme-color">\`. */
+export const THEME_COLOUR = { light: "${sheet[1]}", dark: "${sheet[2]}" } as const;
+`;
+}
+
 if (process.argv.includes("--print")) {
 	process.stdout.write(render());
+} else if (process.argv.includes("--print-theme-colour")) {
+	process.stdout.write(renderThemeColour());
 } else {
-	const file = new URL("../app/styles/tokens.css", import.meta.url);
-	writeFileSync(file, render());
-	console.log("Wrote app/styles/tokens.css");
+	writeFileSync(new URL("../app/styles/tokens.css", import.meta.url), render());
+	writeFileSync(new URL("../app/styles/theme-colour.ts", import.meta.url), renderThemeColour());
+	console.log("Wrote app/styles/tokens.css and app/styles/theme-colour.ts");
 }

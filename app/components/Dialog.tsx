@@ -11,8 +11,8 @@ import {
 import { cx } from "./cx";
 import { DIALOG_MOTION, SCRIM_MOTION } from "./motion";
 
-// Material 3 basic dialog: a surface-container-high card with 28px corners at
-// elevation 3, between 280 and 560px wide with 24px of padding, over a 32% scrim.
+// Material 3 basic dialog: a surface-container-high card with `extra-large`
+// corners at elevation 3, between 280 and 560px wide with 24px of padding, over a 32% scrim.
 
 /** Wraps a button and a `Dialog` or `Sheet`: pressing the button opens it. */
 export { DialogTrigger };

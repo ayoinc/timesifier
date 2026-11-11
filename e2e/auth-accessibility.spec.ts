@@ -146,9 +146,9 @@ async function walkEveryStep(page: Page): Promise<number[]> {
 
 // Shorter than the sign-up page's taller step and taller than its shorter one,
 // so the page outgrows the window at one step and fits it again at the other.
-// At this width the step that takes the name and address measures 572px and
-// the one that takes the code 624px.
-const SHORT = { width: 1280, height: 600 };
+// At this width the step that takes the name and address measures 568px and
+// the one that takes the code is taller than this window and no taller than 600px.
+const SHORT = { width: 1280, height: 576 };
 
 test.describe("with reduced motion requested", () => {
 	test.use({ reducedMotion: "reduce" });

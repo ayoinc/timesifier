@@ -4,7 +4,9 @@ import type { Locator, Page } from "@playwright/test";
 import { expect } from "./fixtures";
 
 // axe-core's rules for WCAG 2.0, 2.1 and 2.2 at levels A and AA. No rule is
-// disabled and nothing on the page is excluded.
+// disabled, and nothing on the page is excluded but a drawing a test names:
+// axe cannot tell what lies behind text inside an SVG, so the test that leaves a
+// drawing out measures that drawing's text itself (`drawnContrast` below).
 const WCAG_22_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 /** An input with nothing typed in it has no text to measure. */
@@ -17,11 +19,18 @@ export const UNDER_AN_OVERLAY = "bgOverlap";
  * every violation, and every piece of text whose contrast axe could not measure
  * for a reason other than the ones named in `unmeasurable`. A scan that reports
  * no violations because it could not see the colours proves nothing.
+ * `drawings` are selectors of SVG drawings left out of the scan.
  */
-export async function problems(page: Page, unmeasurable: string[] = []): Promise<string[]> {
+export async function problems(
+	page: Page,
+	unmeasurable: string[] = [],
+	drawings: string[] = [],
+): Promise<string[]> {
 	// A colour measured part-way through a fade is not the colour shown.
 	await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
-	const results = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
+	let scan = new AxeBuilder({ page }).withTags(WCAG_22_AA);
+	for (const drawing of drawings) scan = scan.exclude(drawing);
+	const results = await scan.analyze();
 
 	const violations = results.violations.flatMap((violation) =>
 		violation.nodes.map(
@@ -77,5 +86,52 @@ export function contrast(text: Locator): Promise<number> {
 			luminance(getComputedStyle(behind).backgroundColor),
 		].sort((a, b) => b - a);
 		return (lighter + 0.05) / (darker + 0.05);
+	});
+}
+
+/**
+ * The WCAG contrast ratio of every piece of text in an SVG drawing against what
+ * it is drawn on: the shape just before it in its group, a plate or a disc, or
+ * else the page behind the drawing. One entry for each piece of text shown.
+ */
+export function drawnContrast(drawing: Locator): Promise<{ text: string; ratio: number }[]> {
+	return drawing.evaluate((svg) => {
+		const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+		if (!canvas) throw new Error("no canvas");
+		const channels = (colour: string) => {
+			canvas.clearRect(0, 0, 1, 1);
+			canvas.fillStyle = colour;
+			canvas.fillRect(0, 0, 1, 1);
+			return [...canvas.getImageData(0, 0, 1, 1).data];
+		};
+		const luminance = (colour: string) => {
+			const [red = 0, green = 0, blue = 0] = channels(colour).map((channel) => {
+				const share = channel / 255;
+				return share <= 0.04045 ? share / 12.92 : ((share + 0.055) / 1.055) ** 2.4;
+			});
+			return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+		};
+		const pageBehind = () => {
+			let behind: Element | null = svg;
+			while (behind && channels(getComputedStyle(behind).backgroundColor)[3] !== 255) {
+				behind = behind.parentElement;
+			}
+			return getComputedStyle(behind ?? document.body).backgroundColor;
+		};
+
+		return [...svg.querySelectorAll("text")].map((text) => {
+			// The shape drawn just before the text, where there is one: a number's disc, a window's plate.
+			const before = text.previousElementSibling;
+			const ground = before?.matches("rect, circle") ? before : null;
+			const behind = ground ? getComputedStyle(ground).fill : pageBehind();
+			const [lighter = 0, darker = 0] = [
+				luminance(getComputedStyle(text).fill),
+				luminance(behind),
+			].sort((one, other) => other - one);
+			return {
+				text: (text.textContent ?? "").trim(),
+				ratio: (lighter + 0.05) / (darker + 0.05),
+			};
+		});
 	});
 }
