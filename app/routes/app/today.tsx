@@ -1,5 +1,14 @@
-import { destination } from "~/shell/destinations";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+
+import { membershipContext } from "~/organisations/membership.server";
+import { DoneMark } from "~/routes/auth/AuthPage";
+import { destination, membersPath, WELCOME_PARAM } from "~/shell/destinations";
+import { TEXT_LINK } from "~/shell/links";
 import { PageHeading } from "~/shell/PageHeading";
+
+import type { Route } from "./+types/today";
+import { useOrganisation } from "./useOrganisation";
 
 const { label } = destination("today");
 
@@ -7,13 +16,49 @@ export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
-export default function Today() {
+/**
+ * Whether the person has just created this organisation, their first: the page
+ * that creates it sends them here with a mark on the address. Only its owner
+ * is welcomed to it.
+ */
+export function loader({ url, context }: Route.LoaderArgs) {
+	const { role } = context.get(membershipContext);
+	return { welcome: url.searchParams.has(WELCOME_PARAM) && role === "owner" };
+}
+
+export default function Today({ loaderData }: Route.ComponentProps) {
+	const organisation = useOrganisation();
+	// The moment is marked once. The mark comes off the address at once, so that
+	// reloading the page or coming back to it does not mark it again, and the
+	// welcome stays until the person leaves the page.
+	const [welcome] = useState(loaderData.welcome);
+	const navigate = useNavigate();
+	const { pathname } = useLocation();
+	useEffect(() => {
+		if (loaderData.welcome) navigate(pathname, { replace: true, preventScrollReset: true });
+	}, [loaderData.welcome, navigate, pathname]);
+
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
 			<p className="mt-2 text-body-large text-on-surface-variant">
 				Your running timer and the entries you track today will appear here.
 			</p>
+			{welcome && (
+				<div className="mt-6 flex items-center gap-4 rounded-large bg-surface-container p-4">
+					<DoneMark />
+					<div>
+						<p className="text-title-medium">{organisation.name} is ready</p>
+						<p className="mt-1 text-body-medium text-on-surface-variant">
+							You are its owner. When you want company,{" "}
+							<Link to={membersPath(organisation.slug)} className={TEXT_LINK}>
+								invite the people you work with
+							</Link>
+							.
+						</p>
+					</div>
+				</div>
+			)}
 		</>
 	);
 }

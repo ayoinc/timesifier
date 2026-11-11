@@ -2,45 +2,34 @@ import { exports } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeNext, signInPath } from "~/routes/auth/paths";
-import { APP_PATH, destinations } from "~/shell/destinations";
+import {
+	APP_PATH,
+	destinationPath,
+	destinations,
+	membersPath,
+	NEW_ORGANISATION_PATH,
+	organisationPath,
+} from "~/shell/destinations";
 import { freshDatabase } from "../db/database";
+import { createOrganisation } from "../organisations/harness";
+import { routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
 import { captureEmail, type Mailbox, ORIGIN, post, signIn } from "./harness";
 
 // Criterion 6 of card TS-008: every route under /app redirects to sign-in
 // without a session. The routes are read from the built route configuration, so
 // a route added under /app is requested here without anyone listing it; if it
 // is not behind the guard, its test fails.
+//
+// An organisation's pages are under /app/<slug>. Their addresses here stand on
+// the slug `acme`, which is the organisation the signed-in person of these
+// tests creates.
+
+const ORGANISATION = STAND_IN_ORGANISATION;
+const REPORTS = destinationPath(ORGANISATION, "reports");
 
 const worker = exports.default;
 
-type RouteUnderTest = {
-	id: string;
-	/** The route's full address, with a stand-in for each parameter. */
-	address: string;
-	hasAction: boolean;
-};
-
-/** A route's address: its own path after those of the routes it is nested in. */
-function addressOf(id: string | undefined): string {
-	const route = id === undefined ? undefined : routes[id];
-	if (!route) return "";
-	const own = (route.path ?? "")
-		.split("/")
-		.filter(Boolean)
-		// `:id`, `:id?` and `*` each stand for something a person would have typed.
-		.map((segment) => (segment.startsWith(":") || segment === "*" ? "x" : segment));
-	return [addressOf(route.parentId), ...own].filter(Boolean).join("/");
-}
-
-/** Every route whose address is /app or below it, wherever it sits in the route tree. */
-const underApp: RouteUnderTest[] = Object.values(routes)
-	.filter((route) => route !== undefined)
-	.map((route) => ({
-		id: route.id,
-		address: `/${addressOf(route.id)}`,
-		hasAction: route.module.action !== undefined,
-	}))
-	.filter(({ address }) => address === APP_PATH || address.startsWith(`${APP_PATH}/`));
+const underApp = routesAtOrUnder(APP_PATH);
 
 const withAction = underApp.filter((route) => route.hasAction);
 
@@ -91,9 +80,14 @@ afterEach(() => {
 describe("the list of routes under /app", () => {
 	it("is read from the route configuration and holds every destination of the shell", () => {
 		const addresses = underApp.map((route) => route.address);
-		for (const destination of destinations) expect(addresses).toContain(destination.path);
-		// The layout, and one route for each destination.
-		expect(underApp.length).toBeGreaterThanOrEqual(destinations.length + 1);
+		for (const { id } of destinations) {
+			expect(addresses).toContain(destinationPath(ORGANISATION, id));
+		}
+		expect(addresses).toContain(membersPath(ORGANISATION));
+		expect(addresses).toContain(NEW_ORGANISATION_PATH);
+		// The two layouts, `/app` itself, the page that creates an organisation,
+		// one route for each destination and the members page.
+		expect(underApp.length).toBeGreaterThanOrEqual(destinations.length + 5);
 	});
 
 	it("leaves out the pages a person uses without a session", () => {
@@ -133,9 +127,9 @@ describe("without a session, every route under /app redirects to sign-in", () =>
 	);
 
 	it("remembers the query of the page that was asked for", async () => {
-		const response = await ask(`${APP_PATH}/reports?week=46&team=blue`);
+		const response = await ask(`${REPORTS}?week=46&team=blue`);
 		expect(response.headers.get("Location")).toBe(
-			"/sign-in?next=%2Fapp%2Freports%3Fweek%3D46%26team%3Dblue",
+			"/sign-in?next=%2Fapp%2Facme%2Freports%3Fweek%3D46%26team%3Dblue",
 		);
 	});
 
@@ -146,8 +140,13 @@ describe("without a session, every route under /app redirects to sign-in", () =>
 });
 
 describe("with a session", () => {
-	it.each(underApp)("$id: $address is served", async ({ address }) => {
+	// `/app` itself shows a page only to a person with several organisations;
+	// test/pages/app.test.ts follows where it sends everybody else.
+	const pages = underApp.filter(({ address }) => address !== APP_PATH);
+
+	it.each(pages)("$id: $address is served", async ({ address }) => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");
+		expect((await createOrganisation(cookie, "Acme")).slug).toBe(ORGANISATION);
 
 		const page = await ask(address, {}, cookie);
 		expect(page.status).toBe(200);
@@ -155,12 +154,21 @@ describe("with a session", () => {
 		expect((await ask(`${address}.data`, {}, cookie)).status).toBe(200);
 	});
 
+	it("/app sends a person with one organisation on to it", async () => {
+		const { cookie } = await signIn(mailbox, "ada@example.com");
+		await createOrganisation(cookie, "Acme");
+
+		const response = await ask(APP_PATH, {}, cookie);
+		expect(response.status).toBe(302);
+		expect(response.headers.get("Location")).toBe(organisationPath(ORGANISATION));
+	});
+
 	it("that has been signed out, the very next request is sent to sign-in", async () => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");
-		expect((await ask(APP_PATH, {}, cookie)).status).toBe(200);
+		expect((await ask(NEW_ORGANISATION_PATH, {}, cookie)).status).toBe(200);
 
 		expect((await post("/sign-out", {}, { cookie })).status).toBe(200);
-		expectSentToSignIn(await ask(APP_PATH, {}, cookie), APP_PATH);
+		expectSentToSignIn(await ask(NEW_ORGANISATION_PATH, {}, cookie), NEW_ORGANISATION_PATH);
 	});
 
 	it("ended from another browser by sign out everywhere, the next move is sent to sign-in", async () => {
@@ -168,10 +176,7 @@ describe("with a session", () => {
 		const elsewhere = await signIn(mailbox, "ada@example.com");
 
 		expect((await post("/revoke-sessions", {}, { cookie: here.cookie })).status).toBe(200);
-		await expectDataSentToSignIn(
-			await ask(`${APP_PATH}/reports.data`, {}, elsewhere.cookie),
-			`${APP_PATH}/reports`,
-		);
+		await expectDataSentToSignIn(await ask(`${REPORTS}.data`, {}, elsewhere.cookie), REPORTS);
 	});
 });
 
@@ -191,8 +196,8 @@ describe("the sign-in and sign-up pages", () => {
 
 	it("sends a signed-in person on to the page under /app they were going to", async () => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");
-		const response = await ask("/sign-in?next=%2Fapp%2Freports%3Fweek%3D46", {}, cookie);
-		expect(response.headers.get("Location")).toBe("/app/reports?week=46");
+		const response = await ask("/sign-in?next=%2Fapp%2Facme%2Freports%3Fweek%3D46", {}, cookie);
+		expect(response.headers.get("Location")).toBe("/app/acme/reports?week=46");
 	});
 
 	it.each([
@@ -210,13 +215,19 @@ describe("the sign-in and sign-up pages", () => {
 });
 
 describe("where a person goes after signing in", () => {
+	const INVITATION = "/invitations/01a1c948-14f6-7039-803e-d4cceb52f23a";
+
 	it.each([
 		["/app", "/app"],
 		["/app/", "/app/"],
-		["/app/reports", "/app/reports"],
-		["/app/reports?week=46&team=a", "/app/reports?week=46&team=a"],
+		["/app/acme/reports", "/app/acme/reports"],
+		["/app/acme/reports?week=46&team=a", "/app/acme/reports?week=46&team=a"],
 		// The fragment never reached the server and is not sent back.
-		["/app/reports#totals", "/app/reports"],
+		["/app/acme/reports#totals", "/app/acme/reports"],
+		// The page of one invitation, by its id. It takes no query, so none is kept.
+		[INVITATION, INVITATION],
+		[`${INVITATION}?from=email`, INVITATION],
+		[`${INVITATION}#join`, INVITATION],
 	])("%s is honoured", (next, expected) => {
 		expect(safeNext(next)).toBe(expected);
 	});
@@ -235,6 +246,20 @@ describe("where a person goes after signing in", () => {
 		["a path that climbs out with encoded dots", "/app/%2e%2e/api/auth/sign-out"],
 		["a path that climbs out with backslashes", "/app\\..\\api\\auth\\sign-out"],
 		["a relative path", "app/reports"],
+		["the invitations prefix alone", "/invitations"],
+		["the invitations prefix with nothing after it", "/invitations/"],
+		["a page below an invitation", `${INVITATION}/accept`],
+		["an invitation whose id climbs out", "/invitations/../api/auth/sign-out"],
+		["an invitation whose id climbs out with encoded dots", "/invitations/%2e%2e/sign-in"],
+		["an invitation whose id holds an encoded slash", "/invitations/a%2Fb"],
+		["an invitation whose id holds a backslash", "/invitations/a\\b"],
+		["an invitation whose id holds a dot", "/invitations/a.data"],
+		["an invitation whose id is too long to be one", `/invitations/${"a".repeat(65)}`],
+		["an invitation on another origin", `https://attacker.example${INVITATION}`],
+		["an invitation on another origin without a scheme", `//attacker.example${INVITATION}`],
+		["an invitation on another origin behind a backslash", `/\\attacker.example${INVITATION}`],
+		["a path that only begins like an invitation", "/invitationsx/abc"],
+		["a relative invitation", "invitations/abc"],
 		["a script", "javascript:alert(1)"],
 		["a path with a space before it", " /app"],
 	])("%s gives /app", (_case, next) => {

@@ -11,7 +11,12 @@ import { SettingsIcon } from "~/components/icons/SettingsIcon";
 import { TodayFilledIcon } from "~/components/icons/TodayFilledIcon";
 import { TodayIcon } from "~/components/icons/TodayIcon";
 
-import { type Destination, type DestinationIcon, destinations } from "./destinations";
+import {
+	type Destination,
+	type DestinationIcon,
+	destinationPath,
+	destinations,
+} from "./destinations";
 import { finishRunningTransition, INDICATOR_NAME, TRANSITION } from "./transitions";
 
 // One navigation, drawn two ways by CSS alone (design rule 17). Under 600px it is
@@ -34,8 +39,15 @@ const ICONS: Record<
 	settings: { rest: SettingsIcon, active: SettingsFilledIcon },
 };
 
-/** The shell's navigation: every destination as a link, the one at `activeIndex` marked as the current page. */
-export function Navigation({ activeIndex }: { activeIndex: number }) {
+export interface NavigationProps {
+	/** The slug of the organisation whose destinations these are. */
+	organisation: string;
+	/** The position of the destination on screen, which is marked as the current page. */
+	activeIndex: number;
+}
+
+/** The shell's navigation: every destination of one organisation as a link. */
+export function Navigation({ organisation, activeIndex }: NavigationProps) {
 	return (
 		<nav
 			aria-label="Main"
@@ -48,7 +60,11 @@ export function Navigation({ activeIndex }: { activeIndex: number }) {
 			<ul className="flex max-medium:h-full medium:flex-col medium:gap-1 medium:pt-11">
 				{destinations.map((destination, index) => (
 					<li key={destination.id} className="max-medium:flex-1">
-						<DestinationLink destination={destination} isActive={index === activeIndex} />
+						<DestinationLink
+							destination={destination}
+							to={destinationPath(organisation, destination.id)}
+							isActive={index === activeIndex}
+						/>
 					</li>
 				))}
 			</ul>
@@ -58,16 +74,19 @@ export function Navigation({ activeIndex }: { activeIndex: number }) {
 
 function DestinationLink({
 	destination,
+	to,
 	isActive,
 }: {
 	destination: Destination;
+	/** Its address in the organisation on screen. */
+	to: string;
 	isActive: boolean;
 }) {
 	const Icon = ICONS[destination.icon][isActive ? "active" : "rest"];
 
 	return (
 		<Link
-			to={destination.path}
+			to={to}
 			prefetch="intent"
 			aria-current={isActive ? "page" : undefined}
 			onClick={finishRunningTransition}
