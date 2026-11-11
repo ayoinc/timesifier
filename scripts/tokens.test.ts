@@ -10,6 +10,10 @@ const committedThemeColour = readFileSync(
 	new URL("../app/styles/theme-colour.ts", import.meta.url),
 	"utf8",
 );
+const committedEmailColours = readFileSync(
+	new URL("../app/styles/email-colours.ts", import.meta.url),
+	"utf8",
+);
 
 function generate(flag = "--print"): string {
 	return execFileSync(process.execPath, ["scripts/tokens.ts", flag], {
@@ -35,6 +39,27 @@ describe("pnpm tokens", () => {
 		);
 		expect(sheet).not.toBeNull();
 		expect(themeColour).toContain(`light: "${sheet?.[1]}", dark: "${sheet?.[2]}"`);
+	});
+
+	it("writes the colours of an email from the light scheme's roles", () => {
+		const emailColours = generate("--print-email-colours");
+
+		expect(committedEmailColours).toBe(emailColours);
+		for (const [name, role] of [
+			["band", "sheet"],
+			["paper", "surface"],
+			["ink", "on-surface"],
+			["quiet", "on-surface-variant"],
+			["rule", "outline-variant"],
+			["action", "primary"],
+			["onAction", "on-primary"],
+		]) {
+			const light = new RegExp(`--md-sys-color-${role}: light-dark\\((#[0-9a-f]{6}),`).exec(
+				committed,
+			);
+			expect(light, role).not.toBeNull();
+			expect(emailColours).toContain(`\t${name}: "${light?.[1]}",`);
+		}
 	});
 });
 

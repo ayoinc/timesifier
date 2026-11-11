@@ -8,9 +8,15 @@ import { fileURLToPath } from "node:url";
 
 const repository = fileURLToPath(new URL("..", import.meta.url));
 
-/** The files `pnpm tokens` generates are the one place raw values belong. */
+/**
+ * The files `pnpm tokens` generates are the one place raw values belong: the
+ * tokens, the colour of the browser's frame, and the colours of an email, which
+ * carries its styles inline and cannot read a custom property.
+ */
 const EXEMPT = new Set(
-	["app/styles/tokens.css", "app/styles/theme-colour.ts"].map((file) => join(repository, file)),
+	["app/styles/tokens.css", "app/styles/theme-colour.ts", "app/styles/email-colours.ts"].map(
+		(file) => join(repository, file),
+	),
 );
 
 const SCANNED = /\.(?:tsx?|jsx?|mjs|cjs|css|html|svg|mdx?|json)$/;
