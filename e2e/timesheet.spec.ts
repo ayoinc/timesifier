@@ -61,6 +61,8 @@ async function startTimer(page: Page) {
 	await expect(trackSheet(page)).toBeHidden();
 	// The Day view's own timer: under 600px the navigation's is not drawn here.
 	await expect(dayTimer(page)).toBeVisible();
+	// The sheet's scrim fades out after the sheet has gone; until it has, it lies over the page.
+	await expect(page.locator("[data-exiting]")).toHaveCount(0);
 }
 
 /** Presses Tab until `target` has the focus: the way a person without a pointer gets there. */
