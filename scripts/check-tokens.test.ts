@@ -11,7 +11,7 @@ function checkTokens(directory?: string) {
 }
 
 describe("pnpm check:tokens", () => {
-	it("fails on the dirty fixture and lists every raw value with its file, line and match", () => {
+	it("fails on the dirty fixture and lists every finding with its file, line and match", () => {
 		const { status, lines } = checkTokens("scripts/fixtures/check-tokens/dirty");
 		const card = "scripts/fixtures/check-tokens/dirty/card.tsx";
 
@@ -25,11 +25,13 @@ describe("pnpm check:tokens", () => {
 			`${card}:8:18  arbitrary property  [mask-type:luminance]`,
 			`${card}:9:18  arbitrary value  bg-primary/[0.5]`,
 			`${card}:10:18  arbitrary value  min-[320px]:`,
+			`${card}:11:18  sibling attribute state  peer-data-focused:`,
+			`${card}:12:41  sibling attribute state  peer-not-aria-invalid/field:`,
 			"scripts/fixtures/check-tokens/dirty/styles/tokens.css:3:11  hex colour  #4f5bd5",
 		]);
 	});
 
-	it("passes array indexing, index signatures, attribute selectors and URL fragments", () => {
+	it("passes array indexing, index signatures, attribute selectors, URL fragments and state that is not a sibling's attribute", () => {
 		const { status, lines } = checkTokens("scripts/fixtures/check-tokens/clean");
 
 		expect(lines).toEqual([
