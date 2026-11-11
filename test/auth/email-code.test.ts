@@ -9,6 +9,7 @@ import {
 	requestCode,
 	sessionCookie,
 	signIn,
+	TURNSTILE_TOKEN,
 	whoIs,
 } from "./harness";
 
@@ -127,5 +128,56 @@ describe("signing in with a code sent by email", () => {
 
 		expect(stored).toBeTruthy();
 		expect(stored).not.toContain(code);
+	});
+});
+
+describe("what is not offered", () => {
+	it("has no password sign-up or sign-in", async () => {
+		const credentials = { email: EMAIL, password: "correct horse battery staple", name: "Ada" };
+
+		const signUp = await post("/sign-up/email", credentials);
+		const signInWithPassword = await post("/sign-in/email", credentials);
+
+		expect(signUp.status).toBe(400);
+		expect(signInWithPassword.status).toBe(400);
+		expect(await countRows("users")).toBe(0);
+	});
+
+	it.each([
+		"/email-otp/request-password-reset",
+		"/forget-password/email-otp",
+		"/email-otp/reset-password",
+		"/email-otp/request-email-change",
+		"/email-otp/change-email",
+		"/email-otp/verify-email",
+		"/email-otp/check-verification-otp",
+	])("answers 404 on %s, and sends nothing", async (path) => {
+		const response = await post(path, { email: EMAIL, otp: "000000", password: "x".repeat(16) });
+
+		expect(response.status).toBe(404);
+		expect(mailbox.sent()).toEqual([]);
+	});
+
+	it.each(["email-verification", "forget-password", "change-email"])(
+		"sends no email when asked for a %s code, even for an address with an account",
+		async (type) => {
+			await signIn(mailbox, EMAIL);
+
+			await post(
+				"/email-otp/send-verification-otp",
+				{ email: EMAIL, type },
+				{ headers: { "x-captcha-response": TURNSTILE_TOKEN } },
+			);
+
+			expect(mailbox.sent(), "only the sign-in code from before").toHaveLength(1);
+		},
+	);
+
+	it("answers 415 to a body that is not JSON", async () => {
+		const response = await post("/sign-in/email-otp", "email=ada", {
+			headers: { "Content-Type": "text/plain" },
+		});
+
+		expect(response.status).toBe(415);
 	});
 });
