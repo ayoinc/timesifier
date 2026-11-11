@@ -16,8 +16,8 @@ const BASE =
 
 const VARIANTS = {
 	standard: "text-on-surface-variant",
-	filled: "bg-primary text-on-primary data-disabled:bg-disabled",
-	tonal: "bg-secondary-container text-on-secondary-container data-disabled:bg-disabled",
+	filled: "over-primary text-on-primary data-disabled:bg-disabled",
+	tonal: "over-secondary-container text-on-secondary-container data-disabled:bg-disabled",
 	outlined: "border border-outline-variant text-on-surface-variant",
 } as const;
 

@@ -14,7 +14,14 @@ import { Popover } from "react-aria-components";
 import { Item, type Node, type SelectState, useSelectState } from "react-stately";
 
 import { cx } from "./cx";
-import { FIELD_ERROR, fieldContainer, fieldIndicator, fieldLabel, fieldSupporting } from "./field";
+import {
+	FIELD_CONTROL,
+	FIELD_ERROR,
+	fieldContainer,
+	fieldIndicator,
+	fieldLabel,
+	fieldSupporting,
+} from "./field";
 import { ArrowDropDownIcon } from "./icons/ArrowDropDownIcon";
 import { POPOVER_MOTION } from "./motion";
 
@@ -104,12 +111,7 @@ export function Select({ options, onChange, description, errorMessage, ...props 
 			data-invalid={isInvalid || undefined}
 			data-required={props.isRequired || undefined}
 		>
-			<div
-				className={cx(
-					fieldContainer(field),
-					"has-data-hovered:state-hover has-data-pressed:state-pressed",
-				)}
-			>
+			<div className={fieldContainer(field)}>
 				<button
 					{...mergeProps(buttonProps, hoverProps, focusProps)}
 					ref={triggerRef}
@@ -117,7 +119,10 @@ export function Select({ options, onChange, description, errorMessage, ...props 
 					data-pressed={isPressed || undefined}
 					data-focused={isFocused || undefined}
 					data-focus-visible={isFocusVisible || undefined}
-					className="peer flex size-full cursor-pointer items-center rounded-t-extra-small ps-4 pe-3 pt-6 pb-2 text-start text-body-large outline-none data-focus-visible:focus-indicator-inner disabled:cursor-not-allowed"
+					className={cx(
+						FIELD_CONTROL,
+						"flex cursor-pointer items-center ps-4 pe-3 pt-6 pb-2 text-start text-body-large data-focus-visible:focus-indicator-inner",
+					)}
 				>
 					<span {...valueProps} className="min-w-0 flex-1 truncate">
 						{state.selectedItem?.rendered}
@@ -227,7 +232,7 @@ function Option({ item, state }: { item: Node<SelectOption>; state: SelectState<
 				"data-focused:state-hover data-focus-visible:state-focus data-focus-visible:focus-indicator-inner data-pressed:state-pressed",
 				"data-disabled:cursor-not-allowed data-disabled:text-disabled",
 				isSelected
-					? "rounded-medium bg-tertiary-container text-on-tertiary-container"
+					? "rounded-medium over-tertiary-container text-on-tertiary-container"
 					: "rounded-extra-small text-on-surface",
 			)}
 		>

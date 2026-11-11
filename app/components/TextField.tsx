@@ -8,7 +8,14 @@ import {
 } from "react-aria-components";
 
 import { cx } from "./cx";
-import { FIELD_ERROR, fieldContainer, fieldIndicator, fieldLabel, fieldSupporting } from "./field";
+import {
+	FIELD_CONTROL,
+	FIELD_ERROR,
+	fieldContainer,
+	fieldIndicator,
+	fieldLabel,
+	fieldSupporting,
+} from "./field";
 
 export interface TextFieldProps
 	extends Pick<
@@ -50,12 +57,13 @@ export function TextField({ label, description, errorMessage, ...props }: TextFi
 		<AriaTextField {...props} className="flex flex-col gap-1">
 			{(field) => (
 				<>
-					<div className={cx(fieldContainer(field), "has-data-hovered:state-hover")}>
+					<div className={fieldContainer(field)}>
 						{/* The one-space placeholder lets the label tell an empty input from a filled one. */}
 						<Input
 							placeholder=" "
 							className={cx(
-								"peer size-full rounded-t-extra-small bg-transparent px-4 pt-6 pb-2 text-body-large outline-none data-disabled:cursor-not-allowed",
+								FIELD_CONTROL,
+								"px-4 pt-6 pb-2 text-body-large",
 								field.isInvalid ? "caret-error" : "caret-primary",
 							)}
 						/>

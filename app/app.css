@@ -213,18 +213,16 @@ body {
  */
 
 /*
- * A Material state layer: the element's own text colour laid over its container.
- * Put `state-layer` on the element, then `state-hover`, `state-focus` or
- * `state-pressed` under the variant for that state. When several apply, the
- * strongest shows. The properties are registered as numbers so the layer can
- * fade, and do not inherit, so a layer never leaks into the elements inside it.
+ * A Material state layer: the element's own text colour mixed into its container
+ * colour. Put `state-layer` on the element, name its container with `over-primary`
+ * (any colour role; leave it out when the element has no fill of its own), then put
+ * `state-hover`, `state-focus` or `state-pressed` under the variant for that state.
+ * When several apply, the strongest shows.
+ *
+ * The result is one plain background colour, which is what lets the accessibility
+ * scan measure the contrast of the text on it in every state. The properties are
+ * registered so they do not inherit: a layer never leaks into the elements inside it.
  */
-@property --state-layer-opacity {
-	syntax: "<number>";
-	inherits: false;
-	initial-value: 0;
-}
-
 @property --state-layer-hover {
 	syntax: "<number>";
 	inherits: false;
@@ -243,18 +241,26 @@ body {
 	initial-value: 0;
 }
 
+@property --state-layer-container {
+	syntax: "<color>";
+	inherits: false;
+	initial-value: transparent;
+}
+
 @utility state-layer {
-	--state-layer-opacity: max(
-		var(--state-layer-hover),
-		var(--state-layer-focus),
-		var(--state-layer-pressed)
-	);
-	--state-layer-color: color-mix(
+	background-color: color-mix(
 		in srgb,
-		currentColor calc(var(--state-layer-opacity) * 100%),
-		transparent
+		currentColor
+			calc(
+				max(var(--state-layer-hover), var(--state-layer-focus), var(--state-layer-pressed)) *
+				100%
+			),
+		var(--state-layer-container)
 	);
-	background-image: linear-gradient(var(--state-layer-color), var(--state-layer-color));
+}
+
+@utility over-* {
+	--state-layer-container: --value(--color-*);
 }
 
 @utility state-hover {
@@ -272,9 +278,8 @@ body {
 /* What a control animates when its state changes; a pressed shape settles on the spring. */
 @utility transition-control {
 	transition:
-		--state-layer-opacity var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-linear),
 		color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
-		background-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+		background-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
 		border-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
 		box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
 		border-radius var(--md-sys-motion-spring-duration) var(--md-sys-motion-spring-easing);

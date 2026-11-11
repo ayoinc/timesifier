@@ -18,9 +18,9 @@ const BASE =
 
 const VARIANTS = {
 	filled:
-		"bg-primary px-4 text-on-primary data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
+		"over-primary px-4 text-on-primary data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
 	tonal:
-		"bg-secondary-container px-4 text-on-secondary-container data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
+		"over-secondary-container px-4 text-on-secondary-container data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
 	outlined: "border border-outline-variant px-4 text-on-surface-variant",
 	text: "px-3 text-primary",
 } as const;
