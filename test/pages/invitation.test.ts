@@ -294,6 +294,19 @@ describe("an invitation that cannot be accepted", () => {
 			},
 		},
 		{
+			// An invitation dies with its sender's role (card TS-027).
+			name: "from a sender who is no longer an owner or admin",
+			async arrange() {
+				const { id } = await invited();
+				const grace = await person(mailbox, "grace@example.com");
+				await seedMembership(acme.id, grace.user.id, "owner");
+				await env.DB.prepare("update memberships set role = 'member' where user_id = ?")
+					.bind(ada.user.id)
+					.run();
+				return { who: await person(mailbox, "bob@example.com"), id };
+			},
+		},
+		{
 			name: "of an organisation that has been deleted",
 			async arrange() {
 				const { id } = await invited();
@@ -356,27 +369,6 @@ describe("an invitation that cannot be accepted", () => {
 		}
 
 		expect(await value("select count(*) from memberships")).toBe(before);
-	});
-
-	// Card TS-027 makes an invitation die with its sender's role: once the
-	// person who sent it is no longer an owner or admin, the server answers as
-	// for every other invalid invitation, and so does this page. That change is
-	// on its own branch. Until the two meet, the server still honours such an
-	// invitation, and this test fails as marked. When it starts to pass, the
-	// branches have met: take `.fails` off.
-	it.fails("from a sender who is no longer an owner or admin: status 410 and the one page", async () => {
-		const { id } = await invited();
-		const grace = await person(mailbox, "grace@example.com");
-		await seedMembership(acme.id, grace.user.id, "owner");
-		await env.DB.prepare("update memberships set role = 'member' where user_id = ?")
-			.bind(ada.user.id)
-			.run();
-		const bob = await person(mailbox, "bob@example.com");
-
-		const response = await open(`/invitations/${id}`, bob);
-
-		expect(response.status).toBe(410);
-		expect(await said(response, id)).toBe(await reference());
 	});
 
 	it("an id that is not one is the same page, and never reaches the database as a query", async () => {

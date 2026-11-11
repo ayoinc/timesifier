@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureEmail, type Mailbox } from "../auth/harness";
+import { captureEmail, type Mailbox, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
 	createOrganisation,
@@ -246,6 +246,13 @@ describe("a person's name", () => {
 		expect(await value("select count(*) from sessions where user_id = ?", ada.user.id)).toBe(
 			sessions,
 		);
+	});
+
+	it("is the only way to change it: the mount does not offer the endpoint that changes a person", async () => {
+		const response = await post("/update-user", { name: "Mallory", image: "x" }, ada);
+
+		expect(response.status).toBe(404);
+		expect((await stored())?.name).toBe("");
 	});
 
 	it("changes the name of the person signed in, and of nobody else", async () => {

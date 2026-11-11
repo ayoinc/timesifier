@@ -162,6 +162,19 @@ describe("/app/new", () => {
 		expect(await value("select count(*) from organisations")).toBe(0);
 	});
 
+	it("refuses a sixth organisation for one owner, and says what the limit is", async () => {
+		const ada = await person(mailbox, "ada@example.com");
+		for (let n = 1; n <= 5; n++) {
+			expect((await post("/organization/create", { name: `Acme ${n}` }, ada)).status).toBe(200);
+		}
+
+		const response = await submit("/app/new", { name: "Acme 6" }, ada, { byScript: true });
+
+		expect(response.status).toBe(403);
+		expect(await response.text()).toContain("You have reached the limit of 5 organisations.");
+		expect(await value("select count(*) from organisations")).toBe(5);
+	});
+
 	it("says so in a sentence when the server answers too many attempts", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 		// The limit on creating is ten requests a minute for one client, whatever

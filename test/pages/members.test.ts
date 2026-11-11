@@ -246,6 +246,29 @@ describe("inviting", () => {
 		expect(await pendingInvitations()).toBe(1);
 	});
 
+	it("refuses the twenty-first invitation one person sends in a day, and says when to try again", async () => {
+		// Twenty invitations, each from a client address of its own: the limit on
+		// one client is not what this test is about.
+		for (let n = 1; n <= 20; n++) {
+			const sent = await post(
+				"/organization/invite-member",
+				{ organizationId: acme.id, email: `guest-${n}@example.com`, role: "member" },
+				{ cookie: ada.cookie, client: `192.0.2.${n}` },
+			);
+			expect(sent.status, `invitation ${n}`).toBe(200);
+		}
+
+		const response = await ask(ada, { intent: "invite", email: "bob@example.com", role: "member" });
+
+		// The same status as the limiter's, and a sentence of its own.
+		expect(response.status).toBe(429);
+		expect(response.said).toContain(
+			"You have sent the most invitations allowed in one day. Try again tomorrow.",
+		);
+		expect(response.said).not.toContain("Try again in a minute.");
+		expect(await pendingInvitations()).toBe(20);
+	});
+
 	it("says too many attempts when the server's limit is reached", async () => {
 		// Ten requests a minute for one client, whatever their answer.
 		for (let n = 1; n <= 10; n++) {
