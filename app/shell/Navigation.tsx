@@ -1,4 +1,4 @@
-import { useEffect, useRef, ViewTransition } from "react";
+import { ViewTransition } from "react";
 import { Link } from "react-router";
 
 import { PAGE } from "~/landing/Site";
@@ -16,8 +16,8 @@ import { finishRunningTransition, INDICATOR_NAME, TRANSITION } from "./transitio
 // One navigation, drawn two ways by CSS alone (design rule 17), in the public
 // pages' words and rules (docs/design-direction.md, "For the product screens").
 // Under 600px it is a bar along the bottom edge: 64px of paper under a 2px ink
-// rule, its destinations side by side, which scrolls sideways when they do not
-// fit. From 600px it is a column of the same links beside the page, under the
+// rule, its destinations side by side in label-medium, so that all seven an
+// owner is shown fit in 390px, a long label on two lines. From 600px it is a column of the same links beside the page, under the
 // band, where it stays as the page scrolls, with the links grouped under their
 // headings (docs/navigation.md). The bar leaves the headings out: there is no
 // room for them, and the links are in the same order without them.
@@ -53,7 +53,7 @@ export function Navigation({ organisation, visible, activeIndex }: NavigationPro
 					}
 				>
 					<NavigationTimer organisation={organisation} />
-					<ul className="flex max-medium:h-full max-medium:overflow-x-auto medium:flex-col medium:gap-4">
+					<ul className="flex max-medium:h-full medium:flex-col medium:gap-4">
 						{navigationGroups(visible).map(({ heading, destinations: links }) => {
 							const headingId = heading ? `navigation-${heading.toLowerCase()}` : undefined;
 							return (
@@ -68,7 +68,7 @@ export function Navigation({ organisation, visible, activeIndex }: NavigationPro
 									)}
 									<ul aria-labelledby={headingId} className="max-medium:contents">
 										{links.map((each) => (
-											<li key={each.id} className="max-medium:shrink-0 max-medium:grow">
+											<li key={each.id} className="max-medium:flex-auto">
 												<DestinationLink
 													destination={each}
 													to={destinationPath(organisation, each.id)}
@@ -97,21 +97,13 @@ function DestinationLink({
 	to: string;
 	isActive: boolean;
 }) {
-	// In the bar the links may be wider than the window together: the current
-	// one is scrolled into it. Elsewhere it is in view already and nothing moves.
-	const link = useRef<HTMLAnchorElement>(null);
-	useEffect(() => {
-		if (isActive) link.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
-	}, [isActive]);
-
 	return (
 		<Link
-			ref={link}
 			to={to}
 			prefetch="intent"
 			aria-current={isActive ? "page" : undefined}
 			onClick={finishRunningTransition}
-			className="group relative flex items-center text-label-large outline-none max-medium:h-full max-medium:justify-center max-medium:px-3 max-medium:whitespace-nowrap medium:min-h-12 medium:ps-4"
+			className="group relative flex items-center text-label-large outline-none max-medium:h-full max-medium:justify-center max-medium:whitespace-nowrap max-medium:text-label-medium medium:min-h-12 medium:ps-4"
 		>
 			{/* The keyboard's focus indicator is drawn around the label. */}
 			<span className="rounded-extra-small py-1 underline-offset-4 group-hover:underline group-focus-visible:focus-indicator">

@@ -40,8 +40,7 @@ async function drawn(page: Page): Promise<{ container: Box; links: Box[] }> {
 
 /**
  * A navigation bar: along the bottom edge, as wide as the window, its
- * destinations side by side in one row that scrolls sideways when they do not
- * fit, and no heading.
+ * destinations side by side in one row, and no heading.
  */
 async function expectBar(page: Page) {
 	const window = page.viewportSize() ?? COMPACT;
@@ -130,15 +129,12 @@ test.describe("in a window 390px wide", () => {
 		await expectContentClearOfNavigation(page);
 	});
 
-	test("the current destination is scrolled into the bar, and every link can be pressed", async ({
-		page,
-	}) => {
+	test("every destination an owner is shown fits in the bar, whole", async ({ page }) => {
 		await openShell(page, homePath(last.id));
-		const current = navigation(page).getByRole("link", { name: last.label, exact: true });
-		await expect(current).toBeInViewport({ ratio: 1 });
 
-		await navigation(page).getByRole("link", { name: first.label, exact: true }).click();
-		await expect(page).toHaveURL(homePath(first.id));
+		for (const link of await navigation(page).getByRole("link").all()) {
+			await expect(link).toBeInViewport({ ratio: 1 });
+		}
 	});
 });
 

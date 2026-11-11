@@ -21,9 +21,11 @@ Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the arch
 - [ ] `docs/product.md` describes the product as the owner described it on 2026-11-11, and TS-038 to TS-042 are in Backlog with their criteria.
 - [ ] `pnpm format` and `pnpm lint` exit 0.
 
+## Review (limit 2; a card waiting only on the owner is not counted)
+
 ### TS-053 · Foundation for the heading features
 
-Builder: an AI session on branch `ts-053-foundation`, cut from `ts-044-navigation`. The owner asked on 2026-11-11 for every feature under the headings of `docs/navigation.md` to be built. The work runs in two waves: this card first, then four slices built side by side, each owning its own pages (Timesheet; Projects, Clients and Workspace settings; Teams, Team and Approvals; Reports and the CSV export). This card lays what the four share: the navigation by heading and role, one migration with every table they need, and the rules in `app/` that more than one of them reads. It builds no feature page.
+Builder: an AI session on branch `ts-053-foundation`. In review: the pull request against `main`. The owner asked on 2026-11-11 for every feature under the headings of `docs/navigation.md` to be built. The work runs in two waves: this card first, then four slices built side by side, each owning its own pages (Timesheet; Projects, Clients and Workspace settings; Teams, Team and Approvals; Reports and the CSV export). This card lays what the four share: the navigation by heading and role, one migration with every table they need, and the rules in `app/` that more than one of them reads. It builds no feature page.
 
 Two questions the owner settled on 2026-11-11, recorded on their cards: approval is always on for now (TS-047), and an hour typed into a cell of the week's grid becomes one entry that starts when the day's last entry ends, or at 09:00 in the person's time zone when the day has none (TS-052).
 
@@ -36,8 +38,6 @@ Two questions the owner settled on 2026-11-11, recorded on their cards: approval
 - [ ] The rules the slices share are in `app/` with their tests: who may see which destination and whose time, a manager's scope being the members of the teams they manage; one running entry for a person in an organisation; a period's bounds from the week start and the time zone; a submitted or approved period locks its entries.
 - [ ] `docs/architecture.md` and `docs/security.md` describe the new tables and who sees which destination.
 - [ ] `pnpm typecheck`, `pnpm lint` and `pnpm test` pass, the shell's browser tests pass, and `pnpm db:migrate:local` applies the migration.
-
-## Review (limit 2; a card waiting only on the owner is not counted)
 
 ### TS-030 · A home page, a privacy page, a terms page, and the visual direction
 
