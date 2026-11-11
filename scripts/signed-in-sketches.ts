@@ -149,7 +149,9 @@ function line(
 		typeof words === "string"
 			? escapeSvgText(words)
 			: words
-					.map(([part, colour]) => `<tspan fill="${p.colour(colour)}">${escapeSvgText(part)}</tspan>`)
+					.map(
+						([part, colour]) => `<tspan fill="${p.colour(colour)}">${escapeSvgText(part)}</tspan>`,
+					)
 					.join("");
 	return (
 		`<text x="${x}" y="${y}" class="${role}" fill="${p.colour(fill)}" text-anchor="${anchor}"` +
