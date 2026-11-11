@@ -330,6 +330,15 @@ export function organisationPlugins() {
 						});
 					}
 				},
+				// The plugin deletes an organisation's memberships first and its row
+				// last, and the database refuses to take the last owner from an
+				// organisation that is still there (migrations/0004). So the row goes
+				// first, here, in one statement, and the memberships and invitations
+				// go with it through their foreign keys. The plugin's own three
+				// deletes then find nothing left.
+				async beforeDeleteOrganization({ organization }) {
+					await drizzle(env.DB).delete(organisations).where(eq(organisations.id, organization.id));
+				},
 			},
 			async sendInvitationEmail({ id, email, role, organization, inviter }, request) {
 				// `handleAuthRequest` lets through only requests to our own hosts.
