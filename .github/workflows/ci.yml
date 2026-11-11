@@ -43,6 +43,11 @@ jobs:
   browser-tests:
     name: browser tests
     runs-on: ubuntu-24.04
+    # Playwright's own image holds the browsers and every system library they
+    # need, so the job never waits on Ubuntu's package mirrors. Its version is
+    # @playwright/test's in package.json, and its digest is pinned.
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
     # About 190 tests in two engines.
     timeout-minutes: 25
     steps:
@@ -57,8 +62,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # The browser tests make their own build, which includes the component
       # gallery, and delete it when they end.
-      - name: Install the browsers the tests use
-        run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm test:e2e
 
   # Migrations reach the database before the new code is live, so a migration
