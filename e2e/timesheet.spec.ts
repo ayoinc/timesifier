@@ -3,7 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import { organisationPath } from "../app/shell/destinations";
 import { newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
-import { EMPTY_INPUT, problems } from "./axe";
+import { DIGIT_CHANGING, EMPTY_INPUT, problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 import { createProject } from "./timesheet";
