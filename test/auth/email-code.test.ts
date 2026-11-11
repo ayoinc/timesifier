@@ -138,8 +138,8 @@ describe("what is not offered", () => {
 		const signUp = await post("/sign-up/email", credentials);
 		const signInWithPassword = await post("/sign-in/email", credentials);
 
-		expect(signUp.status).toBe(400);
-		expect(signInWithPassword.status).toBe(400);
+		expect(signUp.status).toBe(404);
+		expect(signInWithPassword.status).toBe(404);
 		expect(await countRows("users")).toBe(0);
 	});
 
@@ -159,19 +159,34 @@ describe("what is not offered", () => {
 	});
 
 	it.each(["email-verification", "forget-password", "change-email"])(
-		"sends no email when asked for a %s code, even for an address with an account",
+		"refuses a request for a %s code, even for an address with an account: nothing is stored or sent",
 		async (type) => {
 			await signIn(mailbox, EMAIL);
 
-			await post(
+			const response = await post(
 				"/email-otp/send-verification-otp",
 				{ email: EMAIL, type },
 				{ headers: { "x-captcha-response": TURNSTILE_TOKEN } },
 			);
 
+			expect(response.status).toBe(400);
+			expect(await countRows("verifications")).toBe(0);
 			expect(mailbox.sent(), "only the sign-in code from before").toHaveLength(1);
 		},
 	);
+
+	it.each([
+		["a name", { name: "A name of a stranger's choosing" }],
+		["an image", { image: "https://elsewhere.example/tracker.png" }],
+	])("takes %s from nobody, not even for a new account", async (_name, extra) => {
+		await requestCode(EMAIL);
+		const otp = await mailbox.codeFor(EMAIL);
+
+		const response = await post("/sign-in/email-otp", { email: EMAIL, otp, ...extra });
+
+		expect(response.status).toBe(400);
+		expect(await countRows("users")).toBe(0);
+	});
 
 	it("answers 415 to a body that is not JSON", async () => {
 		const response = await post("/sign-in/email-otp", "email=ada", {

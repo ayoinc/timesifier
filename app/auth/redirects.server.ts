@@ -26,12 +26,9 @@ function isPath(value: unknown): boolean {
 	return URL.parse(value, OWN_ORIGIN)?.origin === OWN_ORIGIN;
 }
 
-function fieldsOf(input: unknown): Record<string, unknown> {
-	return typeof input === "object" && input !== null ? { ...input } : {};
-}
-
 const ownPathsOnly = createAuthMiddleware(async (ctx) => {
-	for (const input of [fieldsOf(ctx.body), fieldsOf(ctx.query)]) {
+	for (const input of [ctx.body, ctx.query]) {
+		if (typeof input !== "object" || input === null) continue;
 		for (const field of REDIRECT_FIELDS) {
 			if (field in input && !isPath(input[field])) {
 				throw new APIError("FORBIDDEN", {

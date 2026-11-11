@@ -37,9 +37,11 @@ import {
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
 import { sendEmail } from "./email.server";
+import { isOffered } from "./endpoints";
 import { allowedHosts, isOurHost } from "./hosts";
 import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.server";
 import { redirectRules } from "./redirects.server";
+import { signInCodeRules } from "./sign-in-code.server";
 import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
 
 /** Attempts one client may make on one sign-in path in `window` seconds; the next is answered 429. */
@@ -79,6 +81,11 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 		// The address is taken from the request only when its host is one of this
 		// environment's own, and those hosts are the only origins trusted.
 		baseURL: { allowedHosts: allowedHosts(ENVIRONMENT) },
+
+		// Better Auth has a page of its own for errors, at `/error`, which the
+		// mount does not offer. Whatever would send a browser there sends it to
+		// the sign-in page instead.
+		onAPIError: { errorURL: "/sign-in" },
 
 		database: drizzleAdapter(drizzle(DB), {
 			provider: "sqlite",
@@ -154,6 +161,7 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 			passkey({ rpName: "Timesifier" }),
 			...organisationPlugins(),
 			redirectRules,
+			signInCodeRules(),
 		],
 	});
 }
@@ -192,13 +200,29 @@ const auth = builtFrom(
 );
 
 /**
- * Answers a request to `/api/auth/*`: sign-in, sign-out, sessions, passkeys.
- * A request for a host that is not this environment's own is answered 404
- * before Better Auth sees it, so no cookie is set for such a host and none
- * names it in a passkey.
+ * Every endpoint the installed Better Auth registers under this configuration,
+ * as `METHOD /path`. Its one caller is the test that walks them, which is how
+ * an endpoint added by an upgrade is noticed.
+ */
+export function registeredEndpoints(): string[] {
+	return Object.values(auth().api).flatMap(({ path, options }) =>
+		path ? [options.method].flat().map((method) => `${method} ${path}`) : [],
+	);
+}
+
+/**
+ * Answers a request to `/api/auth/*`: sign-in, sign-out, sessions, passkeys,
+ * organisations.
+ *
+ * Two refusals come before Better Auth, its rate limit or the database sees
+ * the request, each a 404. One is for a host that is not this environment's
+ * own, so no cookie is set for such a host and none names it in a passkey.
+ * The other is for any method and path that `endpoints.ts` does not list.
  */
 export async function handleAuthRequest(request: Request): Promise<Response> {
-	if (!isOurHost(request, env.ENVIRONMENT)) return new Response("Not Found", { status: 404 });
+	if (!isOurHost(request, env.ENVIRONMENT) || !isOffered(request)) {
+		return new Response("Not Found", { status: 404 });
+	}
 	return auth().handler(request);
 }
 

@@ -31,6 +31,7 @@ import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
 import { sendEmail } from "./email.server";
 import { isOurHost } from "./hosts";
+import { valid } from "./input.server";
 import { INVITATION_LIFETIME_SECONDS, invitationEmail } from "./invitation-email";
 
 /** Requests one client may make on one of these paths in `window` seconds; the next is answered 429. */
@@ -93,16 +94,6 @@ type Endpoint = {
 	from: "body" | "query";
 	admit(raw: unknown, asking: Asking): Promise<Record<string, unknown>>;
 };
-
-/** `raw` as `schema` allows it, or a 400 that says what is wrong with it. */
-async function valid<Input>(schema: z.ZodType<Input>, raw: unknown): Promise<Input> {
-	const parsed = await schema.safeParseAsync(raw ?? {});
-	if (parsed.success) return parsed.data;
-	throw new APIError("BAD_REQUEST", {
-		code: "VALIDATION_ERROR",
-		message: z.prettifyError(parsed.error),
-	});
-}
 
 /** An endpoint for any signed-in person. */
 function anyone(from: Endpoint["from"], schema: z.ZodType<Record<string, unknown>>): Endpoint {
