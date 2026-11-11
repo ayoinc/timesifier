@@ -39,7 +39,7 @@ Built in two passes, like TS-008. The first, the server, is merged: the organisa
 
 An organisation always has at least one owner: the last owner cannot leave, be removed or be demoted.
 
-### TS-030 · A home page, and the visual direction
+### TS-030 · A home page, its two notices, and the visual direction
 
 The owner's verdict on the first release: it works, but it does not look like a designed product. This card is the first visible step: the direction the product follows, the tokens that carry it, and a real home page in place of three lines of text. Built on branch `ts-030-landing`; not yet deployed.
 
@@ -51,6 +51,9 @@ The owner's verdict on the first release: it works, but it does not look like a 
 - [x] No accessibility violation at 390px and 1280px, in the light and the dark scheme; the keyboard reaches the primary action, which shows its focus. _`e2e/landing.spec.ts`: "the home page has no accessibility violations" (four cases); "the keyboard reaches the primary action, which shows where the focus is and opens sign-up"; "the skip link moves the focus into the main region". Each also runs in WebKit._
 - [x] Every photograph is our own file, in AVIF and WebP, with its size, a description and its source on record; nothing moves when one arrives. _Four photographs under the Unsplash licence, 20 files, 1.0 MB in all, in `public/images/` with `CREDITS.md`. `test/node/landing-images.test.ts`: "every file the page asks for exists, and no other image is served"; "every file is in the credits, with its author, its source page and the licence". `e2e/landing.spec.ts`: "every image has its size, a description, and comes from our own host"; "nothing on the page moves when its images arrive", which first failed on a one-pixel difference between two widths of one photograph._
 - [x] The components still pass their own tests on the new tokens. _`pnpm test:e2e`: every earlier browser test passes. Two things changed for it: `on-secondary-container` is placed on a darker role, because Material's fell to 4.02:1 under a pressed state layer on a tonal button; and a selected switch keeps its handle's colour, which was the track's in the dark scheme._
+- [x] `/privacy` and `/terms` are real pages in the same design, each dated as a first version, written from what the application does, and linked from the foot of every public page. _`test/documents.test.ts`: "is answered whole by the server, with the date of its version and the address to write to"; "the privacy notice names every cookie the application sets", with the names taken from the code. `e2e/documents.spec.ts`, in Chromium and WebKit: no accessibility violation at 390px and 1280px in both schemes; "is reached from the foot of the home page, and says which version it is"; "without script". Not linked from the sign-up page, which is another card's to change; this is the open half of TS-025's second criterion._
+- [x] `docs/design-direction.md` has a section for the signed-in screens: references for a today view, a projects list and a weekly report, with the structure, hierarchy and density to follow. _"For the product screens". References and guidance only: those screens are not built on this card._
+- [ ] `privacy@timesifier.com`, the address both notices give, receives mail.
 - [ ] Deployed, and seen by the owner at `https://timesifier.com`.
 
 ## Review (limit 2)
