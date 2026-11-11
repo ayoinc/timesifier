@@ -31,7 +31,7 @@ One seed, `#FFD400`, through Material's fidelity scheme, which keeps the seed it
 | `primary-container`           | yellow, for the one thing running | the same yellow                     |
 | `outline`, `on-surface` rules | ink lines                         | pale lines                          |
 
-Yellow marks two things only: the sheet (the hero and the closing band) and whatever is live (the running timer, the current day). Everything else is ink on paper, and an action is the reverse of the page it stands on: an ink button on paper and on the sheet, a yellow one on the board. There is no second accent colour; projects are told apart by name and position, not by a rainbow.
+Yellow marks two things only: the sheet (the hero and the closing band) and whatever is live (the running timer, the current day). Everything else is ink on paper, and an action is the reverse of the page it stands on: an ink button on paper and on the sheet, a yellow one on the board. There is no second accent colour: Material's tertiary roles take the values of the secondary ones, and projects are told apart by name and position, not by a rainbow.
 
 ## Shape and space
 

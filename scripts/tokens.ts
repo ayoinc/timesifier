@@ -22,14 +22,24 @@ const SEED_COLOUR = "#FFD400";
  * seed is an olive in the light scheme and a cream in the dark one; here it is
  * the ink of the sheet by day and the yellow of the lit board by night.
  * The sheet is the yellow page by day and the board by night.
+ * Material's `on-secondary-container` measures 4.55:1 at rest and under 4.5:1
+ * beneath a state layer; the role it is placed on keeps a tonal button above
+ * 5.6:1 in every state.
  */
 const PLACED_ROLES = [
 	["primary", "on-primary-fixed", "primary-container"],
 	["on-primary", "primary-container", "on-primary-fixed"],
+	["on-secondary-container", "on-secondary-fixed-variant", "secondary-fixed"],
 	["sheet", "primary-container", "surface-container-lowest"],
 	["on-sheet", "on-primary-fixed", "primary-container"],
 	["on-sheet-variant", "on-primary-fixed-variant", "on-surface-variant"],
 ] as const;
+
+/**
+ * The design has one accent. Material gives a yellow seed a cyan tertiary; every
+ * tertiary role takes the value of the secondary role of the same name instead.
+ */
+const ONE_ACCENT = { from: "tertiary", to: "secondary" };
 
 /**
  * The typefaces: one family in two widths, as a timetable is set. The condensed
@@ -190,6 +200,12 @@ function colourRoles(): string[] {
 		const night = material3.get(inDark);
 		if (!day || !night) throw new Error(`No Material role for the placed role ${name}`);
 		roles.set(name, { light: day.light, dark: night.dark });
+	}
+	for (const name of material3.keys()) {
+		if (!name.includes(ONE_ACCENT.from)) continue;
+		const twin = roles.get(name.replace(ONE_ACCENT.from, ONE_ACCENT.to));
+		if (!twin) throw new Error(`No ${ONE_ACCENT.to} role to stand in for ${name}`);
+		roles.set(name, twin);
 	}
 
 	return [...roles].map(
