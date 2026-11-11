@@ -15,6 +15,7 @@
 		"test": "vitest run",
 		"test:e2e": "playwright test",
 		"tokens": "node scripts/tokens.ts",
+		"icons": "node scripts/icons.ts && node scripts/social-image.ts",
 		"check:tokens": "node scripts/check-tokens.ts",
 		"preview": "pnpm run build && vite preview",
 		"cf-typegen": "wrangler types",
