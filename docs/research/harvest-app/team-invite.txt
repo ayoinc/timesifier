@@ -1,0 +1,250 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/people/new, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Team
+  - tablist:
+    - tab "Members"
+    - tab "Assignments"
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - heading "Invite person" [level=1]
+    - paragraph: We’ll email this person an invitation to join your team in Harvest.
+    - separator
+    - text: First name
+    - textbox "First name"
+    - text: Last name
+    - textbox "Last name"
+    - text: Work email
+    - textbox "Work email"
+    - text: Employee ID
+    - textbox "Employee ID"
+    - text: Optional. A unique identifier for this employee within your organization Employment start date
+    - textbox "Employment start date":
+      - /placeholder: dd/mm/yyyy
+    - text: Optional. The date this person started working for your organization. It can be used in time off accrual. Type
+    - radio "Employee" [checked]
+    - text: Employee
+    - radio "Contractor"
+    - text: Contractor
+    - separator
+    - text: Roles
+    - list:
+      - listitem:
+        - textbox
+    - list
+    - text: Optional. How you would describe this person, like Designer, Senior, NYC, etc. Roles help organize the Team section and other reports. Departments
+    - list:
+      - listitem:
+        - textbox
+    - list
+    - text: Optional. The departments this person belongs to, like Design, Engineering, NYC, etc. People can be part of multiple departments. Capacity
+    - combobox "Capacity":
+      - option "0"
+      - option "0.5"
+      - option "1"
+      - option "1.5"
+      - option "2"
+      - option "2.5"
+      - option "3"
+      - option "3.5"
+      - option "4"
+      - option "4.5"
+      - option "5"
+      - option "5.5"
+      - option "6"
+      - option "6.5"
+      - option "7"
+      - option "7.5"
+      - option "8"
+      - option "8.5"
+      - option "9"
+      - option "9.5"
+      - option "10"
+      - option "10.5"
+      - option "11"
+      - option "11.5"
+      - option "12"
+      - option "12.5"
+      - option "13"
+      - option "13.5"
+      - option "14"
+      - option "14.5"
+      - option "15"
+      - option "15.5"
+      - option "16"
+      - option "16.5"
+      - option "17"
+      - option "17.5"
+      - option "18"
+      - option "18.5"
+      - option "19"
+      - option "19.5"
+      - option "20"
+      - option "20.5"
+      - option "21"
+      - option "21.5"
+      - option "22"
+      - option "22.5"
+      - option "23"
+      - option "23.5"
+      - option "24"
+      - option "24.5"
+      - option "25"
+      - option "25.5"
+      - option "26"
+      - option "26.5"
+      - option "27"
+      - option "27.5"
+      - option "28"
+      - option "28.5"
+      - option "29"
+      - option "29.5"
+      - option "30"
+      - option "30.5"
+      - option "31"
+      - option "31.5"
+      - option "32"
+      - option "32.5"
+      - option "33"
+      - option "33.5"
+      - option "34"
+      - option "34.5"
+      - option "35 (default)" [selected]
+      - option "35.5"
+      - option "36"
+      - option "36.5"
+      - option "37"
+      - option "37.5"
+      - option "38"
+      - option "38.5"
+      - option "39"
+      - option "39.5"
+      - option "40"
+      - option "40.5"
+      - option "41"
+      - option "41.5"
+      - option "42"
+      - option "42.5"
+      - option "43"
+      - option "43.5"
+      - option "44"
+      - option "44.5"
+      - option "45"
+      - option "45.5"
+      - option "46"
+      - option "46.5"
+      - option "47"
+      - option "47.5"
+      - option "48"
+      - option "48.5"
+      - option "49"
+      - option "49.5"
+      - option "50"
+      - option "50.5"
+      - option "51"
+      - option "51.5"
+      - option "52"
+      - option "52.5"
+      - option "53"
+      - option "53.5"
+      - option "54"
+      - option "54.5"
+      - option "55"
+      - option "55.5"
+      - option "56"
+      - option "56.5"
+      - option "57"
+      - option "57.5"
+      - option "58"
+      - option "58.5"
+      - option "59"
+      - option "59.5"
+      - option "60"
+    - text: hours per week Optional. The number of hours per week this person is available to work. Default billable rate £
+    - textbox "Default billable rate"
+    - text: per hour Optional. The rate you bill clients for this person’s time. You can override this rate on each project. Only Administrators and Managers with permission can see billable rates and amounts. Cost rate £
+    - textbox "Cost rate"
+    - text: per hour Optional. The internal cost that this person incurs on your business. Administrators can see all cost rates and amounts. People who can view only projects they manage in the Profitability report can see cost rates there for people on those projects. Full-report viewers still need permission to view cost rates or edit managed-project cost rates.
+    - button "Invite and continue"
+    - link "Cancel":
+      - /url: https://<account>.harvestapp.com/overview
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"

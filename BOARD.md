@@ -366,6 +366,41 @@ In priority order. Before a feature card enters Ready it gains "Routes", "Tables
 
 The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11, rearranged the same day after a check against Harvest). Cards TS-045 to TS-052 come from it; each gets routes, tables, a role table and a goldfish review when it comes up. The "Flows" section of that file names the card that builds each step.
 
+### TS-056 · Timesheet as Harvest has it: Track time, the week's days, submit from the day, getting started
+
+Depends on: TS-012a, TS-013, TS-046, TS-052. From `docs/harvest-comparison.md`, observed in Harvest's application with rea on 2026-11-11.
+
+- [ ] "Track time" is the Day view's one primary action. Its sheet asks for the project, a description and hours; with no hours its action is "Start timer", with hours (`1.5`, `1,5`, `1:30`) "Save entry", which places the entry with `gridEntryStart` on the day shown. A locked day refuses it (tests).
+- [ ] Above the day, the period's seven days, each a link to its day with its total, the day shown marked, and the period's total (test, and totals equal the Week view's).
+- [ ] The Day view's foot holds the period's status and its one submission action, the same action as the Week view's (test).
+- [ ] Getting started on Timesheet: add a project, track an entry, open the week, "n of 3"; each step ticks from what the database holds; "Put away" hides it for that person; it is gone once all three are done (tests).
+- [ ] Keyboard alone and axe with WCAG 2.2 AA at 390px and 1280px in both schemes (browser test).
+
+### TS-057 · Projects and Clients as Harvest has them: search, grouped by client, hours spent
+
+Depends on: TS-011a, TS-011b. From `docs/harvest-comparison.md`.
+
+- [ ] Projects has a search field, by project or client name, kept in the address (`?q=`), that narrows the list on the server (test).
+- [ ] Projects are listed under their client's name, clients in name order, then "No client"; while Clients is off there are no groups (test).
+- [ ] Each project shows the hours tracked on it to date, finished and running entries alike, summed in one query (test, and a property test that it equals the entries' sum).
+- [ ] Clients has a filter field by name, kept in the address (test).
+- [ ] Keyboard alone and axe at 390px and 1280px (browser test).
+
+### TS-058 · Team's week and Approvals as Harvest has them: totals, filter, status and grouping
+
+Depends on: TS-045, TS-047. From `docs/harvest-comparison.md`.
+
+- [ ] Team > This week shows the week's total hours above the people and a filter by name, kept in the address (test).
+- [ ] Approvals has a status choice, Pending, Approved, Returned and Not submitted, in the address (`?status=`), replacing its tabs, and a grouping by person or by project (`?group=`), each with the period's total hours (tests per role).
+- [ ] Keyboard alone and axe at 390px and 1280px (browser test).
+
+### TS-059 · Reports stepped by range
+
+Depends on: TS-014a. From `docs/harvest-comparison.md`.
+
+- [ ] Beside the range, "Previous" and "Next" move it by its own length: a week by a week, a month by a calendar month, a custom range by its number of days; the address changes and the report follows (tests, including a month that ends on the 31st).
+- [ ] Keyboard alone and axe at 390px and 1280px (browser test).
+
 ### TS-046 · Timesheet periods and submission
 
 Depends on: TS-012b, TS-013.

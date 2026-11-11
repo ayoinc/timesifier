@@ -1,0 +1,115 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/clients, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Clients
+  - link "New client":
+    - /url: /clients/new
+    - img "Plus icon"
+    - text: New client
+  - button "More new options"
+  - button "Actions"
+  - button "Import/Export"
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - region "Harvest AI":
+      - text: What would you like to do with your clients?
+      - combobox "What would you like to do with your clients?"
+      - button "Send to Harvest AI"
+      - button "Minimize Harvest AI bar"
+    - search:
+      - searchbox "Filter by client or contact"
+    - list:
+      - listitem:
+        - link "Edit":
+          - /url: /clients/18205022/edit
+        - strong: Example Client
+        - link "Add contact":
+          - /url: /clients/18205022/contacts/new
+          - img "Plus icon"
+          - text: Add contact
+    - heading "Keep everything organized" [level=4]
+    - paragraph: Create clients to manage your work across every project, time entry, invoice, expense, and task.
+    - link "Add your first client":
+      - /url: /clients/new
+    - button "Dismiss Alert":
+      - img
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"

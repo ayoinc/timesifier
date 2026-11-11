@@ -1,0 +1,156 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/team, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Team
+  - link "Invite person":
+    - /url: /people/new?return_to=%2Fteam
+    - img
+    - text: Invite person
+  - button "Actions"
+  - button "Import"
+  - button "Export"
+  - tablist:
+    - tab "Members"
+    - tab "Assignments"
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - region "Harvest AI":
+      - text: What would you like to do with your team?
+      - combobox "What would you like to do with your team?"
+      - button "Send to Harvest AI"
+      - button "Minimize Harvest AI bar"
+    - heading "Employee IDs are here!" [level=3]
+    - paragraph: You can now identify team members using Employee IDs - alongside names and emails - to sync your Harvest exports with external data sets. Add IDs manually or bulk import them via CSV.
+    - button "Start importing"
+    - button "Previous week"
+    - button "Change date": This week 09 – 15 Nov 2026
+    - button "Next week"
+    - separator
+    - text: Total hours 0.00 Team capacity 35.00 Base 35.00 / Time off -0.00 Billable 0.00 Non-billable 0.00
+    - img
+    - list:
+      - listitem:
+        - strong: 20%
+      - listitem:
+        - strong: 40%
+      - listitem:
+        - strong: 60%
+      - listitem:
+        - strong: 80%
+    - search:
+      - searchbox "Filter by name"
+    - button "Everyone"
+    - table:
+      - rowgroup:
+        - row "Clock icon Employees (1) Hours Utilization Available capacity Billable hours":
+          - columnheader
+          - columnheader "Clock icon":
+            - img "Clock icon"
+          - columnheader "Employees (1)"
+          - columnheader "Hours"
+          - columnheader
+          - columnheader "Utilization"
+          - columnheader "Available capacity"
+          - columnheader "Billable hours"
+          - columnheader
+        - row "<owner> has no running timers. <owner> Owner 0.00 0% 35.00 Base 35.00 / Time off -0.00 0.00 Actions for <owner>":
+          - cell
+          - cell "<owner> has no running timers.":
+            - img
+          - cell "<owner> Owner":
+            - strong:
+              - link "<owner>":
+                - /url: /team/<id>?week_of=2026-11-09&return_to=%2Fteam
+            - text: Owner
+          - cell "0.00"
+          - cell:
+            - img
+          - cell "0%"
+          - cell "35.00 Base 35.00 / Time off -0.00":
+            - strong: "35.00"
+            - text: Base 35.00 / Time off -0.00
+          - cell "0.00"
+          - cell "Actions for <owner>":
+            - button "Actions for <owner>":
+              - text: Actions
+              - img
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"
