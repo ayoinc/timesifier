@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, test } from "./fixtures";
+import { expect, openGallery, test } from "./fixtures";
 
 // Each of the twelve components is found by its role and accessible name and
 // operated with the keyboard alone. Nothing here clicks.
@@ -12,12 +12,17 @@ function gallery(page: Page): Locator {
 
 /**
  * Moves the keyboard focus onto the control with the Tab key: the focus is put on
- * the focusable element before it, then Tab is pressed. The control is scrolled
- * into view first, as it would be for a person working down the page.
+ * the focusable element before it, then Tab is pressed. The control is brought to
+ * the middle of the window first and the scrolling left to finish, because React
+ * Aria closes a tooltip when the page scrolls.
  */
 async function tabTo(page: Page, control: Locator) {
-	await control.scrollIntoViewIfNeeded();
-	await control.evaluate((element) => {
+	await control.evaluate(async (element) => {
+		element.scrollIntoView({ block: "center", behavior: "instant" });
+		const settled = Promise.withResolvers<number>();
+		requestAnimationFrame(() => requestAnimationFrame(settled.resolve));
+		await settled.promise;
+
 		const tabbable = [
 			...document.querySelectorAll<HTMLElement>(
 				"a[href], button, input, select, textarea, [tabindex]",
@@ -41,9 +46,7 @@ async function focusIsInside(container: Locator): Promise<boolean> {
 }
 
 test.beforeEach(async ({ page }) => {
-	await page.goto("/design");
-	// Hydration is complete once React Aria has marked its elements as pressable.
-	await expect(page.locator("[data-react-aria-pressable]").first()).toBeAttached();
+	await openGallery(page);
 });
 
 test("Button is pressed with Enter and with Space", async ({ page }) => {

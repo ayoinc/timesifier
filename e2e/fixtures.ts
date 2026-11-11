@@ -1,4 +1,4 @@
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect, type Page } from "@playwright/test";
 
 type PolicyViolation = { directive: string; blocked: string; sample: string };
 
@@ -45,5 +45,15 @@ export const test = base.extend<{ pageHealth: undefined }>({
 		{ auto: true },
 	],
 });
+
+/**
+ * Opens the component gallery and waits until React has taken over the page.
+ * The sign is the <style> element React Aria adds from an effect; the markup the
+ * server sends looks ready before that, and its controls do not yet respond.
+ */
+export async function openGallery(page: Page, path = "/design") {
+	await page.goto(path);
+	await expect(page.locator("#react-aria-pressable-style")).toBeAttached();
+}
 
 export { expect };

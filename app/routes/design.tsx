@@ -51,11 +51,12 @@ type ForcedState = keyof typeof STATE_ATTRIBUTES;
 /**
  * Shows the control inside it in a state that otherwise takes a pointer or a
  * keyboard, by setting the attributes React Aria sets for that state. React Aria
- * removes them when the real state ends; this puts them back.
+ * removes them when the real state ends, and may replace the element when it
+ * renders again; either way this puts them back.
  */
 function Forced({
 	state,
-	target = "button, label, input, [role=tab]",
+	target = "button, label, input",
 	children,
 }: {
 	state: ForcedState;
@@ -64,17 +65,23 @@ function Forced({
 }) {
 	const ref = useRef<HTMLDivElement>(null);
 	useEffect(() => {
-		const element = ref.current?.querySelector(target);
-		if (!element) return;
+		const root = ref.current;
+		if (!root) return;
 		const attributes = STATE_ATTRIBUTES[state];
 		const apply = () => {
+			const element = root.querySelector(target);
 			for (const name of attributes) {
-				if (!element.hasAttribute(name)) element.setAttribute(name, "true");
+				if (element && !element.hasAttribute(name)) element.setAttribute(name, "true");
 			}
 		};
 		apply();
 		const observer = new MutationObserver(apply);
-		observer.observe(element, { attributes: true, attributeFilter: [...attributes] });
+		observer.observe(root, {
+			subtree: true,
+			childList: true,
+			attributes: true,
+			attributeFilter: [...attributes],
+		});
 		return () => observer.disconnect();
 	}, [state, target]);
 	return (
@@ -331,8 +338,7 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 									</>
 								}
 							>
-								The 45 minutes logged against Atlas on Tuesday will be removed from this week's
-								total.
+								This removes 45 minutes from this week's total.
 							</Dialog>
 						</DialogTrigger>
 					</Row>

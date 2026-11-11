@@ -1,0 +1,13 @@
+{
+	"extends": "./tsconfig.json",
+	"include": ["playwright.config.ts", "e2e/**/*.ts"],
+	"compilerOptions": {
+		"composite": true,
+		"strict": true,
+		"types": ["node"],
+		"lib": ["DOM", "DOM.Iterable", "ES2024"],
+		"target": "ES2024",
+		"module": "ES2022",
+		"moduleResolution": "bundler"
+	}
+}
