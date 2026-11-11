@@ -286,22 +286,27 @@ Moved out of this card: "an entry can be added from the keyboard alone" is on TS
 
 In priority order. Before a feature card enters Ready it gains "Routes", "Tables" and "Who may" sections like the three cards above, and the criterion that every new route joins the cross-organisation 404 test of TS-009.
 
-The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11). Cards TS-045 to TS-050 come from it; each gets routes, tables, a role table and a goldfish review when it comes up.
+The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11, rearranged the same day after a check against Harvest). Cards TS-045 to TS-050 come from it; each gets routes, tables, a role table and a goldfish review when it comes up. The "Flows" section of that file names the card that builds each step.
 
-### TS-045 · Dashboard
+### TS-045 · Team: this week, members and invitations
 
-Depends on: TS-013, TS-046; for managers TS-038 and TS-047.
+Depends on: TS-013, TS-046; expected hours TS-042; for managers TS-038 and TS-047.
 
-- [ ] Shows the person's hours logged this week against their expected hours, and the current period's submission status (test).
-- [ ] A manager, admin or owner also sees pending approvals and missing submissions for the people they may see, and nobody else's (a test per role).
-- [ ] Managers, admins and owners land here after signing in; members land on My Timesheets (test).
+Replaces the Dashboard of the first version of `docs/navigation.md`: Harvest has no home page, and puts the team's week in Team ("Team overview") and missing submissions in Approvals.
+
+- [ ] Team > This week lists, for one week with arrows to earlier ones, each person the viewer may see: hours logged against their expected hours from TS-042, whether a timer is running, and the period's submission status (test).
+- [ ] A manager sees the members of the teams they manage, an admin or owner everyone; a member sees no Team link and gets 404 at its address (a test per role).
+- [ ] Opening a person shows their Week view, read-only; nothing on it can change their entries (test).
+- [ ] Members and Invitations move from Settings to tabs of Team, with the same rules and tests as TS-009; the old addresses redirect (test).
 
 ### TS-046 · Timesheet periods and submission
 
 Depends on: TS-012b, TS-013.
 
-- [ ] An organisation has a timesheet period (a week by default); a person's entries for a period can be submitted once, after which they cannot be edited unless the period is returned (tests).
-- [ ] My Timesheets has Current period and History tabs; History lists each past period with its status (draft, submitted, approved, returned) (test).
+- [ ] An organisation has a timesheet period (a week by default); a person's entries for a period can be submitted once, after which they cannot be edited unless the submission is withdrawn before a decision or the period is returned (tests).
+- [ ] The Week view has "Submit week" at its foot, with a confirmation, and its header shows Not submitted, Submitted, Approved or Returned (test).
+- [ ] A person withdraws a submission that has not been decided, and can edit again; the withdrawal is recorded (test).
+- [ ] The Today destination is renamed Timesheet, with Day and Week views and a History tab; History lists each past period with its status (draft, submitted, approved, returned) (test).
 - [ ] A returned period shows the reason and can be corrected and submitted again (test).
 - Open for the owner: the default period, and whether a submission requires a full set of expected hours.
 
@@ -310,21 +315,26 @@ Depends on: TS-012b, TS-013.
 Depends on: TS-046, TS-038.
 
 - [ ] A manager sees submitted periods of their team's members; an admin or owner sees everyone's; a member sees no Approvals link and gets 404 at its address (a test per role).
-- [ ] Approve, or return with a comment of at most 500 characters; each decision is recorded with who and when (tests).
-- [ ] Missing lists the people who have not submitted a closed period (test).
+- [ ] Approvals shows one period at a time with Previous and Next, in tabs Pending, Not submitted and Decided; the link shows the number pending (test).
+- [ ] Approve one, or all pending on the page, or return with a comment of at most 500 characters; each decision is recorded with who and when (tests).
+- [ ] A manager's own period is decided by an admin or owner, never by the manager (test).
+- [ ] An owner or admin reopens an approved period with a reason, which returns it to the person (test).
+- [ ] Not submitted lists the people who have not submitted a closed period (test).
 
 ### TS-048 · Workspace settings: general
 
-Depends on: TS-012a.
+Depends on: TS-012a; the Clients switch TS-011b.
 
 - [ ] An admin or owner sets the organisation's default time zone and the day its week starts; members see the values and cannot change them (a test per role).
 - [ ] The week view and reports use the week start (test).
+- [ ] An admin or owner turns Clients off or on for the organisation; off hides the Clients link and the client field everywhere and deletes nothing (test).
 
 ### TS-049 · Notifications and reminders
 
 Depends on: TS-046, TS-047.
 
 - [ ] A notification is created for: a reminder to submit, an approval request, a returned period, an approval outcome; each opens its record (tests).
+- [ ] A manager, admin or owner sends a reminder from Approvals, Not submitted, to one person or all listed (test).
 - [ ] The header shows the number unread; opening one marks it read (test).
 - [ ] A person turns each kind of email reminder on or off in My account (test).
 
@@ -333,6 +343,7 @@ Depends on: TS-046, TS-047.
 Depends on: nothing beyond what is built.
 
 - [ ] A help page reachable from the profile menu, with the questions a person asks in the first week, and a way to report a problem that reaches the owner (test that the link resolves and the report is received).
+- [ ] The page answers each flow of `docs/navigation.md`, "Flows", that is built: first sign-in, tracking time, submitting a week, approving or returning, a report and its export, inviting a person.
 
 ### TS-037 · The signed-in product in the landing page's direction
 
