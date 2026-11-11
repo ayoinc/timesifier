@@ -1,0 +1,4 @@
+/* Only the real app/styles/tokens.css is exempt; a file that shares its name is not. */
+:root {
+	--brand: #4f5bd5;
+}

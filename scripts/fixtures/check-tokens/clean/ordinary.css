@@ -1,0 +1,17 @@
+/* Attribute selectors, id selectors and token references must pass. */
+html[data-color-scheme="dark"] a[href^="https://"] {
+	color: var(--md-sys-color-primary);
+}
+
+[data-state="open"],
+[aria-current="page"] {
+	background-color: var(--md-sys-color-surface-container-high);
+}
+
+#feed a {
+	border-radius: var(--md-sys-shape-corner-medium);
+}
+
+.mask {
+	mask-image: url(#fade);
+}
