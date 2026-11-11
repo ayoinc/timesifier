@@ -83,11 +83,10 @@ export default function Timesheet({ loaderData }: Route.ComponentProps) {
 				</div>
 			)}
 
-			{/* The views, as links: each is an address of its own. */}
-			<nav
-				aria-label="Timesheet views"
-				className="mt-6 flex max-w-200 border-b border-outline-variant"
-			>
+			{/* The views, as links: each is an address of its own. A group, not a
+			    landmark: the shell has one navigation landmark, the main one. */}
+			<fieldset className="mt-6 flex max-w-200 border-b border-outline-variant">
+				<legend className="sr-only">Timesheet views</legend>
 				{VIEWS.map((view) => {
 					const isCurrent = data.view === view;
 					return (
@@ -111,7 +110,7 @@ export default function Timesheet({ loaderData }: Route.ComponentProps) {
 						</Link>
 					);
 				})}
-			</nav>
+			</fieldset>
 
 			{data.view === "day" && <DayView data={data} slug={organisation.slug} />}
 			{data.view === "week" && <WeekView data={data} slug={organisation.slug} />}

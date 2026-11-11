@@ -6,7 +6,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { seedProject } from "./timesheet";
+import { createProject } from "./timesheet";
 
 // Timesheet in a browser: the timer on the Day view and in the navigation
 // (TS-012a, TS-051), the Day and Week views and their links (TS-013), an entry
@@ -25,14 +25,13 @@ test.beforeEach(async ({ context, baseURL }) => {
 });
 
 /**
- * Signs a new person in, who creates an organisation, which is given one
- * project, Site, the way TS-011a's page makes one; that page has its own
- * tests. The Day view is open.
+ * Signs a new person in, who creates an organisation and, on Projects, one
+ * project, Site. The Day view is open.
  */
 async function trackingOrganisation(page: Page) {
 	await signIn(page, newPerson().email);
 	const organisation = await createOrganisation(page);
-	seedProject(organisation.slug, "Site");
+	await createProject(page, organisation.slug, "Site");
 	await openShell(page, organisationPath(organisation.slug));
 	return organisation;
 }
@@ -40,7 +39,7 @@ async function trackingOrganisation(page: Page) {
 const navigation = (page: Page) => page.getByRole("navigation", { name: "Main" });
 const navTimer = (page: Page) => navigation(page).getByRole("timer", { name: "Elapsed" });
 const dayTimer = (page: Page) => page.getByRole("main").getByRole("timer", { name: "Elapsed" });
-const views = (page: Page) => page.getByRole("navigation", { name: "Timesheet views" });
+const views = (page: Page) => page.getByRole("group", { name: "Timesheet views" });
 /** The time a timer shows, as it is read out: once, not character by character. */
 const elapsed = (timer: Locator) => timer.locator(".sr-only");
 
@@ -213,7 +212,7 @@ test.describe("the Day view", () => {
 		page,
 	}) => {
 		const { slug } = await trackingOrganisation(page);
-		const days = page.getByRole("navigation", { name: "Days" });
+		const days = page.getByRole("group", { name: "Days" });
 
 		await tabTo(page, days.getByRole("link", { name: "Next day" }));
 		await page.keyboard.press("Enter");
@@ -235,7 +234,7 @@ test.describe("the Week view", () => {
 	}) => {
 		await trackingOrganisation(page);
 		await page
-			.getByRole("navigation", { name: "Timesheet views" })
+			.getByRole("group", { name: "Timesheet views" })
 			.getByRole("link", { name: "Week" })
 			.click();
 		await expect(navigation(page).getByRole("link", { name: "Timesheet" })).toHaveAttribute(
@@ -264,7 +263,7 @@ test.describe("the Week view", () => {
 		await expect(page.getByRole("textbox", { name: /^Site, / })).toHaveCount(0);
 
 		await page
-			.getByRole("navigation", { name: "Timesheet views" })
+			.getByRole("group", { name: "Timesheet views" })
 			.getByRole("link", { name: "History" })
 			.click();
 		await expect(
@@ -278,10 +277,10 @@ test.describe("the Week view", () => {
 	test("steps by week with links reached by keyboard", async ({ page }) => {
 		await trackingOrganisation(page);
 		await page
-			.getByRole("navigation", { name: "Timesheet views" })
+			.getByRole("group", { name: "Timesheet views" })
 			.getByRole("link", { name: "Week" })
 			.click();
-		const weeks = page.getByRole("navigation", { name: "Weeks" });
+		const weeks = page.getByRole("group", { name: "Weeks" });
 
 		await tabTo(page, weeks.getByRole("link", { name: "Previous week" }));
 		await page.keyboard.press("Enter");
@@ -399,7 +398,7 @@ test.describe("stepping through days", () => {
 	test("moves the day forward going later and back going earlier", async ({ page }) => {
 		const arrivals = await watchArrivals(page);
 		await trackingOrganisation(page);
-		const days = page.getByRole("navigation", { name: "Days" });
+		const days = page.getByRole("group", { name: "Days" });
 
 		await days.getByRole("link", { name: "Next day" }).click();
 		await expect.poll(async () => (await arrivals()).length).toBe(1);
@@ -419,7 +418,7 @@ test.describe("stepping through days", () => {
 			const arrivals = await watchArrivals(page);
 			await trackingOrganisation(page);
 			await page
-				.getByRole("navigation", { name: "Days" })
+				.getByRole("group", { name: "Days" })
 				.getByRole("link", { name: "Next day" })
 				.click();
 			await expect(page).toHaveURL(/\?day=/);

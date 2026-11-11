@@ -30,7 +30,8 @@ export function PeriodLinks({
 	next: Target;
 }) {
 	return (
-		<nav aria-label={label} className="mt-6 flex flex-wrap gap-2">
+		<fieldset className="mt-6 flex flex-wrap gap-2">
+			<legend className="sr-only">{label}</legend>
 			{[previous, current, next].map((target) => (
 				<Link
 					key={target.label}
@@ -43,6 +44,6 @@ export function PeriodLinks({
 					{target.label}
 				</Link>
 			))}
-		</nav>
+		</fieldset>
 	);
 }

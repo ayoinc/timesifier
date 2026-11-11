@@ -20,6 +20,11 @@ function navigation(page: Page): Locator {
 	return page.getByRole("navigation", { name: "Main" });
 }
 
+/** The destinations' links: the navigation's list, after the timer's control (TS-051). */
+function destinationLinks(page: Page): Locator {
+	return navigation(page).locator("ul").first().getByRole("link");
+}
+
 function title(destination: Destination): string {
 	return `${destination.label} · Timesifier`;
 }
@@ -34,7 +39,7 @@ async function box(element: Locator): Promise<Box> {
 
 /** Where the navigation and each of its links are drawn. */
 async function drawn(page: Page): Promise<{ container: Box; links: Box[] }> {
-	const links = await navigation(page).getByRole("link").all();
+	const links = await destinationLinks(page).all();
 	return { container: await box(navigation(page)), links: await Promise.all(links.map(box)) };
 }
 
@@ -92,7 +97,7 @@ async function expectRail(page: Page) {
 
 /** The same links, by role and name, in the order of the list, each to its own address. */
 async function expectDestinations(page: Page, current: Destination) {
-	const links = navigation(page).getByRole("link");
+	const links = destinationLinks(page);
 	await expect(links).toHaveText(destinations.map((destination) => destination.label));
 	for (const destination of destinations) {
 		const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
@@ -132,7 +137,7 @@ test.describe("in a window 390px wide", () => {
 	test("every destination an owner is shown fits in the bar, whole", async ({ page }) => {
 		await openShell(page, homePath(last.id));
 
-		for (const link of await navigation(page).getByRole("link").all()) {
+		for (const link of await destinationLinks(page).all()) {
 			await expect(link).toBeInViewport({ ratio: 1 });
 		}
 	});
@@ -151,11 +156,13 @@ test.describe("in a window 1280px wide", () => {
 		await expectContentClearOfNavigation(page);
 	});
 
-	test("nothing stands before the first heading: the timer's place is empty", async ({ page }) => {
+	test("the timer's control stands before the first heading: Start timer while nothing runs", async ({
+		page,
+	}) => {
 		await openShell(page, homePath(first.id));
 
-		const before = await navigation(page).evaluate((nav) => nav.firstElementChild?.localName);
-		expect(before).toBe("ul");
+		const before = await navigation(page).evaluate((nav) => nav.firstElementChild?.textContent);
+		expect(before).toBe("Start timer");
 	});
 
 	test("My account is in the band, beside the organisation's name", async ({ page }) => {
@@ -178,11 +185,7 @@ test.describe("signed in as a member of the organisation", () => {
 	}) => {
 		await openShell(page, homePath(first.id));
 
-		await expect(navigation(page).getByRole("link")).toHaveText([
-			"Timesheet",
-			"Projects",
-			"Reports",
-		]);
+		await expect(destinationLinks(page)).toHaveText(["Timesheet", "Projects", "Reports"]);
 		for (const heading of HEADINGS) {
 			await expect(navigation(page).getByText(heading, { exact: true })).toBeVisible();
 		}
