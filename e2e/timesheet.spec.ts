@@ -194,11 +194,14 @@ test.describe("the Day view", () => {
 		const sheet = page.getByRole("dialog", { name: "Add an entry" });
 		await expect(sheet).toBeVisible();
 
-		await sheet.getByLabel("Start").focus();
-		await page.keyboard.type("0900");
-		await page.keyboard.press("Tab");
-		await page.keyboard.type("1030");
-		await page.keyboard.press("Tab");
+		// The keystrokes a time field takes depend on how the browser's language
+		// draws it (24-hour, or with AM and PM), so its value is set the way a
+		// field's own typing ends: no pointer either way. Tab and Enter move and send.
+		await sheet.getByLabel("Start").fill("09:00");
+		await sheet.getByLabel("Start").press("Tab");
+		await expect(sheet.getByLabel("End")).toBeFocused();
+		await sheet.getByLabel("End").fill("10:30");
+		await sheet.getByLabel("End").press("Tab");
 		await page.keyboard.type("Survey");
 		await page.keyboard.press("Enter");
 
