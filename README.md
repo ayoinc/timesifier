@@ -40,10 +40,12 @@ Browser tests:
 
 ```sh
 pnpm exec playwright install chromium webkit   # once, and again after Playwright is upgraded
-pnpm test:e2e                                  # about 20 seconds
+pnpm test:e2e                                  # about a minute
 ```
 
-`pnpm test:e2e` builds for production with `DESIGN_ROUTE=1`, serves that build on port 5385, and runs the tests in `e2e/` against it with Playwright: each component by keyboard, the application shell at 390px and 1280px (navigation, view transitions, focus, the colour scheme), accessibility scans, reduced motion, and the overlays in WebKit as iOS runs them. Every test fails if the page breaks the Content Security Policy or logs an error. When the tests end the build is deleted, because it contains the component gallery; run `pnpm build` again before anything else uses `build/`.
+`pnpm test:e2e` builds for production with `DESIGN_ROUTE=1`, serves that build on port 5385, and runs the tests in `e2e/` against it with Playwright: each component by keyboard, the application shell at 390px and 1280px (navigation, view transitions, focus, the colour scheme), signing up and signing in with an email code and with a passkey from a virtual authenticator, what the pages say when the answer is no, accessibility scans, reduced motion, and the overlays in WebKit as iOS runs them. Every test fails if the page breaks the Content Security Policy or logs an error. When the tests end the build is deleted, because it contains the component gallery; run `pnpm build` again before anything else uses `build/`.
+
+The run needs nothing set up: `playwright.config.ts` gives the server a throwaway signing secret and Cloudflare's published Turnstile test keys, and applies the migrations to the local database. Two things to know. It refuses to start while its port is taken, so two checkouts running at once need different ports: `E2E_PORT=5386 pnpm test:e2e`. And it signs its test people up in the same local database `pnpm dev` uses (`.wrangler/state`), reading their sign-in codes from the files Wrangler's local email binding writes under `.wrangler/tmp/email/`; nothing is sent. To clear them out, delete `.wrangler/state/v3/d1` and run `pnpm db:migrate:local`.
 
 The component gallery is at `/design` under `pnpm dev`: every component in every state, in both colour schemes. A normal build leaves the route out, so production answers 404. `docs/design-system.md` describes the components and how to add one.
 
