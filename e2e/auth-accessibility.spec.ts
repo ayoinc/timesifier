@@ -2,7 +2,6 @@ import type { Page } from "@playwright/test";
 
 import {
 	ARRIVAL,
-	addAuthenticator,
 	codeSentBy,
 	newPerson,
 	openAuthPage,
@@ -12,7 +11,7 @@ import {
 	TIME_WITH_TURNS,
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
-import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
+import { EMPTY_INPUT, problems } from "./axe";
 import { expect, test } from "./fixtures";
 import { movement, watchForMovement } from "./motion";
 import { openSettings } from "./organisation";
@@ -45,7 +44,6 @@ for (const viewport of [
 
 			test("every view of the sign-up page has no accessibility violations", async ({ page }) => {
 				const person = newPerson();
-				await addAuthenticator(page);
 				await openAuthPage(page, "/sign-up");
 				expect(await page.evaluate(() => getComputedStyle(document.body).colorScheme)).toContain(
 					colorScheme,
@@ -60,57 +58,28 @@ for (const viewport of [
 
 				await page.getByLabel("Code").fill(code);
 				await expectNoProblems(page, "Check your email");
-				await page.getByRole("button", { name: "Create account" }).click();
-				await expectNoProblems(page, "Your account is ready");
-
-				await page.getByRole("button", { name: "Create a passkey" }).click();
-				await expectNoProblems(page, "Your passkey is ready");
 			});
 
 			test("every view of the sign-in page has no accessibility violations", async ({ page }) => {
 				const person = newPerson();
 				await signUp(page, person);
-				await page.getByRole("button", { name: "Not now" }).click();
 				await signOut(page);
 
 				await openAuthPage(page, "/sign-in");
-				await expectNoProblems(page, "Sign in");
-
-				// With its message showing: there is no passkey in this browser.
-				await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-				await expect(page.getByRole("alert")).toContainText("No passkey was used.");
-				await expectNoProblems(page, "Sign in");
-
-				await page.getByRole("button", { name: "Use an email code instead" }).click();
-				await expectNoProblems(page, "Sign in with an email code", [EMPTY_INPUT]);
+				await expectNoProblems(page, "Sign in", [EMPTY_INPUT]);
 				await page.getByLabel("Email").fill(person.email);
+				await expectNoProblems(page, "Sign in");
 				await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
 				await expectNoProblems(page, "Check your email", [EMPTY_INPUT]);
 			});
 
 			test("the account part of Settings has no accessibility violations", async ({ page }) => {
-				await addAuthenticator(page);
 				await signUp(page, newPerson());
-				await page.getByRole("button", { name: "Not now" }).click();
 				await expect(page).toHaveURL(ARRIVAL);
 
-				// With no passkey, then with one and the message that says so.
 				await openSettings(page);
+				await expect(page.getByRole("button", { name: "Sign out everywhere" })).toBeVisible();
 				await expectNoProblems(page, "Settings");
-				await page.getByRole("button", { name: "Add a passkey" }).click();
-				await expect(page.getByRole("status").filter({ hasText: "Passkey added" })).toBeVisible();
-				await expectNoProblems(page, "Settings");
-
-				// The open dialog. Its lines of text lie over different parts of the page,
-				// which is one thing axe cannot measure through; that text is measured here.
-				await page.getByRole("button", { name: /^Remove the passkey added/ }).click();
-				const dialog = page.getByRole("alertdialog", { name: "Remove this passkey?" });
-				await expect(dialog).toBeVisible();
-				expect(await problems(page, [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS])).toEqual([]);
-				expect(
-					await contrast(dialog.getByText("It will stop signing you in")),
-					"contrast of the dialog's text",
-				).toBeGreaterThanOrEqual(4.5);
 			});
 		});
 	}
@@ -149,44 +118,34 @@ function pageHeight(page: Page): Promise<number> {
 }
 
 /**
- * Every change of view the sign-up page makes, forward and back, as far as its
- * last step. It stays on the page: what the watcher has seen is the page's own.
- * Returns the height of the page at each step it stopped on.
+ * Every change of view the sign-up page makes, forward and back, as far as the
+ * code typed into its last step: three changes of step. It stays on the page:
+ * what the watcher has seen is the page's own. Returns the height of the page
+ * at each step it stopped on.
  */
 async function walkEveryStep(page: Page): Promise<number[]> {
 	const heights: number[] = [];
 	const person = newPerson();
-	await addAuthenticator(page);
 	await openAuthPage(page, "/sign-up");
 	await page.getByLabel("Name").fill(person.name);
 	await page.getByLabel("Email").fill(person.email);
+	// 1: forward, to the code.
 	await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
 	await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
 	heights.push(await pageHeight(page));
 
-	// Back a step and forward again.
+	// 2: back a step. 3: forward again.
 	await page.getByRole("button", { name: "Use a different email" }).click();
 	await expect(page.getByRole("heading", { level: 1, name: "Create your account" })).toBeVisible();
 	heights.push(await pageHeight(page));
 	const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
 	await page.getByLabel("Code").fill(code);
-	await page.getByRole("button", { name: "Create account" }).click();
-
-	// The two moments that are marked: the account, then the passkey.
-	await expect(
-		page.getByRole("heading", { level: 1, name: "Your account is ready" }),
-	).toBeVisible();
-	heights.push(await pageHeight(page));
-	await page.getByRole("button", { name: "Create a passkey" }).click();
-	await expect(
-		page.getByRole("heading", { level: 1, name: "Your passkey is ready" }),
-	).toBeVisible();
-	heights.push(await pageHeight(page));
+	await expect(page.getByLabel("Code")).toHaveValue(code);
 	return heights;
 }
 
-// Shorter than the sign-up page's tallest step and taller than its shortest, so
-// the page outgrows the window at one step and fits it again at another.
+// Shorter than the sign-up page's taller step and taller than its shorter one,
+// so the page outgrows the window at one step and fits it again at the other.
 const SHORT = { width: 1280, height: 560 };
 
 test.describe("with reduced motion requested", () => {
@@ -203,7 +162,7 @@ test.describe("with reduced motion requested", () => {
 		expect(await viewTransitionsStarted(page)).toBe(0);
 	});
 
-	test.describe("in a window shorter than the page's tallest step", () => {
+	test.describe("in a window shorter than the page's taller step", () => {
 		test.use({ viewport: SHORT });
 
 		test("no step of the sign-up page moves or changes size", async ({ page }) => {
@@ -227,10 +186,11 @@ test.describe("with reduced motion requested", () => {
 		await watchForMovement(page);
 		await countViewTransitions(page);
 		await openAuthPage(page, "/sign-in");
-		await page.getByRole("button", { name: "Use an email code instead" }).click();
+		await page.getByLabel("Email").fill(newPerson().email);
+		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+		await expect(page.getByLabel("Code")).toBeFocused();
+		await page.getByRole("button", { name: "Use a different email" }).click();
 		await expect(page.getByLabel("Email")).toBeFocused();
-		await page.getByRole("button", { name: "Use a passkey instead" }).click();
-		await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
 
 		expect(await movement(page)).toEqual([]);
 		expect(await viewTransitionsStarted(page)).toBe(0);
@@ -251,10 +211,11 @@ test.describe("with reduced motion requested", () => {
 			});
 		});
 		await openAuthPage(page, "/sign-in");
+		await page.getByLabel("Email").fill(newPerson().email);
 		expect(await page.evaluate(() => window.__stepTransitions)).toEqual([]);
 
-		await page.getByRole("button", { name: "Use an email code instead" }).click();
-		await expect(page.getByLabel("Email")).toBeFocused();
+		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+		await expect(page.getByLabel("Code")).toBeFocused();
 		await expect.poll(() => page.evaluate(() => window.__stepTransitions)).toEqual(["opacity"]);
 	});
 });
@@ -262,21 +223,33 @@ test.describe("with reduced motion requested", () => {
 test.describe("with motion allowed", () => {
 	test.use({ reducedMotion: "no-preference" });
 
-	// The same steps and the same watcher. This is what shows the test above can fail.
+	// The same steps and the same watcher. This is what shows the tests above can fail.
 	test("the watcher sees the steps of the sign-up page move", async ({ page }) => {
 		await watchForMovement(page);
 		await countViewTransitions(page);
 		await walkEveryStep(page);
 
-		// One for each change of step: the count above can be other than nothing.
-		expect(await viewTransitionsStarted(page)).toBe(5);
+		// One for each change of step: forward, back, forward again.
+		expect(await viewTransitionsStarted(page)).toBe(3);
 		const seen = await movement(page);
 		for (const moved of [
 			/^animation of translate on <html>/, // a step arrives from the side it lies on
-			/^transition of scale on <span>/, // the mark of a moment grows in
 			/^transition of top on <label> "Code/, // a field's label floats
 		]) {
 			expect(seen).toContainEqual(expect.stringMatching(moved));
 		}
+	});
+
+	// The sign-in page's two steps, there and back: one for each change of step.
+	test("the steps of the sign-in page are view transitions", async ({ page }) => {
+		await countViewTransitions(page);
+		await openAuthPage(page, "/sign-in");
+		await page.getByLabel("Email").fill(newPerson().email);
+		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+		await expect(page.getByLabel("Code")).toBeFocused();
+		await page.getByRole("button", { name: "Use a different email" }).click();
+		await expect(page.getByLabel("Email")).toBeFocused();
+
+		expect(await viewTransitionsStarted(page)).toBe(2);
 	});
 });

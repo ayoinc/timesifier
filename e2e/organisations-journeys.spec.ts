@@ -57,7 +57,6 @@ test.describe("a person who has just signed up", () => {
 			}) => {
 				const person = newPerson();
 				await signUp(page, person);
-				await page.getByRole("button", { name: "Not now" }).click();
 
 				// No organisation yet: one field, one primary action, and no navigation.
 				await expect(page).toHaveURL(ARRIVAL);
@@ -132,7 +131,6 @@ test.describe("a person who has just signed up", () => {
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
 
 		await signUp(page, ada);
-		await page.getByRole("button", { name: "Not now" }).click();
 		const { name: firstName, slug } = await createOrganisation(page);
 		const settings = destinationPath(slug, "settings");
 		const members = membersPath(slug);
@@ -193,7 +191,6 @@ test.describe("a person who has just signed up", () => {
 		await other.getByRole("link", { name: "Create an account" }).click();
 		await expect(other).toHaveURL(`/sign-up?next=${encodeURIComponent(link)}`);
 		await signUp(other, bob, other.url());
-		await other.getByRole("button", { name: "Not now" }).click();
 		await expect(other).toHaveURL(link);
 		await expect(other.getByRole("heading", { level: 1, name: `Join ${name}?` })).toBeVisible();
 		await expect(
@@ -313,7 +310,6 @@ test.describe("a person who has just signed up", () => {
 		test.setTimeout(2 * TIME_WITH_TURNS);
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
 		await signUp(page, newPerson());
-		await page.getByRole("button", { name: "Not now" }).click();
 		const { slug } = await createOrganisation(page);
 		await openMembers(page, slug);
 		await page.getByRole("button", { name: "Invite a person" }).click();
@@ -331,7 +327,6 @@ test.describe("a person who has just signed up", () => {
 		await ownAddress(bobs, baseURL);
 		const other = await bobs.newPage();
 		await signUp(other, bob, `/sign-up?next=${encodeURIComponent(link)}`);
-		await other.getByRole("button", { name: "Not now" }).click();
 		await expect(other.getByText("as an admin.")).toBeVisible();
 		await other.getByRole("button", { name: "Decline" }).click();
 
@@ -358,7 +353,6 @@ test.describe("a person who has just signed up", () => {
 		test.setTimeout(2 * TIME_WITH_TURNS);
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
 		await signUp(page, newPerson());
-		await page.getByRole("button", { name: "Not now" }).click();
 		const { slug } = await createOrganisation(page);
 		await openMembers(page, slug);
 		await page.getByRole("button", { name: "Invite a person" }).click();
@@ -389,7 +383,6 @@ test.describe("a person who has just signed up", () => {
 		await ownAddress(bobs, baseURL);
 		const other = await bobs.newPage();
 		await signUp(other, bob, `/sign-up?next=${encodeURIComponent(link)}`);
-		await other.getByRole("button", { name: "Not now" }).click();
 		await expect(other).toHaveURL(link);
 		await expect(
 			other.getByRole("heading", { level: 1, name: "This invitation is no longer valid" }),

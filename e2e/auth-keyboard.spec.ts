@@ -2,7 +2,6 @@ import type { Locator, Page } from "@playwright/test";
 
 import {
 	ARRIVAL,
-	addAuthenticator,
 	codeSentBy,
 	newPerson,
 	openAuthPage,
@@ -42,9 +41,8 @@ async function tabTo(page: Page, element: Locator) {
 	await expectFocusShown(element);
 }
 
-test("signing up, the code and the passkey, with the keyboard alone", async ({ page }) => {
+test("signing up and the code, with the keyboard alone", async ({ page }) => {
 	const person = newPerson();
-	const authenticator = await addAuthenticator(page);
 	await openAuthPage(page, "/sign-up");
 
 	// The tab order follows the page: the name of the product, then the fields.
@@ -69,35 +67,22 @@ test("signing up, the code and the passkey, with the keyboard alone", async ({ p
 	await page.keyboard.press("Shift+Tab");
 	await page.keyboard.press("Enter");
 
-	// A step with no field puts the focus on its heading, and Tab goes on from there.
-	const ready = page.getByRole("heading", { level: 1, name: "Your account is ready" });
-	await expectFocusShown(ready);
-	await tabTo(page, page.getByRole("button", { name: "Create a passkey" }));
-	await page.keyboard.press("Enter");
-
-	await expectFocusShown(page.getByRole("heading", { level: 1, name: "Your passkey is ready" }));
-	expect(await authenticator.passkeys()).toBe(1);
-	await tabTo(page, page.getByRole("button", { name: "Open Timesifier" }));
-	await page.keyboard.press("Enter");
+	// The accepted code is the end of the page: the person is where they were going.
 	await expect(page).toHaveURL(ARRIVAL);
 });
 
 test("signing in with an email code, with the keyboard alone", async ({ page }) => {
 	const person = newPerson();
 	await signUp(page, person);
-	await page.getByRole("button", { name: "Not now" }).click();
 	await signOut(page);
 
 	await openAuthPage(page, "/sign-in");
 	await tabTo(page, page.getByRole("link", { name: "Timesifier" }));
-	await tabTo(page, page.getByRole("button", { name: "Sign in with a passkey" }));
-	await tabTo(page, page.getByRole("button", { name: "Use an email code instead" }));
-	await page.keyboard.press("Enter");
-
+	await page.keyboard.press("Tab");
 	await expect(page.getByLabel("Email")).toBeFocused();
 	await page.keyboard.type(person.email);
 	await tabTo(page, page.getByRole("button", { name: "Continue" }));
-	await tabTo(page, page.getByRole("button", { name: "Use a passkey instead" }));
+	await tabTo(page, page.getByRole("link", { name: "Create an account" }));
 	await page.keyboard.press("Shift+Tab");
 	const code = await codeSentBy(() => page.keyboard.press("Enter"));
 
@@ -130,41 +115,18 @@ test("going back a step, with the keyboard alone, returns to the field that was 
 	await expect(page.getByLabel("Email")).toHaveValue(person.email);
 });
 
-test("adding and removing a passkey, and signing out, from Settings with the keyboard alone", async ({
-	page,
-}) => {
-	await addAuthenticator(page);
+test("signing out from Settings, with the keyboard alone", async ({ page }) => {
 	await signUp(page, newPerson());
-	await page.getByRole("button", { name: "Not now" }).click();
 	await expect(page).toHaveURL(ARRIVAL);
 	await openSettings(page);
 
-	const add = page.getByRole("button", { name: "Add a passkey" });
-	await add.focus();
-	await page.keyboard.press("Enter");
-	const remove = page.getByRole("button", { name: /^Remove the passkey added/ });
-	await expect(remove).toBeVisible();
-
-	// The dialog takes the focus, keeps it inside, and gives it back on Escape.
+	// The two ways out follow each other in the tab order, and each shows the focus.
+	const out = page.getByRole("button", { name: "Sign out", exact: true });
+	await out.focus();
+	await tabTo(page, page.getByRole("button", { name: "Sign out everywhere" }));
 	await page.keyboard.press("Shift+Tab");
-	await expectFocusShown(remove);
-	await page.keyboard.press("Enter");
-	const dialog = page.getByRole("alertdialog", { name: "Remove this passkey?" });
-	await expect(dialog).toBeVisible();
-	await tabTo(page, dialog.getByRole("button", { name: "Cancel" }));
-	await tabTo(page, dialog.getByRole("button", { name: "Remove" }));
-	await tabTo(page, dialog.getByRole("button", { name: "Cancel" }));
-	await page.keyboard.press("Escape");
-	await expect(dialog).toBeHidden();
-	await expect(remove).toBeFocused();
+	await expectFocusShown(out);
 
-	await page.keyboard.press("Enter");
-	await page.keyboard.press("Tab");
-	await tabTo(page, dialog.getByRole("button", { name: "Remove" }));
-	await page.keyboard.press("Enter");
-	await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
-
-	await page.getByRole("button", { name: "Sign out", exact: true }).focus();
 	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL("/sign-in");
 });
