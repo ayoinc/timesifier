@@ -7,6 +7,7 @@ import {
 	length,
 	loggedToday,
 	PROJECTS,
+	RHYTHM,
 	RUNNING,
 	TODAY,
 	TODAY_ENTRIES,
@@ -35,14 +36,33 @@ it("the entries of the day follow one another without overlapping", () => {
 	}
 });
 
-it("the running entry is the last of the day, and what is logged is everything before it", () => {
-	expect(RUNNING.entry).toBe(TODAY_ENTRIES.at(-1));
-	expect([...LOGGED_ENTRIES, RUNNING.entry]).toEqual([...TODAY_ENTRIES]);
-	expect(loggedToday + length(RUNNING.entry)).toBe(dayTotals[TODAY]);
+it("the day is worked in stretches: equal lengths, a short break between them, a longer one after every fourth", () => {
+	for (const [index, entry] of TODAY_ENTRIES.entries()) {
+		expect(length(entry), entry.note).toBe(RHYTHM.stretch);
+		const next = TODAY_ENTRIES[index + 1];
+		if (!next) continue;
+		const pause = next.start - entry.end;
+		if ((index + 1) % RHYTHM.stretchesToLongBreak === 0) {
+			expect(pause, entry.note).toBeGreaterThanOrEqual(RHYTHM.longBreak);
+		} else {
+			expect(pause, entry.note).toBe(RHYTHM.shortBreak);
+		}
+	}
+	// No two stretches of the day have the same note: a row is told from the next.
+	expect(new Set(TODAY_ENTRIES.map((entry) => entry.note)).size).toBe(TODAY_ENTRIES.length);
+});
+
+it("the picture of the day stands just after the first longer break: four stretches finished, the fifth running", () => {
+	expect(LOGGED_ENTRIES).toHaveLength(RHYTHM.stretchesToLongBreak);
+	expect(RUNNING.entry).toBe(TODAY_ENTRIES[LOGGED_ENTRIES.length]);
+	expect(TODAY_ENTRIES.slice(0, LOGGED_ENTRIES.length)).toEqual([...LOGGED_ENTRIES]);
+	expect(RUNNING.entry.start - (LOGGED_ENTRIES.at(-1)?.end ?? 0)).toBe(RHYTHM.longBreak);
+	expect(loggedToday).toBe(LOGGED_ENTRIES.length * RHYTHM.stretch);
 
 	// The time on the running timer is less than the entry it becomes.
-	const [hours = 0, minutes = 0] = RUNNING.elapsed.split(":").map(Number);
-	expect(hours * 60 + minutes).toBeLessThan(length(RUNNING.entry));
+	expect(RUNNING.elapsedSeconds).toBeLessThan(length(RUNNING.entry) * 60);
+	// By the end of the day the entries are the day's column in the week.
+	expect(TODAY_ENTRIES.map(length).reduce((total, each) => total + each, 0)).toBe(dayTotals[TODAY]);
 });
 
 it("the week's total is the sum of its rows and of its columns", () => {
@@ -57,5 +77,5 @@ it("a length of time is written in hours and minutes", () => {
 	expect(duration(0)).toBe("0:00");
 	expect(duration(45)).toBe("0:45");
 	expect(duration(150)).toBe("2:30");
-	expect(duration(1935)).toBe("32:15");
+	expect(duration(1945)).toBe("32:25");
 });
