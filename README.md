@@ -36,6 +36,19 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 
 `pnpm format` fixes formatting and import order. Local secrets go in `.dev.vars`; see `.dev.vars.example` and `docs/security.md`.
 
+## Database
+
+The schema is `app/db/schema.ts`. Changes reach a database only as the SQL migrations in `migrations/`.
+
+```sh
+pnpm db:migrate:local   # apply the committed migrations to the local D1 that `pnpm dev` uses
+pnpm db:generate        # after changing the schema: write the next migration into migrations/
+```
+
+After `pnpm db:generate`, run `pnpm format` (it tidies the snapshot files drizzle-kit writes) and commit the generated files with the schema change; `pnpm test` fails when the schema and the migrations disagree. To start again locally, delete `.wrangler/state/v3/d1` and run `pnpm db:migrate:local`.
+
+**Migrations are applied to the preview and production databases only by the pipeline, never from a laptop.** There is no script for it, and `wrangler d1 migrations apply --remote` is not run by hand.
+
 ## Delivery
 
 Every pull request is checked and gets a preview URL as a comment. Merging to `main` deploys to production; nothing is deployed from a laptop. The steps, the pipeline's token and the rollback command are in `docs/architecture.md`.

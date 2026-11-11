@@ -24,7 +24,7 @@ flowchart LR
 | --------------- | ------------------------------------------------ | ------------------------------------------------------- | --------------- |
 | Application     | Workers, React Router v8, Cloudflare Vite plugin | Pages, loaders, actions                                 | TS-001          |
 | Static files    | Workers Static Assets                            | Scripts, styles, images                                 | TS-001          |
-| Database        | D1 with Drizzle and SQL migrations               | Users, organisations, time entries, everything durable  | TS-007          |
+| Database        | D1 (binding `DB`), Drizzle ORM, SQL migrations   | Users, organisations, time entries, everything durable  | TS-007          |
 | Authentication  | Better Auth in the Worker, data in D1            | Passkeys, email sign-in, sessions, organisations, roles | TS-008          |
 | Bot protection  | Turnstile                                        | Sign-up                                                 | TS-008          |
 | Email           | Cloudflare email sending, from its own subdomain | Verification and summaries                              | TS-008          |
@@ -36,27 +36,31 @@ flowchart LR
 
 ## Environments
 
-| Environment | Where                                                                     | Data                                  |
-| ----------- | ------------------------------------------------------------------------- | ------------------------------------- |
-| Local       | `pnpm dev`, running in the Workers runtime                                | Local D1 file, secrets in `.dev.vars` |
-| Preview     | `https://pr-<number>-timesifier.ayoinc.workers.dev`, one per pull request | Preview D1 database                   |
-| Production  | `https://timesifier.com`                                                  | Production D1 database                |
+| Environment | Where                                                                     | Data                                                     |
+| ----------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Local       | `pnpm dev`, running in the Workers runtime                                | Local D1 file under `.wrangler/`, secrets in `.dev.vars` |
+| Preview     | `https://pr-<number>-timesifier.ayoinc.workers.dev`, one per pull request | D1 database `timesifier-preview`, shared by all previews |
+| Production  | `https://timesifier.com`                                                  | D1 database `timesifier`                                 |
+
+Both remote databases were created on 2026-11-11 with `wrangler d1 create <name> --jurisdiction eu`. `wrangler.jsonc` binds `DB` to `timesifier` at the top level and to `timesifier-preview` in its `previews` block. The local database is built from the same migrations with `pnpm db:migrate:local`, and tests build their own copy inside the Workers runtime.
 
 ## Data rules
 
-- Every table that holds customer data has an `organisation_id`. Code reads and writes it only through the organisation-scoped data layer.
-- Times are stored in UTC and shown in the person's time zone.
-- Schema changes are SQL migrations in the repository, applied to remote databases by the pipeline only.
-- The production database is created in the EU. The exact option is confirmed in TS-007.
+- Every table that holds customer data has an `organisation_id`. Code reads and writes it only through the organisation-scoped data layer, `organisationScope` in `app/db/`. The scope sets the organisation of every row it writes and adds it to every statement, and it accepts only tables that have the column.
+- Ids are UUID version 7 text, generated in the application. Times are stored in UTC, as integers holding milliseconds since the Unix epoch, and shown in the person's time zone. The reasons are in `docs/decisions.md` entry 17.
+- Foreign keys are enforced: D1 checks them on every query and migration, as SQLite does with `PRAGMA foreign_keys = on`. A migration can defer the check to the end of its transaction with `PRAGMA defer_foreign_keys = on`, but cannot switch it off (<https://developers.cloudflare.com/d1/sql-api/foreign-keys/>).
+- The schema is `app/db/schema.ts`. A schema change is a SQL migration generated from it by `pnpm db:generate` and committed in `migrations/`; a test fails when the two disagree. Migrations are applied to remote databases by the pipeline only.
+- Both remote databases are restricted to the `eu` jurisdiction. Cloudflare's D1 documentation says a jurisdiction creates a database that "only run[s] and store[s] data within a region", and that read replicas are created only inside it. This differs from a location hint such as `--location weur`, which "does not guarantee that D1 runs in your preferred location". A jurisdiction can be set only when the database is created and cannot be changed afterwards. It governs where the database runs and keeps its data, not where the Worker that queries it runs. The binding needs no extra field: it names the database by id. Source: <https://developers.cloudflare.com/d1/configuration/data-location/>, read 2026-11-11.
 
 ## Delivery
 
 One workflow, `.github/workflows/ci.yml`, does all of it.
 
 1. A pull request runs install with a frozen lockfile, typecheck, lint, tests, build, a secret scan and a dependency audit.
-2. When those pass, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
-3. Merging to `main` runs the same checks, then `wrangler deploy`, then the smoke test against production.
+2. When those pass, the migrations are applied to the preview database, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
+3. Merging to `main` runs the same checks, then applies the migrations to the production database, then `wrangler deploy`, then the smoke test against production.
 4. The smoke test is `scripts/smoke.sh`: the home page must answer 200 and contain the product name, and `www` must redirect to the apex. A failure fails the workflow; it does not roll back by itself.
+5. Migrations are applied before the new code is live, so each one must work with the code already running: add a column in one release, stop using the old one in the next, remove it in a third. All previews share one database, so a migration on an open pull request reaches the other previews too.
 
 Production is deployed only by the pipeline. The one exception was the first deploy on 2026-11-11, made from the owner's machine, because a token limited to one Worker cannot create that Worker.
 
@@ -119,4 +123,6 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 | Biome                    | 2.6.6      |
 | TypeScript               | 5.9.3      |
 | Zod                      | 4.6.7      |
+| Drizzle ORM              | 0.45.4     |
+| Drizzle Kit              | 0.31.11    |
 | `compatibility_date`     | 2026-11-09 |
