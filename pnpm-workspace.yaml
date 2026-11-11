@@ -5,3 +5,8 @@
 allowBuilds:
   esbuild: true
   workerd: true
+# drizzle-kit loads its config through @esbuild-kit, which is deprecated and
+# pins esbuild 0.18, the subject of advisory GHSA-67mh-4wv8-2f99 (its dev
+# server). This gives that one path the esbuild drizzle-kit itself already uses.
+overrides:
+  "@esbuild-kit/core-utils>esbuild": "0.25.12"

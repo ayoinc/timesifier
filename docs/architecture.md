@@ -59,7 +59,7 @@ Authentication differs by environment in three ways, all set in `wrangler.jsonc`
 
 One workflow, `.github/workflows/ci.yml`, does all of it.
 
-1. A pull request runs install with a frozen lockfile, typecheck, lint, tests, build, a secret scan and a dependency audit.
+1. A pull request runs install with a frozen lockfile, typecheck, lint, tests, build, the browser tests, a secret scan and a dependency audit that fails on a moderate or worse advisory.
 2. When those pass, the migrations are applied to the preview database, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
 3. Merging to `main` runs the same checks, then applies the migrations to the production database, then `wrangler deploy`, then the smoke test against production.
 4. The smoke test is `scripts/smoke.sh`: the home page must answer 200 and contain the product name. Against production it also requires `www` to redirect to the apex, plain HTTP to redirect to HTTPS, and the workers.dev address of the version just deployed to answer 404 (see `docs/security.md`, "One host in production"). A failure fails the workflow; it does not roll back by itself.
