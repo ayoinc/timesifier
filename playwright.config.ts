@@ -113,7 +113,9 @@ export default defineConfig({
 		env: SERVER_ENV,
 		reuseExistingServer: false,
 		timeout: 180_000,
-		stdout: "ignore",
+		// In the pipeline the server's own lines go to the job's log, so a 500 seen
+		// by a test can be read beside it; locally they would drown the results.
+		stdout: process.env.CI ? "pipe" : "ignore",
 		stderr: "pipe",
 	},
 });
