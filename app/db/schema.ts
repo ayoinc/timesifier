@@ -8,11 +8,12 @@
  * Ids are UUID version 7 text; timestamps are integers holding milliseconds
  * since the Unix epoch (UTC). See docs/decisions.md entry 17.
  *
- * `users`, `organisations` and `memberships` carry the fields of Better Auth's
- * `user`, `organization` and `member` models. The tables below `memberships`
- * are Better Auth's own; `app/auth/auth.server.ts` maps each to its model.
- * The property names are the field names Better Auth reads and writes, so
- * renaming a property there breaks sign-in; `test/auth/schema.test.ts` says so.
+ * `users`, `organisations`, `memberships` and `invitations` carry the fields of
+ * Better Auth's `user`, `organization`, `member` and `invitation` models. The
+ * tables below `invitations` are Better Auth's own. `app/auth/` maps each table
+ * to its model. The property names are the field names Better Auth reads and
+ * writes, except that its `organizationId` is our `organisationId`; renaming a
+ * property breaks sign-in, and `test/auth/schema.test.ts` says so.
  */
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { uuidv7 } from "./uuidv7";
@@ -73,7 +74,43 @@ export const memberships = sqliteTable(
 	],
 );
 
-/** A signed-in browser. The token is the value the session cookie carries, signed. */
+/**
+ * An offer of membership, sent to an email address. Its id is the secret in the
+ * invitation link. `status` is `pending` until the invitation is accepted or
+ * cancelled; a pending invitation stops working at `expiresAt`.
+ */
+export const invitations = sqliteTable(
+	"invitations",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		email: text("email").notNull(),
+		role: text("role").notNull(),
+		status: text("status").notNull().default("pending"),
+		expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+		inviterId: text("inviter_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		index("invitations_organisation_id_idx").on(table.organisationId),
+		index("invitations_email_idx").on(table.email),
+	],
+);
+
+/**
+ * A signed-in browser. The token is the value the session cookie carries, signed.
+ *
+ * `activeOrganisationId` is a field Better Auth's organization plugin requires
+ * and writes when a person creates or joins an organisation. Nothing reads it:
+ * the organisation of a request always comes from the request itself
+ * (docs/decisions.md entry 20). It is not a foreign key, so a value left behind
+ * by a deleted organisation never stands in the way of the deletion.
+ */
 export const sessions = sqliteTable(
 	"sessions",
 	{
@@ -85,6 +122,7 @@ export const sessions = sqliteTable(
 		expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
 		ipAddress: text("ip_address"),
 		userAgent: text("user_agent"),
+		activeOrganisationId: text("active_organisation_id"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
