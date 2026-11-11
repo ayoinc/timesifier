@@ -232,7 +232,7 @@ export function TrackTime({
 	onClose,
 	onDone,
 }: {
-	data: Pick<DayData, "day" | "today" | "projects">;
+	data: Pick<DayData, "day" | "today" | "projects" | "away">;
 	/** The time the entry starts, `09:30`, where a slot of the calendar was chosen. */
 	start?: string;
 	isOpen: boolean;

@@ -1119,13 +1119,16 @@ describe("the Calendar view (TS-062)", () => {
 		expect(text).toContain("Monday 9 November, 2:00");
 		expect(text).toContain("Week of 9 November, 3:00");
 		expect(text).toContain("Week of 26 October, 0:00");
+		// The day as leave sees it (TS-061), in the place each day keeps for it.
+		expect(text).toContain("Saturday 14 November, 0:00, Not a working day");
 	});
 
-	it("marks the days of a submitted week", async () => {
+	it("offers a free slot as a new entry, and marks the days of a submitted week, which offer none", async () => {
+		expect(await mainOf(WEEK)).toContain("New entry, Monday 9 November, from 12:00");
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
 		const main = await mainOf(WEEK);
 		expect(textOf(main)).toContain("Submitted");
-		expect(main).not.toContain("Track time, Monday 9 November");
+		expect(main).not.toContain("New entry, Monday 9 November");
 		expect(await textAt(MONTH)).toContain("Monday 9 November, 2:00, submitted");
 	});
 

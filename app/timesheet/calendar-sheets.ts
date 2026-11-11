@@ -20,10 +20,9 @@ export const ROW_MINUTES = 5;
 export const ROWS_PER_DAY = MINUTES_PER_DAY / ROW_MINUTES;
 
 /**
- * Something a day is besides the time on it, such as leave or a public
- * holiday: a label, and whether the day is not a working day and is shown
- * muted. The calendar has a place for it on every day; nothing fills it yet
- * (TS-061 will).
+ * Something a day is besides the time on it: leave, a public holiday or a
+ * day not worked, as leave names it (TS-061, `weekAway`), and whether nothing
+ * is expected on it, which mutes it. The calendar shows it on the day.
  */
 export interface DayStatus {
 	label: string;

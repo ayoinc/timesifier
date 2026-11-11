@@ -101,7 +101,7 @@ test("the week calendar shows each entry as a block with the Week view's totals;
 	await expect(grid.getByRole("columnheader", { name: "Week total 2:30" })).toBeVisible();
 
 	// The slot at 14:00 opens Track time from 14:00.
-	await grid.getByRole("button", { name: `Track time, ${today}, from 14:00` }).click();
+	await grid.getByRole("button", { name: `New entry, ${today}, from 14:00` }).click();
 	const sheet = trackSheet(page);
 	await expect(sheet.getByLabel("Start")).toHaveValue("14:00");
 	await expect(sheet.getByRole("button", { name: "Save entry" })).toBeVisible();
@@ -232,7 +232,7 @@ test("with the keyboard alone: arrows move between days, Enter opens a day, a sl
 	const week = weekGrid(page);
 	await tabTo(page, todayLink(week));
 	await page.keyboard.press("ArrowDown");
-	await expect(focused(page)).toHaveAccessibleName(/^Track time, .*, from 08:00$|^Site, 09:00/);
+	await expect(focused(page)).toHaveAccessibleName(/^New entry, .*, from 08:00$|^Site, 09:00/);
 	for (let step = 0; step < 6; step++) {
 		const id = await focused(page).getAttribute("data-focus-id");
 		if (id?.startsWith("slot:")) await page.keyboard.press("ArrowDown");
@@ -245,7 +245,7 @@ test("with the keyboard alone: arrows move between days, Enter opens a day, a sl
 	await expect(focused(page)).toHaveAccessibleName(/^Site, 09:00–11:00/);
 
 	await page.keyboard.press("ArrowDown");
-	await expect(focused(page)).toHaveAccessibleName(/^Track time, .*, from 11:00$/);
+	await expect(focused(page)).toHaveAccessibleName(/^New entry, .*, from 11:00$/);
 	await page.keyboard.press("Enter");
 	await expect(trackSheet(page).getByLabel("Start")).toHaveValue("11:00");
 	await focusIn(trackSheet(page));

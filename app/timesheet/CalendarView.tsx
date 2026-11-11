@@ -167,7 +167,7 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 			</ViewTransition>
 
 			<TrackTime
-				data={{ day: slot.day, today, projects }}
+				data={{ day: slot.day, today, projects, away: data.away }}
 				start={slot.start}
 				isOpen={task === "track"}
 				onClose={close}

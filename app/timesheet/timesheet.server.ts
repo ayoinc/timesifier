@@ -225,7 +225,9 @@ export interface CalendarData extends TimesheetBase {
 	entries: SheetEntry[];
 	/** The days shown that are in a submitted or approved period. */
 	lockedDays: Day[];
-	/** What each day is besides its time, such as leave; nothing fills it yet (TS-061 will). */
+	/** The days shown as leave sees them (TS-061), which Track time reads as the Day view does. */
+	away: WeekAway;
+	/** What each day is besides its time: leave, a public holiday or a day not worked, muted when nothing is expected on it. */
 	statuses: Partial<Record<Day, DayStatus>>;
 }
 
@@ -271,9 +273,10 @@ export async function timesheetData(
 			const { days, month } = calendarDays(chosen.scale, date, organisation.weekStartsOn);
 			const first = days[0] as Day;
 			const last = days.at(-1) as Day;
-			const [entries, locked] = await Promise.all([
+			const [entries, locked, away] = await Promise.all([
 				entriesStartingIn(scope, user.id, bounds(addDays(first, -1), last, zone)),
 				lockedDays(scope, user.id, days),
+				weekAway(scope, user.id, { startsOn: first, endsOn: last }),
 			]);
 			return {
 				...base,
@@ -285,7 +288,12 @@ export async function timesheetData(
 				month,
 				entries,
 				lockedDays: days.filter((day) => locked.has(day)),
-				statuses: {},
+				away,
+				statuses: Object.fromEntries(
+					away.days.flatMap(({ day, label, expectedMinutes }) =>
+						label === null ? [] : [[day, { label, quiet: expectedMinutes === 0 }]],
+					),
+				),
 			};
 		}
 		case "history": {

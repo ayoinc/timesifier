@@ -294,7 +294,8 @@ export function CalendarWeek({
 												data-at={minutes}
 												{...itemProps(slotId(day, minutes))}
 												onClick={() => onTrack(day, clockOfMinutes(minutes))}
-												aria-label={`Track time, ${formatLong(day)}, from ${clockOfMinutes(minutes)}`}
+												// Not "Track time": that is the Day view's button and the sheet's title.
+												aria-label={`New entry, ${formatLong(day)}, from ${clockOfMinutes(minutes)}`}
 												className={cx(
 													"group col-span-60 flex items-start justify-start rounded-small px-2 text-label-small text-on-surface-variant outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator-inner",
 													placement(
