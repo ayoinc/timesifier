@@ -57,12 +57,16 @@ async function expectBrowserPolicy(response: Response, { turnstile = false } = {
 	expect(headers.get("Cross-Origin-Opener-Policy")).toBe("same-origin");
 
 	const permissions = (headers.get("Permissions-Policy") ?? "").split(", ");
-	const allowed = permissions.filter((directive) => !directive.endsWith("=()"));
-	expect(allowed.sort()).toEqual([
-		"publickey-credentials-create=(self)",
-		"publickey-credentials-get=(self)",
-	]);
-	for (const feature of ["camera", "microphone", "geolocation", "payment", "usb"]) {
+	expect(permissions.filter((directive) => !directive.endsWith("=()"))).toEqual([]);
+	for (const feature of [
+		"camera",
+		"microphone",
+		"geolocation",
+		"payment",
+		"usb",
+		"publickey-credentials-create",
+		"publickey-credentials-get",
+	]) {
 		expect(permissions).toContain(`${feature}=()`);
 	}
 

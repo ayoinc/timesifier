@@ -118,9 +118,9 @@ export function StepLead({ children }: { children: ReactNode }) {
 }
 
 /**
- * The mark of a moment worth marking: an account made, a passkey made (design
- * rule 11). It arrives on the spring, or with a fade when reduced motion is
- * requested, and holds nothing back: the next action is ready beside it.
+ * The mark of a moment worth marking: an organisation made (design rule 11).
+ * It arrives on the spring, or with a fade when reduced motion is requested,
+ * and holds nothing back: the next action is ready beside it.
  */
 export function DoneMark() {
 	return (
@@ -169,13 +169,11 @@ export const PROBLEM_WORDS: Record<Problem, string> = {
 	"wrong-code": "That code is not right. Check it, or send a new one.",
 	"expired-code": "That code has expired. Send a new one.",
 	"spent-code": "That code no longer works: it was entered wrongly too many times. Send a new one.",
-	cancelled: "No passkey was used.",
-	"already-added": "This device already holds a passkey for your account.",
 	failed: "Something went wrong. Check your connection and try again.",
 };
 
-export function problem(kind: Problem, words: Partial<Record<Problem, string>> = {}): Notice {
-	return { tone: "problem", text: words[kind] ?? PROBLEM_WORDS[kind] };
+export function problem(kind: Problem): Notice {
+	return { tone: "problem", text: PROBLEM_WORDS[kind] };
 }
 
 export function progress(text: string): Notice {

@@ -4,9 +4,8 @@
  */
 import { env } from "cloudflare:workers";
 import { createContext, type MiddlewareFunction, redirectDocument } from "react-router";
-import * as z from "zod";
 
-import { getSession, handleAuthRequest, type SignedIn } from "~/auth/auth.server";
+import { getSession, type SignedIn } from "~/auth/auth.server";
 
 import { NEXT_PARAM, safeNext, signInPath } from "./paths";
 
@@ -41,33 +40,4 @@ export async function loadAuthPage(request: Request, url: URL) {
 	const next = safeNext(url.searchParams.get(NEXT_PARAM));
 	if (await getSession(request)) throw redirectDocument(next);
 	return { next, turnstileSiteKey: env.TURNSTILE_SITE_KEY };
-}
-
-/** What Settings shows of a passkey. The public key and the credential's id stay on the server. */
-const passkeyList = z.array(
-	z.object({
-		id: z.string(),
-		createdAt: z.iso.datetime(),
-		/** Whether the authenticator said the passkey is synced to the person's other devices. */
-		backedUp: z.boolean(),
-	}),
-);
-
-export type PasskeySummary = z.output<typeof passkeyList>[number];
-
-/**
- * The signed-in person's passkeys, oldest first, or `null` when they could not
- * be read. Asked of Better Auth's own endpoint with the request's cookie, so it
- * lists the passkeys of the session the request carries and nobody else's.
- */
-export async function listPasskeys(request: Request): Promise<PasskeySummary[] | null> {
-	const response = await handleAuthRequest(
-		new Request(new URL("/api/auth/passkey/list-user-passkeys", request.url), {
-			headers: request.headers,
-		}),
-	);
-	if (!response.ok) return null;
-	const passkeys = passkeyList.safeParse(await response.json());
-	if (!passkeys.success) return null;
-	return passkeys.data.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }

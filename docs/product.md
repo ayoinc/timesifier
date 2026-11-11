@@ -28,7 +28,7 @@ Release 1 is a web application. It covers what a person or a small team needs to
 
 | Capability | In release 1                                                                 |
 | ---------- | ---------------------------------------------------------------------------- |
-| Accounts   | Sign in with a passkey or email; organisations and roles                     |
+| Accounts   | Sign in with a code sent by email; organisations and roles                   |
 | Tracking   | Start and stop a timer; add and edit entries by hand; projects and clients   |
 | Review     | Today and week views; reports by project, client and day; CSV export         |
 | AI         | Suggested project or category for an entry; the person accepts or rejects it |

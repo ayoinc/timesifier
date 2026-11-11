@@ -4,29 +4,32 @@ Settled choices and the evidence behind them. A settled choice stays settled; to
 
 Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by a calibrated judgement model on the evidence listed, asked twice with the options in opposite order; the answer was the same both times. The criteria were written by the person preparing the project, so treat the ruling as a consistency check on the evidence, not as independent research.
 
-| #   | Decision            | Chosen                                                                                   | How                                |
-| --- | ------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------- |
-| 1   | Hosting             | Cloudflare only                                                                          | Owner                              |
-| 2   | First release       | Web platform; native tracking clients later                                              | Preparer, for the owner to confirm |
-| 3   | Web framework       | React Router v8, framework mode, server rendering                                        | Jev                                |
-| 4   | Design system       | Material 3 Expressive tokens on our own components                                       | Jev                                |
-| 5   | Design principles   | Simplicity, fluidity, delight                                                            | Owner                              |
-| 6   | Headless components | React Aria Components                                                                    | Jev                                |
-| 7   | Data                | D1 as system of record; Durable Objects only when a feature needs real-time coordination | Jev                                |
-| 8   | Authentication      | Better Auth inside the Worker                                                            | Jev                                |
-| 9   | Styling             | Tailwind CSS v4 with tokens as theme variables                                           | Jev                                |
-| 10  | Motion              | View Transitions API plus the Motion library                                             | Jev                                |
-| 11  | Pipeline            | GitHub Actions                                                                           | Jev                                |
-| 12  | Package manager     | pnpm                                                                                     | Jev                                |
-| 13  | Tests               | Vitest in the Workers runtime, plus Playwright                                           | Jev                                |
-| 14  | Lint and format     | Biome                                                                                    | Preparer                           |
-| 15  | Board               | `BOARD.md` in the repository                                                             | Preparer                           |
-| 16  | Seed and typeface   | Seed colour `#4F5BD5`; Roboto Flex, self-hosted                                          | Preparer, for the owner to confirm |
-| 17  | Ids and timestamps  | UUID version 7 text ids; integer timestamps in milliseconds since the Unix epoch         | Preparer                           |
-| 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
-| 19  | Motion library      | Not added yet: components animate with CSS transitions on the motion tokens (amends 10)  | Preparer                           |
-| 20  | Organisation        | Named by each request and checked on the server; never the session's active organisation | Preparer                           |
-| 21  | Route transitions   | React's `<ViewTransition>`, not React Router's `viewTransition` props (refines 10)       | Preparer                           |
+| #   | Decision            | Chosen                                                                                                                             | How                                |
+| --- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1   | Hosting             | Cloudflare only                                                                                                                    | Owner                              |
+| 2   | First release       | Web platform; native tracking clients later                                                                                        | Preparer, for the owner to confirm |
+| 3   | Web framework       | React Router v8, framework mode, server rendering                                                                                  | Jev                                |
+| 4   | Design system       | Material 3 Expressive tokens on our own components                                                                                 | Jev                                |
+| 5   | Design principles   | Simplicity, fluidity, delight                                                                                                      | Owner                              |
+| 6   | Headless components | React Aria Components                                                                                                              | Jev                                |
+| 7   | Data                | D1 as system of record; Durable Objects only when a feature needs real-time coordination                                           | Jev                                |
+| 8   | Authentication      | Better Auth inside the Worker                                                                                                      | Jev                                |
+| 9   | Styling             | Tailwind CSS v4 with tokens as theme variables                                                                                     | Jev                                |
+| 10  | Motion              | View Transitions API plus the Motion library                                                                                       | Jev                                |
+| 11  | Pipeline            | GitHub Actions                                                                                                                     | Jev                                |
+| 12  | Package manager     | pnpm                                                                                                                               | Jev                                |
+| 13  | Tests               | Vitest in the Workers runtime, plus Playwright                                                                                     | Jev                                |
+| 14  | Lint and format     | Biome                                                                                                                              | Preparer                           |
+| 15  | Board               | `BOARD.md` in the repository                                                                                                       | Preparer                           |
+| 16  | Seed and typeface   | Seed colour `#4F5BD5`; Roboto Flex, self-hosted                                                                                    | Preparer, for the owner to confirm |
+| 17  | Ids and timestamps  | UUID version 7 text ids; integer timestamps in milliseconds since the Unix epoch                                                   | Preparer                           |
+| 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes                                                | Preparer                           |
+| 19  | Motion library      | Not added yet: components animate with CSS transitions on the motion tokens (amends 10)                                            | Preparer                           |
+| 20  | Organisation        | Named by each request and checked on the server; never the session's active organisation                                           | Preparer                           |
+| 21  | Route transitions   | React's `<ViewTransition>`, not React Router's `viewTransition` props (refines 10)                                                 | Preparer                           |
+| 22  | Sign-in code        | Works only in the browser that asked for it                                                                                        | Card TS-027, after its review      |
+| 23  | Passkeys            | None: the emailed code is the one way to sign up and sign in (amends 8 and 22)                                                     | Owner                              |
+| 27  | Lock-out by code    | Codes counted apart for browsers that have signed in as the address; their code is theirs alone (narrows the gap of 23, amends 22) | Owner                              |
 
 ## Evidence
 
@@ -239,6 +242,53 @@ The answer to a request for a code sets a cookie, `__Host-timesifier.sign_in_cod
 | A separate code for each requester          | Would also stop one person's request replacing another's code. The plugin keeps one live code per address and offers no other shape; it would mean writing the email-code flow ourselves.                                                                                                                                                                                                             |
 
 What it does not close, and why passkeys are the remedy, is in `docs/security.md`, "Known gaps". The cookie holds no address and is `HttpOnly`; the proof in it counts for the five minutes a code lasts, and the browser keeps it for an hour so that a late code is answered "expired" and not "wrong". The length of a code, eight digits, is one constant, `SIGN_IN_CODE_LENGTH` in `app/auth/code.ts`, read by the server and by the sign-in page.
+
+### 23. No passkeys: the emailed code is the one way in
+
+Decided by the owner on 2026-11-11, on card TS-029. It amends entry 8, under which passkeys shipped beside the email code, and the last paragraph of entry 22, which names passkeys as the remedy for a gap. Where those entries speak of passkeys they describe what was built and has since been removed.
+
+A person signs up and signs in with the emailed code and nothing else. `/sign-in` opens on the email address; `/sign-up` ends when the code is accepted and goes on to where the person was going; Settings has no Passkeys section.
+
+| Option                                            | Evidence                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The emailed code only (chosen)                    | One way in, the same on every device and in every browser, and the same two steps to sign up and to sign in. Every sign-in waits for an email, and the gap below stays open.                                                                                                |
+| A passkey first, the code as fallback (was built) | Sign-in with no email and no code, for a person who has made a passkey. It put a view in front of the email step on `/sign-in`, a third step after sign-up, a section in Settings, six endpoints, a table and a second dependency, `@better-auth/passkey`, to keep current. |
+
+What was removed: the passkey plugin and `@better-auth/passkey`; its six endpoints from `app/auth/endpoints.ts`, which now lists 20; its two rate-limit rules and its registration hook; the `passkeys` table, dropped by migration `0005_remove_passkeys` (production held no rows); and the passkey views, their tests and the virtual authenticator the browser tests used. `Permissions-Policy` now denies `publickey-credentials-get` and `publickey-credentials-create` like every other feature.
+
+**What it costs.** Passkeys were the remedy for a known gap (`docs/security.md`, "Known gaps", TS-027): somebody who knows a person's address can use up that address's five codes an hour, or keep replacing the code the person is about to type, and so keep them from signing in. A passkey signs in without a code and was out of that reach. With the code as the only way in, every person is exposed to it and nothing planned closes it. The bounds that remain are the ones entry 22 and the security document describe: each request for a code costs a Turnstile token, one client may ask three times a minute, and guessing a code needs the cookie of the browser that asked.
+
+Bringing passkeys back needs a new entry that names this one, the plugin and the table again, and the two permissions.
+
+### 27. A browser that has signed in before is counted apart, and its code is its own
+
+Decided by the owner on 2026-11-11, on card TS-029, the same day as entry 23 and because of it. It narrows the gap entry 23 left open and amends entry 22: the cookie of entry 22 now names one request, not any request of the last five minutes.
+
+The gap: somebody who knows a person's address could use up the five codes an hour the address may be sent, and could replace the code the person was about to type by asking for another. With no passkey there was no way in that did not need a code.
+
+What was built. When a code signs a person in, the browser is given a cookie, `__Host-timesifier.known_browser`, kept for a year: an HMAC under `BETTER_AUTH_SECRET` of the lower-cased address, for each of the last five addresses signed in from that browser. From then on:
+
+- **Two counts.** A request for a code from a browser that holds a proof for the address is counted against five an hour for such browsers. Every other request is counted against five an hour for everybody else. A stranger can use up only the second.
+- **A waiting code is its asker's alone.** While the code of a known browser is waiting, a stranger's request is answered like any other and issues nothing, so it cannot replace that code. And a guess is let through to the plugin only from the browser whose request the live code answers, so a stranger who has asked, before or after, cannot use up its three attempts either.
+- **One answer.** The status, the body and the cookie set by asking are the same in every case: served or not, known or not, account or none.
+
+| Option                                               | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Two counts and a waiting code of one's own (chosen)  | A person on a browser they have used before can always ask and sign in, whatever strangers do: `test/auth/known-browser.test.ts`, "can still ask for a code and sign in when strangers have used up the address's five in an hour", "is not replaced by a stranger's request" and "is not used up by a stranger's guesses". It costs a third cookie, one more row for each address with a code out, and an address may now be sent ten codes an hour and guessed at 30 times. |
+| Accept the risk                                      | Nothing to build. Anybody who knows an address and will solve a Turnstile challenge every twelve minutes keeps its owner out for as long as they like, on every browser, and nothing but a passkey, which entry 23 removed, was ever going to end that.                                                                                                                                                                                                                       |
+| A code for each requester, so that none replaces any | Would also protect a first sign-in on a new browser. The plugin keeps one live code for an address and compares a guess with the newest alone (`resolveOTP` and `atomicVerifyOTP` in `plugins/email-otp/routes.mjs`, 1.7.19); its `resendStrategy: "reuse"` sends the same code again and does nothing for a code stored as a hash, which ours is. It would mean writing the email-code flow ourselves. Not built.                                                            |
+
+**What the plugin does with a pending code, and what was and was not prevented.** Every request creates a new code row for the address, and a guess is compared with the newest row only, so a request replaces the code before it. Prevented, by rules that run before the plugin and without changing it: a stranger replacing or using up the code a known browser is waiting for. Not prevented: a stranger's request replacing another stranger's code, which is what a first sign-in on a new browser asks for.
+
+**Found on the way.** The cookie of entry 22 proved that a browser had asked for a code for the address within five minutes, and was set on every request, served or not. Anybody who asked could therefore still spend the three attempts of a code sent in answer to somebody else's request: in `test/auth/email-code.test.ts`, "refuses the cookie of a browser that asked for an earlier code", the earlier browser's fourth wrong guess was answered 403, the code used up, where it is now answered 400 and the code still signs in the browser that asked for it. The cookie now carries a number of its request's own, and the server keeps the number of the request the live code answers.
+
+**What stays open** is in `docs/security.md`, "Known gaps", rows TS-029:
+
+- A first sign-in on a new browser, sign-up included, can still be delayed: its request is a stranger's, so the strangers' five can be used up before it, and a stranger's later request replaces its code.
+- A proof cannot be withdrawn and signing out does not remove it. Whoever holds a browser that once signed in as an address can do to the known browsers' count what a stranger could do to the one count before.
+- While a known browser's code waits, for five minutes at most, the same person asking from a new browser is sent nothing and is not told.
+
+Signing out everywhere does not clear the proof: it signs nobody in, the person who has signed out is the one who needs it next, and a request from one browser cannot reach a cookie in another.
 
 ## To verify when the code is scaffolded
 

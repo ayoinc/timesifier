@@ -90,8 +90,8 @@ describe("what the page shows", () => {
 		const account = html.indexOf(">Your account</h2>");
 		expect(organisation).toBeGreaterThan(-1);
 		expect(account).toBeGreaterThan(organisation);
-		// The colour scheme, the passkeys and both ways out are under the person's heading.
-		for (const heading of ["Appearance", "Passkeys", "Sign out", "Sign out everywhere"]) {
+		// The colour scheme and both ways out are under the person's heading.
+		for (const heading of ["Appearance", "Sign out", "Sign out everywhere"]) {
 			expect(html.indexOf(`>${heading}</h3>`), heading).toBeGreaterThan(account);
 		}
 		expect(html.indexOf(">Delete organisation</h3>")).toBeLessThan(account);

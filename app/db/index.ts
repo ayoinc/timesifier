@@ -8,7 +8,6 @@
 export {
 	accounts,
 	organisations,
-	passkeys,
 	rateLimits,
 	sessions,
 	users,

@@ -35,7 +35,7 @@ beforeEach(async () => {
 });
 
 describe("the endpoints under /api/auth", () => {
-	it("are these 26 and no other", () => {
+	it("are these 20 and no other", () => {
 		expect([...offered].sort()).toEqual([
 			"GET /get-session",
 			"GET /organization/get-full-organization",
@@ -43,9 +43,6 @@ describe("the endpoints under /api/auth", () => {
 			"GET /organization/list",
 			"GET /organization/list-invitations",
 			"GET /organization/list-members",
-			"GET /passkey/generate-authenticate-options",
-			"GET /passkey/generate-register-options",
-			"GET /passkey/list-user-passkeys",
 			"POST /email-otp/send-verification-otp",
 			"POST /organization/accept-invitation",
 			"POST /organization/cancel-invitation",
@@ -57,9 +54,6 @@ describe("the endpoints under /api/auth", () => {
 			"POST /organization/remove-member",
 			"POST /organization/update",
 			"POST /organization/update-member-role",
-			"POST /passkey/delete-passkey",
-			"POST /passkey/verify-authentication",
-			"POST /passkey/verify-registration",
 			"POST /revoke-sessions",
 			"POST /sign-in/email-otp",
 			"POST /sign-out",
@@ -90,8 +84,8 @@ describe("the endpoints under /api/auth", () => {
 					: [endpoint],
 			)
 			.filter((endpoint) => !offered.includes(endpoint));
-		// Better Auth 1.7.19 registers 70 under this configuration, 43 of them not
-		// offered. Far fewer would mean the walk no longer sees the library's list.
+		// Better Auth 1.7.19 registers 63 under this configuration, and 43 are
+		// asked for here. Far fewer would mean the walk no longer sees the library's list.
 		expect(others.length).toBeGreaterThan(30);
 		const touched: string[] = [];
 		setBinding(
@@ -122,7 +116,6 @@ describe("the endpoints under /api/auth", () => {
 			"GET /error?error=probe&error_description=text+of+a+stranger's+choosing",
 		],
 		["a person's name and image", "POST /update-user"],
-		["renaming a passkey, which no page does", "POST /passkey/update-passkey"],
 		["a person's sessions, tokens included", "GET /list-sessions"],
 		["the password-reset link, which redirects", "GET /reset-password/x?callbackURL=/app"],
 		["a path nothing registers", "GET /no-such-endpoint"],

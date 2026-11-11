@@ -7,33 +7,22 @@
  * `getSession`.
  *
  * A person proves an email address with an eight-digit code sent to it, which
- * signs them in and, the first time, creates their account. Once signed in
- * they can add a passkey and use it from then on, with the code as the
- * fallback. There are no passwords. `sign-in-code.server.ts` holds the rules
- * around the code that the library does not.
+ * signs them in and, the first time, creates their account. That is the one
+ * way in: there are no passwords (docs/decisions.md entry 23).
+ * `sign-in-code.server.ts` holds the rules around the code that the library
+ * does not.
  *
  * The same instance holds organisations, memberships and invitations, which
  * `organisations.server.ts` configures.
  */
 
 import { env, waitUntil } from "cloudflare:workers";
-import { passkey } from "@better-auth/passkey";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError } from "better-auth/api";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import type { Session, User } from "better-auth/types";
 import { drizzle } from "drizzle-orm/d1";
-import {
-	accounts,
-	organisations,
-	passkeys,
-	rateLimits,
-	sessions,
-	users,
-	uuidv7,
-	verifications,
-} from "~/db";
+import { accounts, organisations, rateLimits, sessions, users, uuidv7, verifications } from "~/db";
 // The two tenant tables are absent from `~/db` on purpose. Better Auth is the
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
@@ -108,7 +97,6 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 				session: sessions,
 				account: accounts,
 				verification: verifications,
-				passkey: passkeys,
 				rateLimit: rateLimits,
 				organization: organisations,
 				member: memberships,
@@ -128,10 +116,6 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 			customRules: {
 				"/email-otp/send-verification-otp": ASKING_LIMIT,
 				"/sign-in/email-otp": SIGN_IN_LIMIT,
-				"/passkey/verify-authentication": SIGN_IN_LIMIT,
-				// Anyone may ask for the options, and each answer stores a challenge
-				// for five minutes. The sign-in page asks once each time it loads.
-				"/passkey/generate-authenticate-options": { window: 60, max: 30 },
 				...ORGANISATION_RATE_LIMITS,
 			},
 		},
@@ -169,38 +153,6 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 					if (type !== "sign-in") return;
 					// Not awaited: how long the mail takes must not show in the response.
 					waitUntil(sendEmail({ to: email, ...signInCodeEmail(otp) }));
-				},
-			}),
-			// The relying party is the host of the request, one of this environment's
-			// own, so a passkey made on a preview works on that preview and nowhere else.
-			// The authenticator must verify the person, with a PIN or a fingerprint,
-			// both to add a passkey and to sign in with one: the plugin then asks for
-			// that and refuses an answer without it. A key that is merely held, a
-			// stolen one for instance, signs nobody in.
-			passkey({
-				rpName: "Timesifier",
-				authenticatorSelection: { userVerification: "required" },
-				registration: {
-					// The plugin stores a new passkey without looking for its credential
-					// id. An id some passkey already has never comes from an authenticator,
-					// only from a request made up to stand in another passkey's way, so
-					// it is the caller's mistake and is told so. The unique index on
-					// `passkeys.credential_id` remains for two such requests at once.
-					async afterVerification({ ctx, verification }) {
-						const credentialID = verification.registrationInfo?.credential.id;
-						const taken =
-							credentialID &&
-							(await ctx.context.adapter.findOne({
-								model: "passkey",
-								where: [{ field: "credentialID", value: credentialID }],
-							}));
-						if (taken) {
-							throw new APIError("BAD_REQUEST", {
-								code: "PASSKEY_ALREADY_REGISTERED",
-								message: "This passkey is already registered",
-							});
-						}
-					},
 				},
 			}),
 			...organisationPlugins(),
@@ -255,12 +207,12 @@ export function registeredEndpoints(): string[] {
 }
 
 /**
- * Answers a request to `/api/auth/*`: sign-in, sign-out, sessions, passkeys,
+ * Answers a request to `/api/auth/*`: sign-in, sign-out, sessions,
  * organisations.
  *
  * Two refusals come before Better Auth, its rate limit or the database sees
  * the request, each a 404. One is for a host that is not this environment's
- * own, so no cookie is set for such a host and none names it in a passkey.
+ * own, so no cookie is set for such a host.
  * The other is for any method and path that `endpoints.ts` does not list.
  *
  * An error nobody expected, a statement D1 refused for one, is answered 500

@@ -131,7 +131,7 @@ export const sessions = sqliteTable(
 
 /**
  * A way of signing in that belongs to a user at an identity provider. Better
- * Auth requires the table; email codes and passkeys write nothing to it.
+ * Auth requires the table; signing in with an emailed code writes nothing to it.
  */
 export const accounts = sqliteTable(
 	"accounts",
@@ -157,7 +157,7 @@ export const accounts = sqliteTable(
 
 /**
  * Short-lived proofs: the hash of an emailed sign-in code with its attempt
- * count, and the challenge of a passkey ceremony in progress.
+ * count.
  */
 export const verifications = sqliteTable(
 	"verifications",
@@ -170,34 +170,6 @@ export const verifications = sqliteTable(
 		updatedAt: updatedAt(),
 	},
 	(table) => [index("verifications_identifier_idx").on(table.identifier)],
-);
-
-/**
- * A passkey's public half. The private key never leaves the person's device.
- * A credential's id belongs to one passkey: sign-in finds the passkey by it,
- * so a second row with the same id could stand in the way of the first.
- */
-export const passkeys = sqliteTable(
-	"passkeys",
-	{
-		id: id(),
-		userId: text("user_id")
-			.notNull()
-			.references(() => users.id, { onDelete: "cascade" }),
-		name: text("name"),
-		publicKey: text("public_key").notNull(),
-		credentialID: text("credential_id").notNull(),
-		counter: integer("counter").notNull(),
-		deviceType: text("device_type").notNull(),
-		backedUp: integer("backed_up", { mode: "boolean" }).notNull(),
-		transports: text("transports"),
-		aaguid: text("aaguid"),
-		createdAt: createdAt(),
-	},
-	(table) => [
-		index("passkeys_user_id_idx").on(table.userId),
-		uniqueIndex("passkeys_credential_id_unique").on(table.credentialID),
-	],
 );
 
 /**

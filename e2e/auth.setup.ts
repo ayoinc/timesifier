@@ -38,7 +38,6 @@ async function newBrowser(browser: Browser, baseURL: string | undefined): Promis
 /** Signs up on the way to an invitation, and arrives at its page. */
 async function signUpFor(page: Page, person: Person, invitation: string, organisation: string) {
 	await signUp(page, person, `/sign-up?next=${encodeURIComponent(invitation)}`);
-	await page.getByRole("button", { name: "Not now" }).click();
 	await expect(page).toHaveURL(invitation);
 	await expect(
 		page.getByRole("heading", { level: 1, name: `Join ${organisation}?` }),
@@ -52,7 +51,6 @@ setup(
 
 		await ownAddress(context, baseURL);
 		await signUp(page, owner);
-		await page.getByRole("button", { name: "Not now" }).click();
 		// A person with no organisation is sent to create their first.
 		await expect(page).toHaveURL(ARRIVAL);
 		const home = await createOrganisation(page);

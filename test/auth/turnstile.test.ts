@@ -138,8 +138,10 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 		});
 	});
 
-	it("does not stand in front of passkey sign-in", async () => {
-		const response = await get("/passkey/generate-authenticate-options");
+	it("does not stand in front of a request that sends no code", async () => {
+		setBinding("TURNSTILE_SECRET_KEY", TURNSTILE_SECRET_THAT_FAILS);
+
+		const response = await get("/get-session");
 
 		expect(response.status).toBe(200);
 	});

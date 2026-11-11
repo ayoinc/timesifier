@@ -47,7 +47,7 @@ test.describe("the pages that send a code", () => {
 		});
 	}
 
-	test("the widget runs only on the views that send a code, and leaves our markup alone", async ({
+	test("the widget runs on the view that sends a code, and leaves our markup alone", async ({
 		page,
 	}) => {
 		const loaded: string[] = [];
@@ -55,13 +55,7 @@ test.describe("the pages that send a code", () => {
 			if (request.url().startsWith(TURNSTILE)) loaded.push(request.url());
 		});
 
-		// The first view of the sign-in page sends nothing, so it loads nothing of Turnstile's.
 		await openAuthPage(page, "/sign-in");
-		await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
-		expect(loaded).toEqual([]);
-		expect(widgetFrames(page)).toHaveLength(0);
-
-		await page.getByRole("button", { name: "Use an email code instead" }).click();
 		await expect.poll(() => widgetFrames(page).length).toBe(1);
 		expect(loaded[0]).toBe(`${TURNSTILE}/turnstile/v0/api.js?render=explicit`);
 
@@ -82,11 +76,6 @@ test.describe("the pages that send a code", () => {
 			frames: 0,
 			fields: 0,
 		});
-
-		// Leaving the view takes the widget with it.
-		await page.getByRole("button", { name: "Use a passkey instead" }).click();
-		await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
-		await expect.poll(() => widgetFrames(page).length).toBe(0);
 	});
 });
 

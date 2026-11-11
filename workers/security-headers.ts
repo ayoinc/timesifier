@@ -4,7 +4,7 @@
 // timesifier.com belong to other services.
 const STRICT_TRANSPORT_SECURITY = "max-age=63072000";
 
-// Every policy-controlled feature is denied except passkeys (TS-008).
+// Every policy-controlled feature is denied.
 const DENIED_FEATURES = [
 	"accelerometer",
 	"autoplay",
@@ -30,6 +30,8 @@ const DENIED_FEATURES = [
 	"otp-credentials",
 	"payment",
 	"picture-in-picture",
+	"publickey-credentials-create",
+	"publickey-credentials-get",
 	"screen-wake-lock",
 	"serial",
 	"storage-access",
@@ -38,11 +40,7 @@ const DENIED_FEATURES = [
 	"xr-spatial-tracking",
 ];
 
-const PERMISSIONS_POLICY = [
-	...DENIED_FEATURES.map((feature) => `${feature}=()`),
-	"publickey-credentials-get=(self)",
-	"publickey-credentials-create=(self)",
-].join(", ");
+const PERMISSIONS_POLICY = DENIED_FEATURES.map((feature) => `${feature}=()`).join(", ");
 
 /**
  * The `<style>` elements React Aria inserts from script, each allowed by the

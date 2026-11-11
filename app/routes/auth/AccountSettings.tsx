@@ -1,31 +1,13 @@
 import { type ReactNode, useState, useSyncExternalStore } from "react";
-import { useDateFormatter } from "react-aria";
-import { useRevalidator } from "react-router";
 
 import { Button } from "~/components/Button";
-import { Dialog } from "~/components/Dialog";
 
-import { type Notice, NoticeLine, problem, progress, useOneAtATime } from "./AuthPage";
-import {
-	addPasskey,
-	leaveFor,
-	type Outcome,
-	type Problem,
-	passkeysSupported,
-	removePasskey,
-	signOut,
-	signOutEverywhere,
-} from "./client";
+import { type Notice, NoticeLine, problem, useOneAtATime } from "./AuthPage";
+import { leaveFor, type Outcome, signOut, signOutEverywhere } from "./client";
 import { SIGN_IN_PATH } from "./paths";
-import type { PasskeySummary } from "./session.server";
 
-// The parts of Settings that are about the person's account: their passkeys,
-// and the two ways to sign out.
-
-const ADD_WORDS: Partial<Record<Problem, string>> = {
-	cancelled: "No passkey was added.",
-	failed: "We could not add the passkey. Try again.",
-};
+// The parts of Settings that are about the person's account: the two ways to
+// sign out.
 
 const neverChanges = () => () => {};
 
@@ -41,131 +23,6 @@ export function useTimeZone(): string {
 		() => "UTC",
 	);
 }
-
-export interface PasskeysProps {
-	/** The person's passkeys, oldest first, from the route's loader; `null` when it could not read them. */
-	passkeys: PasskeySummary[] | null;
-}
-
-/**
- * Lists the person's passkeys, adds one and removes one. Removing never locks
- * anyone out: the email code is always a way in.
- */
-export function Passkeys({ passkeys }: PasskeysProps) {
-	const [notice, setNotice] = useState<Notice | null>(null);
-	const [removing, setRemoving] = useState<PasskeySummary | null>(null);
-	const { revalidate } = useRevalidator();
-	const once = useOneAtATime();
-	const added = useDateFormatter({
-		dateStyle: "medium",
-		timeStyle: "short",
-		timeZone: useTimeZone(),
-	});
-
-	function add() {
-		once(async () => {
-			if (!passkeysSupported()) {
-				return setNotice({ tone: "problem", text: "This browser cannot create passkeys." });
-			}
-			setNotice(progress("Follow your browser's steps to create the passkey…"));
-			const outcome = await addPasskey();
-			if (!outcome.ok) return setNotice(problem(outcome.problem, ADD_WORDS));
-			await revalidate();
-			setNotice(progress("Passkey added. You can sign in with it from now on."));
-		});
-	}
-
-	function remove(passkey: PasskeySummary) {
-		once(async () => {
-			setRemoving(null);
-			const outcome = await removePasskey(passkey.id);
-			if (!outcome.ok) return setNotice(problem(outcome.problem));
-			await revalidate();
-			setNotice(progress("Passkey removed. It no longer signs you in."));
-		});
-	}
-
-	return (
-		<section aria-labelledby="passkeys" className="mt-8">
-			<h3 id="passkeys" className="text-title-medium">
-				Passkeys
-			</h3>
-			<p className="mt-2 text-body-medium text-on-surface-variant">
-				A passkey signs you in with your fingerprint, your face or your screen lock. An email code
-				always works as well, so removing a passkey never locks you out.
-			</p>
-
-			{passkeys === null && (
-				<p role="alert" className="mt-4 text-body-large text-error">
-					Your passkeys could not be loaded. Reload the page to try again.
-				</p>
-			)}
-			{passkeys?.length === 0 ? (
-				<p className="mt-4 text-body-large">You have no passkeys yet.</p>
-			) : (
-				<ul className="mt-4 flex flex-col gap-2 empty:hidden">
-					{passkeys?.map((passkey) => {
-						const when = added.format(new Date(passkey.createdAt));
-						return (
-							<li
-								key={passkey.id}
-								className="flex items-center justify-between gap-4 rounded-medium bg-surface-container px-4 py-3"
-							>
-								<div className="min-w-0">
-									<p className="text-body-large">Added {when}</p>
-									<p className="text-body-medium text-on-surface-variant">
-										{passkey.backedUp ? "Synced by your password manager" : "Kept on one device"}
-									</p>
-								</div>
-								<Button
-									variant="text"
-									aria-label={`Remove the passkey added ${when}`}
-									onPress={() => setRemoving(passkey)}
-								>
-									Remove
-								</Button>
-							</li>
-						);
-					})}
-				</ul>
-			)}
-
-			<div className="mt-4 flex flex-col items-start gap-4">
-				<NoticeLine notice={notice} />
-				<Button variant="tonal" onPress={add}>
-					Add a passkey
-				</Button>
-			</div>
-
-			<Dialog
-				role="alertdialog"
-				title="Remove this passkey?"
-				isOpen={removing !== null}
-				onOpenChange={(open) => {
-					if (!open) setRemoving(null);
-				}}
-				actions={
-					<>
-						<Button variant="text" slot="close">
-							Cancel
-						</Button>
-						<Button
-							onPress={() => {
-								if (removing) remove(removing);
-							}}
-						>
-							Remove
-						</Button>
-					</>
-				}
-			>
-				It will stop signing you in to Timesifier. It stays on your device or in your password
-				manager until you delete it there. You can still sign in with an email code.
-			</Dialog>
-		</section>
-	);
-}
-
 export interface SignOutProps {
 	/** The address of the account that is signed in. */
 	email: string;

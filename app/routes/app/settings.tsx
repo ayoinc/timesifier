@@ -20,8 +20,7 @@ import { AS_ROLE } from "~/organisations/people";
 import { SOMETHING_WENT_WRONG } from "~/organisations/problems";
 import { allows } from "~/organisations/roles";
 import type { loader as rootLoader } from "~/root";
-import { Passkeys, SignOut } from "~/routes/auth/AccountSettings";
-import { listPasskeys } from "~/routes/auth/session.server";
+import { SignOut } from "~/routes/auth/AccountSettings";
 import {
 	type ColorSchemeChoice,
 	colorSchemeCookie,
@@ -46,15 +45,12 @@ export function meta() {
 
 /**
  * The organisation and what the person's role lets them do to it, then the
- * person: their name, their address and their passkeys. The checks on the
+ * person: their name and their address. The checks on the
  * layouts have already run.
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const { organisation, role, user } = context.get(membershipContext);
-	const [passkeys, organisations] = await Promise.all([
-		listPasskeys(request),
-		listOrganisations(request),
-	]);
+	const organisations = await listOrganisations(request);
 	return {
 		organisation: {
 			name: organisation.name,
@@ -65,7 +61,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		// Whether there is another organisation to switch to.
 		hasOthers: organisations.ok && organisations.data.length > 1,
 		person: { name: user.name?.trim() || null, email: user.email },
-		passkeys,
 	};
 }
 
@@ -234,7 +229,6 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 				</div>
 
 				<Appearance />
-				<Passkeys passkeys={loaderData.passkeys} />
 				<SignOut email={person.email} />
 			</section>
 

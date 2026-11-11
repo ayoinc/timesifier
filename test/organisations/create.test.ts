@@ -69,8 +69,8 @@ describe("creating an organisation", () => {
 
 	it("is refused to a person whose email address is not verified", async () => {
 		// No way of signing in leaves an address unverified: the emailed code
-		// verifies it, and a passkey belongs to an account that already has. The
-		// rule is shown by taking the mark away from a signed-in person.
+		// verifies it. The rule is shown by taking the mark away from a signed-in
+		// person.
 		const ada = await signIn(mailbox, "ada@example.com");
 		await env.DB.prepare("update users set email_verified = 0").run();
 

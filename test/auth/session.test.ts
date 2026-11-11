@@ -5,6 +5,7 @@ import {
 	captureEmail,
 	countRows,
 	get,
+	KNOWN_COOKIE,
 	type Mailbox,
 	ORIGIN,
 	post,
@@ -33,7 +34,10 @@ describe("the session cookie", () => {
 		const { response } = await signIn(mailbox, EMAIL);
 
 		const cookies = response.headers.getSetCookie();
-		expect(cookies, "sign-in sets the session cookie and nothing else").toHaveLength(1);
+		expect(
+			cookies.map((cookie) => cookie.slice(0, cookie.indexOf("="))),
+			"sign-in sets the session cookie, the proof that this browser has signed in, and nothing else",
+		).toEqual([SESSION_COOKIE, KNOWN_COOKIE]);
 		const [nameAndValue = "", ...attributes] = (cookies[0] ?? "").split("; ");
 
 		expect(nameAndValue.startsWith(`${SESSION_COOKIE}=`)).toBe(true);
@@ -128,10 +132,14 @@ describe("hosts", () => {
 		setBinding("ENVIRONMENT", environment);
 
 		const session = await get("/get-session", { origin });
-		const options = await get("/passkey/generate-authenticate-options", { origin });
+		const signingIn = await post(
+			"/sign-in/email-otp",
+			{ email: EMAIL, otp: "00000000" },
+			{ origin },
+		);
 
-		expect([session.status, options.status]).toEqual([404, 404]);
-		expect(options.headers.getSetCookie()).toEqual([]);
+		expect([session.status, signingIn.status]).toEqual([404, 404]);
+		expect(signingIn.headers.getSetCookie()).toEqual([]);
 	});
 
 	it.each([

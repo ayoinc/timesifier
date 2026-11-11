@@ -1,10 +1,11 @@
+import { randomInt } from "node:crypto";
 import type { Page } from "@playwright/test";
 
 import { destinationPath, organisationPath } from "../app/shell/destinations";
 
 import {
 	ARRIVAL,
-	addAuthenticator,
+	codeSentBy,
 	newPerson,
 	openAuthPage,
 	ownAddress,
@@ -18,10 +19,9 @@ import { expect, openShell, test } from "./fixtures";
 import { createOrganisation, openSettings } from "./organisation";
 
 // The journeys of card TS-008, each walked in a browser against the production
-// build: sign up with an email code, make a passkey, sign out, sign in with the
-// passkey, sign in with a code, end every session, remove a passkey. Passkeys
-// are made and used by a virtual authenticator in Chromium; the codes are read
-// from the messages the local EMAIL binding writes (./auth.ts).
+// build: sign up with an email code, sign out, sign in with a code, end every
+// session. The codes are read from the messages the local EMAIL binding writes
+// (./auth.ts).
 //
 // A person who has just signed up belongs to no organisation, so `/app` sends
 // them to the page that creates one (`ARRIVAL`). Settings is in an
@@ -47,75 +47,47 @@ async function whoIs(page: Page): Promise<{ email: string; name: string } | null
 }
 
 test.describe("signing up", () => {
-	test("with an email code makes the account, and a passkey is made straight after", async ({
+	test("with an email code makes the account and goes straight on to the application", async ({
 		page,
 	}) => {
 		const person = newPerson();
-		const authenticator = await addAuthenticator(page);
 
 		await signUp(page, person);
-		expect(await whoIs(page), "the account, signed in, with the name that was typed").toEqual(
-			person,
-		);
-		expect(await authenticator.passkeys()).toBe(0);
 
-		// One primary action, and a way past it.
-		await expect(page.getByRole("button", { name: "Not now" })).toBeVisible();
-		await page.getByRole("button", { name: "Create a passkey" }).click();
-		await expect(
-			page.getByRole("heading", { level: 1, name: "Your passkey is ready" }),
-		).toBeVisible();
-		expect(await authenticator.passkeys(), "passkeys on the authenticator").toBe(1);
-
-		await page.getByRole("button", { name: "Open Timesifier" }).click();
+		// The accepted code is the last step: nothing stands between it and the application.
 		await expect(page).toHaveURL(ARRIVAL);
 		await expect(
 			page.getByRole("heading", { level: 1, name: "Create your organisation" }),
 		).toBeVisible();
+		expect(await whoIs(page), "the account, signed in, with the name that was typed").toEqual(
+			person,
+		);
 
 		await openSettings(page);
-		await expect(page.getByRole("listitem").filter({ hasText: "Added" })).toHaveCount(1);
 		await expect(page.getByText(person.email)).toBeVisible();
-	});
-
-	test("without a passkey goes on to the application, and Settings lists none", async ({
-		page,
-	}) => {
-		await signUp(page, newPerson());
-		await page.getByRole("button", { name: "Not now" }).click();
-		await expect(page).toHaveURL(ARRIVAL);
-
-		await openSettings(page);
-		await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
 	});
 
 	test("says the same for an address that already has an account", async ({ page }) => {
 		const person = newPerson();
 		await signUp(page, person);
-		await page.getByRole("button", { name: "Not now" }).click();
 		await signOut(page);
 
 		// The second time round every step reads as the first did.
 		await signUp(page, person);
+		await expect(page).toHaveURL(ARRIVAL);
 	});
 });
 
 test.describe("signing out and signing in", () => {
-	test("sign out ends the session; the passkey alone signs back in", async ({ page }) => {
+	test("sign out ends the session; an email code signs back in", async ({ page }) => {
 		const person = newPerson();
-		await addAuthenticator(page);
 		await signUp(page, person);
-		await page.getByRole("button", { name: "Create a passkey" }).click();
-		await page.getByRole("button", { name: "Open Timesifier" }).click();
 		await expect(page).toHaveURL(ARRIVAL);
 
 		await signOut(page);
 		expect(await whoIs(page)).toBeNull();
 
-		// No address typed and no code sent: the passkey says who this is.
-		await openAuthPage(page, "/sign-in");
-		await expect(page.getByLabel("Email")).toHaveCount(0);
-		await page.getByRole("button", { name: "Sign in with a passkey" }).click();
+		await signInWithCode(page, person.email);
 		await expect(page).toHaveURL(ARRIVAL);
 		expect((await whoIs(page))?.email).toBe(person.email);
 	});
@@ -123,7 +95,6 @@ test.describe("signing out and signing in", () => {
 	test("an email code signs in, and goes on to the page that was asked for", async ({ page }) => {
 		const person = newPerson();
 		await signUp(page, person);
-		await page.getByRole("button", { name: "Not now" }).click();
 		const { slug } = await createOrganisation(page);
 		await signOut(page);
 
@@ -138,45 +109,29 @@ test.describe("signing out and signing in", () => {
 		expect((await whoIs(page))?.email).toBe(person.email);
 	});
 
-	test("the email field offers the passkey through the browser's autofill", async ({ page }) => {
-		const person = newPerson();
-		await addAuthenticator(page);
-		await signUp(page, person);
-		await page.getByRole("button", { name: "Create a passkey" }).click();
-		await page.getByRole("button", { name: "Open Timesifier" }).click();
-		await signOut(page);
-
-		// The authenticator answers the request the field makes, as a person
-		// choosing the passkey in the field's autofill would.
-		await openAuthPage(page, "/sign-in");
-		await page.getByRole("button", { name: "Use an email code instead" }).click();
-		await expect(page).toHaveURL(ARRIVAL);
-		expect((await whoIs(page))?.email).toBe(person.email);
-	});
-
-	test("the email-code path is not on the page until it is asked for, and leads back", async ({
+	test("the page opens on the email address; the code is asked for once one is sent, and the way back keeps the address", async ({
 		page,
 	}) => {
-		// An authenticator with no passkey: the field's autofill has nothing to offer.
-		await addAuthenticator(page);
+		const person = newPerson();
 		await openAuthPage(page, "/sign-in");
-		await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
-		await expect(page.getByLabel("Email")).toHaveCount(0);
+		await expect(page.getByLabel("Email")).toBeVisible();
 		await expect(page.getByLabel("Code")).toHaveCount(0);
+		// One action on the step, and it is the primary one.
+		await expect(page.getByRole("main").getByRole("button")).toHaveCount(1);
 
-		await page.getByRole("button", { name: "Use an email code instead" }).click();
-		await expect(page.getByLabel("Email")).toBeFocused();
-		await expect(page.getByLabel("Email")).toHaveAttribute("autocomplete", "username webauthn");
-		await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toHaveCount(0);
-
-		await page.getByRole("button", { name: "Use a passkey instead" }).click();
-		await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
+		await page.getByLabel("Email").fill(person.email);
+		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+		await expect(page.getByLabel("Code")).toBeFocused();
 		await expect(page.getByLabel("Email")).toHaveCount(0);
+
+		await page.getByRole("button", { name: "Use a different email" }).click();
+		await expect(page.getByLabel("Email")).toBeFocused();
+		await expect(page.getByLabel("Email")).toHaveValue(person.email);
+		await expect(page.getByLabel("Code")).toHaveCount(0);
 	});
 
 	test("a person who is signed in is sent on from both pages", async ({ page }) => {
 		await signUp(page, newPerson());
-		await page.getByRole("button", { name: "Not now" }).click();
 		await expect(page).toHaveURL(ARRIVAL);
 
 		// With no organisation, /app sends them to create one.
@@ -197,13 +152,48 @@ test.describe("signing out and signing in", () => {
 		await page.goto("/sign-in?next=//example.com/app");
 		await expect(page).toHaveURL(home);
 	});
+
+	test("a browser that has signed in before is still sent a code when strangers have used up the address's five in an hour", async ({
+		page,
+		playwright,
+		baseURL,
+	}) => {
+		const person = newPerson();
+		await signUp(page, person);
+		await signOut(page);
+
+		// Somebody who knows the address and nothing else, asking from a new
+		// client address each time. The sign-up above was the first of the five
+		// that everybody else is allowed; these are the rest.
+		const stranger = await playwright.request.newContext({ baseURL });
+		for (let n = 0; n < 4; n++) {
+			await codeSentBy(async () => {
+				const asked = await stranger.post("/api/auth/email-otp/send-verification-otp", {
+					data: { email: person.email, type: "sign-in" },
+					headers: {
+						// What a page of ours would send; the server refuses a request without it.
+						origin: baseURL ?? "",
+						"cf-connecting-ip": `198.18.${randomInt(256)}.${randomInt(1, 255)}`,
+						// The token Turnstile's test keys accept.
+						"x-captcha-response": "XXXX.DUMMY.TOKEN.XXXX",
+					},
+				});
+				expect(asked.status(), await asked.text()).toBe(200);
+			});
+		}
+		await stranger.dispose();
+
+		// A sixth request from anybody else would be sent nothing. This browser's is
+		// sent a code, and the code signs the person in.
+		await signInWithCode(page, person.email);
+		await expect(page).toHaveURL(ARRIVAL);
+	});
 });
 
 test.describe("sign out everywhere", () => {
 	test("ends the session in a second browser too", async ({ page, browser, baseURL }) => {
 		const person = newPerson();
 		await signUp(page, person);
-		await page.getByRole("button", { name: "Not now" }).click();
 		await expect(page).toHaveURL(ARRIVAL);
 		const { slug } = await createOrganisation(page);
 		const home = organisationPath(slug);
@@ -229,69 +219,6 @@ test.describe("sign out everywhere", () => {
 	});
 });
 
-test.describe("passkeys in Settings", () => {
-	test("one is added, then removed, and no longer signs in", async ({ page }) => {
-		const person = newPerson();
-		const authenticator = await addAuthenticator(page);
-		await signUp(page, person);
-		await page.getByRole("button", { name: "Not now" }).click();
-		await expect(page).toHaveURL(ARRIVAL);
-
-		await openSettings(page);
-		const passkeys = page.getByRole("listitem").filter({ hasText: "Added" });
-		await expect(passkeys).toHaveCount(0);
-
-		await page.getByRole("button", { name: "Add a passkey" }).click();
-		await expect(passkeys).toHaveCount(1);
-		await expect(page.getByRole("status").filter({ hasText: "Passkey added" })).toBeVisible();
-		expect(await authenticator.passkeys()).toBe(1);
-
-		// Removing asks first, and Cancel leaves the passkey alone.
-		await page.getByRole("button", { name: /^Remove the passkey added/ }).click();
-		const dialog = page.getByRole("alertdialog", { name: "Remove this passkey?" });
-		await expect(dialog).toContainText("You can still sign in with an email code.");
-		await dialog.getByRole("button", { name: "Cancel" }).click();
-		await expect(dialog).toHaveCount(0);
-		await expect(passkeys).toHaveCount(1);
-
-		await page.getByRole("button", { name: /^Remove the passkey added/ }).click();
-		await dialog.getByRole("button", { name: "Remove" }).click();
-		await expect(passkeys).toHaveCount(0);
-		await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
-		await expect(page.getByRole("status").filter({ hasText: "Passkey removed" })).toBeVisible();
-
-		expect(await authenticator.passkeys(), "the device still holds its copy").toBe(1);
-	});
-});
-
-test.describe("a removed passkey", () => {
-	// The device still offers it; the server no longer knows it.
-	test.use({ refusals: { "/api/auth/passkey/verify-authentication": [401] } });
-
-	test("is refused", async ({ page }) => {
-		const person = newPerson();
-		await addAuthenticator(page);
-		await signUp(page, person);
-		await page.getByRole("button", { name: "Create a passkey" }).click();
-		await page.getByRole("button", { name: "Open Timesifier" }).click();
-		await expect(page).toHaveURL(ARRIVAL);
-
-		await openSettings(page);
-		await page.getByRole("button", { name: /^Remove the passkey added/ }).click();
-		await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
-		await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
-		await signOut(page);
-
-		await openAuthPage(page, "/sign-in");
-		await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-		await expect(page.getByRole("alert")).toHaveText(
-			"We could not sign you in with that passkey. Try again, or use an email code instead.",
-		);
-		await expect(page).toHaveURL("/sign-in");
-		expect(await whoIs(page)).toBeNull();
-	});
-});
-
 test.describe("what the pages ask of the server", () => {
 	test("every journey together calls these endpoints under /api/auth and no other", async ({
 		page,
@@ -302,43 +229,22 @@ test.describe("what the pages ask of the server", () => {
 			if (pathname.startsWith("/api/auth/")) called.add(`${request.method()} ${pathname}`);
 		});
 
-		// Sign up, make a passkey, end every session, sign in with the passkey,
-		// remove it, sign out, sign in with a code.
+		// Sign up, end every session, sign in with a code, sign out.
 		const person = newPerson();
-		const authenticator = await addAuthenticator(page);
 		await signUp(page, person);
-		await page.getByRole("button", { name: "Create a passkey" }).click();
-		await page.getByRole("button", { name: "Open Timesifier" }).click();
 		await expect(page).toHaveURL(ARRIVAL);
 		// "Sign out everywhere" is in Settings, and Settings is in an organisation.
 		const { slug } = await createOrganisation(page);
 		await signOut(page, "Sign out everywhere");
 
-		await openAuthPage(page, "/sign-in");
-		await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-		await expect(page).toHaveURL(organisationPath(slug));
-		await openSettings(page);
-		await page.getByRole("button", { name: /^Remove the passkey added/ }).click();
-		await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
-		await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
-		await signOut(page);
-
-		// The device still holds the passkey the server has forgotten; nobody chooses it.
-		await authenticator.setPresent(false);
 		await signInWithCode(page, person.email);
 		await expect(page).toHaveURL(organisationPath(slug));
+		await signOut(page);
 
-		// Settings reads the list of passkeys on the server, from its loader:
-		// GET /api/auth/passkey/list-user-passkeys never leaves the Worker. The
-		// pages of an organisation ask the server the same way, from their loaders
-		// and actions: creating the organisation above called nothing from the browser.
+		// The pages of an organisation ask the server from their loaders and
+		// actions: creating the organisation above called nothing from the browser.
 		expect([...called].sort()).toEqual([
-			"GET /api/auth/passkey/generate-authenticate-options",
-			"GET /api/auth/passkey/generate-register-options",
 			"POST /api/auth/email-otp/send-verification-otp",
-			"POST /api/auth/passkey/delete-passkey",
-			"POST /api/auth/passkey/verify-authentication",
-			"POST /api/auth/passkey/verify-registration",
 			"POST /api/auth/revoke-sessions",
 			"POST /api/auth/sign-in/email-otp",
 			"POST /api/auth/sign-out",

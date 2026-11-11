@@ -1,19 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { freshDatabase } from "../db/database";
-import { captureEmail, get, post, requestCode } from "./harness";
+import { captureEmail, post, requestCode } from "./harness";
 
 const EMAIL = "ada@example.com";
 
-/** One attempt on each rate-limited path, as the client at `client` would make it. */
-const attempts: Record<
-	string,
-	(client: string, headers?: Record<string, string>) => Promise<Response>
-> = {
-	"signing in with an email code": (client, headers) =>
-		post("/sign-in/email-otp", { email: EMAIL, otp: "000000" }, { client, headers }),
-	"signing in with a passkey": (client, headers) =>
-		post("/passkey/verify-authentication", { response: {} }, { client, headers }),
-};
+/** One attempt to sign in with a code, as the client at `client` would make it. */
+const attempt = (client: string) =>
+	post("/sign-in/email-otp", { email: EMAIL, otp: "000000" }, { client });
 
 async function statusesOf(count: number, attempt: () => Promise<Response>): Promise<number[]> {
 	const statuses: number[] = [];
@@ -33,15 +26,12 @@ afterEach(() => {
 });
 
 describe("the sign-in rate limit", () => {
-	it.each(Object.entries(attempts))(
-		"%s: the 11th attempt in a minute from one client is answered 429, the first ten are not",
-		async (_name, attempt) => {
-			const statuses = await statusesOf(11, () => attempt("203.0.113.7"));
+	it("signing in with an email code: the 11th attempt in a minute from one client is answered 429, the first ten are not", async () => {
+		const statuses = await statusesOf(11, () => attempt("203.0.113.7"));
 
-			expect(statuses.slice(0, 10)).not.toContain(429);
-			expect(statuses[10]).toBe(429);
-		},
-	);
+		expect(statuses.slice(0, 10)).not.toContain(429);
+		expect(statuses[10]).toBe(429);
+	});
 
 	it("asking for an email code: the 4th request in a minute from one client is answered 429, the first three are served", async () => {
 		const statuses = await statusesOf(4, () => requestCode(EMAIL, { client: "203.0.113.7" }));
@@ -50,18 +40,7 @@ describe("the sign-in rate limit", () => {
 		expect((await requestCode(EMAIL, { client: "203.0.113.8" })).status).toBe(200);
 	});
 
-	it("asking for passkey sign-in options: the 31st request in a minute from one client is answered 429, the first thirty are served", async () => {
-		const ask = (client: string) => get("/passkey/generate-authenticate-options", { client });
-
-		const statuses = await statusesOf(31, () => ask("203.0.113.7"));
-
-		expect(statuses).toEqual([...Array(30).fill(200), 429]);
-		expect((await ask("203.0.113.8")).status).toBe(200);
-	});
-
 	it("counts each client on its own", async () => {
-		const attempt = attempts["signing in with an email code"];
-		if (!attempt) throw new Error("no such attempt");
 		await statusesOf(11, () => attempt("203.0.113.7"));
 
 		expect((await attempt("203.0.113.7")).status).toBe(429);

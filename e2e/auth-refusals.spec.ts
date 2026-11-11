@@ -2,7 +2,6 @@ import type { Page } from "@playwright/test";
 
 import {
 	ARRIVAL,
-	addAuthenticator,
 	codeSentBy,
 	newPerson,
 	openAuthPage,
@@ -15,8 +14,8 @@ import { expect, test } from "./fixtures";
 
 // What the pages say when the answer is no: a wrong code, a code tried too
 // often, too many attempts, a code that has expired, an address the server
-// will not send to, a robot check that fails, and a passkey prompt that comes
-// to nothing. No message says whether an address has an account.
+// will not send to, and a robot check that fails. No message says whether an
+// address has an account.
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
@@ -31,10 +30,9 @@ test.beforeEach(async ({ context, baseURL }) => {
 const SIGN_IN = "/api/auth/sign-in/email-otp";
 const SEND = "/api/auth/email-otp/send-verification-otp";
 
-/** The email-code path of the sign-in page, as far as the code field, with the code that was sent. */
+/** The sign-in page as far as the code field, with the code that was sent. */
 async function askForCode(page: Page, email: string) {
 	await openAuthPage(page, "/sign-in");
-	await page.getByRole("button", { name: "Use an email code instead" }).click();
 	await page.getByLabel("Email").fill(email);
 	const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
 	await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
@@ -88,7 +86,6 @@ test.describe("a code typed in a browser that did not ask for it", () => {
 		const other = await elsewhere.newPage();
 		await other.route(`**${SEND}`, (route) => route.fulfill({ json: { success: true } }));
 		await openAuthPage(other, "/sign-in");
-		await other.getByRole("button", { name: "Use an email code instead" }).click();
 		await other.getByLabel("Email").fill(email);
 		await other.getByRole("button", { name: "Continue" }).click();
 
@@ -168,7 +165,6 @@ test.describe("an address the server will not send to", () => {
 
 	test("is said to be the address, and the robot check is not blamed", async ({ page }) => {
 		await openAuthPage(page, "/sign-in");
-		await page.getByRole("button", { name: "Use an email code instead" }).click();
 		// A browser takes an address whose domain has no dot; the server does not.
 		await page.getByLabel("Email").fill("ada@example");
 		const answered = page.waitForResponse((response) => response.url().endsWith(SEND));
@@ -178,9 +174,7 @@ test.describe("an address the server will not send to", () => {
 		await expect(page.getByRole("alert")).toHaveText(
 			"That email address is not valid. Check it and try again.",
 		);
-		await expect(
-			page.getByRole("heading", { level: 1, name: "Sign in with an email code" }),
-		).toBeVisible();
+		await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
 	});
 });
 
@@ -230,23 +224,6 @@ test.describe("a robot check that fails", () => {
 			headers: { ...from, "x-captcha-response": "not-a-token-turnstile-issued" },
 		});
 		expect(forged.status()).toBe(403);
-	});
-});
-
-test.describe("a passkey prompt that comes to nothing", () => {
-	test("on the sign-in page says no passkey was used and keeps the email code in reach", async ({
-		page,
-	}) => {
-		// An authenticator with nothing on it: the browser has no passkey to offer.
-		await addAuthenticator(page);
-		await openAuthPage(page, "/sign-in");
-		await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-
-		await expect(page.getByRole("alert")).toHaveText(
-			"No passkey was used. Try again, or use an email code instead.",
-		);
-		await expect(page.getByRole("button", { name: "Use an email code instead" })).toBeVisible();
-		await expect(page).toHaveURL("/sign-in");
 	});
 });
 

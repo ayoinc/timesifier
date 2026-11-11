@@ -1,7 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { BrowserContext, CDPSession, Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 
 import { SIGN_IN_CODE_LENGTH } from "../app/auth/code";
 import { APP_PATH, NEW_ORGANISATION_PATH } from "../app/shell/destinations";
@@ -120,55 +120,14 @@ export function codeSentBy(send: () => Promise<unknown>): Promise<string> {
 	return foundInMessageSentBy(send, CODE, "the code");
 }
 
-/** A passkey authenticator that exists only in this page's browser, and answers every prompt itself. */
-export interface Authenticator {
-	/** How many passkeys it holds. */
-	passkeys(): Promise<number>;
-	/** Whether it answers prompts. One that does not behaves as a person who closes the prompt. */
-	setPresent(present: boolean): Promise<void>;
-}
-
-/**
- * Gives the page a platform authenticator through the DevTools protocol, like a
- * laptop's fingerprint reader: it stores passkeys, verifies the user, and
- * confirms each prompt without a person. Chromium only.
- */
-export async function addAuthenticator(page: Page): Promise<Authenticator> {
-	const client: CDPSession = await page.context().newCDPSession(page);
-	await client.send("WebAuthn.enable");
-	const { authenticatorId } = await client.send("WebAuthn.addVirtualAuthenticator", {
-		options: {
-			protocol: "ctap2",
-			transport: "internal",
-			hasResidentKey: true,
-			hasUserVerification: true,
-			isUserVerified: true,
-			automaticPresenceSimulation: true,
-		},
-	});
-	return {
-		async passkeys() {
-			const { credentials } = await client.send("WebAuthn.getCredentials", { authenticatorId });
-			return credentials.length;
-		},
-		async setPresent(present) {
-			await client.send("WebAuthn.setAutomaticPresenceSimulation", {
-				authenticatorId,
-				enabled: present,
-			});
-			await client.send("WebAuthn.setUserVerified", { authenticatorId, isUserVerified: present });
-		},
-	};
-}
-
 /** Opens the sign-in or the sign-up page and waits until its buttons work. */
 export async function openAuthPage(page: Page, path: "/sign-in" | "/sign-up" | (string & {})) {
 	await openShell(page, path, "main");
 }
 
 /**
- * Signs up through the page as far as the offer of a passkey: name, email,
- * the emailed code. The account exists and the person is signed in.
+ * Signs up through the page: name, email, the emailed code. The account exists,
+ * the person is signed in, and the page has left for where they were going.
  */
 export async function signUp(page: Page, person: Person, path = "/sign-up") {
 	await openAuthPage(page, path);
@@ -179,15 +138,12 @@ export async function signUp(page: Page, person: Person, path = "/sign-up") {
 	await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
 	await page.getByLabel("Code").fill(code);
 	await page.getByRole("button", { name: "Create account" }).click();
-	await expect(
-		page.getByRole("heading", { level: 1, name: "Your account is ready" }),
-	).toBeVisible();
+	await page.waitForURL((url) => url.pathname !== "/sign-up");
 }
 
 /** Signs in through the page with an emailed code, and arrives where the page sends the person. */
 export async function signInWithCode(page: Page, email: string, path = "/sign-in") {
 	await openAuthPage(page, path);
-	await page.getByRole("button", { name: "Use an email code instead" }).click();
 	await page.getByLabel("Email").fill(email);
 	const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
 
