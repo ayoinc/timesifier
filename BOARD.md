@@ -23,35 +23,9 @@ Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the arch
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
-### TS-055 · A signed-in person never sees the home page
+### Waiting on the owner's screenshots · the heading features and their Harvest parity
 
-Builder: an AI session on branch `ts-055-session`. The owner asked on 2026-11-11 that a signed-in session never shows the landing page, for any reason, until the person signs out. How it works is in `docs/security.md`, "The pages for a person who is signed out".
-
-- [x] A signed-in person who asks for `/` is sent to `/app`, and on to their organisation; a move to `/` from inside the application gets the same as a whole-page redirect (`test/pages/signed-out-pages.test.ts`).
-- [x] After signing out, `/` shows the home page again (same file).
-- [x] When the session cannot be read, `/` answers with the error page, not the home page (same file).
-- [x] Every page and every page's data is sent with `Cache-Control: private, no-store` (same file).
-- [x] Going back through a tab's history after signing in never shows the home page; going back after signing out never shows the application (`e2e/auth-journeys.spec.ts`, "the home page and the session", Chromium and WebKit).
-
-### Timesheet slice · TS-012a, TS-013, TS-012b, TS-046, TS-051, TS-052
-
-Builder: an AI session on branch `ts-054-timesheet`. In review: its pull request. Timesheet's Day view (timer, entries, entries by hand), Week view (grid of projects by days, totals, Submit week, Withdraw), History, and the timer's control in the navigation, on the foundation of TS-053. The cards' criteria stay on the cards below; tests: `test/pages/timesheet.test.ts`, `test/timesheet/sheets.test.ts`, `test/db/timesheet-index.test.ts`, `e2e/timesheet.spec.ts`. Two departures from the card texts, both from `docs/navigation.md`: the views are `?view=week` and `?view=history` on Timesheet's own address, not `/week`; the person's zone is set on My account, not Settings. TS-012b uses the browser's own date and time inputs, which write no `style` attribute, so decision 28 is not needed for it. The browser tests create the project on the Projects page (TS-011a). Not yet done: the owner's screenshots.
-
-### TS-053 · Foundation for the heading features
-
-Builder: an AI session on branch `ts-053-foundation`. In review: the pull request against `main`. The owner asked on 2026-11-11 for every feature under the headings of `docs/navigation.md` to be built. The work runs in two waves: this card first, then four slices built side by side, each owning its own pages (Timesheet; Projects, Clients and Workspace settings; Teams, Team and Approvals; Reports and the CSV export). This card lays what the four share: the navigation by heading and role, one migration with every table they need, and the rules in `app/` that more than one of them reads. It builds no feature page.
-
-Two questions the owner settled on 2026-11-11, recorded on their cards: approval is always on for now (TS-047), and an hour typed into a cell of the week's grid becomes one entry that starts when the day's last entry ends, or at 09:00 in the person's time zone when the day has none (TS-052).
-
-- [ ] The destinations are Timesheet, Projects, Clients, Team, Approvals, Reports and Workspace settings, under the headings Track, Organize and Review or under none, each shown to the roles `docs/navigation.md` names. Clients is also hidden when the organisation turns Clients off. A heading shows only when a link under it shows (test).
-- [ ] A destination a person may not see answers 404 at its address and at every address below it, the same 404 as another organisation's (a test per role, beside `test/pages/isolation.test.ts`).
-- [ ] The navigation has a place for the timer's control before its first link, which draws nothing until TS-051 fills it (test).
-- [ ] Each destination's page has its heading and an empty state that says what will be there.
-- [ ] Members and invitations are at `team/members` and `team/invitations`, and `settings/members` redirects to the first (test). The person's own name, colour scheme, signing out and leaving the organisation are on My account, `/app/<slug>/account`, which every role opens, because a member no longer opens Workspace settings.
-- [ ] One migration creates `clients`, `projects`, `time_entries`, `periods`, `period_events`, `teams` and `team_members`, and adds `users.time_zone` and the organisation's `time_zone`, `week_starts_on` and `clients_enabled`. Every new table is in `tenantTables` (test).
-- [ ] The rules the slices share are in `app/` with their tests: who may see which destination and whose time, a manager's scope being the members of the teams they manage; one running entry for a person in an organisation; a period's bounds from the week start and the time zone; a submitted or approved period locks its entries.
-- [ ] `docs/architecture.md` and `docs/security.md` describe the new tables and who sees which destination.
-- [ ] `pnpm typecheck`, `pnpm lint` and `pnpm test` pass, the shell's browser tests pass, and `pnpm db:migrate:local` applies the migration.
+Merged and deployed on 2026-11-11: the Timesheet slice (TS-012a, TS-013, TS-012b, TS-046, TS-051, TS-052) in pull request #34, and TS-056 to TS-059 (`docs/harvest-comparison.md`, observed in Harvest's application with rea) in pull requests #38, #36 and #37, with the cards below. Each card's criteria and evidence stay on it; what is left for each is the owner's acceptance of its screenshots at 390px and 1280px in both schemes. Two departures from the Timesheet cards' texts, both from `docs/navigation.md`: the views are `?view=week` and `?view=history` on Timesheet's own address, not `/week`; the person's zone is set on My account, not Settings.
 
 ### TS-011a · Projects
 
@@ -700,6 +674,8 @@ Depends on: nothing. Left over from TS-002.
 
 The newest first. Each card, with its criteria and their evidence, is in `docs/board-done.md`.
 
+- TS-055 · A signed-in person never sees the home page. Done 2026-11-11, pull request #31.
+- TS-053 · Foundation for the heading features. Done 2026-11-11, pull request #29.
 - TS-032 · Nothing of one deployment in the code. Merged 2026-11-11, pull request #23; the integrator is checking its production deploy.
 - TS-008 · Authentication. Done 2026-11-11, pull request #17.
 - TS-009 · Organisations and roles. Done 2026-11-11, pull request #20.
