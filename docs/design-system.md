@@ -40,7 +40,7 @@ Each rule can be checked in review or by a test.
 ### Delight
 
 10. Every screen gets the same polish, including the ones used rarely: settings, empty states, errors.
-11. The strongest moments go to events that are significant and rare: creating an account, the first tracked hour, closing a week.
+11. The strongest moments go to events that are significant and rare: a first organisation, the first tracked hour, closing a week.
 12. Actions repeated many times a day, such as starting and stopping a timer, get subtle feedback that never delays the next action.
 
 ### Material and accessibility
@@ -96,7 +96,9 @@ The steps a screen goes through. They are step 3 of "Flow of one card" in `docs/
 
 ### Colour schemes
 
-`:root` declares `color-scheme: light dark`, so each role follows the device setting. `data-color-scheme="light"` or `data-color-scheme="dark"` forces one scheme: on the `html` element for the whole page, or on any element for that part of it. Because every role already carries both values, components need no `dark:` variants. An element that forces a scheme must also set its own background and text colour (`bg-surface text-on-surface`), since those are inherited as colours already worked out.
+**Light is the default.** The server renders `data-color-scheme="light"` on `html` for a person who has chosen nothing, whatever their device prefers: the owner looked at both schemes and chose light as the product's face (`docs/design-direction.md`, "Light is the product's face"). A person who chooses Dark in Settings gets `data-color-scheme="dark"`. Only a person who chooses "Match my device" gets a page with no attribute, and there `:root`'s own `color-scheme: light dark` lets each role follow the device setting.
+
+`data-color-scheme="light"` or `data-color-scheme="dark"` forces one scheme: on the `html` element for the whole page, or on any element for that part of it. Because every role already carries both values, components need no `dark:` variants. An element that forces a scheme must also set its own background and text colour (`bg-surface text-on-surface`), since those are inherited as colours already worked out. The `theme-color` the browser's own frame takes is named once, for the scheme the page is held to, and once for each scheme where the page follows the device (`app/root.tsx`).
 
 ### The spring
 
@@ -126,7 +128,7 @@ Thirteen components live in `app/components/`, one file each. They are built on 
 
 | Component  | File             | Variants and states                                                                                                                 | Keyboard                                                                                                        | Specification                                                                  |
 | ---------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Button     | `Button.tsx`     | `filled`, `tonal`, `outlined`, `text`; optional leading icon. Hover, focus, pressed (corners settle to 4px), disabled.              | Enter or Space presses.                                                                                         | `md-comp-button`, `-button-small`, `-filled`, `-tonal`, `-outlined`, `-text`   |
+| Button     | `Button.tsx`     | `filled`, `tonal`, `outlined`, `text`; optional leading icon. Hover, focus, pressed (corners settle to 4px), disabled. `size="large"` is the 48px action of a page nobody is signed in on, with 4px corners throughout; the default is 40px. | Enter or Space presses.                                                                                         | `md-comp-button`, `-button-small`, `-filled`, `-tonal`, `-outlined`, `-text`   |
 | IconButton | `IconButton.tsx` | `standard`, `filled`, `tonal`, `outlined`. Requires `label`, its accessible name. Hover, focus, pressed, disabled.                  | Enter or Space presses.                                                                                         | `md-comp-icon-button`, `-small`, `-standard`, `-filled`, `-tonal`, `-outlined` |
 | TextField  | `TextField.tsx`  | Filled field. Label, supporting text, error text, required (asterisk). Empty, filled, hover, focus, invalid, disabled.              | Type. Tab moves on.                                                                                             | `md-comp-filled-text-field`                                                    |
 | Checkbox   | `Checkbox.tsx`   | Unselected, selected, indeterminate; hover, focus, pressed, invalid, disabled.                                                      | Space toggles.                                                                                                  | `md-comp-checkbox`                                                             |
@@ -265,7 +267,7 @@ React's `<ViewTransition>` (in the installed React, 19.3.1) starts the browser's
 - **Interruption (rule 8).** React holds the next transition until the running one has finished. A press on a destination and the browser's Back and Forward therefore end the running transition first (`finishRunningTransition`, through `document.activeViewTransition`): its animations jump to their end and the new page arrives at once. In a browser without that property the next transition follows the running one, a third of a second later at most.
 - **Only a change of destination starts a transition.** The content's `<ViewTransition>` has the class `none` in every other render. Without that, React starts a transition for any render that reaches it, and each one holds back the next navigation.
 - **Reduced motion (rule 9).** Nothing moves or changes size: each part takes its new place at once and the content cross-fades.
-- **The steps of the sign-in and sign-up pages** move the same way, with the same classes (`AuthPage` in `app/routes/auth/AuthPage.tsx`), except with reduced motion requested: there a change of step is not a view transition at all (`changeStep`). The new step is in its place at once and fades in with a CSS transition of opacity. A view transition whose parts only fade is not enough: when the new step's `<main>` measures the same as the old one's, React 19.3.1 leaves the rest of the page out of the transition, and to do so it starts an animation from script that holds the `width` and `height` of `::view-transition` at nothing. A style sheet cannot stop an animation that script starts, and whether two steps measure the same depends on how the person's address wraps in the sentence around it. `e2e/auth-accessibility.spec.ts`, "with reduced motion requested", counts the view transitions those pages start and expects none.
+- **The two views of the sign-in page** move the same way, with the same classes (`AuthPage` in `app/routes/auth/AuthPage.tsx`), except with reduced motion requested: there a change of view is not a view transition at all (`changeStep`). The new view is in its place at once and fades in with a CSS transition of opacity. A view transition whose parts only fade is not enough: when the new view measures the same as the old one, React 19.3.1 leaves the rest of the page out of the transition, and to do so it starts an animation from script that holds the `width` and `height` of `::view-transition` at nothing. A style sheet cannot stop an animation that script starts, and whether two views measure the same depends on how the person's address wraps in the sentence around it. `e2e/auth-accessibility.spec.ts`, "with reduced motion requested", counts the view transitions the page starts and expects none. The band at the top, the photograph and the foot are outside the transition and hold still.
 - **A browser without view transitions** navigates with no animation.
 
 ### Focus and landmarks
@@ -277,7 +279,7 @@ React's `<ViewTransition>` (in the installed React, 19.3.1) starts the browser's
 
 ### Choosing a colour scheme
 
-Settings offers System, Light and Dark as one radio group. Light and Dark are stored in the cookie `__Host-color-scheme` (`docs/security.md`); System deletes it. The root loader reads the cookie and the server renders `data-color-scheme` on `html`, so a page arrives in the chosen scheme with no flash and no inline script. With script the choice is saved as it is made and the page changes without loading again; without script the form has a Save button and the page loads again.
+Settings offers Light, Dark and "Match my device" as one radio group, Light first because it is what a person who has chosen nothing has. Each choice is stored in the cookie `__Host-color-scheme` as `light`, `dark` or `system` (`docs/security.md`); with no cookie the page is light. The root loader reads the cookie and the server renders `data-color-scheme` on `html`, or leaves it off for `system`, so a page arrives in the chosen scheme with no flash and no inline script. With script the choice is saved as it is made and the page changes without loading again; without script the form has a Save button and the page loads again.
 
 ### Locale
 

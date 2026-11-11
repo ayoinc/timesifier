@@ -1,14 +1,19 @@
 import type { BrowserContext, Page } from "@playwright/test";
 
 import { destination } from "../app/shell/destinations";
+import { SIGNED_OUT } from "./auth-state";
 import { expect, openShell, test } from "./fixtures";
 import { homePath } from "./organisation";
 
-// The colour scheme (TS-006, criterion 4): it follows the device, a person can
-// override it in Settings, and the override is a cookie the server renders from.
+// The colour scheme (TS-006, criterion 4, as card TS-036 changed it): light is
+// the product's face, so a person who has chosen nothing gets light whatever
+// their device prefers. Dark, and matching the device, are choices in Settings,
+// kept in a cookie the server renders from.
 
 const settings = destination("settings");
 const today = destination("today");
+
+type Choice = "Light" | "Dark" | "Match my device";
 
 /** What a person sees: a dark page has a dark background, a light page a light one. */
 async function shown(page: Page): Promise<"light" | "dark"> {
@@ -30,30 +35,58 @@ function schemes(page: Page) {
 }
 
 /** Chooses a scheme the way a pointer does, and returns the `Set-Cookie` header of the answer. */
-async function choose(page: Page, name: "System" | "Light" | "Dark"): Promise<string | null> {
+async function choose(page: Page, name: Choice): Promise<string | null> {
 	const answered = page.waitForResponse((response) => response.request().method() === "POST");
 	await schemes(page).getByText(name, { exact: true }).click();
 	await expect(schemes(page).getByRole("radio", { name })).toBeChecked();
 	return (await answered).headerValue("set-cookie");
 }
 
+const cookieOf = (value: string) =>
+	`__Host-color-scheme=${value}; Max-Age=31536000; Path=/; Secure; SameSite=Lax`;
+
 test.describe("with the device set to dark", () => {
 	test.use({ colorScheme: "dark" });
 
-	test("the page follows the device until a scheme is chosen", async ({ page }) => {
+	test.describe("and nobody signed in", () => {
+		test.use({ storageState: SIGNED_OUT });
+
+		for (const path of ["/", "/sign-in", "/privacy", "/terms"]) {
+			test(`${path} is light: the device's preference is not asked`, async ({ page, context }) => {
+				await page.goto(path);
+
+				expect(await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches)).toBe(
+					true,
+				);
+				expect(await shown(page)).toBe("light");
+				await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
+				// Nothing was chosen, so nothing was stored.
+				expect(await schemeCookies(context)).toEqual([]);
+			});
+		}
+	});
+
+	test("a signed-in page is light until a scheme is chosen, and Light is the choice shown", async ({
+		page,
+		context,
+	}) => {
 		await openShell(page, homePath(settings.id));
 
-		expect(await shown(page)).toBe("dark");
-		await expect(page.locator("html")).not.toHaveAttribute("data-color-scheme");
-		await expect(schemes(page).getByRole("radio", { name: "System" })).toBeChecked();
+		expect(await shown(page)).toBe("light");
+		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
 		await expect(schemes(page).getByRole("radio")).toHaveCount(3);
+		await expect(schemes(page).getByRole("radio", { name: "Light" })).toBeChecked();
+		await expect(schemes(page).locator("label")).toHaveText(["Light", "Dark", "Match my device"]);
+		expect(await schemeCookies(context)).toEqual([]);
 
-		// With nothing chosen, the page changes when the device does.
+		// With nothing chosen, the page does not change when the device does.
 		await page.emulateMedia({ colorScheme: "light" });
+		expect(await shown(page)).toBe("light");
+		await page.emulateMedia({ colorScheme: "dark" });
 		expect(await shown(page)).toBe("light");
 	});
 
-	test("choosing Light makes the page light at once, and it stays light", async ({
+	test("choosing Dark makes the page dark at once, and it stays dark", async ({
 		page,
 		context,
 	}) => {
@@ -62,108 +95,126 @@ test.describe("with the device set to dark", () => {
 			document.documentElement.dataset.loadedOnce = "yes";
 		});
 
-		const cookie = await choose(page, "Light");
-		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
-		expect(await shown(page)).toBe("light");
+		const cookie = await choose(page, "Dark");
+		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
+		expect(await shown(page)).toBe("dark");
 		// The change arrived in the page that was open: the mark is still there.
 		await expect(page.locator("html")).toHaveAttribute("data-loaded-once", "yes");
 		await expect(page).toHaveURL(homePath(settings.id));
 
 		// The cookie: its name and every attribute. No Domain, and not HttpOnly.
-		expect(cookie).toBe(
-			"__Host-color-scheme=light; Max-Age=31536000; Path=/; Secure; SameSite=Lax",
-		);
+		expect(cookie).toBe(cookieOf("dark"));
 
-		// It survives a reload…
+		// It holds when the device turns light…
+		await page.emulateMedia({ colorScheme: "light" });
+		expect(await shown(page)).toBe("dark");
+
+		// …survives a reload…
 		await page.reload();
 		await expect(page.locator("html")).not.toHaveAttribute("data-loaded-once");
-		expect(await shown(page)).toBe("light");
-		await expect(schemes(page).getByRole("radio", { name: "Light" })).toBeChecked();
+		expect(await shown(page)).toBe("dark");
+		await expect(schemes(page).getByRole("radio", { name: "Dark" })).toBeChecked();
 
-		// …and a new page in the same browser, on another destination.
+		// …and a new page in the same browser, on another destination and on a public page.
 		const another = await context.newPage();
 		await another.goto(homePath(today.id));
-		expect(await shown(another)).toBe("light");
+		expect(await shown(another)).toBe("dark");
+		await another.goto("/privacy");
+		expect(await shown(another)).toBe("dark");
 
 		// The server rendered it: the scheme is in the HTML before any script runs.
 		const html = await (await context.request.get(homePath(today.id))).text();
-		expect(html).toContain('<html lang="en" data-color-scheme="light">');
+		expect(html).toContain('<html lang="en" data-color-scheme="dark">');
 	});
 
-	test("choosing Dark holds the page dark when the device turns light", async ({ page }) => {
-		await openShell(page, homePath(settings.id));
-
-		const cookie = await choose(page, "Dark");
-		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
-		expect(cookie).toBe("__Host-color-scheme=dark; Max-Age=31536000; Path=/; Secure; SameSite=Lax");
-
-		await page.emulateMedia({ colorScheme: "light" });
-		expect(await shown(page)).toBe("dark");
-	});
-
-	test("choosing System deletes the cookie and the page follows the device again", async ({
+	test("choosing Light stores the choice, and the page stays light after a reload", async ({
 		page,
 		context,
 	}) => {
 		await openShell(page, homePath(settings.id));
-		await choose(page, "Light");
-		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
-		expect(await schemeCookies(context)).toHaveLength(1);
+		await choose(page, "Dark");
+		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
 
-		const cookie = await choose(page, "System");
+		const cookie = await choose(page, "Light");
+		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
+		expect(cookie).toBe(cookieOf("light"));
+		expect(await shown(page)).toBe("light");
+
+		await page.reload();
+		expect(await shown(page)).toBe("light");
+		await expect(schemes(page).getByRole("radio", { name: "Light" })).toBeChecked();
+		expect((await schemeCookies(context)).map(({ value }) => value)).toEqual(["light"]);
+	});
+
+	test("choosing Match my device stores the choice, and the page follows the device from then on", async ({
+		page,
+		context,
+	}) => {
+		await openShell(page, homePath(settings.id));
+
+		const cookie = await choose(page, "Match my device");
 		await expect(page.locator("html")).not.toHaveAttribute("data-color-scheme");
-		expect(cookie).toBe("__Host-color-scheme=; Max-Age=0; Path=/; Secure; SameSite=Lax");
-		expect(await schemeCookies(context)).toEqual([]);
+		expect(cookie).toBe(cookieOf("system"));
+		expect((await schemeCookies(context)).map(({ value }) => value)).toEqual(["system"]);
 
 		expect(await shown(page)).toBe("dark");
 		await page.reload();
 		expect(await shown(page)).toBe("dark");
+		await expect(schemes(page).getByRole("radio", { name: "Match my device" })).toBeChecked();
 		await page.emulateMedia({ colorScheme: "light" });
 		expect(await shown(page)).toBe("light");
+
+		// The server rendered it: no scheme is forced in the HTML.
+		const html = await (await context.request.get(homePath(today.id))).text();
+		expect(html).toContain('<html lang="en">');
 	});
 
 	test("the choice is made with the keyboard alone", async ({ page }) => {
 		await openShell(page, homePath(settings.id));
 
-		const system = schemes(page).getByRole("radio", { name: "System" });
+		const light = schemes(page).getByRole("radio", { name: "Light" });
 		for (let presses = 0; presses < 12; presses++) {
-			if (await system.evaluate((element) => element === document.activeElement)) break;
+			if (await light.evaluate((element) => element === document.activeElement)) break;
 			await page.keyboard.press("Tab");
 		}
-		await expect(system).toBeFocused();
+		await expect(light).toBeFocused();
 
 		await page.keyboard.press("ArrowDown");
-		await expect(schemes(page).getByRole("radio", { name: "Light" })).toBeChecked();
-		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
+		await expect(schemes(page).getByRole("radio", { name: "Dark" })).toBeChecked();
+		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
 		// The focus stays on the choice just made.
-		await expect(schemes(page).getByRole("radio", { name: "Light" })).toBeFocused();
+		await expect(schemes(page).getByRole("radio", { name: "Dark" })).toBeFocused();
 	});
 });
 
 test.describe("without script, with the device set to dark", () => {
 	test.use({ colorScheme: "dark", javaScriptEnabled: false });
 
-	test("the form still changes the scheme", async ({ page }) => {
+	test("the form still saves each of the three choices", async ({ page }) => {
 		await page.goto(homePath(settings.id));
+		expect(await shown(page)).toBe("light");
+
+		const save = async (name: Choice) => {
+			await schemes(page).getByText(name, { exact: true }).click();
+			const answered = page.waitForResponse((response) => response.request().method() === "POST");
+			await page.getByRole("button", { name: "Save" }).click();
+			const answer = await answered;
+			expect(answer.status()).toBe(303);
+			await expect(page).toHaveURL(homePath(settings.id));
+			await expect(schemes(page).getByRole("radio", { name })).toBeChecked();
+			return answer.headerValue("set-cookie");
+		};
+
+		expect(await save("Dark")).toBe(cookieOf("dark"));
+		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
 		expect(await shown(page)).toBe("dark");
 
-		await schemes(page).getByText("Light", { exact: true }).click();
-		const answered = page.waitForResponse((response) => response.request().method() === "POST");
-		await page.getByRole("button", { name: "Save" }).click();
-
-		const answer = await answered;
-		expect(answer.status()).toBe(303);
-		expect(await answer.headerValue("set-cookie")).toBe(
-			"__Host-color-scheme=light; Max-Age=31536000; Path=/; Secure; SameSite=Lax",
-		);
-		await expect(page).toHaveURL(homePath(settings.id));
+		expect(await save("Light")).toBe(cookieOf("light"));
 		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
 		expect(await shown(page)).toBe("light");
-		await expect(schemes(page).getByRole("radio", { name: "Light" })).toBeChecked();
 
-		// And back to the device's scheme.
-		await schemes(page).getByText("System", { exact: true }).click();
-		await page.getByRole("button", { name: "Save" }).click();
+		// And the device's own scheme, which here is dark.
+		expect(await save("Match my device")).toBe(cookieOf("system"));
 		await expect(page.locator("html")).not.toHaveAttribute("data-color-scheme");
 		expect(await shown(page)).toBe("dark");
 	});

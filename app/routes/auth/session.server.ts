@@ -1,6 +1,6 @@
 /**
  * The session, as routes use it: the guard in front of `/app`, and what the
- * sign-in and sign-up pages ask the server before they render.
+ * sign-in page asks the server before it renders.
  */
 import { env } from "cloudflare:workers";
 import { createContext, type MiddlewareFunction, redirectDocument } from "react-router";
@@ -33,10 +33,10 @@ export const requireSession: MiddlewareFunction<Response> = async ({ request, ur
 };
 
 /**
- * What the sign-in and sign-up pages load: Turnstile's public site key and
+ * What the sign-in page loads: Turnstile's public site key and
  * where to go afterwards. A person who already has a session is sent there at
  * once, again as a whole page load. A deployment without a site key has no
- * widget to show, so neither page is served.
+ * widget to show, so the page is not served.
  */
 export async function loadAuthPage(request: Request, url: URL) {
 	const next = safeNext(url.searchParams.get(NEXT_PARAM));

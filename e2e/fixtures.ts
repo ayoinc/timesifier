@@ -1,5 +1,7 @@
 import { test as base, expect, type Page } from "@playwright/test";
 
+import { COLOR_SCHEME_COOKIE, type ColorSchemeChoice } from "../app/shell/color-scheme.server";
+
 type PolicyViolation = { directive: string; blocked: string; sample: string };
 
 declare global {
@@ -24,9 +26,40 @@ export type Refusals = Record<string, number[]>;
  * above. A test that makes the server refuse a request on purpose names the
  * refusal with `test.use({ refusals: { "/path": [403] } })`; any other error
  * still fails it.
+ *
+ * Every page is light unless the person chose otherwise in Settings, whatever
+ * the device prefers. A test of a page in another scheme is a test of a person
+ * who chose it: `test.use({ chosenScheme: "dark" })` gives the browser the
+ * cookie Settings would have set.
  */
-export const test = base.extend<{ pageHealth: undefined; refusals: Refusals }>({
+export const test = base.extend<{
+	pageHealth: undefined;
+	refusals: Refusals;
+	chosenScheme: ColorSchemeChoice | undefined;
+	schemeCookie: undefined;
+}>({
 	refusals: [{}, { option: true }],
+	chosenScheme: [undefined, { option: true }],
+	schemeCookie: [
+		async ({ context, baseURL, chosenScheme }, use) => {
+			if (chosenScheme) {
+				// By host and path, as a saved session's cookies are given back: a
+				// `__Host-` cookie named by an http address is refused.
+				await context.addCookies([
+					{
+						name: COLOR_SCHEME_COOKIE,
+						value: chosenScheme,
+						domain: new URL(baseURL ?? "http://localhost").hostname,
+						path: "/",
+						secure: true,
+						sameSite: "Lax",
+					},
+				]);
+			}
+			await use(undefined);
+		},
+		{ auto: true },
+	],
 	pageHealth: [
 		async ({ page, refusals }, use) => {
 			const violations: PolicyViolation[] = [];
@@ -77,18 +110,26 @@ export async function openGallery(page: Page, path = "/design") {
 }
 
 /**
- * Opens a page whose links React Router handles and waits until React has taken
- * over the page. Before that a press on a link is an ordinary one: the browser
- * loads the next page whole, with no transition and no move of the focus. The
- * sign is the record React keeps on each element it has hydrated, read from the
- * first link in `within`; nothing a person can see changes at that moment.
+ * Waits until React has taken over the page that is open. Before that a press
+ * on a link is an ordinary one, and a button does nothing. The sign is the
+ * record React keeps on each element it has hydrated, read from the first link
+ * in `within`; nothing a person can see changes at that moment.
  */
-export async function openShell(page: Page, path: string, within = "nav") {
-	await page.goto(path);
+export async function takenOver(page: Page, within = "nav") {
 	await page.waitForFunction((container) => {
 		const link = document.querySelector(`${container} a`);
 		return link !== null && Object.keys(link).some((key) => key.startsWith("__reactFiber"));
 	}, within);
+}
+
+/**
+ * Opens a page whose links React Router handles and waits until React has taken
+ * over the page: until then the browser loads the next page whole, with no
+ * transition and no move of the focus.
+ */
+export async function openShell(page: Page, path: string, within = "nav") {
+	await page.goto(path);
+	await takenOver(page, within);
 }
 
 export { expect };

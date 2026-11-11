@@ -8,9 +8,10 @@ import { APP_PATH, NEW_ORGANISATION_PATH } from "../app/shell/destinations";
 import { expect, openShell } from "./fixtures";
 import { openOutsideOrganisation, openSettings } from "./organisation";
 
-// What the browser tests of sign-up, sign-in and sign-out share.
+// What the browser tests of signing in and signing out share.
 
 export interface Person {
+	/** No page asks it on the way in: a test that needs it sets it in Settings (`setName`). */
 	name: string;
 	email: string;
 }
@@ -120,35 +121,42 @@ export function codeSentBy(send: () => Promise<unknown>): Promise<string> {
 	return foundInMessageSentBy(send, CODE, "the code");
 }
 
-/** Opens the sign-in or the sign-up page and waits until its buttons work. */
-export async function openAuthPage(page: Page, path: "/sign-in" | "/sign-up" | (string & {})) {
-	await openShell(page, path, "main");
+/** Opens the sign-in page and waits until its buttons work. */
+export async function openAuthPage(page: Page, path: "/sign-in" | (string & {}) = "/sign-in") {
+	await openShell(page, path, "header");
 }
 
+/** The label of the one primary action, on each of the sign-in page's two views. */
+export const CONTINUE = { name: "Continue", exact: true } as const;
+
 /**
- * Signs up through the page: name, email, the emailed code. The account exists,
- * the person is signed in, and the page has left for where they were going.
+ * Signs in through the one page: an email address, then the emailed code. An
+ * address that is new has its account from that moment, with no name. The page
+ * has left for where the person was going.
  */
-export async function signUp(page: Page, person: Person, path = "/sign-up") {
+export async function signIn(page: Page, email: string, path = "/sign-in") {
 	await openAuthPage(page, path);
-	await page.getByLabel("Name").fill(person.name);
-	await page.getByLabel("Email").fill(person.email);
-	const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+	await page.getByLabel("Email").fill(email);
+	const code = await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 
 	await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
 	await page.getByLabel("Code").fill(code);
-	await page.getByRole("button", { name: "Create account" }).click();
-	await page.waitForURL((url) => url.pathname !== "/sign-up");
+	await page.getByRole("button", CONTINUE).click();
+	await page.waitForURL((url) => url.pathname !== "/sign-in");
 }
 
-/** Signs in through the page with an emailed code, and arrives where the page sends the person. */
-export async function signInWithCode(page: Page, email: string, path = "/sign-in") {
-	await openAuthPage(page, path);
-	await page.getByLabel("Email").fill(email);
-	const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
-
-	await page.getByLabel("Code").fill(code);
-	await page.getByRole("button", { name: "Sign in", exact: true }).click();
+/**
+ * Gives the signed-in person a name, where a person does: in Settings, which is
+ * in an organisation. For a person with exactly one; the page is left on its Settings.
+ */
+export async function setName(page: Page, name: string) {
+	await openSettings(page);
+	await page.getByRole("button", { name: /^(Add|Change) name$/ }).click();
+	const sheet = page.getByRole("dialog", { name: "Your name" });
+	await sheet.getByLabel("Name").fill(name);
+	await sheet.getByRole("button", { name: "Save" }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.getByRole("status")).toHaveText(`Your name is now ${name}.`);
 }
 
 /**
@@ -160,16 +168,18 @@ export const ARRIVAL = NEW_ORGANISATION_PATH;
 /**
  * Signs out and arrives at the sign-in page. A person with an organisation
  * signs out from its Settings; a person with none, from the page that would
- * create one, which is where `/app` sends them. "Sign out everywhere" is in
- * Settings alone, so a person with no organisation gets one first.
+ * create one, which is where `/app` sends them and where the way out is called
+ * "Use a different email". "Sign out everywhere" is in Settings alone, so a
+ * person with no organisation gets one first.
  */
 export async function signOut(page: Page, button: "Sign out" | "Sign out everywhere" = "Sign out") {
 	await page.goto(APP_PATH);
 	if (button === "Sign out" && new URL(page.url()).pathname === NEW_ORGANISATION_PATH) {
 		await openOutsideOrganisation(page, NEW_ORGANISATION_PATH);
+		await page.getByRole("button", { name: "Use a different email" }).click();
 	} else {
 		await openSettings(page);
+		await page.getByRole("button", { name: button, exact: true }).click();
 	}
-	await page.getByRole("button", { name: button, exact: true }).click();
 	await expect(page).toHaveURL("/sign-in");
 }

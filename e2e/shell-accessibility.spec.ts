@@ -12,7 +12,7 @@ for (const viewport of [
 ]) {
 	for (const colorScheme of ["light", "dark"] as const) {
 		test.describe(`in a window ${viewport.width}px wide, in the ${colorScheme} scheme`, () => {
-			test.use({ viewport, colorScheme });
+			test.use({ viewport, chosenScheme: colorScheme });
 
 			for (const destination of destinations) {
 				test(`${destination.label} has no accessibility violations`, async ({ page }) => {

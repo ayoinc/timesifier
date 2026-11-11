@@ -124,40 +124,48 @@ const HEADER_LINK =
 
 /**
  * The top band of the sheet: the product's name, which leads home, the places on
- * the page where it has any, and the one way in for someone coming back. It
- * stays at the top of the window, and settles as the page leaves the top: the
- * name draws in a little and a rule appears under the band (public.css).
+ * the page where it has any, and the one way in. The sign-in page is that way
+ * in, so on it the band holds the name alone. It stays at the top of the window,
+ * and settles as the page leaves the top: the name draws in a little and a rule
+ * appears under the band (public.css).
  */
 export function SiteHeader({ current, sections = [] }: SiteHeaderProps) {
+	const signIn = current !== SIGN_IN_PATH;
+
 	return (
 		<header className="site-header sticky top-0 z-10 bg-sheet text-on-sheet">
 			<div className={`${PAGE} flex items-center justify-between gap-6 py-5`}>
+				{/* As tall as "Sign in" beside it, so the band is one height on every page. */}
 				<a
 					href="/"
 					aria-current={current === "/" ? "page" : undefined}
-					className="site-name rounded-extra-small outline-none focus-visible:focus-indicator"
+					className="site-name inline-flex min-h-9.5 items-center rounded-extra-small outline-none focus-visible:focus-indicator"
 				>
 					<Wordmark tone="one" />
 				</a>
-				<nav aria-label="Site">
-					<ul className="flex items-center gap-8 text-label-large">
-						{sections.map(({ href, label }) => (
-							<li key={href} className="max-medium:hidden">
-								<a href={href} className={HEADER_LINK}>
-									{label}
-								</a>
-							</li>
-						))}
-						<li>
-							<a
-								href={SIGN_IN_PATH}
-								className="inline-block rounded-small border border-on-sheet px-4 py-2 outline-none hover:underline hover:underline-offset-4 focus-visible:focus-indicator"
-							>
-								Sign in
-							</a>
-						</li>
-					</ul>
-				</nav>
+				{(signIn || sections.length > 0) && (
+					<nav aria-label="Site">
+						<ul className="flex items-center gap-8 text-label-large">
+							{sections.map(({ href, label }) => (
+								<li key={href} className="max-medium:hidden">
+									<a href={href} className={HEADER_LINK}>
+										{label}
+									</a>
+								</li>
+							))}
+							{signIn && (
+								<li>
+									<a
+										href={SIGN_IN_PATH}
+										className="inline-block rounded-small border border-on-sheet px-4 py-2 outline-none hover:underline hover:underline-offset-4 focus-visible:focus-indicator"
+									>
+										Sign in
+									</a>
+								</li>
+							)}
+						</ul>
+					</nav>
+				)}
 			</div>
 			<span
 				aria-hidden="true"

@@ -5,27 +5,29 @@ import { destinationPath, organisationPath } from "../app/shell/destinations";
 
 import {
 	ARRIVAL,
+	CONTINUE,
 	codeSentBy,
 	newPerson,
 	openAuthPage,
 	ownAddress,
-	signInWithCode,
+	setName,
+	signIn,
 	signOut,
-	signUp,
 	TIME_WITH_TURNS,
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation, openSettings } from "./organisation";
 
-// The journeys of card TS-008, each walked in a browser against the production
-// build: sign up with an email code, sign out, sign in with a code, end every
-// session. The codes are read from the messages the local EMAIL binding writes
-// (./auth.ts).
+// The journeys of card TS-008 as card TS-036 left them, each walked in a
+// browser against the production build: one page signs in a person who is new
+// and a person coming back, with an emailed code; sign out; end every session.
+// The codes are read from the messages the local EMAIL binding writes (./auth.ts).
 //
-// A person who has just signed up belongs to no organisation, so `/app` sends
-// them to the page that creates one (`ARRIVAL`). Settings is in an
-// organisation: a journey that needs it creates one first (./organisation.ts).
+// A person who has just signed in for the first time belongs to no
+// organisation, so `/app` sends them to the page that creates one (`ARRIVAL`).
+// Settings is in an organisation: a journey that needs it creates one first
+// (./organisation.ts).
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
@@ -46,55 +48,77 @@ async function whoIs(page: Page): Promise<{ email: string; name: string } | null
 	return session && { email: session.user.email, name: session.user.name };
 }
 
-test.describe("signing up", () => {
-	test("with an email code makes the account and goes straight on to the application", async ({
+test.describe("an address that is new", () => {
+	test("is signed in by its first code, with no name asked, and goes straight on to the application", async ({
 		page,
 	}) => {
 		const person = newPerson();
 
-		await signUp(page, person);
+		await signIn(page, person.email);
 
 		// The accepted code is the last step: nothing stands between it and the application.
 		await expect(page).toHaveURL(ARRIVAL);
 		await expect(
 			page.getByRole("heading", { level: 1, name: "Create your organisation" }),
 		).toBeVisible();
-		expect(await whoIs(page), "the account, signed in, with the name that was typed").toEqual(
-			person,
-		);
+		expect(await whoIs(page), "the account, signed in, with no name yet").toEqual({
+			email: person.email,
+			name: "",
+		});
 
+		// Until they give a name, people see their address; Settings is where they give it.
 		await openSettings(page);
-		await expect(page.getByText(person.email)).toBeVisible();
+		await expect(
+			page.getByText(`Not set. People see your address, ${person.email}.`),
+		).toBeVisible();
+		await setName(page, person.name);
+		expect(await whoIs(page)).toEqual(person);
 	});
 
-	test("says the same for an address that already has an account", async ({ page }) => {
+	test("and an address that has an account are told the same, view for view", async ({ page }) => {
 		const person = newPerson();
-		await signUp(page, person);
-		await signOut(page);
 
-		// The second time round every step reads as the first did.
-		await signUp(page, person);
-		await expect(page).toHaveURL(ARRIVAL);
+		/** What the page says on each of its two views, on the way in. */
+		async function said(): Promise<string[]> {
+			const views: string[] = [];
+			await openAuthPage(page);
+			views.push((await page.getByRole("main").textContent()) ?? "");
+			await page.getByLabel("Email").fill(person.email);
+			const code = await codeSentBy(() => page.getByRole("button", CONTINUE).click());
+			await expect(page.getByLabel("Code")).toBeFocused();
+			views.push((await page.getByRole("main").textContent()) ?? "");
+			await page.getByLabel("Code").fill(code);
+			await page.getByRole("button", CONTINUE).click();
+			await expect(page).toHaveURL(ARRIVAL);
+			return views;
+		}
+
+		const asNew = await said();
+		await signOut(page);
+		const asReturning = await said();
+
+		expect(asReturning).toEqual(asNew);
+		expect(asNew[1]).toContain(person.email);
 	});
 });
 
 test.describe("signing out and signing in", () => {
 	test("sign out ends the session; an email code signs back in", async ({ page }) => {
 		const person = newPerson();
-		await signUp(page, person);
+		await signIn(page, person.email);
 		await expect(page).toHaveURL(ARRIVAL);
 
 		await signOut(page);
 		expect(await whoIs(page)).toBeNull();
 
-		await signInWithCode(page, person.email);
+		await signIn(page, person.email);
 		await expect(page).toHaveURL(ARRIVAL);
 		expect((await whoIs(page))?.email).toBe(person.email);
 	});
 
 	test("an email code signs in, and goes on to the page that was asked for", async ({ page }) => {
 		const person = newPerson();
-		await signUp(page, person);
+		await signIn(page, person.email);
 		const { slug } = await createOrganisation(page);
 		await signOut(page);
 
@@ -103,7 +127,7 @@ test.describe("signing out and signing in", () => {
 		await page.goto(reports);
 		await expect(page).toHaveURL(signInPath(reports));
 
-		await signInWithCode(page, person.email, page.url());
+		await signIn(page, person.email, page.url());
 		await expect(page).toHaveURL(reports);
 		await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
 		expect((await whoIs(page))?.email).toBe(person.email);
@@ -113,16 +137,32 @@ test.describe("signing out and signing in", () => {
 		page,
 	}) => {
 		const person = newPerson();
-		await openAuthPage(page, "/sign-in");
+		await openAuthPage(page);
+		await expect(page.getByRole("heading", { level: 1, name: "Enter your email" })).toBeVisible();
+		await expect(
+			page.getByText("We will email you a code. If you are new here, the same code sets you up."),
+		).toBeVisible();
+		await expect(page).toHaveTitle("Sign in · Timesifier");
+		// One field, and no name among them.
+		await expect(page.getByRole("textbox")).toHaveCount(1);
 		await expect(page.getByLabel("Email")).toBeVisible();
 		await expect(page.getByLabel("Code")).toHaveCount(0);
-		// One action on the step, and it is the primary one.
-		await expect(page.getByRole("main").getByRole("button")).toHaveCount(1);
+		// One action on the view, and it is the primary one.
+		await expect(page.getByRole("main").getByRole("button")).toHaveText(["Continue"]);
 
 		await page.getByLabel("Email").fill(person.email);
-		await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
+		await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 		await expect(page.getByLabel("Code")).toBeFocused();
 		await expect(page.getByLabel("Email")).toHaveCount(0);
+		await expect(page.getByRole("textbox")).toHaveCount(1);
+		await expect(
+			page.getByText("We send at most five codes an hour to one address."),
+		).toBeVisible();
+		await expect(page.getByRole("main").getByRole("button")).toHaveText([
+			"Continue",
+			"Send a new code",
+			"Use a different email",
+		]);
 
 		await page.getByRole("button", { name: "Use a different email" }).click();
 		await expect(page.getByLabel("Email")).toBeFocused();
@@ -130,8 +170,10 @@ test.describe("signing out and signing in", () => {
 		await expect(page.getByLabel("Code")).toHaveCount(0);
 	});
 
-	test("a person who is signed in is sent on from both pages", async ({ page }) => {
-		await signUp(page, newPerson());
+	test("a person who is signed in is sent on from the page, and from where a page for new people once was", async ({
+		page,
+	}) => {
+		await signIn(page, newPerson().email);
 		await expect(page).toHaveURL(ARRIVAL);
 
 		// With no organisation, /app sends them to create one.
@@ -159,12 +201,12 @@ test.describe("signing out and signing in", () => {
 		baseURL,
 	}) => {
 		const person = newPerson();
-		await signUp(page, person);
+		await signIn(page, person.email);
 		await signOut(page);
 
 		// Somebody who knows the address and nothing else, asking from a new
-		// client address each time. The sign-up above was the first of the five
-		// that everybody else is allowed; these are the rest.
+		// client address each time. The first sign-in above was the first of the
+		// five that everybody else is allowed; these are the rest.
 		const stranger = await playwright.request.newContext({ baseURL });
 		for (let n = 0; n < 4; n++) {
 			await codeSentBy(async () => {
@@ -185,7 +227,7 @@ test.describe("signing out and signing in", () => {
 
 		// A sixth request from anybody else would be sent nothing. This browser's is
 		// sent a code, and the code signs the person in.
-		await signInWithCode(page, person.email);
+		await signIn(page, person.email);
 		await expect(page).toHaveURL(ARRIVAL);
 	});
 });
@@ -193,7 +235,7 @@ test.describe("signing out and signing in", () => {
 test.describe("sign out everywhere", () => {
 	test("ends the session in a second browser too", async ({ page, browser, baseURL }) => {
 		const person = newPerson();
-		await signUp(page, person);
+		await signIn(page, person.email);
 		await expect(page).toHaveURL(ARRIVAL);
 		const { slug } = await createOrganisation(page);
 		const home = organisationPath(slug);
@@ -202,7 +244,7 @@ test.describe("sign out everywhere", () => {
 		const elsewhere = await browser.newContext({ storageState: SIGNED_OUT, baseURL });
 		await ownAddress(elsewhere, baseURL);
 		const other = await elsewhere.newPage();
-		await signInWithCode(other, person.email);
+		await signIn(other, person.email);
 		await expect(other).toHaveURL(home);
 		await openShell(other, home);
 
@@ -229,15 +271,15 @@ test.describe("what the pages ask of the server", () => {
 			if (pathname.startsWith("/api/auth/")) called.add(`${request.method()} ${pathname}`);
 		});
 
-		// Sign up, end every session, sign in with a code, sign out.
+		// Sign in for the first time, end every session, sign in again, sign out.
 		const person = newPerson();
-		await signUp(page, person);
+		await signIn(page, person.email);
 		await expect(page).toHaveURL(ARRIVAL);
 		// "Sign out everywhere" is in Settings, and Settings is in an organisation.
 		const { slug } = await createOrganisation(page);
 		await signOut(page, "Sign out everywhere");
 
-		await signInWithCode(page, person.email);
+		await signIn(page, person.email);
 		await expect(page).toHaveURL(organisationPath(slug));
 		await signOut(page);
 

@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import { SIGNED_OUT } from "./auth-state";
 import { expect, test } from "./fixtures";
 
@@ -117,20 +119,44 @@ test("every page names its icons, and each is a file of the right kind on our ow
 	}
 });
 
-test("the browser's own frame takes the colour of the band, in each scheme", async ({ page }) => {
-	await page.goto("/");
+/** The colour of the band at the top, as the six digits a `theme-color` is written in. */
+function bandColour(page: Page): Promise<string> {
+	return page.getByRole("banner").evaluate((header) => {
+		const [red, green, blue] = (getComputedStyle(header).backgroundColor.match(/\d+/g) ?? []).map(
+			Number,
+		);
+		return `#${[red, green, blue].map((part) => (part ?? 0).toString(16).padStart(2, "0")).join("")}`;
+	});
+}
 
-	for (const scheme of ["light", "dark"] as const) {
-		await page.emulateMedia({ colorScheme: scheme });
-		const named = await page
-			.locator(`meta[name="theme-color"][media*="${scheme}"]`)
-			.getAttribute("content");
-		const band = await page.getByRole("banner").evaluate((header) => {
-			const [red, green, blue] = (getComputedStyle(header).backgroundColor.match(/\d+/g) ?? []).map(
-				Number,
-			);
-			return `#${[red, green, blue].map((part) => (part ?? 0).toString(16).padStart(2, "0")).join("")}`;
+for (const chosenScheme of [undefined, "light", "dark"] as const) {
+	test.describe(`for a person who has chosen ${chosenScheme ?? "no scheme"}`, () => {
+		// Whatever the device prefers: the page is held to one scheme, and names one colour.
+		test.use({ chosenScheme, colorScheme: chosenScheme === "dark" ? "light" : "dark" });
+
+		test("the browser's own frame takes the colour of the band", async ({ page }) => {
+			await page.goto("/");
+
+			const named = page.locator('meta[name="theme-color"]');
+			await expect(named).toHaveCount(1);
+			expect(await named.getAttribute("media")).toBeNull();
+			expect((await named.getAttribute("content"))?.toLowerCase()).toBe(await bandColour(page));
 		});
-		expect(named?.toLowerCase(), scheme).toBe(band);
-	}
+	});
+}
+
+test.describe("for a person who chose to match their device", () => {
+	test.use({ chosenScheme: "system" });
+
+	test("the browser's own frame takes the colour of the band, in each scheme", async ({ page }) => {
+		await page.goto("/");
+
+		for (const scheme of ["light", "dark"] as const) {
+			await page.emulateMedia({ colorScheme: scheme });
+			const named = await page
+				.locator(`meta[name="theme-color"][media*="${scheme}"]`)
+				.getAttribute("content");
+			expect(named?.toLowerCase(), scheme).toBe(await bandColour(page));
+		}
+	});
 });

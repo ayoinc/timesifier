@@ -46,7 +46,7 @@ for (const viewport of [
 ]) {
 	for (const colorScheme of ["light", "dark"] as const) {
 		test.describe(`in a window ${viewport.width}px wide, in the ${colorScheme} scheme`, () => {
-			test.use({ viewport, colorScheme });
+			test.use({ viewport, chosenScheme: colorScheme });
 
 			test.describe("for an owner", () => {
 				test("creating an organisation, and the welcome to a first one", async ({ page }) => {

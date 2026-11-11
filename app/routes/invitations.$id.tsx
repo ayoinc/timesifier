@@ -12,12 +12,13 @@ import {
 } from "~/organisations/api.server";
 import { AS_ROLE, nameOrEmail } from "~/organisations/people";
 import { TOO_MANY_ATTEMPTS } from "~/organisations/problems";
-import { AuthPage, StepHeading, StepLead } from "~/routes/auth/AuthPage";
 import { invitationPath, signInPath } from "~/routes/auth/paths";
 import { APP_PATH, organisationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
-
+import { OUTSIDE_FRAME, ProductName } from "~/shell/Outside";
+import { PageHeading } from "~/shell/PageHeading";
 import type { Route } from "./+types/invitations.$id";
+import { SignedInAs } from "./app/SignedInAs";
 
 // The page an invitation's link opens. It is outside `/app/<slug>`: the person
 // it is for is not a member yet.
@@ -40,12 +41,13 @@ export function meta({ loaderData }: Route.MetaArgs) {
 
 /**
  * The same answer for every invitation that cannot be accepted by the person
- * asking: nothing about the invitation, and status 410. The server's limiter
- * is the one other refusal, and it is passed on as itself.
+ * asking: nothing about the invitation, and status 410. It says whose session
+ * this is, which the person already knows and may have got wrong. The server's
+ * limiter is the one other refusal, and it is passed on as itself.
  */
-function gone(refusal: Refusal) {
+function gone(refusal: Refusal, email: string) {
 	if (refusal.status === 429) throw data(TOO_MANY_ATTEMPTS, { status: 429 });
-	return data({ invitation: null }, { status: 410 });
+	return data({ invitation: null, email }, { status: 410 });
 }
 
 /**
@@ -60,13 +62,14 @@ async function requirePerson(request: Request, id: string) {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-	await requirePerson(request, params.id);
+	const { email } = (await requirePerson(request, params.id)).user;
 
 	const invitation = await findInvitation(request, params.id);
-	if (!invitation.ok) return gone(invitation);
+	if (!invitation.ok) return gone(invitation, email);
 
 	const { organisation, role, inviter } = invitation.data;
 	return {
+		email,
 		invitation: {
 			organisation: { name: organisation.name },
 			role,
@@ -88,66 +91,81 @@ const form = z.object({ intent: z.enum(["join", "decline"]) });
  */
 export async function action({ request, params }: Route.ActionArgs) {
 	const { intent } = await parseRequest(request, form);
-	await requirePerson(request, params.id);
+	const { email } = (await requirePerson(request, params.id)).user;
 
 	if (intent === "decline") {
 		const declined = await declineInvitation(request, params.id);
-		return declined.ok ? redirect(APP_PATH) : gone(declined);
+		return declined.ok ? redirect(APP_PATH) : gone(declined, email);
 	}
 
 	// Read first for the organisation's address: accepting does not give it.
 	const invitation = await findInvitation(request, params.id);
-	if (!invitation.ok) return gone(invitation);
+	if (!invitation.ok) return gone(invitation, email);
 	const accepted = await acceptInvitation(request, params.id);
 	return accepted.ok
 		? redirect(organisationPath(invitation.data.organisation.slug))
-		: gone(accepted);
+		: gone(accepted, email);
 }
 
-export default function InvitationPage({ loaderData }: Route.ComponentProps) {
+const LEAD = "text-body-large text-on-surface-variant";
+
+export default function InvitationPage({ loaderData, params }: Route.ComponentProps) {
 	const { invitation } = loaderData;
 	const busy = useNavigation().state !== "idle";
 
 	if (!invitation) {
 		return (
-			<AuthPage step={0}>
-				<StepHeading>{GONE_TITLE}</StepHeading>
-				<StepLead>
-					It may have been used or cancelled, it may have expired, or it may have been sent to
-					another address. Ask the person who invited you to send a new one.
-				</StepLead>
-				<p>
-					<Link to={APP_PATH} className={TEXT_LINK}>
-						Go to Timesifier
-					</Link>
-				</p>
-			</AuthPage>
+			<div className={OUTSIDE_FRAME}>
+				<ProductName />
+				<main className="flex flex-col gap-6">
+					<PageHeading>{GONE_TITLE}</PageHeading>
+					<p className={LEAD}>
+						It may have been used or cancelled, it may have expired, or it may have been sent to
+						another address. Ask the person who invited you to send a new one.
+					</p>
+					<p>
+						<Link to={APP_PATH} className={TEXT_LINK}>
+							Go to Timesifier
+						</Link>
+					</p>
+				</main>
+				{/* An invitation sent to another address is the commonest reason to be
+				    here: the way out leads back to this page, signed in as somebody else. */}
+				<SignedInAs
+					email={loaderData.email}
+					wayOut="Use a different email"
+					next={invitationPath(params.id)}
+				/>
+			</div>
 		);
 	}
 
 	const { organisation, role, inviter } = invitation;
 	return (
-		<AuthPage step={0}>
-			<StepHeading>Join {organisation.name}?</StepHeading>
-			<StepLead>
-				{inviter.name}
-				{inviter.email && ` (${inviter.email})`} invited you to join {organisation.name} as{" "}
-				{AS_ROLE[role]}.
-			</StepLead>
-			<Form
-				method="post"
-				className="flex flex-wrap gap-2"
-				onSubmit={(event) => {
-					if (busy) event.preventDefault();
-				}}
-			>
-				<Button type="submit" name="intent" value="join">
-					Join
-				</Button>
-				<Button type="submit" name="intent" value="decline" variant="text">
-					Decline
-				</Button>
-			</Form>
-		</AuthPage>
+		<div className={OUTSIDE_FRAME}>
+			<ProductName />
+			<main className="flex flex-col gap-6">
+				<PageHeading>Join {organisation.name}?</PageHeading>
+				<p className={LEAD}>
+					{inviter.name}
+					{inviter.email && ` (${inviter.email})`} invited you to join {organisation.name} as{" "}
+					{AS_ROLE[role]}.
+				</p>
+				<Form
+					method="post"
+					className="flex flex-wrap gap-2"
+					onSubmit={(event) => {
+						if (busy) event.preventDefault();
+					}}
+				>
+					<Button type="submit" name="intent" value="join">
+						Join
+					</Button>
+					<Button type="submit" name="intent" value="decline" variant="text">
+						Decline
+					</Button>
+				</Form>
+			</main>
+		</div>
 	);
 }

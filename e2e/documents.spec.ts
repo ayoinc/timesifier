@@ -22,7 +22,7 @@ for (const { path, link } of DOCUMENTS) {
 				test.describe(`in a window ${viewport.width}px wide, in the ${colorScheme} scheme`, () => {
 					// A scan measures the page settled: with reduced motion asked for, the
 					// band at the top is not part-way through settling.
-					test.use({ viewport, colorScheme, reducedMotion: "reduce" });
+					test.use({ viewport, chosenScheme: colorScheme, reducedMotion: "reduce" });
 
 					test("has no accessibility violations, and nothing runs off the side", async ({
 						page,

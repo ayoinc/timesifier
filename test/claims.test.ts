@@ -1,7 +1,7 @@
 import { exports } from "cloudflare:workers";
 import { expect, it } from "vitest";
-import { PRIMARY_ACTION, PRIVACY_PATH, TERMS_PATH } from "~/landing/Site";
-import { SIGN_IN_PATH, SIGN_UP_PATH } from "~/routes/auth/paths";
+import { PRIMARY_ACTION, PRIVACY_PATH } from "~/landing/Site";
+import { SIGN_IN_PATH } from "~/routes/auth/paths";
 import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
 
 import { CODE_COOKIE, KNOWN_COOKIE, ORIGIN, SESSION_COOKIE, setBinding } from "./auth/harness";
@@ -72,9 +72,9 @@ it("the home page has one primary action, said the same at the top and at the en
 	);
 
 	expect(actions.map(([, href]) => href)).toEqual([SIGN_IN_PATH, SIGN_IN_PATH]);
-	for (const path of ["/", PRIVACY_PATH, TERMS_PATH]) {
-		expect(await page(path), path).not.toContain(`href="${SIGN_UP_PATH}"`);
-	}
+	// And one quiet "Sign in", in the band at the top, to the same page.
+	const quiet = [...html.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>Sign in<\/a>/g)];
+	expect(quiet.map(([, href]) => href)).toEqual([SIGN_IN_PATH]);
 });
 
 it("the privacy notice names this deployment's host and sender, from its settings and the request", async () => {

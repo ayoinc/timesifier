@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import {
 	ARRIVAL,
+	CONTINUE,
 	codeSentBy,
 	newPerson,
 	openAuthPage,
@@ -47,7 +48,7 @@ test.describe("a wrong code", () => {
 		const first = await askForCode(page, email);
 
 		await page.getByLabel("Code").fill(wrongCode(first));
-		await page.getByRole("button", { name: "Sign in", exact: true }).click();
+		await page.getByRole("button", CONTINUE).click();
 		await expect(page.getByRole("alert")).toHaveText(
 			"That code is not right. Check it, or send a new one.",
 		);
@@ -62,7 +63,7 @@ test.describe("a wrong code", () => {
 		await expect(page.getByLabel("Code")).toHaveValue("");
 
 		await page.getByLabel("Code").fill(second);
-		await page.getByRole("button", { name: "Sign in", exact: true }).click();
+		await page.getByRole("button", CONTINUE).click();
 		await expect(page).toHaveURL(ARRIVAL);
 	});
 });
@@ -91,7 +92,7 @@ test.describe("a code typed in a browser that did not ask for it", () => {
 
 		const refused = other.waitForResponse((response) => response.url().endsWith(SIGN_IN));
 		await other.getByLabel("Code").fill(code);
-		await other.getByRole("button", { name: "Sign in", exact: true }).click();
+		await other.getByRole("button", CONTINUE).click();
 		expect((await refused).status()).toBe(400);
 		await expect(other.getByRole("alert")).toHaveText(
 			"That code is not right. Check it, or send a new one.",
@@ -101,7 +102,7 @@ test.describe("a code typed in a browser that did not ask for it", () => {
 
 		// The refusal used up none of the code's attempts: it still works where it was asked for.
 		await page.getByLabel("Code").fill(code);
-		await page.getByRole("button", { name: "Sign in", exact: true }).click();
+		await page.getByRole("button", CONTINUE).click();
 		await expect(page).toHaveURL(ARRIVAL);
 	});
 });
@@ -119,7 +120,7 @@ test.describe("too many attempts", () => {
 		const said: string[] = [];
 		for (let attempt = 1; attempt <= 11; attempt++) {
 			const answered = page.waitForResponse((response) => response.url().endsWith(SIGN_IN));
-			await page.getByRole("button", { name: "Sign in", exact: true }).click();
+			await page.getByRole("button", CONTINUE).click();
 			answers.push((await answered).status());
 			await expect(page.getByRole("alert")).not.toHaveText("");
 			said.push((await page.getByRole("alert").textContent()) ?? "");
@@ -154,7 +155,7 @@ test.describe("an expired code", () => {
 		);
 
 		await page.getByLabel("Code").fill(code);
-		await page.getByRole("button", { name: "Sign in", exact: true }).click();
+		await page.getByRole("button", CONTINUE).click();
 		await expect(page.getByRole("alert")).toHaveText("That code has expired. Send a new one.");
 		await expect(page.getByRole("button", { name: "Send a new code" })).toBeVisible();
 	});
@@ -174,7 +175,7 @@ test.describe("an address the server will not send to", () => {
 		await expect(page.getByRole("alert")).toHaveText(
 			"That email address is not valid. Check it and try again.",
 		);
-		await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+		await expect(page.getByRole("heading", { level: 1, name: "Enter your email" })).toBeVisible();
 	});
 });
 
@@ -182,13 +183,14 @@ test.describe("a robot check that fails", () => {
 	// Cloudflare's published site key whose widget fails every check.
 	const ALWAYS_PASSES = "1x00000000000000000000AA";
 	const ALWAYS_FAILS = "2x00000000000000000000AB";
+	const COULD_NOT = "We could not confirm this browser. Wait a moment and press Continue again.";
 
 	test("stops the page from asking for a code, and the server refuses a request made anyway", async ({
 		page,
 	}) => {
 		// The site key reaches the page in the loader's data. The server under test
 		// has the key that passes, so the page is given the failing one on its way in.
-		await page.route("**/sign-up", async (route) => {
+		await page.route("**/sign-in", async (route) => {
 			const response = await route.fetch();
 			const html = await response.text();
 			expect(html).toContain(ALWAYS_PASSES);
@@ -200,17 +202,19 @@ test.describe("a robot check that fails", () => {
 		});
 
 		const person = newPerson();
-		await openAuthPage(page, "/sign-up");
-		await page.getByLabel("Name").fill(person.name);
+		await openAuthPage(page);
 		await page.getByLabel("Email").fill(person.email);
-		await page.getByRole("button", { name: "Continue" }).click();
+		await page.getByRole("button", CONTINUE).click();
 
-		await expect(page.getByRole("alert")).toHaveText(
-			"We could not check that you are not a robot. Reload the page and try again.",
-		);
-		await expect(
-			page.getByRole("heading", { level: 1, name: "Create your account" }),
-		).toBeVisible();
+		// The words say what to do, and it is not to reload: the address typed is still there.
+		await expect(page.getByRole("alert")).toHaveText(COULD_NOT);
+		await expect(page.getByRole("heading", { level: 1, name: "Enter your email" })).toBeVisible();
+		await expect(page.getByLabel("Email")).toHaveValue(person.email);
+		expect(asked, "requests for a code made by the page").toBe(0);
+
+		// Pressing again runs the check again. With this key it fails again, and says so again.
+		await page.getByRole("button", CONTINUE).click();
+		await expect(page.getByRole("alert")).toHaveText(COULD_NOT);
 		expect(asked, "requests for a code made by the page").toBe(0);
 
 		// Whoever skips the page gets no further: no token, and a token Turnstile never issued.
@@ -225,35 +229,51 @@ test.describe("a robot check that fails", () => {
 		});
 		expect(forged.status()).toBe(403);
 	});
+
+	test.describe("because the check could not be reached", () => {
+		const SCRIPT = "/turnstile/v0/api.js";
+		test.use({ refusals: { [SCRIPT]: [503] } });
+
+		test("pressing Continue again, as the page says, runs the check again and goes on", async ({
+			page,
+		}) => {
+			// Cloudflare's script does not arrive the first time it is asked for.
+			let asked = 0;
+			await page.route(`**${SCRIPT}*`, (route) =>
+				++asked === 1 ? route.fulfill({ status: 503, body: "" }) : route.continue(),
+			);
+			const person = newPerson();
+			await openAuthPage(page);
+			await page.getByLabel("Email").fill(person.email);
+			await page.getByRole("button", CONTINUE).click();
+			await expect(page.getByRole("alert")).toHaveText(COULD_NOT);
+
+			await codeSentBy(() => page.getByRole("button", CONTINUE).click());
+			await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
+			expect(asked).toBe(2);
+		});
+	});
 });
 
 test.describe("without script", () => {
 	test.use({ javaScriptEnabled: false });
 
-	test("the sign-in page says it needs JavaScript", async ({ page }) => {
-		await page.goto("/sign-in");
-		await expect(page.locator("main p").first()).toHaveText(
-			"Signing in needs JavaScript. Turn it on for this site and reload the page.",
-		);
-	});
-
-	test("the sign-up page says so too, and a press on Continue sends what was typed nowhere", async ({
+	test("the sign-in page says it needs JavaScript, and a press on Continue sends what was typed nowhere", async ({
 		page,
 	}) => {
 		const person = newPerson();
 		const requests: string[] = [];
-		await page.goto("/sign-up");
+		await page.goto("/sign-in");
 		await expect(page.locator("main p").first()).toHaveText(
-			"Creating an account needs JavaScript. Turn it on for this site and reload the page.",
+			"Signing in needs JavaScript. Turn it on for this site and reload the page.",
 		);
 
 		page.on("request", (request) => requests.push(`${request.method()} ${request.url()}`));
-		await page.getByLabel("Name").fill(person.name);
 		await page.getByLabel("Email").fill(person.email);
-		await page.getByRole("button", { name: "Continue" }).click();
+		await page.getByRole("button", CONTINUE).click();
 
-		// The name and the address are not put into the page's address, and nothing is asked of the server.
-		await expect(page).toHaveURL("/sign-up");
+		// The address is not put into the page's address, and nothing is asked of the server.
+		await expect(page).toHaveURL("/sign-in");
 		expect(requests).toEqual([]);
 		await expect(page.getByLabel("Email")).toHaveValue(person.email);
 	});

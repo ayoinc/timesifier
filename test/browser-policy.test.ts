@@ -133,14 +133,11 @@ describe("the Turnstile addition to the policy", () => {
 		vi.restoreAllMocks();
 	});
 
-	it.each(["/sign-in", "/sign-up"])(
-		"%s, which shows the widget, may load Turnstile's script and frame",
-		async (path) => {
-			const response = await worker.fetch(`${ORIGIN}${path}`);
-			expect(response.status).toBe(200);
-			await expectBrowserPolicy(response, { turnstile: true });
-		},
-	);
+	it("/sign-in, which shows the widget, may load Turnstile's script and frame", async () => {
+		const response = await worker.fetch(`${ORIGIN}/sign-in`);
+		expect(response.status).toBe(200);
+		await expectBrowserPolicy(response, { turnstile: true });
+	});
 
 	it("is on no page under /app, nor on an invitation's page", async () => {
 		await freshDatabase();

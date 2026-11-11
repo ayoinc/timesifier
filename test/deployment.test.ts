@@ -39,11 +39,10 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-/** The status of the two sign-in pages and of two requests to Better Auth, on one origin. */
+/** The status of the sign-in page and of two requests to Better Auth, on one origin. */
 async function signInAnswers(origin: string): Promise<number[]> {
 	const responses = [
 		await worker.fetch(`${origin}/sign-in`),
-		await worker.fetch(`${origin}/sign-up`),
 		await get("/get-session", { origin }),
 		await requestCode("ada@example.com", { origin }),
 	];
@@ -58,7 +57,7 @@ async function expectNothingDone(): Promise<void> {
 
 describe("a Worker with every setting", () => {
 	it("serves sign-in, which the tests below take away one setting at a time", async () => {
-		expect(await signInAnswers(ORIGIN)).toEqual([200, 200, 200, 200]);
+		expect(await signInAnswers(ORIGIN)).toEqual([200, 200, 200]);
 		expect(logged).toEqual([]);
 	});
 });
@@ -85,12 +84,12 @@ describe("a Worker without a setting refuses sign-in", () => {
 		await expectNothingDone();
 	});
 
-	it("without TURNSTILE_SITE_KEY the two pages that show the widget are not served", async () => {
+	it("without TURNSTILE_SITE_KEY the page that shows the widget is not served", async () => {
 		setBinding("TURNSTILE_SITE_KEY", undefined);
 
-		const [signIn, signUp] = await signInAnswers(ORIGIN);
+		const [signIn] = await signInAnswers(ORIGIN);
 
-		expect([signIn, signUp]).toEqual([500, 500]);
+		expect(signIn).toBe(500);
 		expect(logged).toContain("deployment: TURNSTILE_SITE_KEY is not set");
 	});
 
@@ -105,11 +104,11 @@ describe("a Worker without a setting refuses sign-in", () => {
 
 		// The host it should have had, a preview's, and a version's own address.
 		for (const origin of [ORIGIN, PREVIEW, "https://41b1b1d9-timesifier.acme.workers.dev"]) {
-			expect(await signInAnswers(origin), origin).toEqual([500, 500, 500, 500]);
+			expect(await signInAnswers(origin), origin).toEqual([500, 500, 500]);
 			expect((await worker.fetch(`${origin}/`)).status, origin).toBe(500);
 		}
 		// A loopback host is let through to the application, which refuses it there.
-		expect(await signInAnswers(LOCAL)).toEqual([500, 500, 500, 500]);
+		expect(await signInAnswers(LOCAL)).toEqual([500, 500, 500]);
 		expect(logged).toContain(`deployment: APP_HOST is ${value ? "not valid" : "not set"}`);
 		await expectNothingDone();
 	});
@@ -126,7 +125,7 @@ describe("a Worker without a setting refuses sign-in", () => {
 		setBinding("PREVIEW_HOST_SUFFIX", value);
 
 		for (const origin of [PREVIEW, ORIGIN, LOCAL]) {
-			expect(await signInAnswers(origin), origin).toEqual([500, 500, 500, 500]);
+			expect(await signInAnswers(origin), origin).toEqual([500, 500, 500]);
 		}
 		expect(logged).toContain(
 			`deployment: PREVIEW_HOST_SUFFIX is ${value ? "not valid" : "not set"}`,
@@ -141,8 +140,8 @@ describe("a Worker without a setting refuses sign-in", () => {
 		setBinding("PREVIEW_HOST_SUFFIX", "");
 
 		expect((await worker.fetch(`${ORIGIN}/`)).status).toBe(500);
-		expect(await signInAnswers(ORIGIN)).toEqual([500, 500, 500, 500]);
-		expect(await signInAnswers(PREVIEW)).toEqual([500, 500, 500, 500]);
+		expect(await signInAnswers(ORIGIN)).toEqual([500, 500, 500]);
+		expect(await signInAnswers(PREVIEW)).toEqual([500, 500, 500]);
 		await expectNothingDone();
 	});
 });

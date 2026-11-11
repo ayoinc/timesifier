@@ -1,11 +1,10 @@
-// The addresses of the two pages a person uses without a session, and the rule
+// The address of the one page a person uses without a session, and the rule
 // for where a person goes once they have one. This module imports only the
 // shell's list, so the server, the pages and the tests all read the same rule.
 
 import { APP_PATH } from "~/shell/destinations";
 
 export const SIGN_IN_PATH = "/sign-in";
-export const SIGN_UP_PATH = "/sign-up";
 
 /** The query parameter that carries the page a person was on their way to. */
 export const NEXT_PARAM = "next";
@@ -57,11 +56,10 @@ export function signInPath(next: string): string {
 	return `${SIGN_IN_PATH}?${NEXT_PARAM}=${encodeURIComponent(next)}`;
 }
 
-/** The link from one of the two pages to the other, keeping where the person was going. */
+/**
+ * The sign-in page for a person who chose to go to it, keeping where they were
+ * going when that is one of the places `safeNext` allows.
+ */
 export function signInLink(next: string): string {
 	return withNext(SIGN_IN_PATH, next);
-}
-
-export function signUpLink(next: string): string {
-	return withNext(SIGN_UP_PATH, next);
 }

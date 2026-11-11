@@ -84,10 +84,10 @@ export function sendCode(email: string, token: string): Promise<Outcome> {
 	});
 }
 
-/** Signs in with an emailed code. The first time, this creates the account, with `name`. */
-export function signInWithCode(email: string, code: string, name?: string): Promise<Outcome> {
+/** Signs in with an emailed code. The first time an address does, this creates its account. */
+export function signInWithCode(email: string, code: string): Promise<Outcome> {
 	return attempt(async () => {
-		const { error } = await auth().signIn.emailOtp({ email, otp: code, ...(name ? { name } : {}) });
+		const { error } = await auth().signIn.emailOtp({ email, otp: code });
 		return outcome(error, CODE_PROBLEMS);
 	});
 }

@@ -67,7 +67,7 @@ async function htmlTag(cookie?: string): Promise<string> {
 }
 
 describe("the colour-scheme action", () => {
-	it.each(["light", "dark"])("stores %s in the cookie for a year", async (scheme) => {
+	it.each(["light", "dark", "system"])("stores %s in the cookie for a year", async (scheme) => {
 		const response = await choose(`scheme=${scheme}`);
 
 		expect(response.status).toBe(303);
@@ -75,16 +75,6 @@ describe("the colour-scheme action", () => {
 		// `__Host-` needs Secure, Path=/ and no Domain. No HttpOnly: the value is no secret.
 		expect(response.headers.getSetCookie()).toEqual([
 			`__Host-color-scheme=${scheme}; Max-Age=31536000; Path=/; Secure; SameSite=Lax`,
-		]);
-	});
-
-	it("deletes the cookie for system", async () => {
-		const response = await choose("scheme=system");
-
-		expect(response.status).toBe(303);
-		expect(response.headers.get("Location")).toBe(SETTINGS);
-		expect(response.headers.getSetCookie()).toEqual([
-			"__Host-color-scheme=; Max-Age=0; Path=/; Secure; SameSite=Lax",
 		]);
 	});
 
@@ -119,14 +109,20 @@ describe("the colour-scheme action", () => {
 });
 
 describe("the colour scheme the server renders", () => {
-	it("follows the device when there is no cookie", async () => {
-		expect(await htmlTag()).toBe('<html lang="en">');
+	// Light is the product's face: nothing in the request can say what the
+	// device prefers, so a person who has chosen nothing is held to light.
+	it("is light when there is no cookie, whatever the device prefers", async () => {
+		expect(await htmlTag()).toBe('<html lang="en" data-color-scheme="light">');
 	});
 
-	it.each(["light", "dark"])("forces %s from the cookie", async (scheme) => {
+	it.each(["light", "dark"])("holds the page to %s from the cookie", async (scheme) => {
 		expect(await htmlTag(`__Host-color-scheme=${scheme}`)).toBe(
 			`<html lang="en" data-color-scheme="${scheme}">`,
 		);
+	});
+
+	it("follows the device for a person who chose that", async () => {
+		expect(await htmlTag("__Host-color-scheme=system")).toBe('<html lang="en">');
 	});
 
 	it("finds the cookie among others", async () => {
@@ -137,12 +133,30 @@ describe("the colour scheme the server renders", () => {
 
 	it.each([
 		["a value that is not a scheme", "__Host-color-scheme=sepia"],
-		["system, which is the absence of the cookie", "__Host-color-scheme=system"],
 		["an attempt to write markup", '__Host-color-scheme="><script>alert(1)</script>'],
 		["an empty value", "__Host-color-scheme="],
 		["a cookie of another name", "color-scheme=dark"],
-	])("ignores %s", async (_case, cookie) => {
-		expect(await htmlTag(cookie)).toBe('<html lang="en">');
+	])("is light for %s", async (_case, cookie) => {
+		expect(await htmlTag(cookie)).toBe('<html lang="en" data-color-scheme="light">');
+	});
+
+	it("names the colour of the browser's frame once for a held scheme, and for each where the page follows the device", async () => {
+		const themes = async (cookie?: string) => {
+			const response = await worker.fetch(
+				new Request(`${ORIGIN}/`, { headers: cookie ? { Cookie: cookie } : {} }),
+			);
+			return (await response.text()).match(/<meta name="theme-color"[^>]*>/g) ?? [];
+		};
+
+		const light = await themes();
+		expect(light).toHaveLength(1);
+		expect(light[0]).not.toContain("media=");
+		const dark = await themes("__Host-color-scheme=dark");
+		expect(dark).toHaveLength(1);
+		expect(dark[0]).not.toBe(light[0]);
+		const device = await themes("__Host-color-scheme=system");
+		expect(device).toHaveLength(2);
+		for (const each of device) expect(each).toContain("prefers-color-scheme");
 	});
 
 	it("renders the scheme on every page, the home page included", async () => {

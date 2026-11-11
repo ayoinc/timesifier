@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 
+import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import {
 	LINK,
@@ -191,10 +192,19 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 						it. Script on the page cannot read it.
 					</Row>
 					<Row term="__Host-color-scheme">
-						The word light or dark, when you choose a colour scheme in Settings. It is kept for one
-						year, and is not set while the scheme follows your device.
+						The word light, dark or system, once you choose a colour scheme in Settings. It is kept
+						for one year. Until you choose, it is not set and the pages are light.
 					</Row>
 				</Rows>
+				<p>
+					Two things are kept in your browser that are not cookies, both in the tab you are using
+					and nowhere else. The first is how far down each page you had scrolled, so that going
+					back returns you to the same place. The second is kept when you ask for a sign-in code:
+					your email address and the time, for {CODE_LIFETIME_SECONDS / 60} minutes, so that you
+					can leave for your mail, come back and type the code. Neither is sent to {host} or
+					anywhere else. The second is removed when you sign in, and when the{" "}
+					{CODE_LIFETIME_SECONDS / 60} minutes have passed.
+				</p>
 			</DocumentSection>
 
 			<DocumentSection id="how-long" title="How long it is kept">
