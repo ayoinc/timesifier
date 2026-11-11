@@ -57,9 +57,10 @@ Both remote databases were created on 2026-11-11 with `wrangler d1 create <name>
 One workflow, `.github/workflows/ci.yml`, does all of it.
 
 1. A pull request runs install with a frozen lockfile, typecheck, lint, tests, build, a secret scan and a dependency audit.
-2. When those pass, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
-3. Merging to `main` runs the same checks, then `wrangler deploy`, then the smoke test against production.
+2. When those pass, the migrations are applied to the preview database, the pull request gets a preview (`wrangler preview --name pr-<number>`), the smoke test runs against it, and its URL is posted as a comment. Closing the pull request deletes the preview.
+3. Merging to `main` runs the same checks, then applies the migrations to the production database, then `wrangler deploy`, then the smoke test against production.
 4. The smoke test is `scripts/smoke.sh`: the home page must answer 200 and contain the product name, and `www` must redirect to the apex. A failure fails the workflow; it does not roll back by itself.
+5. Migrations are applied before the new code is live, so each one must work with the code already running: add a column in one release, stop using the old one in the next, remove it in a third. All previews share one database, so a migration on an open pull request reaches the other previews too.
 
 Production is deployed only by the pipeline. The one exception was the first deploy on 2026-11-11, made from the owner's machine, because a token limited to one Worker cannot create that Worker.
 
