@@ -247,7 +247,8 @@ describe("the codes one address can be sent", () => {
 		).all<{ identifier: string; value: string }>();
 
 		expect(results).toHaveLength(2);
-		expect(JSON.stringify(results)).not.toMatch(/ada|example/i);
+		// Hex can spell "ada"; it cannot spell "@" or "example".
+		expect(JSON.stringify(results)).not.toMatch(/ada@|example/i);
 	});
 
 	it("does not count a request that Turnstile refused", async () => {
@@ -284,7 +285,7 @@ describe("a code is used in the browser that asked for it", () => {
 			"SameSite=Lax",
 			"Secure",
 		]);
-		expect(decodeURIComponent(nameAndValue)).not.toMatch(/ada|example/i);
+		expect(decodeURIComponent(nameAndValue)).not.toMatch(/ada@|example/i);
 	});
 
 	it("refuses a stranger's guesses with the answer a wrong code gets, and they use up none of the three attempts", async () => {
