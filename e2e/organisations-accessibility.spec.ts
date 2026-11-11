@@ -152,8 +152,6 @@ for (const viewport of [
 
 				test("the destinations still to be built, each with its empty sheet", async ({ page }) => {
 					for (const [id, heading] of [
-						["projects", "Projects"],
-						["clients", "Clients"],
 						["approvals", "Approvals"],
 						["reports", "Reports"],
 					] as const) {

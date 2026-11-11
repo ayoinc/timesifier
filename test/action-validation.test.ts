@@ -41,6 +41,10 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	// An invitation gives the role of a member or an admin; this is neither.
 	"routes/app/invitations": () =>
 		formFromAMember("/app/acme/team/invitations", "intent=invite&email=bob@example.com&role=owner"),
+	// A project is created, renamed, archived or restored; this asks to delete one.
+	"routes/app/projects": () => formFromAMember("/app/acme/projects", "intent=delete&projectId=p1"),
+	// A client's name is 1 to 120 characters; this is none.
+	"routes/app/clients": () => formFromAMember("/app/acme/clients", "intent=create&name="),
 	// An invitation is joined or declined; this asks for neither. The invitation
 	// is one the person could join, so only the input is wrong.
 	"routes/invitations.$id": async () => {

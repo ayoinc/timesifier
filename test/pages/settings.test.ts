@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { membershipOf } from "~/organisations/membership.server";
+import { periodContaining } from "~/periods/periods";
+import { zoneOfMember } from "~/time/zones.server";
 import { captureEmail, type Mailbox, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -6,6 +9,7 @@ import {
 	type Role,
 	row,
 	seedMembership,
+	seedTeam,
 	value,
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
@@ -310,5 +314,124 @@ describe("the colour scheme, which My account holds in an organisation", () => {
 		expect(response.headers.getSetCookie()).toEqual([
 			"__Host-color-scheme=dark; Max-Age=31536000; Path=/; Secure; SameSite=Lax",
 		]);
+	});
+});
+
+describe("the general settings: default time zone, week start and Clients (TS-048)", () => {
+	const organisationRow = () =>
+		row(
+			"select time_zone, week_starts_on, clients_enabled from organisations where id = ?",
+			acme.id,
+		);
+
+	it.each(["owner", "admin"] as const)(
+		"a %s sees them and changes each, and the page shows the new values",
+		async (role) => {
+			const who = role === "owner" ? ada : await memberOfAcme(role, "grace@example.com");
+			let text = textOf(await pageBody(await open(SETTINGS, who)));
+			expect(text).toContain("UTC");
+			expect(text).toContain("Monday");
+			expect(text).toContain("Clients");
+
+			for (const [fields, said] of [
+				[{ intent: "time-zone", timeZone: "America/New_York" }, "America/New York"],
+				[{ intent: "week-start", weekStartsOn: "7" }, "Weeks now start on Sunday."],
+				[{ intent: "clients" }, "Clients is off. Nothing was deleted"],
+			] as const) {
+				const answer = await outcome(await submit(SETTINGS, fields, who, { byScript: true }));
+				expect(answer.status).toBe(200);
+				expect(answer.said).toContain(said);
+			}
+			expect(await organisationRow()).toEqual({
+				time_zone: "America/New_York",
+				week_starts_on: 7,
+				clients_enabled: 0,
+			});
+			text = textOf(await pageBody(await open(SETTINGS, who)));
+			expect(text).toContain("America/New York");
+			expect(text).toContain("Sunday");
+
+			await submit(SETTINGS, { intent: "clients", clientsEnabled: "on" }, who, { byScript: true });
+			expect((await organisationRow())?.clients_enabled).toBe(1);
+		},
+	);
+
+	it("a member and a manager cannot change them: the page and its forms are 404, and nothing changes", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const mary = await memberOfAcme("member", "mary@example.com");
+		await seedTeam(acme.id, "Design", { members: [linus.user.id], managers: [mary.user.id] });
+
+		for (const who of [linus, mary]) {
+			expect((await open(SETTINGS, who)).status).toBe(404);
+			for (const fields of [
+				{ intent: "time-zone", timeZone: "Asia/Tokyo" },
+				{ intent: "week-start", weekStartsOn: "3" },
+				{ intent: "clients" },
+			] as Record<string, string>[]) {
+				expect((await submit(SETTINGS, fields, who, { byScript: true })).status).toBe(404);
+			}
+		}
+		expect(await organisationRow()).toEqual({
+			time_zone: "UTC",
+			week_starts_on: 1,
+			clients_enabled: 1,
+		});
+	});
+
+	it.each([
+		["an unknown zone", { intent: "time-zone", timeZone: "Mars/Olympus" }],
+		["a day that is no weekday", { intent: "week-start", weekStartsOn: "8" }],
+		["no day", { intent: "week-start", weekStartsOn: "0" }],
+	])("refuses %s with 400 and changes nothing", async (_, fields) => {
+		const response = await submit(SETTINGS, fields, ada, { byScript: true });
+		expect(response.status).toBe(400);
+		expect(await organisationRow()).toEqual({
+			time_zone: "UTC",
+			week_starts_on: 1,
+			clients_enabled: 1,
+		});
+	});
+
+	it("the week start is the one every period starts on", async () => {
+		await submit(SETTINGS, { intent: "week-start", weekStartsOn: "7" }, ada, { byScript: true });
+		const weekStartsOn = await value<number>(
+			"select week_starts_on from organisations where id = ?",
+			acme.id,
+		);
+		// 2026-11-11 is a Wednesday.
+		expect(periodContaining("2026-11-11", weekStartsOn ?? 0)).toEqual({
+			startsOn: "2026-11-08",
+			endsOn: "2026-11-14",
+		});
+	});
+
+	it("the default time zone is the zone of a person who has not chosen one", async () => {
+		await submit(SETTINGS, { intent: "time-zone", timeZone: "Asia/Tokyo" }, ada, {
+			byScript: true,
+		});
+		const membership = await membershipOf(
+			{ id: ada.user.id } as Parameters<typeof membershipOf>[0],
+			"acme",
+		);
+		expect(membership && (await zoneOfMember(membership))).toBe("Asia/Tokyo");
+	});
+
+	it("Clients off hides the link and 404s the page for everyone, and deletes nothing; on brings them back", async () => {
+		const grace = await memberOfAcme("admin", "grace@example.com");
+		await submit("/app/acme/clients", { intent: "create", name: "Globex" }, ada, {
+			byScript: true,
+		});
+		await submit(SETTINGS, { intent: "clients" }, ada, { byScript: true });
+
+		for (const who of [ada, grace]) {
+			const html = await pageBody(await open(SETTINGS, who));
+			expect(html).not.toMatch(/<a[^>]*href="\/app\/acme\/clients"/);
+			expect((await open("/app/acme/clients", who)).status).toBe(404);
+		}
+		expect(await value("select count(*) from clients")).toBe(1);
+
+		await submit(SETTINGS, { intent: "clients", clientsEnabled: "on" }, grace, { byScript: true });
+		expect(await pageBody(await open(SETTINGS, ada))).toMatch(/<a[^>]*href="\/app\/acme\/clients"/);
+		expect(textOf(await pageBody(await open("/app/acme/clients", ada)))).toContain("Globex");
 	});
 });

@@ -1,9 +1,12 @@
-import { useState } from "react";
-import { redirect } from "react-router";
+import { env } from "cloudflare:workers";
+import { useEffect, useState } from "react";
+import { redirect, useFetcher } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Select } from "~/components/Select";
+import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
 import { parseRequest } from "~/lib/validate";
 import { deleteOrganisation, renameOrganisation } from "~/organisations/api.server";
@@ -11,9 +14,14 @@ import { membershipContext } from "~/organisations/membership.server";
 import { NAME_MAX_LENGTH, Name, nameProblem } from "~/organisations/name";
 import { declined, done, refused } from "~/organisations/outcome.server";
 import { AS_ROLE } from "~/organisations/people";
+import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows } from "~/organisations/roles";
+import { WeekStart } from "~/periods/periods";
 import { APP_PATH, destination } from "~/shell/destinations";
 import { PageHeading, Section } from "~/shell/PageHeading";
+import { TimeZone } from "~/time/zones";
+import { WEEKDAYS, weekdayName, zoneLabel } from "~/workspace/general";
+import { changeGeneral, timeZones } from "~/workspace/general.server";
 
 import type { Route } from "./+types/settings";
 import { FormSheet } from "./FormSheet";
@@ -21,7 +29,9 @@ import { FormSheet } from "./FormSheet";
 // Workspace settings: the organisation on screen, which its owners and admins
 // manage for everyone in it (docs/navigation.md, "Workspace settings"). Only
 // they are shown it; anybody else gets 404 here (app/shell/destinations.ts).
-// The person's own account is on My account.
+// General holds its name, its default time zone, the day its weeks start on
+// and whether Clients is shown (TS-048). The person's own account is on My
+// account.
 
 const { label } = destination("settings");
 
@@ -32,35 +42,66 @@ export function meta() {
 /** The organisation and what the person's role lets them do to it. The checks on the layouts have already run. */
 export function loader({ context }: Route.LoaderArgs) {
 	const { organisation, role } = context.get(membershipContext);
+	const canChange = allows(role, { organization: ["update"] });
 	return {
 		organisation: {
 			name: organisation.name,
 			role,
-			canRename: allows(role, { organization: ["update"] }),
+			timeZone: organisation.timeZone,
+			weekStartsOn: organisation.weekStartsOn,
+			clientsEnabled: organisation.clientsEnabled,
+			canChange,
 			canDelete: allows(role, { organization: ["delete"] }),
 		},
+		// Only those who may choose a zone are sent the list.
+		zones: canChange ? timeZones() : [],
 	};
 }
 
 /** Each thing this page can ask for. A form says which with its `intent`. */
 const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("rename"), name: Name }),
+	z.object({ intent: z.literal("time-zone"), timeZone: TimeZone }),
+	z.object({ intent: z.literal("week-start"), weekStartsOn: WeekStart }),
+	// A switch sends its value only while it is on: no `clientsEnabled` is off.
+	z.object({ intent: z.literal("clients"), clientsEnabled: z.literal("on").optional() }),
 	// What the person typed to confirm. It is compared with the name; it is never used as one.
 	z.object({ intent: z.literal("delete"), confirmation: z.string().max(200) }),
 ]);
 
 /**
- * The organisation's name and its deletion, which the server allows by role.
- * The organisation acted on is the one in the address, as the layout read it;
- * no form names one.
+ * The organisation's general settings and its deletion, which the server
+ * allows by role. The organisation acted on is the one in the address, as the
+ * layout read it; no form names one.
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation } = context.get(membershipContext);
+	const { organisation, role } = context.get(membershipContext);
 	switch (input.intent) {
 		case "rename": {
 			const renamed = await renameOrganisation(request, organisation.id, input.name);
 			return renamed.ok ? done(`The organisation is now called ${input.name}.`) : refused(renamed);
+		}
+
+		case "time-zone":
+		case "week-start":
+		case "clients": {
+			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
+			if (input.intent === "time-zone") {
+				await changeGeneral(env.DB, organisation.id, { timeZone: input.timeZone });
+				return done(`The default time zone is now ${zoneLabel(input.timeZone)}.`);
+			}
+			if (input.intent === "week-start") {
+				await changeGeneral(env.DB, organisation.id, { weekStartsOn: input.weekStartsOn });
+				return done(`Weeks now start on ${weekdayName(input.weekStartsOn)}.`);
+			}
+			const clientsEnabled = input.clientsEnabled === "on";
+			await changeGeneral(env.DB, organisation.id, { clientsEnabled });
+			return done(
+				clientsEnabled
+					? "Clients is on. Everyone sees each project's client."
+					: "Clients is off. Nothing was deleted; turn it on to show them again.",
+			);
 		}
 
 		case "delete": {
@@ -74,13 +115,19 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 /** The sheets of this page. One is open at a time. */
-type Task = "rename" | "delete";
+type Task = "rename" | "time-zone" | "week-start" | "delete";
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-	const { organisation } = loaderData;
+	const { organisation, zones } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
+	const change = (to: Task, what: string) =>
+		organisation.canChange && (
+			<Button variant="text" aria-label={`Change ${what}`} onPress={() => setTask(to)}>
+				Change
+			</Button>
+		);
 
 	return (
 		<>
@@ -100,17 +147,33 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 				}
 				className="max-w-200"
 			>
-				<Ledger heading="Organisation name">
+				<Ledger heading="Organisation">
 					<LedgerRows>
 						<LedgerRow
 							title={<span className="wrap-anywhere">{organisation.name}</span>}
+							detail="Name"
 							action={
-								organisation.canRename && (
+								organisation.canChange && (
 									<Button variant="text" onPress={() => setTask("rename")}>
 										Rename
 									</Button>
 								)
 							}
+						/>
+						<LedgerRow
+							title={zoneLabel(organisation.timeZone)}
+							detail="Default time zone. A person's days are counted in it until they choose their own in My account."
+							action={change("time-zone", "the default time zone")}
+						/>
+						<LedgerRow
+							title={weekdayName(organisation.weekStartsOn)}
+							detail="Week starts on. Every timesheet week, and the period it is submitted in, starts on this day."
+							action={change("week-start", "the day weeks start on")}
+						/>
+						<ClientsRow
+							enabled={organisation.clientsEnabled}
+							canChange={organisation.canChange}
+							onDone={setSaid}
 						/>
 					</LedgerRows>
 				</Ledger>
@@ -157,6 +220,48 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
+				title="Change the default time zone"
+				intent="time-zone"
+				submitLabel="Save"
+				isOpen={task === "time-zone"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<p>
+					Everyone who has not chosen their own zone counts their days in this one. Times already
+					tracked stay as they are.
+				</p>
+				<Select
+					label="Default time zone"
+					name="timeZone"
+					options={zones.map((zone) => ({ id: zone, label: zoneLabel(zone) }))}
+					defaultValue={organisation.timeZone}
+					isRequired
+				/>
+			</FormSheet>
+
+			<FormSheet
+				title="Change the day weeks start on"
+				intent="week-start"
+				submitLabel="Save"
+				isOpen={task === "week-start"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<p>
+					Every timesheet week starts on this day, and so does each period people submit. Periods
+					already submitted keep their days.
+				</p>
+				<Select
+					label="Week starts on"
+					name="weekStartsOn"
+					options={[...WEEKDAYS]}
+					defaultValue={`${organisation.weekStartsOn}`}
+					isRequired
+				/>
+			</FormSheet>
+
+			<FormSheet
 				title={`Delete ${organisation.name}?`}
 				intent="delete"
 				submitLabel="Delete organisation"
@@ -180,5 +285,59 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 				/>
 			</FormSheet>
 		</>
+	);
+}
+
+/**
+ * Whether Clients is shown, a switch that takes effect at once. Off, nobody is
+ * shown Clients or a project's client; nothing is deleted (TS-048).
+ */
+function ClientsRow({
+	enabled,
+	canChange,
+	onDone,
+}: {
+	enabled: boolean;
+	canChange: boolean;
+	onDone: (said: string) => void;
+}) {
+	const fetcher = useFetcher<Outcome>();
+	// While the change is on its way, the switch shows what was asked for.
+	const asked = fetcher.formData?.get("intent") === "clients";
+	const on = asked ? fetcher.formData?.get("clientsEnabled") === "on" : enabled;
+	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
+	// The answer to one change is told once.
+	useEffect(() => {
+		if (answer?.ok) onDone(answer.said);
+	}, [answer, onDone]);
+
+	return (
+		<LedgerRow
+			title={
+				<Switch
+					isSelected={on}
+					isReadOnly={!canChange}
+					onChange={(selected) =>
+						fetcher.submit(
+							selected ? { intent: "clients", clientsEnabled: "on" } : { intent: "clients" },
+							{ method: "post" },
+						)
+					}
+				>
+					Clients
+				</Switch>
+			}
+			detail={
+				<>
+					Shows Clients to owners and admins, and each project's client to everyone. Turning it off
+					hides them and deletes nothing.
+					{answer && !answer.ok && (
+						<span role="alert" className="block text-error">
+							{answer.problem}
+						</span>
+					)}
+				</>
+			}
+		/>
 	);
 }
