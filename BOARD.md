@@ -33,7 +33,7 @@ Built in two passes. The first, the server, is merged: everything that needs no 
 Blocked on one criterion; the rest is merged.
 
 - [x] A workflow runs on every pull request and on `main`: install with a frozen lockfile, typecheck, lint, tests, build. _Pull request #2: job `checks` passed in 46 s._
-- [x] A secret scan and `pnpm audit --audit-level=high` run in the workflow, and a finding fails it. _Job `secret scan` passed; the audit is the last step of `checks`. Neither has been shown failing on a real finding._
+- [x] A secret scan and `pnpm audit --audit-level=high` run in the workflow, and a finding fails it. _Job `secret scan` passed; the audit is the last step of `checks`. The audit was shown failing on a real finding on 2026-11-11: with the gate at moderate it exited 1 on advisory GHSA-67mh-4wv8-2f99 (`esbuild` 0.18, under `drizzle-kit`), and 0 once an override removed that version. The gate has been moderate and above since then. The secret scan has not been shown failing._
 - [x] Every third-party action is pinned to a full commit SHA, and the workflow's default `permissions` are `contents: read`. _See `.github/workflows/ci.yml`._
 - [x] A throwaway pull request with a failing test shows a failed check; it is then closed. _Pull request #3: `checks` failed in 35 s; closed and its branch deleted._
 - [ ] `main` is protected: the check must pass before merging. _Blocked: GitHub answered "Upgrade to GitHub Pro or make this repository public to enable this feature." The owner decides. Until then, TS-003 deploys only after `checks` passes in the same workflow run._
