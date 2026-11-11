@@ -375,3 +375,62 @@ test("Tooltip shows on keyboard focus and on hover, describes its control, and h
 	await button.hover();
 	await expect(tooltip).toBeVisible();
 });
+
+test("Digits is read as one time, is not announced as it changes, and redraws only the digit that changed", async ({
+	page,
+}) => {
+	const timer = gallery(page).getByRole("timer");
+	// What is drawn. The same time is there once more, whole, for a screen reader.
+	const shown = timer.locator('[aria-hidden="true"]');
+	const add = gallery(page).getByRole("button", { name: "Add a second" });
+	await expect(shown).toHaveText("0:59:58");
+	await expect(timer).toHaveAccessibleName(/./);
+	// Nothing reads a timer out every second.
+	expect(await timer.evaluate((element) => element.closest("[aria-live]"))).toBeNull();
+
+	// Each digit on the page is marked, so that one drawn again is told from one that stayed.
+	const mark = () =>
+		timer.evaluate((element) => {
+			for (const digit of element.querySelectorAll("[aria-hidden] > span")) {
+				digit.setAttribute("data-seen", "");
+			}
+		});
+	const drawnAgain = () =>
+		timer.evaluate((element) =>
+			[...element.querySelectorAll("[aria-hidden] > span")]
+				.filter((digit) => !digit.hasAttribute("data-seen"))
+				.map((digit) => digit.textContent),
+		);
+
+	await mark();
+	await tabTo(page, add);
+	await page.keyboard.press("Enter");
+	await expect(shown).toHaveText("0:59:59");
+	expect(await drawnAgain()).toEqual(["9"]);
+
+	// On the hour every digit but the first turns over.
+	await mark();
+	await page.keyboard.press("Enter");
+	await expect(shown).toHaveText("1:00:00");
+	expect(await drawnAgain()).toEqual(["1", "0", "0", "0", "0"]);
+});
+
+test("Ledger is a list of rows under a heading: a row is read as its title, its detail and its figure", async ({
+	page,
+}) => {
+	const rows = gallery(page).getByRole("listitem").filter({ hasText: "Receipts" });
+
+	await expect(rows).toHaveCount(1);
+	await expect(rows).toContainText("Admin");
+	await expect(rows).toContainText("0:35");
+	// The total is on the sheet, after its rows.
+	const total = gallery(page).getByText("1:50", { exact: true });
+	await expect(total).toBeVisible();
+	expect(
+		await total.evaluate(
+			(element, row) =>
+				Boolean(row && element.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_PRECEDING),
+			await rows.elementHandle(),
+		),
+	).toBe(true);
+});

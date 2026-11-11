@@ -533,3 +533,26 @@ body {
 		animation-name: shell-fade-in;
 	}
 }
+
+/*
+ * A time that changes while it is looked at (app/components/Digits.tsx). A digit
+ * that changes arrives from below, as a clock's does; a digit that stays is the
+ * same element and does not move. With reduced motion the digit simply changes.
+ */
+.tick-digit {
+	display: inline-block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.tick-digit {
+		animation: tick-in var(--md-sys-motion-duration-short4)
+			var(--md-sys-motion-easing-emphasized-decelerate);
+	}
+}
+
+@keyframes tick-in {
+	from {
+		opacity: 0;
+		transform: translateY(40%);
+	}
+}
