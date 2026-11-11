@@ -44,11 +44,26 @@ const PERMISSIONS_POLICY = [
 	"publickey-credentials-create=(self)",
 ].join(", ");
 
+/**
+ * The `<style>` elements React Aria inserts from script, each allowed by the
+ * SHA-256 hash of its exact text and by nothing else. They are listed in
+ * docs/security.md; test/node/react-aria-styles.test.ts derives them from the
+ * installed library and fails when this list and the library disagree.
+ */
+export const REACT_ARIA_STYLE_HASHES = [
+	// usePress: `touch-action` on pressable elements, so a tap is not delayed.
+	"sha256-38RhXrc7EdReTKsOm23ZPOCUgniTUUcjky8QOOrQx6o=",
+	// usePreventScroll, iOS only: `overscroll-behavior: contain` while an overlay is open.
+	"sha256-gYiS/BvZvRcK27JIXTuwhZ3hs2+VJ1X+2gUlE+farlg=",
+];
+
 function contentSecurityPolicy(nonce: string): string {
+	const hashes = REACT_ARIA_STYLE_HASHES.map((hash) => `'${hash}'`).join(" ");
 	// The one relaxation, and only under the dev server: Vite injects stylesheets
 	// as <style> elements so it can hot-reload them. Its WebSocket is same-origin,
-	// which `connect-src 'self'` already allows.
-	const styleSrc = import.meta.env.DEV ? "'self' 'unsafe-inline'" : "'self'";
+	// which `connect-src 'self'` already allows. A browser ignores `'unsafe-inline'`
+	// when the directive also carries a hash, so the hashes are left out there.
+	const styleSrc = import.meta.env.DEV ? "'self' 'unsafe-inline'" : `'self' ${hashes}`;
 
 	return [
 		"default-src 'self'",
