@@ -85,7 +85,8 @@ describe.each(Object.entries(MESSAGES))("%s, in the frame", (_, message) => {
 		);
 		// A cell that holds type on a ground of its own names that ground.
 		for (const cell of message.html.match(/<(?:td|a)\b[^>]*>/g) ?? []) {
-			if (cell.includes(`color:${EMAIL_COLOURS.onAction}`)) {
+			// The text colour, not the ground: `background-color` also ends in `color:`.
+			if (new RegExp(`(?<!-)color:${EMAIL_COLOURS.onAction}`).test(cell)) {
 				expect(cell).toContain(`background-color:${EMAIL_COLOURS.action}`);
 			}
 		}
@@ -184,7 +185,7 @@ describe("the frame", () => {
 			reason: markup,
 		});
 
-		expect(html).not.toContain("<b");
+		expect(html).not.toContain("<b title");
 		expect(html.split("&lt;b title=&quot;x&quot;&gt;Tom&#39;s &amp; Co&lt;/b&gt;")).toHaveLength(8);
 		expect(html).toContain(`href="/a?b=&quot;c&quot;&amp;d"`);
 		expect(text.split(markup)).toHaveLength(7);

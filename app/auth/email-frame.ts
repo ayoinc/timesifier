@@ -67,7 +67,7 @@ const HTML_ENTITIES: Record<string, string> = {
 };
 
 /** Text made safe to place in HTML. Every word of a message passes through it. */
-function escapeHtml(text: string): string {
+function escapeHtmlText(text: string): string {
 	return text.replace(/[&<>"']/g, (character) => HTML_ENTITIES[character] ?? character);
 }
 
@@ -97,20 +97,20 @@ export type Message = {
 
 function partAsHtml(part: string | Figure | Action): string {
 	if (typeof part === "string") {
-		return `<p style="margin:16px 0 0;${BODY}">${escapeHtml(part)}</p>`;
+		return `<p style="margin:16px 0 0;${BODY}">${escapeHtmlText(part)}</p>`;
 	}
 	if ("figure" in part) {
 		return (
 			`<table ${TABLE} width="100%" style="margin:24px 0 0;border:2px solid ${COLOUR.ink};border-radius:8px;background-color:${COLOUR.paper};">` +
-			`<tr><td align="left" style="padding:12px 20px 0;${LABEL}">${escapeHtml(part.label)}</td></tr>` +
-			`<tr><td align="left" style="padding:4px 20px 12px;${FIGURE}letter-spacing:4px;font-variant-numeric:tabular-nums;white-space:nowrap;-webkit-user-select:all;user-select:all;">${escapeHtml(part.figure)}</td></tr>` +
+			`<tr><td align="left" style="padding:12px 20px 0;${LABEL}">${escapeHtmlText(part.label)}</td></tr>` +
+			`<tr><td align="left" style="padding:4px 20px 12px;${FIGURE}letter-spacing:4px;font-variant-numeric:tabular-nums;white-space:nowrap;-webkit-user-select:all;user-select:all;">${escapeHtmlText(part.figure)}</td></tr>` +
 			"</table>"
 		);
 	}
 	return (
 		`<table ${TABLE} style="margin:24px 0 0;"><tr>` +
 		`<td bgcolor="${COLOUR.action}" style="background-color:${COLOUR.action};border-radius:4px;">` +
-		`<a href="${escapeHtml(part.link)}" style="display:inline-block;padding:10px 22px;border:2px solid ${COLOUR.action};${ACTION}background-color:${COLOUR.action};border-radius:4px;text-decoration:none;">${escapeHtml(part.action)}</a>` +
+		`<a href="${escapeHtmlText(part.link)}" style="display:inline-block;padding:10px 22px;border:2px solid ${COLOUR.action};${ACTION}background-color:${COLOUR.action};border-radius:4px;text-decoration:none;">${escapeHtmlText(part.action)}</a>` +
 		"</td></tr></table>"
 	);
 }
@@ -134,7 +134,7 @@ export function compose({ subject, heading, parts, reason }: Message): Omit<Emai
 		`<meta name="viewport" content="width=device-width,initial-scale=1">` +
 		// The message is drawn in the light scheme and says so, for the programs that ask.
 		`<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">` +
-		`<title>${escapeHtml(subject)}</title></head>` +
+		`<title>${escapeHtmlText(subject)}</title></head>` +
 		`<body style="margin:0;padding:0;background-color:${COLOUR.paper};">` +
 		`<table ${TABLE} width="100%" bgcolor="${COLOUR.paper}" style="background-color:${COLOUR.paper};">` +
 		// The amber band, with nothing on it; then the name on paper over the ink rule.
@@ -144,9 +144,9 @@ export function compose({ subject, heading, parts, reason }: Message): Omit<Emai
 		"</td></tr>" +
 		`<tr><td align="center" bgcolor="${COLOUR.paper}" style="padding:0 20px;background-color:${COLOUR.paper};">` +
 		`<table ${COLUMN_TABLE}><tr><td align="left" style="padding:32px 0 48px;">` +
-		`<h1 style="margin:0;${HEADING}">${escapeHtml(heading)}</h1>` +
+		`<h1 style="margin:0;${HEADING}">${escapeHtmlText(heading)}</h1>` +
 		parts.map(partAsHtml).join("") +
-		`<p style="margin:40px 0 0;padding:16px 0 0;border-top:1px solid ${COLOUR.rule};${REASON}">${escapeHtml(reason)}</p>` +
+		`<p style="margin:40px 0 0;padding:16px 0 0;border-top:1px solid ${COLOUR.rule};${REASON}">${escapeHtmlText(reason)}</p>` +
 		"</td></tr></table>" +
 		"</td></tr></table></body></html>";
 

@@ -125,7 +125,7 @@ function pen(scheme: Scheme): Pen {
 	};
 }
 
-const escape = (words: string) =>
+const escapeSvgText = (words: string) =>
 	words.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 interface TextOptions {
@@ -147,9 +147,9 @@ function line(
 	const y = top + TYPE[role].line / 2;
 	const body =
 		typeof words === "string"
-			? escape(words)
+			? escapeSvgText(words)
 			: words
-					.map(([part, colour]) => `<tspan fill="${p.colour(colour)}">${escape(part)}</tspan>`)
+					.map(([part, colour]) => `<tspan fill="${p.colour(colour)}">${escapeSvgText(part)}</tspan>`)
 					.join("");
 	return (
 		`<text x="${x}" y="${y}" class="${role}" fill="${p.colour(fill)}" text-anchor="${anchor}"` +
@@ -918,7 +918,7 @@ function drawing(title: string, scheme: Scheme, windows: Window[]): string {
 	});
 	return (
 		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="title">` +
-		`<title id="title">${escape(title)}</title><style>${STYLE}</style>` +
+		`<title id="title">${escapeSvgText(title)}</title><style>${STYLE}</style>` +
 		`<rect width="${width}" height="${height}" fill="${p.colour("surface-container-high")}"/>` +
 		`${body.join("")}</svg>\n`
 	);
