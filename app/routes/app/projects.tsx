@@ -12,18 +12,23 @@ import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
+import { isAdministrator, timeScopeOf } from "~/organisations/access";
+import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound, viewerOf } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
-import { NO_CLIENT, onlyTabChanged } from "~/projects/projects";
+import { groupedByClient, NO_CLIENT, onlyTabChanged, searchIn } from "~/projects/projects";
 import {
 	changeProject,
 	createProject,
 	listProjects,
 	type ProjectResult,
+	projectHours,
 	setProjectArchived,
 } from "~/projects/projects.server";
+import { SearchForm } from "~/projects/SearchForm";
+import { hoursAndMinutes } from "~/reports/format";
 import { canSee, destination } from "~/shell/destinations";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 
@@ -35,7 +40,10 @@ import { useOrganisation } from "./useOrganisation";
 // sees every project, active and archived, and creates, renames, archives and
 // restores them; none is ever deleted. A project's client is shown while the
 // organisation has Clients turned on; only those who are shown Clients, its
-// owners and admins, give a project one (TS-011b).
+// owners and admins, give a project one (TS-011b). The list is searched by a
+// project's or its client's name, grouped under the clients, and each project
+// shows the hours tracked on it to date by the people whose time the viewer
+// may see (TS-057).
 
 const { label } = destination("projects");
 
@@ -43,21 +51,39 @@ export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
-/** Every project, and the clients a project may be given when the person may give one. */
-export async function loader({ context }: Route.LoaderArgs) {
+/** Whose hours the page shows: everyone's, the viewer's and their teams', or the viewer's own. */
+export type HoursOf = "everyone" | "teams" | "own";
+
+/**
+ * Every project, or those the address searches for, each with its hours to
+ * date; and the clients a project may be given when the person may give one.
+ */
+export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const scope = organisationScope(env.DB, membership.organisation.id);
 	const showsClients = membership.organisation.clientsEnabled;
 	const givesClients = canSee(viewerOf(membership), "clients");
-	const [projects, clients] = await Promise.all([
-		listProjects(scope),
+	const query = searchIn(new URL(request.url).searchParams);
+	const access = await accessOf(membership);
+	const [projects, hours, clients] = await Promise.all([
+		listProjects(scope, { query, byClient: showsClients }),
+		projectHours(scope, timeScopeOf(access), Date.now()),
 		givesClients ? activeClients(scope) : [],
 	]);
+	const hoursOf: HoursOf = isAdministrator(access.role)
+		? "everyone"
+		: access.managed.size > 0
+			? "teams"
+			: "own";
 	return {
 		projects: projects.map((project) => ({
 			...project,
 			client: showsClients ? project.client : null,
+			hours: hoursAndMinutes(hours.get(project.id) ?? 0),
 		})),
+		query,
+		showsClients,
+		hoursOf,
 		clients: clients.map(({ id, name }) => ({ id, name })),
 		givesClients,
 	};
@@ -144,8 +170,16 @@ type Project = Route.ComponentProps["loaderData"]["projects"][number];
 /** The sheets of this page. One is open at a time. */
 type Task = "create" | "rename" | "archive" | "restore";
 
+/** The sentence that says whose hours a project's figure adds up. */
+const HOURS_SAID: Record<HoursOf, string> = {
+	everyone: "Each shows the hours tracked on it to date, a running timer included.",
+	teams:
+		"Each shows the hours you and the people in your teams have tracked on it to date, a running timer included.",
+	own: "Each shows the hours you have tracked on it to date, a running timer included.",
+};
+
 export default function Projects({ loaderData }: Route.ComponentProps) {
-	const { projects, clients, givesClients } = loaderData;
+	const { projects, clients, givesClients, query, showsClients, hoursOf } = loaderData;
 	const organisation = useOrganisation();
 
 	const [task, setTask] = useState<Task | null>(null);
@@ -159,51 +193,67 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 
 	const create = <Button onPress={() => setTask("create")}>Create project</Button>;
 
-	const rows = (shown: Project[], archived: boolean) =>
-		shown.length === 0 ? (
-			<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
-				{archived
-					? "No archived projects. A project you archive is kept here, with its time, and can be restored."
-					: "No active projects. Restore one from Archived, or create one."}
-			</p>
-		) : (
-			<LedgerRows label={archived ? "Archived projects" : "Active projects"}>
-				{shown.map((each) => (
-					<LedgerRow
-						key={each.id}
-						title={<span className="wrap-anywhere">{each.name}</span>}
-						detail={
-							each.client && (
-								<span className="wrap-anywhere">
-									{each.client.name}
-									{each.client.archived && " (archived client)"}
-								</span>
-							)
-						}
-						action={
-							<MenuTrigger>
-								<Button variant="text" aria-label={`Actions for ${each.name}`}>
-									Actions
-								</Button>
-								<Menu
-									onAction={(chosen) => {
-										setProject(each);
-										setTask(chosen === "rename" ? "rename" : archived ? "restore" : "archive");
-									}}
-								>
-									<MenuItem id="rename">{editWord}</MenuItem>
-									{archived ? (
-										<MenuItem id="restore">Restore</MenuItem>
-									) : (
-										<MenuItem id="archive">Archive</MenuItem>
-									)}
-								</Menu>
-							</MenuTrigger>
-						}
-					/>
-				))}
-			</LedgerRows>
-		);
+	const list = (shown: Project[], archived: boolean, label: string) => (
+		<LedgerRows label={label}>
+			{shown.map((each) => (
+				<LedgerRow
+					key={each.id}
+					title={<span className="wrap-anywhere">{each.name}</span>}
+					value={each.hours}
+					action={
+						<MenuTrigger>
+							<Button variant="text" aria-label={`Actions for ${each.name}`}>
+								Actions
+							</Button>
+							<Menu
+								onAction={(chosen) => {
+									setProject(each);
+									setTask(chosen === "rename" ? "rename" : archived ? "restore" : "archive");
+								}}
+							>
+								<MenuItem id="rename">{editWord}</MenuItem>
+								{archived ? (
+									<MenuItem id="restore">Restore</MenuItem>
+								) : (
+									<MenuItem id="archive">Archive</MenuItem>
+								)}
+							</Menu>
+						</MenuTrigger>
+					}
+				/>
+			))}
+		</LedgerRows>
+	);
+
+	const rows = (shown: Project[], archived: boolean) => {
+		const listName = archived ? "Archived projects" : "Active projects";
+		if (shown.length === 0) {
+			return (
+				<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
+					{query !== ""
+						? `No ${archived ? "archived" : "active"} project has “${query}” in its name${showsClients ? " or its client’s" : ""}.`
+						: archived
+							? "No archived projects. A project you archive is kept here, with its time, and can be restored."
+							: "No active projects. Restore one from Archived, or create one."}
+				</p>
+			);
+		}
+		// While Clients is off no project shows a client, so there are no groups.
+		if (!showsClients) return list(shown, archived, listName);
+		return groupedByClient(shown).map(({ client, projects: inGroup }) => {
+			const name = client
+				? `${client.name}${client.archived ? " (archived client)" : ""}`
+				: "No client";
+			return (
+				<section key={client?.id ?? NO_CLIENT} className="border-t border-outline-variant">
+					<h2 className="wrap-anywhere px-4 pt-3 text-title-small text-on-surface-variant @sm:px-5">
+						{name}
+					</h2>
+					{list(inGroup, archived, `${listName}: ${name}`)}
+				</section>
+			);
+		});
+	};
 
 	const active = projects.filter((each) => !each.archived);
 	const archived = projects.filter((each) => each.archived);
@@ -223,7 +273,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
 				What everyone in {organisation.name} tracks time against. Anyone here can add one, rename
-				it, or archive it when the work is done.
+				it, or archive it when the work is done. {HOURS_SAID[hoursOf]}
 			</PageLead>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
@@ -231,7 +281,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			</p>
 
 			<div className="mt-10 max-w-200">
-				{projects.length === 0 ? (
+				{projects.length === 0 && query === "" ? (
 					<Ledger heading="Projects" note={0}>
 						<div className="flex flex-col items-start gap-4 border-t border-outline-variant px-4 py-6 @sm:px-5">
 							<h2 className="text-title-large">No projects yet</h2>
@@ -245,6 +295,13 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 				) : (
 					<>
 						{create}
+						<div className="mt-6">
+							<SearchForm
+								name="Search projects"
+								label={showsClients ? "Search by project or client name" : "Search by project name"}
+								submitLabel="Search"
+							/>
+						</div>
 						<div className="mt-6">
 							<ArchiveTabs
 								label="Projects"

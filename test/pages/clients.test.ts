@@ -200,3 +200,55 @@ describe("the page", () => {
 		expect(projects).toContain("Globex (archived client)");
 	});
 });
+
+describe("filter by name (TS-057)", () => {
+	const filtered = async (query: string, extra = "") =>
+		textOf(
+			mainOf(await pageBody(await open(`${CLIENTS}?q=${encodeURIComponent(query)}${extra}`, ada))),
+		);
+
+	beforeEach(async () => {
+		const globex = await create("Globex Corporation");
+		await create("Initech");
+		await create("Umbrella");
+		await send({ intent: "create", name: "Website", clientId: globex }, ada, PROJECTS);
+		await send({ intent: "archive", clientId: await clientId("Umbrella") });
+	});
+
+	it("keeps the clients whose name has the words, in any letters", async () => {
+		const text = await filtered("GLOBEX");
+		expect(text).toContain("Globex Corporation");
+		expect(text).toContain("Website");
+		expect(text).not.toContain("Initech");
+	});
+
+	it("filters the archived tab too, from the address", async () => {
+		expect(await filtered("umb", "&show=archived")).toContain("Umbrella");
+		expect(await filtered("glob", "&show=archived")).toContain(
+			"No archived client has “glob” in its name.",
+		);
+	});
+
+	it("matches no project name, only the client's", async () => {
+		const text = await filtered("website");
+		expect(text).not.toContain("Globex");
+		expect(text).toContain("No active client has “website” in its name.");
+		expect(text).toContain("Create client");
+	});
+
+	it("shows the words in the field, and every client when there are none", async () => {
+		const html = await pageBody(await open(`${CLIENTS}?q=ini`, ada));
+		expect(html).toMatch(/<form[^>]*role="search"[^>]*aria-label="Filter clients"/);
+		expect(html.match(/<input[^>]*name="q"[^>]*>/)?.[0]).toContain('value="ini"');
+		const all = await filtered("  ");
+		expect(all).toContain("Globex Corporation");
+		expect(all).toContain("Initech");
+	});
+
+	it("never shows a client of another organisation", async () => {
+		const grace = await person(mailbox, "grace@example.com");
+		await createOrganisation(grace.cookie, "Hooli");
+		await send({ intent: "create", name: "Globex Hooli" }, grace, "/app/hooli/clients");
+		expect(await filtered("globex")).not.toContain("Globex Hooli");
+	});
+});

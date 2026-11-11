@@ -2,6 +2,7 @@ import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import type { OrganisationScope } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
+import { nameHas } from "~/projects/search.server";
 
 /**
  * Whom an organisation's projects are for (TS-011b). Owners and admins keep
@@ -16,10 +17,16 @@ export const CLIENT_NAME_TAKEN = "A client with this name already exists.";
 /** What a write answered: the client's name as stored, a sentence for the person, or null for no such client here. */
 export type ClientResult = { ok: true; name: string } | { ok: false; problem: string } | null;
 
-/** Every client of the organisation, active and archived, by name, each with its projects by name. */
-export async function listClients(scope: OrganisationScope) {
+/**
+ * Every client of the organisation, active and archived, by name, each with
+ * its projects by name; those whose name has the words typed in the filter,
+ * when there are some, narrowed in SQL (TS-057).
+ */
+export async function listClients(scope: OrganisationScope, query: string) {
 	const [clients, projects] = await Promise.all([
-		scope.clients.select(undefined, { orderBy: (c) => [asc(c.nameKey)] }),
+		scope.clients.select(nameKey(query) === "" ? undefined : (c) => nameHas(c.nameKey, query), {
+			orderBy: (c) => [asc(c.nameKey)],
+		}),
 		scope.projects.select((p) => isNotNull(p.clientId), { orderBy: (p) => [asc(p.nameKey)] }),
 	]);
 	return clients.map((client) => ({

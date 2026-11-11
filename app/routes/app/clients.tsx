@@ -20,7 +20,8 @@ import { parseRequest } from "~/lib/validate";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
-import { onlyTabChanged } from "~/projects/projects";
+import { onlyTabChanged, searchIn } from "~/projects/projects";
+import { SearchForm } from "~/projects/SearchForm";
 import { destination } from "~/shell/destinations";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 
@@ -33,7 +34,8 @@ import { useOrganisation } from "./useOrganisation";
 // nobody else is: the layout answers them 404, actions included
 // (docs/navigation.md). They create, rename, archive and restore clients, and
 // see each client's projects; a client is never deleted. An archived client is
-// offered to no project, and the projects that have it keep it.
+// offered to no project, and the projects that have it keep it. The list is
+// filtered by a client's name, in the address (TS-057).
 
 const { label } = destination("clients");
 
@@ -41,10 +43,12 @@ export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
-/** Every client, active and archived, each with its projects. */
-export async function loader({ context }: Route.LoaderArgs) {
+/** Every client, active and archived, or those whose name has the words in the address, each with its projects. */
+export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
-	return { clients: await listClients(organisationScope(env.DB, membership.organisation.id)) };
+	const query = searchIn(new URL(request.url).searchParams);
+	const scope = organisationScope(env.DB, membership.organisation.id);
+	return { clients: await listClients(scope, query), query };
 }
 
 /** Moving between the tabs reads nothing again: the loader sent both lists. */
@@ -111,7 +115,7 @@ type Client = Route.ComponentProps["loaderData"]["clients"][number];
 type Task = "create" | "rename" | "archive" | "restore";
 
 export default function Clients({ loaderData }: Route.ComponentProps) {
-	const { clients } = loaderData;
+	const { clients, query } = loaderData;
 	const organisation = useOrganisation();
 
 	const [task, setTask] = useState<Task | null>(null);
@@ -126,9 +130,11 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 	const rows = (shown: Client[], archived: boolean) =>
 		shown.length === 0 ? (
 			<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
-				{archived
-					? "No archived clients. A client you archive is kept here, with its projects, and can be restored."
-					: "No active clients. Restore one from Archived, or create one."}
+				{query !== ""
+					? `No ${archived ? "archived" : "active"} client has “${query}” in its name.`
+					: archived
+						? "No archived clients. A client you archive is kept here, with its projects, and can be restored."
+						: "No active clients. Restore one from Archived, or create one."}
 			</p>
 		) : (
 			<LedgerRows label={archived ? "Archived clients" : "Active clients"}>
@@ -188,7 +194,7 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 			</p>
 
 			<div className="mt-10 max-w-200">
-				{clients.length === 0 ? (
+				{clients.length === 0 && query === "" ? (
 					<Ledger heading="Clients" note={0}>
 						<div className="flex flex-col items-start gap-4 border-t border-outline-variant px-4 py-6 @sm:px-5">
 							<h2 className="text-title-large">No clients yet</h2>
@@ -202,6 +208,13 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 				) : (
 					<>
 						{create}
+						<div className="mt-6">
+							<SearchForm
+								name="Filter clients"
+								label="Filter by client name"
+								submitLabel="Filter"
+							/>
+						</div>
 						<div className="mt-6">
 							<ArchiveTabs
 								label="Clients"

@@ -25,9 +25,10 @@ async function ownNewOrganisation(page: Page): Promise<string> {
 	return (await createOrganisation(page)).slug;
 }
 
-async function expectNoProblems(page: Page, heading: string) {
+/** `unmeasurable`: what axe may leave unmeasured, such as a filled list's empty search field. */
+async function expectNoProblems(page: Page, heading: string, unmeasurable: string[] = []) {
 	await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
-	expect(await problems(page), `problems in "${heading}"`).toEqual([]);
+	expect(await problems(page, unmeasurable), `problems in "${heading}"`).toEqual([]);
 }
 
 async function expectNoProblemsInSheet(page: Page, sheet: Locator, text: Locator) {
@@ -84,7 +85,7 @@ for (const viewport of [
 				await expectNoProblems(page, "Projects");
 
 				await createThrough(page, "project", "Design");
-				await expectNoProblems(page, "Projects");
+				await expectNoProblems(page, "Projects", [EMPTY_INPUT]);
 
 				await page.getByRole("button", { name: "Create project" }).click();
 				const creating = page.getByRole("dialog", { name: "Create a project" });
@@ -102,7 +103,7 @@ for (const viewport of [
 				await page.getByRole("tab", { name: "Archived" }).click();
 				await expect(page).toHaveURL(/\?show=archived$/);
 				await expect(page.getByRole("list", { name: "Archived projects" })).toContainText("Design");
-				await expectNoProblems(page, "Projects");
+				await expectNoProblems(page, "Projects", [EMPTY_INPUT]);
 			});
 
 			test("Clients and Workspace settings, with their sheets", async ({ page }) => {
@@ -111,7 +112,7 @@ for (const viewport of [
 				await expect(page.getByRole("heading", { level: 2, name: "No clients yet" })).toBeVisible();
 				await expectNoProblems(page, "Clients");
 				await createThrough(page, "client", "Globex");
-				await expectNoProblems(page, "Clients");
+				await expectNoProblems(page, "Clients", [EMPTY_INPUT]);
 
 				await openShell(page, destinationPath(slug, "settings"));
 				await expectNoProblems(page, "Workspace settings");
