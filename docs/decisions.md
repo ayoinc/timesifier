@@ -29,7 +29,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 21  | Route transitions   | React's `<ViewTransition>`, not React Router's `viewTransition` props (refines 10)                                                 | Preparer                           |
 | 22  | Sign-in code        | Works only in the browser that asked for it                                                                                        | Card TS-027, after its review      |
 | 23  | Passkeys            | None: the emailed code is the one way to sign up and sign in (amends 8 and 22)                                                     | Owner                              |
-| 24  | Visual direction    | Seed `#FFD400`, fidelity scheme; Sofia Sans in two widths, self-hosted (replaces 16)                                               | Preparer, for the owner to confirm |
+| 24  | Visual direction    | Seed `#FEAD05` and ink `#252A2F`, the mark's two colours, fidelity scheme; Sofia Sans in two widths, self-hosted (replaces 16)     | Preparer, for the owner to confirm |
 | 27  | Lock-out by code    | Codes counted apart for browsers that have signed in as the address; their code is theirs alone (narrows the gap of 23, amends 22) | Owner                              |
 
 ## Evidence
@@ -263,6 +263,22 @@ What was removed: the passkey plugin and `@better-auth/passkey`; its six endpoin
 
 Bringing passkeys back needs a new entry that names this one, the plugin and the table again, and the two permissions.
 
+### 24. The visual direction: a departure sheet
+
+Replaces entry 16. The owner's verdict on the first release of the interface was that it worked but did not look like a designed product. `docs/design-direction.md` is the answer: who the product is for, the feeling, and what the design refuses to do. It changes values, not the system: the tokens still come from one seed through `scripts/tokens.ts`, and the contrast test still passes with no adjustment.
+
+- **Seed colour, fidelity scheme.** First `#FFD400`, a lemon yellow. The tonal spot scheme mutes any seed to a pastel; the fidelity scheme keeps the seed itself as `primary-container` in both schemes, which is what a yellow sheet needs. Material's own `primary` for a yellow seed is an olive by day and a cream by night, so `PLACED_ROLES` in `scripts/tokens.ts` places `primary` and `on-primary` on other Material roles of the same scheme (ink and yellow), and adds three roles for the sheet. `on-secondary-container` is placed too: Material's measures 4.55:1 at rest and 4.02:1 beneath a pressed state layer, which the accessibility scan of the component gallery refuses. Material's tertiary for this seed is a cyan; the design has one accent, so each tertiary role takes the value of its secondary twin. Every role is still derived from the seed, and the contrast test covers each.
+- **Sofia Sans and Sofia Sans Condensed** (Lettersoup, SIL Open Font License 1.1), variable, weight axis, Latin and Latin Extended. One family in two widths, as a timetable is set. The files are copied from the Fontsource packages (5.3.0) into `app/fonts/`, so the two packages are not dependencies; `@fontsource-variable/roboto-flex` is removed.
+- **Corners of 2 to 24px** on Material's step names.
+
+| Option                                  | Evidence                                                                                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Yellow sheet, condensed grotesque       | Specific to keeping time: the reference is a timetable. Amber with charcoal type measures 7.7:1. No other time tracker on Mobbin on 2026-11-11 used it. |
+| Keep indigo and Roboto Flex, add a page | The least work. It is the look of a default Material application, which is the look the owner rejected.                                                 |
+| Warm neutral with a serif               | Reads as a writing or note-taking product, and is the most common look of the new landing pages of 2026.                                                |
+
+Amended the same day, when the owner supplied the product's mark after seeing the page. The mark's arrowhead is an amber, `#FEAD05`, and its T a charcoal, `#252A2F`, cooler than the ink the yellow seed gave. One product has one yellow: the seed became the amber, and the charcoal became the ink as a second given colour, placed on the text of the light scheme and on everything set on amber. The alternative, keeping the page's yellow and the mark's amber side by side as brand values outside the scheme, would have put two yellows on every page that shows the mark. Every contrast pair still passes (`scripts/tokens.test.ts`); charcoal on amber is 7.7:1.
+
 ### 27. A browser that has signed in before is counted apart, and its code is its own
 
 Decided by the owner on 2026-11-11, on card TS-029, the same day as entry 23 and because of it. It narrows the gap entry 23 left open and amends entry 22: the cookie of entry 22 now names one request, not any request of the last five minutes.
@@ -292,20 +308,6 @@ What was built. When a code signs a person in, the browser is given a cookie, `_
 - While a known browser's code waits, for five minutes at most, the same person asking from a new browser is sent nothing and is not told.
 
 Signing out everywhere does not clear the proof: it signs nobody in, the person who has signed out is the one who needs it next, and a request from one browser cannot reach a cookie in another.
-
-### 24. The visual direction: a departure sheet
-
-Replaces entry 16. The owner's verdict on the first release of the interface was that it worked but did not look like a designed product. `docs/design-direction.md` is the answer: who the product is for, the feeling, and what the design refuses to do. It changes values, not the system: the tokens still come from one seed through `scripts/tokens.ts`, and the contrast test still passes with no adjustment.
-
-- **Seed colour `#FFD400`, fidelity scheme.** The tonal spot scheme mutes any seed to a pastel; the fidelity scheme keeps the seed itself as `primary-container` in both schemes, which is what a yellow sheet needs. Material's own `primary` for a yellow seed is an olive by day and a cream by night, so `PLACED_ROLES` in `scripts/tokens.ts` places `primary` and `on-primary` on other Material roles of the same scheme (ink and yellow), and adds three roles for the sheet. `on-secondary-container` is placed too: Material's measures 4.55:1 at rest and 4.02:1 beneath a pressed state layer, which the accessibility scan of the component gallery refuses. Material's tertiary for this seed is a cyan; the design has one accent, so each tertiary role takes the value of its secondary twin. Every role is still derived from the seed, and the contrast test covers each.
-- **Sofia Sans and Sofia Sans Condensed** (Lettersoup, SIL Open Font License 1.1), variable, weight axis, Latin and Latin Extended. One family in two widths, as a timetable is set. The files are copied from the Fontsource packages (5.3.0) into `app/fonts/`, so the two packages are not dependencies; `@fontsource-variable/roboto-flex` is removed.
-- **Corners of 2 to 24px** on Material's step names.
-
-| Option                                  | Evidence                                                                                                                                                        |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Yellow sheet, condensed grotesque       | Specific to keeping time: the reference is a timetable. Yellow with near-black type measures above 11:1. No other time tracker on Mobbin on 2026-11-11 used it. |
-| Keep indigo and Roboto Flex, add a page | The least work. It is the look of a default Material application, which is the look the owner rejected.                                                         |
-| Warm neutral with a serif               | Reads as a writing or note-taking product, and is the most common look of the new landing pages of 2026.                                                        |
 
 ## To verify when the code is scaffolded
 
