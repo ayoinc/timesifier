@@ -5,7 +5,15 @@
  * through `organisationScope`, which limits every statement to one organisation.
  * `biome.json` refuses an import of `~/db/schema` or `~/db/scope` anywhere else.
  */
-export { organisations, users } from "./schema";
+export {
+	accounts,
+	organisations,
+	passkeys,
+	rateLimits,
+	sessions,
+	users,
+	verifications,
+} from "./schema";
 export {
 	everyRow,
 	type Filter,
