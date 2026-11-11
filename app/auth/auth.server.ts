@@ -37,8 +37,9 @@ import {
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
 import { sendEmail } from "./email.server";
-import { ALLOWED_HOSTS, isOurHost } from "./hosts";
+import { allowedHosts, isOurHost } from "./hosts";
 import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.server";
+import { redirectRules } from "./redirects.server";
 import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
 
 /** Attempts one client may make on one sign-in path in `window` seconds; the next is answered 429. */
@@ -58,9 +59,15 @@ const UNUSED_PATHS = [
 	"/email-otp/change-email",
 ];
 
-type Bindings = Pick<Env, "DB" | "BETTER_AUTH_SECRET" | "TURNSTILE_SECRET_KEY">;
+/**
+ * What the instance is built from. The generated type gives `ENVIRONMENT`
+ * production's value alone; a preview and a developer's machine set others.
+ */
+type Bindings = Pick<Env, "DB" | "BETTER_AUTH_SECRET" | "TURNSTILE_SECRET_KEY"> & {
+	ENVIRONMENT: string | undefined;
+};
 
-function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) {
+function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT }: Bindings) {
 	// Better Auth falls back to a published default secret outside production
 	// mode, and nothing sets production mode in a Worker. Refuse to start instead.
 	if (!BETTER_AUTH_SECRET) throw new Error("BETTER_AUTH_SECRET is not set");
@@ -69,8 +76,9 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 	return betterAuth({
 		appName: "Timesifier",
 		secret: BETTER_AUTH_SECRET,
-		// The address is taken from the request only when its host is one of ours.
-		baseURL: { allowedHosts: ALLOWED_HOSTS },
+		// The address is taken from the request only when its host is one of this
+		// environment's own, and those hosts are the only origins trusted.
+		baseURL: { allowedHosts: allowedHosts(ENVIRONMENT) },
 
 		database: drizzleAdapter(drizzle(DB), {
 			provider: "sqlite",
@@ -141,10 +149,11 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 					waitUntil(sendEmail({ to: email, ...signInCodeEmail(otp) }));
 				},
 			}),
-			// The relying party is the host of the request, one of ALLOWED_HOSTS, so
-			// a passkey made on a preview works on that preview and nowhere else.
+			// The relying party is the host of the request, one of this environment's
+			// own, so a passkey made on a preview works on that preview and nowhere else.
 			passkey({ rpName: "Timesifier" }),
 			...organisationPlugins(),
+			redirectRules,
 		],
 	});
 }
@@ -177,17 +186,19 @@ const auth = builtFrom(
 		DB: env.DB,
 		BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
 		TURNSTILE_SECRET_KEY: env.TURNSTILE_SECRET_KEY,
+		ENVIRONMENT: env.ENVIRONMENT,
 	}),
 	createAuth,
 );
 
 /**
  * Answers a request to `/api/auth/*`: sign-in, sign-out, sessions, passkeys.
- * A request for a host that is not ours is answered 404 before Better Auth
- * sees it, so no cookie is set for such a host and none names it in a passkey.
+ * A request for a host that is not this environment's own is answered 404
+ * before Better Auth sees it, so no cookie is set for such a host and none
+ * names it in a passkey.
  */
 export async function handleAuthRequest(request: Request): Promise<Response> {
-	if (!isOurHost(request)) return new Response("Not Found", { status: 404 });
+	if (!isOurHost(request, env.ENVIRONMENT)) return new Response("Not Found", { status: 404 });
 	return auth().handler(request);
 }
 
@@ -202,7 +213,7 @@ export type SignedIn = { user: User; session: Session };
  * This is what a route guard calls.
  */
 export async function getSession(request: Request): Promise<SignedIn | null> {
-	if (!isOurHost(request)) return null;
+	if (!isOurHost(request, env.ENVIRONMENT)) return null;
 	// Better Auth takes the host from the `Host` header here. The platform sets
 	// it from the request's address; a `Request` built in code may not have it.
 	const headers = new Headers(request.headers);

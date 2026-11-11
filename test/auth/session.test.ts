@@ -104,16 +104,70 @@ describe("ending all sessions", () => {
 });
 
 describe("hosts", () => {
-	// `ENVIRONMENT` is what tells the Worker it is a preview (workers/canonical-host.ts).
+	// `ENVIRONMENT` says which hosts are the application's own (app/auth/hosts.ts).
 	it.each([
 		["a pull request's preview", "preview", "https://pr-12-timesifier.ayoinc.workers.dev"],
-		["a developer's machine", "production", "http://localhost:5173"],
+		["a developer's machine", "development", "http://localhost:5173"],
 	])("signs a person in on %s", async (_name, environment, origin) => {
 		setBinding("ENVIRONMENT", environment);
 
 		const { cookie } = await signIn(mailbox, EMAIL, { origin });
 
 		expect(await whoIs(cookie, { origin })).toMatchObject({ email: EMAIL });
+	});
+
+	// The Worker serves a loopback host in every environment, and a preview
+	// answers on any host it is given (workers/canonical-host.ts), so these
+	// requests reach the mount; it is the mount that must not know the host.
+	it.each([
+		["production", "a developer's machine", "http://localhost:5173"],
+		["preview", "a developer's machine", "http://localhost:5173"],
+		["preview", "production", "https://timesifier.com"],
+		["development", "production", "https://timesifier.com"],
+	])("in %s, answers 404 on the host of %s", async (environment, _name, origin) => {
+		setBinding("ENVIRONMENT", environment);
+
+		const session = await get("/get-session", { origin });
+		const options = await get("/passkey/generate-authenticate-options", { origin });
+
+		expect([session.status, options.status]).toEqual([404, 404]);
+		expect(options.headers.getSetCookie()).toEqual([]);
+	});
+
+	it.each([
+		["production", "https://timesifier.com", "https://pr-12-timesifier.ayoinc.workers.dev/app"],
+		["production", "https://timesifier.com", "http://localhost:5173/app"],
+		[
+			"preview",
+			"https://pr-12-timesifier.ayoinc.workers.dev",
+			"https://pr-13-timesifier.ayoinc.workers.dev/app",
+		],
+		["preview", "https://pr-12-timesifier.ayoinc.workers.dev", "https://timesifier.com/app"],
+		["production", "https://timesifier.com", "https://timesifier.com/app"],
+		["production", "https://timesifier.com", "//evil.example/app"],
+		["production", "https://timesifier.com", "/\\evil.example/app"],
+	])(
+		"in %s on %s, refuses to be given %s as a place to send the browser",
+		async (environment, origin, url) => {
+			setBinding("ENVIRONMENT", environment);
+			const { cookie } = await signIn(mailbox, EMAIL, { origin });
+
+			for (const field of ["callbackURL", "redirectTo", "errorCallbackURL", "newUserCallbackURL"]) {
+				const response = await post("/sign-out", { [field]: url }, { origin, cookie });
+
+				expect(response.status, field).toBe(403);
+				expect(response.headers.get("Location"), field).toBeNull();
+			}
+			expect(await whoIs(cookie, { origin }), "still signed in").toMatchObject({ email: EMAIL });
+		},
+	);
+
+	it("accepts a path on its own origin as a place to send the browser", async () => {
+		const { cookie } = await signIn(mailbox, EMAIL);
+
+		const response = await post("/sign-out", { callbackURL: "/sign-in" }, { cookie });
+
+		expect(response.status).toBe(200);
 	});
 
 	// In production the Worker itself answers only on timesifier.com. A preview

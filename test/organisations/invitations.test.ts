@@ -353,10 +353,10 @@ describe("inviting a person", () => {
 		expect(mailbox.sent().filter(({ text }) => text.includes("/invitations/"))).toHaveLength(1);
 	});
 
-	// `ENVIRONMENT` is what tells the Worker it is a preview (workers/canonical-host.ts).
+	// `ENVIRONMENT` says which hosts are the application's own (app/auth/hosts.ts).
 	it.each([
 		["a pull request's preview", "preview", "https://pr-12-timesifier.ayoinc.workers.dev"],
-		["a developer's machine", "production", "http://localhost:5173"],
+		["a developer's machine", "development", "http://localhost:5173"],
 	])(
 		"puts the link on the host the invitation was made on: %s",
 		async (_name, environment, origin) => {

@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe("passkey options", () => {
-	// `ENVIRONMENT` is what tells the Worker it is a preview (workers/canonical-host.ts).
+	// `ENVIRONMENT` says which hosts are the application's own (app/auth/hosts.ts).
 	it.each([
 		["production", "https://timesifier.com", "timesifier.com"],
 		[
@@ -56,7 +56,7 @@ describe("passkey options", () => {
 			"https://pr-12-timesifier.ayoinc.workers.dev",
 			"pr-12-timesifier.ayoinc.workers.dev",
 		],
-		["production", "http://localhost:5173", "localhost"],
+		["development", "http://localhost:5173", "localhost"],
 	])(
 		"names the relying party after the host asked (%s): %s",
 		async (environment, origin, relyingParty) => {
