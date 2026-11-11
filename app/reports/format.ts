@@ -1,47 +1,29 @@
 import type { Day } from "~/time/calendar";
+import { formatDay, formatDuration, formatRange, formatTime } from "~/time/format";
 
 import type { Range } from "./choices";
 
 /**
  * How a report puts its figures into words (docs/design-direction.md, "Totals
- * and figures"): a length as hours and minutes, a time of day on the 24-hour
- * clock, a day by its weekday, date and month. The server writes them, in the
- * organisation's zone, so the page reads the same before and after it hydrates.
+ * and figures"), in the forms every page uses (`app/time/format.ts`): a length
+ * as hours and minutes, a time of day on the 24-hour clock, a day by its
+ * weekday, date and month. The server writes them, in the organisation's zone,
+ * so the page reads the same before and after it hydrates.
  */
 
 /** A length of time as hours and minutes, the seconds dropped: 5400 is "1:30". */
 export function hoursAndMinutes(seconds: number): string {
-	const minutes = Math.floor(seconds / 60);
-	return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}`;
+	return formatDuration(seconds);
 }
 
-/** A day's own midnight in UTC, which a formatter in UTC reads back as that day. */
-const asUtc = (day: Day) => new Date(`${day}T00:00:00Z`);
-
-const dayFormat = new Intl.DateTimeFormat("en-GB", {
-	weekday: "short",
-	day: "numeric",
-	month: "short",
-	timeZone: "UTC",
-});
-
-/** A day as a row names it: "Mon 2 Nov". */
+/** A day as a row names it: "Monday 2 November". */
 export function dayLabel(day: Day): string {
-	return dayFormat.format(asUtc(day)).replace(",", "");
+	return formatDay(day);
 }
-
-const rangeFormat = new Intl.DateTimeFormat("en-GB", {
-	day: "numeric",
-	month: "long",
-	year: "numeric",
-	timeZone: "UTC",
-});
 
 /** A range of days as the report's heading line names it: "2–8 November 2026". */
 export function rangeLabel(first: Day, last: Day): string {
-	return first === last
-		? rangeFormat.format(asUtc(first))
-		: rangeFormat.formatRange(asUtc(first), asUtc(last));
+	return formatRange(first, last);
 }
 
 /**
@@ -58,25 +40,14 @@ export function stepUnit(range: Range, { first, last }: { first: Day; last: Day 
 		case "month":
 			return "month";
 		case "custom": {
-			const length = (asUtc(last).getTime() - asUtc(first).getTime()) / 86_400_000 + 1;
+			const length =
+				(Date.parse(`${last}T00:00:00Z`) - Date.parse(`${first}T00:00:00Z`)) / 86_400_000 + 1;
 			return length === 1 ? "day" : `${length} days`;
 		}
 	}
 }
 
-const clockFormats = new Map<string, Intl.DateTimeFormat>();
-
 /** The time of day at `instant` in `zone`, on the 24-hour clock: "09:15". */
 export function clockIn(instant: number, zone: string): string {
-	let format = clockFormats.get(zone);
-	if (!format) {
-		format = new Intl.DateTimeFormat("en-GB", {
-			hour: "2-digit",
-			minute: "2-digit",
-			hourCycle: "h23",
-			timeZone: zone,
-		});
-		clockFormats.set(zone, format);
-	}
-	return format.format(instant);
+	return formatTime(instant, zone);
 }

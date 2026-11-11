@@ -26,6 +26,14 @@ async function tabTo(page: Page, element: Locator) {
 	await expectFocusShown(element);
 }
 
+/** From a Team page's heading, Tab goes through its four tabs, which sit under it (TS-091, W20). */
+async function tabThroughTeamTabs(page: Page) {
+	const tabs = page.getByRole("group", { name: "Team pages" });
+	for (const tab of ["This week", "Teams", "Members", "Invitations"]) {
+		await tabTo(page, tabs.getByRole("link", { name: tab, exact: true }));
+	}
+}
+
 /** The radio is focused, and the ring around it shows so. */
 async function expectRadioFocused(radio: Locator) {
 	await expect(radio).toBeFocused();
@@ -53,8 +61,9 @@ for (const viewport of [
 			// The move puts the focus on the page's heading; Tab goes on from there.
 			await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
 
-			// The member's actions: a menu the arrow keys move through.
+			// The member's actions, after the tabs: a menu the arrow keys move through.
 			const actions = page.getByRole("button", { name: `Actions for ${member.name}` });
+			await tabThroughTeamTabs(page);
 			await tabTo(page, actions);
 			await page.keyboard.press("Enter");
 			const changeRole = page.getByRole("menuitem", { name: "Change role" });
@@ -106,6 +115,7 @@ for (const viewport of [
 
 			// Invite: Enter opens the sheet with the focus in its field.
 			const invite = page.getByRole("button", { name: "Invite a person" });
+			await tabThroughTeamTabs(page);
 			await tabTo(page, invite);
 			await page.keyboard.press("Enter");
 			const inviting = page.getByRole("dialog", { name: "Invite a person" });
@@ -139,7 +149,7 @@ for (const viewport of [
 			await expect(cancelling).toBeHidden();
 			await expectFocusShown(cancel);
 
-			// Back to Team by its This week tab, above the heading.
+			// Back to Team by its This week tab, under the heading.
 			const back = page.getByRole("main").getByRole("link", { name: "This week" });
 			await back.focus();
 			await expectFocusShown(back);
@@ -147,7 +157,8 @@ for (const viewport of [
 			await expect(page).toHaveURL(homePath("team"));
 			await expect(page.getByRole("heading", { level: 1, name: "Team" })).toBeFocused();
 
-			// Leaving is on My account, which the profile menu in the band leads to.
+			// My account, which the profile menu in the band leads to, does not offer the
+			// only owner to leave (TS-091, W26): it says what to do instead, with links to both.
 			const profile = page.getByRole("banner").getByRole("button", { name: /^Account menu for / });
 			await profile.focus();
 			await page.keyboard.press("Enter");
@@ -155,17 +166,15 @@ for (const viewport of [
 			await page.keyboard.press("Enter");
 			await expect(page).toHaveURL(accountPath(slug));
 			await expect(page.getByRole("heading", { level: 1, name: "My account" })).toBeFocused();
-			const leave = page.getByRole("button", { name: "Leave organisation" });
-			await leave.focus();
-			await expectFocusShown(leave);
+			await expect(page.getByRole("button", { name: "Leave organisation" })).toHaveCount(0);
+			await expect(page.getByText(`You are the only owner of ${name}.`)).toBeVisible();
+			const toMembersFromAccount = page
+				.getByRole("main")
+				.getByRole("link", { name: "Members", exact: true });
+			await toMembersFromAccount.focus();
+			await expectFocusShown(toMembersFromAccount);
 			await page.keyboard.press("Enter");
-			const leaving = page.getByRole("dialog", { name: `Leave ${name}?` });
-			await expect(leaving).toBeVisible();
-			await tabTo(page, leaving.getByRole("button", { name: "Cancel" }));
-			await tabTo(page, leaving.getByRole("button", { name: "Leave", exact: true }));
-			await page.keyboard.press("Escape");
-			await expect(leaving).toBeHidden();
-			await expectFocusShown(leave);
+			await expect(page).toHaveURL(membersPath(slug));
 		});
 	});
 }

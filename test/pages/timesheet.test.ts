@@ -662,7 +662,7 @@ describe("submitting a week (TS-046)", () => {
 		const text = await textAt(WEEK);
 		expect(text).toContain("Status: Returned");
 		expect(text).toContain("Returned: Add Friday");
-		expect(await post({ intent: "cell", projectId: site, day: "2026-11-13", hours: "4" })).toBe(
+		expect(await post({ intent: "cell", projectId: site, day: "2026-11-10", hours: "4" })).toBe(
 			200,
 		);
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
@@ -693,8 +693,8 @@ describe("History (TS-046)", () => {
 		const main = await mainOf(`${PAGE}?view=history`);
 		const text = textOf(main);
 
-		expect(text).toMatch(/9 – 15 November 2026 Not submitted 0:00/);
-		expect(text).toMatch(/2 – 8 November 2026 Returned Reason: Add Friday 0:00/);
+		expect(text).toMatch(/9–15 November 2026 Not submitted 0:00/);
+		expect(text).toMatch(/2–8 November 2026 Returned Reason: Add Friday 0:00/);
 		expect(text).toMatch(/26 October – 1 November 2026 Approved 2:00/);
 		expect(main).toContain('href="/app/acme?view=week&amp;start=2026-10-26"');
 	});
@@ -827,7 +827,9 @@ describe("Track time (TS-056)", () => {
 		expect(main).not.toContain(">Track time</button>");
 		expect(textOf(main)).toContain("so nothing can be tracked or changed on it");
 
-		// The week after is not locked.
+		// The week after is not locked. Hours are tracked on a day that has begun
+		// (TS-091, W08), so the clock moves into it.
+		clockAt(instantAt("2026-11-16", 18 * 60, LONDON));
 		expect(await post(track({ projectId: site, day: "2026-11-16", hours: "1" }))).toBe(200);
 	});
 });
@@ -933,13 +935,13 @@ describe("the Day view's foot (TS-056)", () => {
 			instantAt("2026-11-10", 10 * 60, LONDON),
 		);
 		const before = await mainOf(DAY);
-		expect(textOf(before)).toMatch(/9 – 15 November 2026 Status: Not submitted/);
+		expect(textOf(before)).toMatch(/9–15 November 2026 Status: Not submitted/);
 		expect(before.match(/>Submit week<\/button>/g)).toHaveLength(1);
 
 		// The Week view's own action, for the period the day is in.
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
 		const after = await mainOf(DAY);
-		expect(textOf(after)).toMatch(/9 – 15 November 2026 Status: Submitted/);
+		expect(textOf(after)).toMatch(/9–15 November 2026 Status: Submitted/);
 		expect(after).toMatch(/>Withdraw submission<\/button>/);
 		expect(after).not.toContain(">Submit week</button>");
 		expect(await textAt(`${PAGE}?view=week&start=2026-11-09`)).toContain("Status: Submitted");
@@ -1139,12 +1141,24 @@ describe("the Calendar view (TS-062)", () => {
 	});
 
 	it("tracks time from a slot: the entry starts at the time chosen, in the person's zone", async () => {
+		// A day that has passed: hours never run past now (TS-091, W08).
 		expect(
-			await post(track({ projectId: site, day: "2026-11-12", start: "14:30", hours: "1.5" })),
+			await post(track({ projectId: site, day: "2026-11-10", start: "14:30", hours: "1.5" })),
 		).toBe(200);
-		const added = (await entries()).results.at(-1);
-		expect(added?.startedAt).toBe(instantAt("2026-11-12", 14 * 60 + 30, LONDON));
-		expect(added?.endedAt).toBe(instantAt("2026-11-12", 16 * 60, LONDON));
+		const start = instantAt("2026-11-10", 14 * 60 + 30, LONDON);
+		const added = (await entries()).results.find((entry) => entry.startedAt === start);
+		expect(added?.endedAt).toBe(instantAt("2026-11-10", 16 * 60, LONDON));
+	});
+
+	it("keeps the slot's start, and refuses hours that would cross midnight or end after now (TS-091, W08)", async () => {
+		const before = await countEntries();
+		expect(
+			await post(track({ projectId: site, day: "2026-11-10", start: "23:00", hours: "2" })),
+		).toBe(400);
+		expect(
+			await post(track({ projectId: site, day: "2026-11-12", start: "14:30", hours: "1" })),
+		).toBe(400);
+		expect(await countEntries()).toBe(before);
 	});
 
 	it("asks for the hours from a slot, and refuses a time the clocks skip, storing nothing", async () => {

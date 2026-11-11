@@ -52,6 +52,8 @@ export function loader({ context }: Route.LoaderArgs) {
 }
 
 const MAIN_ID = "main";
+/** The column every page of an organisation is drawn in (docs/design-system.md, "Shell"). */
+const INSIDE_COLUMN = "min-w-0 max-w-200";
 
 export default function Shell({ loaderData }: Route.ComponentProps) {
 	const { pathname } = useLocation();
@@ -162,7 +164,9 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 								organisation ? "min-w-0 flex-1 pt-10 pb-24 medium:ms-32" : OUTSIDE_MAIN,
 							)}
 						>
-							<div className={organisation ? undefined : OUTSIDE_COLUMN}>
+							{/* One column for every page of the organisation: 800px at most, so
+							    headings, tabs, rules, sheets and grids share one right edge (audit W22). */}
+							<div className={organisation ? INSIDE_COLUMN : OUTSIDE_COLUMN}>
 								<Outlet />
 							</div>
 						</main>

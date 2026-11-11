@@ -1,6 +1,5 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
-import { useDateFormatter } from "react-aria";
 import * as z from "zod";
 
 import { changes, record } from "~/activity/activity.server";
@@ -18,6 +17,8 @@ import { allows, InvitedRole } from "~/organisations/roles";
 import { useTimeZone } from "~/routes/auth/AccountSettings";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
 import { TeamTabs } from "~/teams/TeamTabs";
+import { dayOf } from "~/time/calendar";
+import { formatDayWithYear } from "~/time/format";
 
 import type { Route } from "./+types/invitations";
 import { FormSheet } from "./FormSheet";
@@ -129,19 +130,18 @@ export default function Invitations({ loaderData }: Route.ComponentProps) {
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
 
-	const expires = useDateFormatter({ dateStyle: "medium", timeZone: useTimeZone() });
+	// An invitation expires on a day on the browser's clock, once the page is the browser's.
+	const zone = useTimeZone();
 
 	return (
 		<>
-			<TeamTabs slug={organisation.slug} current="invitations" />
-			<div className="mt-10">
-				<PageHeading>{TITLE}</PageHeading>
-			</div>
+			<PageHeading>{TITLE}</PageHeading>
 			<PageLead>
 				{canInvite
 					? `A person joins ${organisation.name} by an invitation sent to their email address. Its link works once and expires after ${INVITATION_DAYS} days.`
 					: `Owners and admins invite people to ${organisation.name}.`}
 			</PageLead>
+			<TeamTabs slug={organisation.slug} current="invitations" />
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
@@ -164,7 +164,7 @@ export default function Invitations({ loaderData }: Route.ComponentProps) {
 											detail={
 												<>
 													Invited as {AS_ROLE[each.role]}. Expires{" "}
-													{expires.format(new Date(each.expiresAt))}.
+													{formatDayWithYear(dayOf(Date.parse(each.expiresAt), zone))}.
 												</>
 											}
 											action={

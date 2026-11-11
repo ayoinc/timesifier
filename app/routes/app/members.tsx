@@ -140,11 +140,9 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 
 	return (
 		<>
-			<TeamTabs slug={organisation.slug} current="members" />
-			<div className="mt-10">
-				<PageHeading>{TITLE}</PageHeading>
-			</div>
+			<PageHeading>{TITLE}</PageHeading>
 			<PageLead>The people in {organisation.name} and what each of them may do.</PageLead>
+			<TeamTabs slug={organisation.slug} current="members" />
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}

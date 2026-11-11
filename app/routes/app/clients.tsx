@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
-import type { ShouldRevalidateFunctionArgs } from "react-router";
+import { Button as AriaButton } from "react-aria-components";
+import { type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
 import * as z from "zod";
 
 import {
@@ -11,8 +12,9 @@ import {
 	setClientArchived,
 } from "~/clients/clients.server";
 import { Button } from "~/components/Button";
+import { cx } from "~/components/cx";
+import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
-import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
@@ -20,16 +22,15 @@ import { parseRequest } from "~/lib/validate";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
-import { onlyTabChanged, searchIn } from "~/projects/projects";
-import { SearchForm } from "~/projects/SearchForm";
+import { keptTab, onlyTabChanged, SEARCH_PARAM, searchIn } from "~/projects/projects";
 import { destination } from "~/shell/destinations";
+import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/clients";
 import { FormSheet } from "./FormSheet";
-import { useOrganisation } from "./useOrganisation";
 
-// Clients: whom the organisation's projects are for (TS-011b). Its owners and
+// Clients: the companies the organisation's projects are for (TS-011b). Its owners and
 // admins are shown it while the organisation has Clients turned on, and
 // nobody else is: the layout answers them 404, actions included
 // (docs/navigation.md). They create, rename, archive and restore clients, and
@@ -120,14 +121,13 @@ type Task = "create" | "rename" | "archive" | "restore";
 
 export default function Clients({ loaderData }: Route.ComponentProps) {
 	const { clients, query } = loaderData;
-	const organisation = useOrganisation();
-
 	const [task, setTask] = useState<Task | null>(null);
 	// Which client the open sheet is about. Kept after it closes, so the sheet
 	// goes on saying the same thing while it leaves.
 	const [client, setClient] = useState<Client | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
+	const [search] = useSearchParams();
 
 	const create = <Button onPress={() => setTask("create")}>Create client</Button>;
 
@@ -141,11 +141,26 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 						: "No active clients. Restore one from Archived, or create one."}
 			</p>
 		) : (
+			// A client's name opens its sheet, which renames it and holds Archive or
+			// Restore: two things, so no menu (docs/design-direction.md, rule 2).
 			<LedgerRows label={archived ? "Archived clients" : "Active clients"}>
 				{shown.map((each) => (
 					<LedgerRow
 						key={each.id}
-						title={<span className="wrap-anywhere">{each.name}</span>}
+						title={
+							// React Aria's button presses on key up, as every button that opens a
+							// sheet here does, so the sheet's field keeps the focus it is given.
+							<AriaButton
+								aria-haspopup="dialog"
+								className={cx(ACTION_LINK, "cursor-pointer text-start wrap-anywhere")}
+								onPress={() => {
+									setClient(each);
+									setTask("rename");
+								}}
+							>
+								{each.name}
+							</AriaButton>
+						}
 						detail={
 							<span className="wrap-anywhere">
 								{each.projects.length === 0
@@ -156,26 +171,6 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 											)
 											.join(", ")}
 							</span>
-						}
-						action={
-							<MenuTrigger>
-								<Button variant="text" aria-label={`Actions for ${each.name}`}>
-									Actions
-								</Button>
-								<Menu
-									onAction={(chosen) => {
-										setClient(each);
-										setTask(chosen === "rename" ? "rename" : archived ? "restore" : "archive");
-									}}
-								>
-									<MenuItem id="rename">Rename</MenuItem>
-									{archived ? (
-										<MenuItem id="restore">Restore</MenuItem>
-									) : (
-										<MenuItem id="archive">Archive</MenuItem>
-									)}
-								</Menu>
-							</MenuTrigger>
 						}
 					/>
 				))}
@@ -189,8 +184,8 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
-				Whom {organisation.name}'s projects are for. Give a project its client on Projects; everyone
-				sees it there.
+				The companies your projects are for. Give a project its client on Projects; everyone sees it
+				there.
 			</PageLead>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
@@ -213,11 +208,9 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 					<>
 						{create}
 						<div className="mt-6">
-							<SearchForm
-								name="Filter clients"
-								label="Filter by client name"
-								submitLabel="Filter"
-							/>
+							<FilterBar name="Filter clients" keep={keptTab(search)}>
+								<FilterField label="Search clients" param={SEARCH_PARAM} />
+							</FilterBar>
 						</div>
 						<div className="mt-6">
 							<ArchiveTabs
@@ -278,6 +271,20 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
 				/>
+				{/* Archiving is not renaming: it opens its own sheet, which says what it does. */}
+				<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
+					<p className="text-body-medium text-on-surface-variant">
+						{client?.archived
+							? "Archived. Restore it and projects can be given it again."
+							: "No longer working with them? Archive it; its projects keep it."}
+					</p>
+					<Button
+						variant="outlined"
+						onPress={() => setTask(client?.archived ? "restore" : "archive")}
+					>
+						{client?.archived ? "Restore client" : "Archive client"}
+					</Button>
+				</div>
 			</FormSheet>
 
 			<FormSheet

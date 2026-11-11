@@ -18,46 +18,71 @@ export const LONGEST_RANGE_DAYS = 366;
 /** A field left empty by the form is a field not given. */
 const blankIsAbsent = (value: unknown) => (value === "" ? undefined : value);
 
-const ReportQuery = z
-	.object({
-		range: z.preprocess(blankIsAbsent, z.enum(RANGES).default("this-week")),
-		from: z.preprocess(blankIsAbsent, Day.optional()),
-		to: z.preprocess(blankIsAbsent, Day.optional()),
-		group: z.preprocess(blankIsAbsent, z.enum(GROUPS).default("project")),
-		person: z.preprocess(
-			(value) => (value === EVERYONE ? undefined : blankIsAbsent(value)),
-			z.string().max(64).optional(),
-		),
-	})
-	.superRefine((query, context) => {
-		if (query.range !== "custom") return;
-		if (query.from === undefined || query.to === undefined) {
-			context.addIssue({ code: "custom", message: "A custom range needs a first and a last day." });
-			return;
-		}
-		const span = daysBetween(query.from, query.to);
-		if (span < 0) {
-			context.addIssue({ code: "custom", message: "The last day is before the first." });
-		} else if (span >= LONGEST_RANGE_DAYS) {
-			context.addIssue({
-				code: "custom",
-				message: `A range is at most ${LONGEST_RANGE_DAYS} days.`,
-			});
-		}
-	});
+/** A day as typed: checked as a date by `rangeProblem`, so a slip in it is a field error, not a 400. */
+const TypedDay = z.preprocess(blankIsAbsent, z.string().max(32).optional());
+
+const ReportQuery = z.object({
+	range: z.preprocess(blankIsAbsent, z.enum(RANGES).default("this-week")),
+	from: TypedDay,
+	to: TypedDay,
+	group: z.preprocess(blankIsAbsent, z.enum(GROUPS).default("project")),
+	person: z.preprocess(
+		(value) => (value === EVERYONE ? undefined : blankIsAbsent(value)),
+		z.string().max(64).optional(),
+	),
+});
 
 export type ReportQuery = z.output<typeof ReportQuery>;
 
+/** What the page says under a date field of a custom range it cannot report on (TS-091, W05). */
+export const RANGE_MESSAGES = {
+	notADate: "Enter a date like 2026-11-09",
+	backwards: "Must be on or after the first day",
+	tooLong: `At most ${LONGEST_RANGE_DAYS} days`,
+} as const;
+
+/** Why a custom range makes no report, and the field that says so. */
+export interface RangeProblem {
+	field: "from" | "to";
+	message: string;
+}
+
+export interface ParsedReportQuery {
+	/** What the address asks for, its days as typed. */
+	query: ReportQuery;
+	/** Null when the range makes a report. */
+	problem: RangeProblem | null;
+}
+
 /**
- * The report an address asks for, or null when it asks for none that can be
- * made: a range or a grouping that is not one of these, a day that is not a
- * date, or a custom range without both its days, backwards or longer than a
- * year. A value the address leaves out takes its default: this week, by project,
- * everyone the viewer may see. The page answers null with 400.
+ * The report an address asks for, or null when the address was not written by
+ * the form: a range or a grouping that is not one of these, or a week or month
+ * named by a day that is not a date. A value the address leaves out takes its
+ * default: this week, by project, everyone the viewer may see. The page
+ * answers null with 400. A custom range that cannot be reported on (a day
+ * missing or not a date, backwards, longer than a year) is a slip in the form:
+ * it is parsed, with the problem the page shows under its field.
  */
-export function parseReportQuery(params: URLSearchParams): ReportQuery | null {
+export function parseReportQuery(params: URLSearchParams): ParsedReportQuery | null {
 	const result = ReportQuery.safeParse(Object.fromEntries(params));
-	return result.success ? result.data : null;
+	if (!result.success) return null;
+	const query = result.data;
+	if (query.range !== "custom") {
+		return query.from === undefined || isDay(query.from) ? { query, problem: null } : null;
+	}
+	return { query, problem: rangeProblem(query.from, query.to) };
+}
+
+const isDay = (value: string | undefined): value is Day => Day.safeParse(value).success;
+
+/** What is wrong with a custom range from `from` to `to`, or null when it makes a report. */
+function rangeProblem(from: string | undefined, to: string | undefined): RangeProblem | null {
+	if (!isDay(from)) return { field: "from", message: RANGE_MESSAGES.notADate };
+	if (!isDay(to)) return { field: "to", message: RANGE_MESSAGES.notADate };
+	const span = daysBetween(from, to);
+	if (span < 0) return { field: "to", message: RANGE_MESSAGES.backwards };
+	if (span >= LONGEST_RANGE_DAYS) return { field: "to", message: RANGE_MESSAGES.tooLong };
+	return null;
 }
 
 /** The days a report covers, both included. */
@@ -67,10 +92,11 @@ export interface ReportDays {
 }
 
 /**
- * The days of `query`'s range, with `today` the local date in the
- * organisation's zone. A week starts on the organisation's `week_starts_on`, as
- * its timesheet periods do; a month is the calendar month. `week` and `month`
- * hold the day in `from`, or today when there is none.
+ * The days of `query`'s range, with `today` the local date in the viewer's
+ * zone. A week starts on the organisation's `week_starts_on`, as its timesheet
+ * periods do; a month is the calendar month. `week` and `month` hold the day in
+ * `from`, or today when there is none. A custom range is one `parseReportQuery`
+ * found no problem with.
  */
 export function rangeDays(query: ReportQuery, today: Day, weekStartsOn: number): ReportDays {
 	switch (query.range) {
@@ -90,7 +116,7 @@ export function rangeDays(query: ReportQuery, today: Day, weekStartsOn: number):
 			return monthOf(query.from ?? today);
 		case "custom":
 			if (query.from === undefined || query.to === undefined) {
-				throw new Error("A custom range is parsed with both its days.");
+				throw new Error("A custom range is reported on only with both its days.");
 			}
 			return { first: query.from, last: query.to };
 	}

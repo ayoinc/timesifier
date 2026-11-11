@@ -3,13 +3,12 @@ import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react
 
 import { cx } from "./cx";
 
-// Material 3 Expressive icon button, small size: a 40px container around a 24px
-// icon, with a 48px touch target. Pressed, its corners settle to 8px on the spring.
+// Material 3 Expressive icon button, drawn with a 44px container around a 24px
+// icon (Material's 40px, grown so the target is what is seen). Pressed, its corners settle to 8px on the spring.
 
 const BASE =
-	"relative inline-flex size-10 shrink-0 cursor-pointer select-none items-center justify-center " +
+	"relative inline-flex size-11 shrink-0 cursor-pointer select-none items-center justify-center " +
 	"rounded-large-increased outline-none state-layer transition-control " +
-	"before:absolute before:-inset-1 " +
 	"data-hovered:state-hover data-focus-visible:state-focus data-focus-visible:focus-indicator " +
 	"data-pressed:rounded-small data-pressed:state-pressed " +
 	"data-disabled:cursor-not-allowed data-disabled:text-disabled";

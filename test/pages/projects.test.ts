@@ -186,7 +186,7 @@ describe("archive and restore", () => {
 
 		const main = mainOf(await pageBody(await open(`${PROJECTS}?show=archived`, ada)));
 		// The address picks the tab, and only the chosen tab's list is on the page.
-		expect(main).toMatch(/aria-selected="true"[^>]*><span[^>]*>Archived</);
+		expect(main).toMatch(/aria-selected="true"[^>]*>(?:<[^>]+>)*Archived</);
 		// While Clients is on, each list is a client's group: these have none.
 		const archivedList =
 			main.match(/<ol aria-label="Archived projects: No client"[\s\S]*?<\/ol>/)?.[0] ?? "";
@@ -424,13 +424,17 @@ describe("search (TS-057)", () => {
 		expect(await mainText(`${PROJECTS}?q=globex&show=archived`)).toContain("Old site");
 	});
 
-	it("reads the words searched for from the address, and shows them in the field", async () => {
+	it("reads the words searched for from the address, and shows them in the field, with no button to apply them", async () => {
 		const html = await pageBody(await open(`${PROJECTS}?q=pay`, ada));
-		expect(html).toMatch(/<form[^>]*role="search"[^>]*aria-label="Search projects"/);
+		expect(html).toMatch(/<form[^>]*role="search"[^>]*aria-label="Filter projects"/);
 		const field = html.match(/<input[^>]*name="q"[^>]*>/)?.[0] ?? "";
 		expect(field).toContain('value="pay"');
 		expect(field).toContain('type="search"');
-		expect(textOf(mainOf(html))).toContain("Clear search");
+		expect(textOf(mainOf(html))).toContain("Search projects or clients");
+		expect(html).toContain('aria-label="Clear search"');
+		// It applies as it is typed (TS-091, W15): no Search, Filter or Apply button but the one for no script.
+		const form = html.match(/<form[^>]*role="search"[\s\S]*?<\/form>/)?.[0] ?? "";
+		expect(form.replace(/<noscript>[\s\S]*?<\/noscript>/, "")).not.toMatch(/type="submit"/);
 	});
 
 	it("takes % and _ as letters, not wildcards", async () => {
@@ -449,9 +453,10 @@ describe("search (TS-057)", () => {
 
 	it("an empty search, or one of spaces, is every project", async () => {
 		for (const query of ["", "   "]) {
-			const text = await search(query);
+			const html = await pageBody(await open(`${PROJECTS}?q=${encodeURIComponent(query)}`, ada));
+			const text = textOf(mainOf(html));
 			for (const name of ["Website", "Payroll", "Office move"]) expect(text).toContain(name);
-			expect(text).not.toContain("Clear search");
+			if (query === "") expect(html).not.toContain('aria-label="Clear search"');
 		}
 	});
 
@@ -469,7 +474,8 @@ describe("search (TS-057)", () => {
 		const text = await search("globex");
 		expect(text).not.toContain("Website");
 		expect(text).toContain("No active project has “globex” in its name.");
-		expect(text).toContain("Search by project name");
+		expect(text).toContain("Search projects");
+		expect(text).not.toContain("Search projects or clients");
 	});
 
 	it("never finds a project of another organisation", async () => {

@@ -4,11 +4,15 @@ import type { EntryContext, RouterContextProvider } from "react-router";
 import { ServerRouter } from "react-router";
 
 import { nonceContext } from "../workers/nonce";
+import { readColorScheme } from "./shell/color-scheme.server";
+import { RequestColorScheme } from "./shell/request-scheme";
 
 // React Router's default server entry for web-standard runtimes, plus the CSP
 // nonce. The Worker creates the nonce and sends the policy header; here it is
 // given to the two places that emit inline scripts: `ServerRouter` (which hands
 // it to `Scripts`, `ScrollRestoration` and the streamed data scripts) and React.
+// It also provides the colour scheme the request's cookie chose, which an error
+// page drawn before any loader ran has no other way to know.
 
 export const streamTimeout = 5_000;
 
@@ -59,7 +63,11 @@ export default async function handleRequest(
 	const userAgent = request.headers.get("user-agent");
 
 	const body = await renderToReadableStream(
-		<ServerRouter context={routerContext} url={request.url} nonce={nonce} />,
+		// The colour scheme from the cookie, for a page drawn without the root
+		// loader's answer (app/shell/request-scheme.ts).
+		<RequestColorScheme value={readColorScheme(request.headers.get("Cookie"))}>
+			<ServerRouter context={routerContext} url={request.url} nonce={nonce} />
+		</RequestColorScheme>,
 		{
 			nonce,
 			signal: AbortSignal.timeout(streamTimeout + 1000),

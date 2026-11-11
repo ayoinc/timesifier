@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { I18nProvider } from "react-aria";
 import {
-	isRouteErrorResponse,
 	Links,
 	Meta,
 	Outlet,
@@ -19,10 +18,13 @@ import plainFont from "./fonts/sofia-sans-latin-wght-normal.woff2?url";
 import { MAIN_ID, SiteHeader } from "./landing/Site";
 import { readColorScheme } from "./shell/color-scheme.server";
 import { APP_PATH } from "./shell/destinations";
+import { errorWords } from "./shell/error-words";
 import { useFreshOnReturn } from "./shell/fresh-on-return";
 import { TEXT_LINK } from "./shell/links";
 import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "./shell/Outside";
+import { PendingBar } from "./shell/PendingBar";
+import { useRequestColorScheme } from "./shell/request-scheme";
 import { ignoreSkippedTransitions } from "./shell/transitions";
 import { THEME_COLOUR } from "./styles/theme-colour";
 
@@ -64,6 +66,11 @@ export function loader({ request }: Route.LoaderArgs) {
 	};
 }
 
+/** The title of the root's error page: its heading. Every other page names itself. */
+export function meta({ error }: Route.MetaArgs) {
+	return error ? [{ title: `${errorWords(error, "outside").heading} · Timesifier` }] : [];
+}
+
 /**
  * Moving to another page changes neither value, so it asks the server nothing.
  * A submitted form may have changed the colour scheme; the answer to one arrives
@@ -79,11 +86,13 @@ export function shouldRevalidate({
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-	// Missing when the root loader itself failed and the error page is shown.
+	// Missing when no loader ran: a middleware refused the request, or no route
+	// matched. The scheme is then the one the request's cookie chose.
 	const data = useRouteLoaderData<typeof loader>("root");
+	const fromRequest = useRequestColorScheme();
 	// Light is the product's face. The page is held to it, or to dark where the
 	// person chose that; it follows the device only where they chose that.
-	const choice = data?.colorScheme ?? "light";
+	const choice = data?.colorScheme ?? fromRequest;
 	const scheme = choice === "system" ? null : choice;
 
 	return (
@@ -109,6 +118,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<Links nonce="" />
 			</head>
 			<body>
+				{/* Above the band on every page while the page waits for the server. */}
+				<PendingBar />
 				{/* The language of the interface is English; the locale is how React Aria
 				    formats dates and numbers, the same on the server and in the browser. */}
 				<I18nProvider locale={data?.locale ?? DEFAULT_LOCALE}>{children}</I18nProvider>
@@ -126,21 +137,20 @@ export default function App() {
 	return <Outlet />;
 }
 
+/**
+ * The error page outside an organisation's shell: an address no route answers,
+ * an organisation that is nobody's or not the person's, a destination their
+ * role is not shown, and anything that failed before the organisation was
+ * known. Inside an organisation the person belongs to, the organisation's own
+ * error page is drawn in the shell instead (app/routes/app/organisation.tsx).
+ */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 	const { pathname } = useLocation();
-	let heading = "Something went wrong";
-	let details = "An unexpected error occurred.";
-	let stack: string | undefined;
-
-	if (isRouteErrorResponse(error)) {
-		if (error.status === 404) {
-			heading = "Page not found";
-			details = NOT_FOUND;
-		} else details = error.statusText || details;
-	} else if (import.meta.env.DEV && error && error instanceof Error) {
-		details = error.message;
-		stack = error.stack;
-	}
+	const { heading, details } = errorWords(error, "outside");
+	const stack = import.meta.env.DEV && error instanceof Error ? error.stack : undefined;
+	// Under /app the way on is the person's own organisation: `/app` sends them
+	// to it, or lets them choose between theirs. Anywhere else it is the home page.
+	const inApp = pathname === APP_PATH || pathname.startsWith(`${APP_PATH}/`);
 
 	// The sign-in page's frame: the band with the lockup alone, a heading, one
 	// sentence, and one way out (docs/design/signed-in-error.svg).
@@ -152,8 +162,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 					<h1 className="text-headline-large text-balance medium:text-display-small">{heading}</h1>
 					<p className="mt-4 text-body-large text-on-surface-variant">{details}</p>
 					<p className="mt-10">
-						<a href={APP_PATH} className={TEXT_LINK}>
-							Your organisations
+						<a href={inApp ? APP_PATH : "/"} className={TEXT_LINK}>
+							{inApp ? "Go to your timesheet" : "Go to the home page"}
 						</a>
 					</p>
 					{stack && (
@@ -166,6 +176,3 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 		</div>
 	);
 }
-
-/** What the page at an address that is nobody's, or not yours, says. */
-const NOT_FOUND = "There is no page at this address, or it is not yours to open.";

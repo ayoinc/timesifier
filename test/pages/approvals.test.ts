@@ -60,7 +60,7 @@ describe("the page", () => {
 
 		const html = await pageBody(await open(`${APPROVALS}?week=${WEEK}`, ada));
 		const text = textOf(html);
-		expect(text).toContain("5 to 11 January 2026");
+		expect(text).toContain("5–11 January 2026");
 		expect(text).toContain("Pending (1)");
 		expect(text).toContain("Approved (1)");
 		expect(text).toContain("Returned (0)");
@@ -86,7 +86,7 @@ describe("the page", () => {
 		const grace = await memberOfAcme("member", "grace@example.com");
 		await seedPeriod(acme.id, grace.user.id, WEEK, "submitted");
 		const html = await pageBody(await open(`${APPROVALS}?week=2026-01-12`, ada));
-		expect(textOf(html)).toContain("Also waiting: 5 to 11 January 2026 (1)");
+		expect(textOf(html)).toContain("Also waiting: 5–11 January 2026 (1)");
 		expect(html).toContain(`href="/app/acme/approvals?week=${WEEK}"`);
 	});
 
@@ -427,7 +427,7 @@ describe("time off waiting (TS-061)", () => {
 		const html = await pageBody(await open(`${APPROVALS}?week=${WEEK}`, ada));
 		const text = textOf(html);
 		expect(text).toContain("Time off waiting");
-		expect(text).toContain("grace@example.com · Annual leave 14 to 18 December 2026 · 5 days");
+		expect(text).toContain("grace@example.com · Annual leave 14–18 December 2026 · 5 days");
 		expect(text).toContain(
 			"linus@example.com · Study leave 21 December 2026, half day · half a day",
 		);

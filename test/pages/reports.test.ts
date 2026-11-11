@@ -76,7 +76,7 @@ beforeEach(async () => {
 
 	await track(ada, site, "2026-10-05T09:00:00Z", "2026-10-05T10:00:00Z");
 	await track(hedy, billing, "2026-10-06T09:00:00Z", "2026-10-06T11:00:00Z");
-	// Across midnight in UTC: an hour on each day.
+	// Across midnight in UTC: two hours, counted whole on the Tuesday it starts.
 	await track(linus, site, "2026-10-06T23:00:00Z", "2026-10-07T01:00:00Z");
 	await track(mallory, billing, "2026-10-08T10:00:00Z", "2026-10-08T13:00:00Z");
 	// The Monday after the week: in no report of it.
@@ -128,15 +128,10 @@ async function pageTotal(who: Person, query: string): Promise<string> {
 
 describe("whose time a report holds", () => {
 	it.each([
-		["an owner", () => ada, ["ada", "hedy", "linus", "linus", "mallory"], "8:00"],
-		["an admin", () => grace, ["ada", "hedy", "linus", "linus", "mallory"], "8:00"],
-		[
-			"a manager: their own and their team's people",
-			() => hedy,
-			["hedy", "linus", "linus"],
-			"4:00",
-		],
-		["a member: their own", () => linus, ["linus", "linus"], "2:00"],
+		["an owner", () => ada, ["ada", "hedy", "linus", "mallory"], "8:00"],
+		["an admin", () => grace, ["ada", "hedy", "linus", "mallory"], "8:00"],
+		["a manager: their own and their team's people", () => hedy, ["hedy", "linus"], "4:00"],
+		["a member: their own", () => linus, ["linus"], "2:00"],
 		["a member in no team: their own", () => mallory, ["mallory"], "3:00"],
 	])("%s", async (_, who, people, total) => {
 		const { rows } = await exported(who(), WEEK);
@@ -148,7 +143,7 @@ describe("whose time a report holds", () => {
 
 	it("narrows to one person the viewer may see", async () => {
 		const { rows } = await exported(ada, `${WEEK}&person=${linus.user.id}`);
-		expect(rows.map((row) => row.person)).toEqual(["linus@example.com", "linus@example.com"]);
+		expect(rows.map((row) => row.person)).toEqual(["linus@example.com"]);
 		expect(await pageTotal(hedy, `${WEEK}&person=${linus.user.id}`)).toBe("2:00");
 		expect(await pageTotal(hedy, `${WEEK}&person=${hedy.user.id}`)).toBe("2:00");
 	});
@@ -189,21 +184,25 @@ describe("whose time a report holds", () => {
 	});
 });
 
-describe("Previous and Next beside the range (TS-059)", () => {
+describe("the stepper beside the range (TS-059, TS-091)", () => {
 	/** The addresses of Previous and Next on the report at `query`, as `who` sees it. */
 	async function steps(who: Person, query: string) {
 		const html = await pageBody(await open(`${REPORTS}?${query}`, who));
-		const step = (word: string) =>
-			new RegExp(`href="([^"]+)"[^>]*>(?:← )?${word} `)
-				.exec(html)?.[1]
+		const step = (word: string) => {
+			const tag = new RegExp(`<a [^>]*aria-label="${word} [^"]*"[^>]*>`).exec(html)?.[0] ?? "";
+			return /href="([^"]+)"/
+				.exec(tag)?.[1]
 				?.replaceAll("&amp;", "&")
 				.slice(REPORTS.length + 1);
-		return { text: textOf(html), previous: step("Previous"), next: step("Next") };
+		};
+		// The stepper's own links: ‹ the range › and the way back to today.
+		const stepper = /aria-label="Report range".*?<\/div>/s.exec(html)?.[0] ?? "";
+		return { html, stepper, text: textOf(html), previous: step("Previous"), next: step("Next") };
 	}
 
 	it("moves a custom range by its number of days, keeping the grouping and the person", async () => {
 		const here = await steps(ada, `${WEEK}&group=day&person=${linus.user.id}`);
-		expect(here.text).toContain("Previous 7 days");
+		expect(here.html).toContain('aria-label="Previous 7 days"');
 		expect(here.previous).toBe(
 			`range=custom&from=2026-09-28&to=2026-10-04&group=day&person=${linus.user.id}`,
 		);
@@ -217,8 +216,10 @@ describe("Previous and Next beside the range (TS-059)", () => {
 
 	it("moves a week by a week", async () => {
 		const here = await steps(ada, "range=week&from=2026-10-07");
-		expect(here.text).toContain("5 – 11 October 2026");
-		expect(here.text).toContain("Next week");
+		expect(here.text).toContain("5–11 October 2026");
+		expect(here.html).toContain('aria-label="Next week"');
+		// Away from this week, the way back to it.
+		expect(here.stepper).toMatch(/href="[^"]*range=this-week[^"]*"[^>]*>This week</);
 		expect(here.previous).toBe("range=week&from=2026-09-28&group=project");
 		expect(here.next).toBe("range=week&from=2026-10-12&group=project");
 		expect(await pageTotal(ada, "range=week&from=2026-10-07")).toBe("8:00");
@@ -227,14 +228,14 @@ describe("Previous and Next beside the range (TS-059)", () => {
 
 	it("moves a month that ends on the 31st by a calendar month, to one of 30 days", async () => {
 		const october = await steps(ada, "range=month&from=2026-10-31");
-		expect(october.text).toContain("1 – 31 October 2026");
-		expect(october.text).toContain("Next month");
+		expect(october.text).toContain("1–31 October 2026");
+		expect(october.html).toContain('aria-label="Next month"');
 		expect(october.previous).toBe("range=month&from=2026-09-01&group=project");
 		expect(october.next).toBe("range=month&from=2026-11-01&group=project");
 		expect(await pageTotal(ada, "range=month&from=2026-10-31")).toBe("9:00");
 
 		const november = await steps(ada, october.next ?? "");
-		expect(november.text).toContain("1 – 30 November 2026");
+		expect(november.text).toContain("1–30 November 2026");
 		expect(november.previous).toBe("range=month&from=2026-10-01&group=project");
 	});
 
@@ -249,6 +250,9 @@ describe("Previous and Next beside the range (TS-059)", () => {
 		expect(thisMonth.previous).toBe(`range=month&from=${before}-01&group=project`);
 		const thisWeek = await steps(ada, "range=this-week");
 		expect(thisWeek.previous).toMatch(/^range=week&from=\d{4}-\d\d-\d\d&group=project$/);
+		// Already at this week: no way back to it.
+		expect(thisWeek.stepper).toContain("Previous week");
+		expect(thisWeek.stepper).not.toContain("This week");
 	});
 
 	it.each([
@@ -268,29 +272,42 @@ describe("Previous and Next beside the range (TS-059)", () => {
 });
 
 describe("a report", () => {
-	it("cuts an entry at midnight in the organisation's time zone", async () => {
-		const { rows } = await exported(linus, WEEK);
-		expect(rows.map((row) => [row.started_at, row.ended_at, row.duration_seconds])).toEqual([
-			["2026-10-06T23:00:00Z", "2026-10-07T00:00:00Z", "3600"],
-			["2026-10-07T00:00:00Z", "2026-10-07T01:00:00Z", "3600"],
-		]);
-		const page = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=day`, linus)));
-		expect(page).toContain("Tue 6 Oct 1:00");
-		expect(page).toContain("Wed 7 Oct 1:00");
+	it("counts an entry of 21:33 to 02:33 whole on the day it starts, by day and in one CSV row", async () => {
+		await track(mallory, site, "2026-10-09T21:33:00Z", "2026-10-10T02:33:00Z", "Late");
+		const { rows } = await exported(mallory, WEEK);
+		expect(
+			rows
+				.filter((row) => row.description === "Late")
+				.map((row) => [row.started_at, row.ended_at, row.duration_seconds]),
+		).toEqual([["2026-10-09T21:33:00Z", "2026-10-10T02:33:00Z", "18000"]]);
+		const page = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=day`, mallory)));
+		expect(page).toContain("Friday 9 October 5:00");
+		expect(page).not.toContain("Saturday 10 October");
+		expect(page).toContain("Total 8:00");
+		// The page lists it once, on its first day, as the export does.
+		expect(page.match(/Late/g)).toHaveLength(1);
 	});
 
-	it("counts its days in the organisation's zone, whatever the viewer's own", async () => {
+	it("counts its days in the viewer's zone, not the organisation's", async () => {
 		await env.DB.prepare("update organisations set time_zone = 'Pacific/Auckland' where id = ?")
 			.bind(acme.id)
 			.run();
 		await env.DB.prepare("update users set time_zone = 'America/New_York' where id = ?")
 			.bind(linus.user.id)
 			.run();
-		// 23:00 to 01:00 UTC is midday to two in Auckland, on the 7th: one piece.
+		// 23:00 to 01:00 UTC starts at 19:00 on the 6th in New York: one row, on the Tuesday.
 		const { rows } = await exported(linus, WEEK);
 		expect(rows.map((row) => row.duration_seconds)).toEqual(["7200"]);
+		const inNewYork = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=day`, linus)));
+		expect(inNewYork).toContain("Tuesday 6 October 2:00");
+		expect(inNewYork).toContain("America/New_York");
+
+		// The same entry, seen from Auckland, starts at midday on the 7th.
+		await env.DB.prepare("update users set time_zone = 'Pacific/Auckland' where id = ?")
+			.bind(linus.user.id)
+			.run();
 		expect(textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=day`, linus)))).toContain(
-			"Wed 7 Oct 2:00",
+			"Wednesday 7 October 2:00",
 		);
 	});
 
@@ -313,11 +330,12 @@ describe("a report", () => {
 		const today = dayOf(now, "UTC");
 		const yesterday = dayOf(now - 86_400_000, "UTC");
 		const { rows } = await exported(mallory, `range=custom&from=${yesterday}&to=${today}`);
-		// A run that crosses midnight UTC is two rows; the last is the one running.
-		expect(rows.slice(0, -1).map((row) => row.ended_at)).not.toContain("");
-		expect(rows.at(-1)?.ended_at).toBe("");
+		// One row, even across midnight, with no end; its whole minutes so far.
+		expect(rows).toHaveLength(1);
+		expect(rows[0]?.ended_at).toBe("");
 		const seconds = secondsOf(rows);
-		expect(seconds).toBeGreaterThanOrEqual(90 * 60 - 1);
+		expect(seconds % 60).toBe(0);
+		expect(seconds).toBeGreaterThanOrEqual(90 * 60);
 		expect(seconds).toBeLessThan(92 * 60);
 	});
 
@@ -332,13 +350,63 @@ describe("a report", () => {
 		expect(rows.map((row) => row.client)).toEqual(rows.map(() => ""));
 	});
 
+	it("is 400 for a range that is not one, page and export alike", async () => {
+		expect((await open(`${REPORTS}?range=forever`, ada)).status).toBe(400);
+		expect((await open(`${EXPORT}?range=forever`, ada)).status).toBe(400);
+	});
+
 	it.each([
-		["a range that is not one", "range=forever"],
-		["a custom range that runs backwards", "range=custom&from=2026-10-11&to=2026-10-05"],
-		["a day that is not a date", "range=custom&from=2026-02-30&to=2026-03-01"],
-	])("is 400 for %s, page and export alike", async (_, query) => {
-		expect((await open(`${REPORTS}?${query}`, ada)).status).toBe(400);
-		expect((await open(`${EXPORT}?${query}`, ada)).status).toBe(400);
+		[
+			"that runs backwards",
+			"range=custom&from=2026-10-11&to=2026-10-05",
+			"Must be on or after the first day",
+			"2026-10-05",
+		],
+		[
+			"longer than 366 days",
+			"range=custom&from=2025-10-01&to=2026-10-11",
+			"At most 366 days",
+			"2026-10-11",
+		],
+		[
+			"whose last day is not a date",
+			"range=custom&from=2026-10-05&to=2026-02-30",
+			"Enter a date like 2026-11-09",
+			"2026-02-30",
+		],
+		["with no last day", "range=custom&from=2026-10-05&to=", "Enter a date like 2026-11-09", ""],
+	])(
+		"shows the page again for a custom range %s, the days as typed and why under Last day",
+		async (_, query, message, last) => {
+			const response = await open(`${REPORTS}?${query}`, ada);
+			expect(response.status).toBe(400);
+			const html = await pageBody(response);
+			const text = textOf(html);
+			// The Reports page itself, not the error boundary.
+			expect(html).toMatch(/<h1[^>]*>Reports<\/h1>/);
+			expect(html).toContain(">Last day<");
+			expect(html).toMatch(
+				new RegExp(`name="to"[^>]*value="${last}"|value="${last}"[^>]*name="to"`),
+			);
+			expect(html).toMatch(
+				/name="from"[^>]*value="20\d\d-\d\d-\d\d"|value="20\d\d-\d\d-\d\d"[^>]*name="from"/,
+			);
+			expect(text).toContain(message);
+			// No report: no total and no export.
+			expect(text).not.toContain("Total");
+			expect(text).not.toContain("Export as CSV");
+			expect((await open(`${EXPORT}?${query}`, ada)).status).toBe(400);
+		},
+	);
+
+	it("gives Last day the first day as its least", async () => {
+		const html = await pageBody(await open(`${REPORTS}?${WEEK}`, ada));
+		expect(html).toMatch(/name="to"[^>]*min="2026-10-05"|min="2026-10-05"[^>]*name="to"/);
+	});
+
+	it("applies its filters as they change: there is no button to show it", async () => {
+		const html = await pageBody(await open(`${REPORTS}?${WEEK}`, ada));
+		expect(textOf(html)).not.toContain("Show report");
 	});
 });
 
@@ -383,17 +451,18 @@ describe("the export", () => {
 			userId: linus.user.id,
 			projectId: site,
 			description: `Entry ${i}`,
-			startedAt: new Date(Date.parse("2026-10-09T00:00:00Z") + i * 60_000),
-			endedAt: new Date(Date.parse("2026-10-09T00:00:00Z") + i * 60_000 + 30_000),
+			startedAt: new Date(Date.parse("2026-10-09T00:00:00Z") + i * 120_000),
+			// A minute and a half: a whole minute, as the report counts it.
+			endedAt: new Date(Date.parse("2026-10-09T00:00:00Z") + i * 120_000 + 90_000),
 		}));
 		// D1 binds at most 100 values a statement: ten entries an insert.
 		for (let at = 0; at < many.length; at += 10)
 			await scope.timeEntries.insert(many.slice(at, at + 10));
 		const { rows } = await exported(linus, WEEK);
-		expect(rows).toHaveLength(452);
+		expect(rows).toHaveLength(451);
 		expect(new Set(rows.map((row) => row.entry_id)).size).toBe(451);
-		expect(secondsOf(rows)).toBe(2 * HOUR + 450 * 30);
-		expect(await pageTotal(linus, WEEK)).toBe("5:45");
+		expect(secondsOf(rows)).toBe(2 * HOUR + 450 * 60);
+		expect(await pageTotal(linus, WEEK)).toBe("9:30");
 	});
 });
 

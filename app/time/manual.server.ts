@@ -6,7 +6,8 @@ import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
 
 import { bounds, type Day, dayOf } from "./calendar";
-import { gridEntryStart } from "./grid";
+import { formatDuration } from "./format";
+import { gridEntryStart, placeOnDay } from "./grid";
 
 /**
  * Entries a person writes by hand: hours tracked on a day from the Day view's
@@ -139,25 +140,37 @@ export interface DayHours {
 	now: number;
 }
 
+/** The refusal of hours a day has no room for, saying what it has left (TS-091, W08). */
+const dayFull = (minutesLeft: number) => ({
+	ok: false as const,
+	reason: "day-full" as const,
+	message: `This day has only ${formatDuration(minutesLeft * 60)} left`,
+});
+
 /**
  * Adds one entry of `minutes` on `day` for `userId`, on an active project
  * (TS-056): it starts at `startedAt` when given, or where `gridEntryStart`
  * says, as an hour typed into an empty cell of the week's grid does, and
- * lasts the time typed.
+ * lasts the time typed. It is placed within its day by `placeOnDay` (TS-091,
+ * W08); a start the person chose is kept, so the hours must fit after it.
  */
 export async function addHours(scope: OrganisationScope, userId: string, hours: DayHours) {
 	const { projectId, description, day, minutes, zone, now } = hours;
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
-	const startedAt =
+	const wanted =
 		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
+	const placed = placeOnDay(day, zone, wanted, minutes, now, {
+		keepStart: hours.startedAt !== undefined,
+	});
+	if (!placed.fits) return dayFull(placed.minutesLeft);
 	const added = {
 		id: uuidv7(),
 		userId,
 		projectId,
 		description,
-		startedAt: new Date(startedAt),
-		endedAt: new Date(startedAt + minutes * 60_000),
+		startedAt: new Date(placed.start),
+		endedAt: new Date(placed.start + minutes * 60_000),
 	};
 	const [[entry]] = await scope.batch([
 		scope.timeEntries.statements.insert(added),
@@ -185,8 +198,11 @@ export interface CellHours {
 /**
  * Sets the time of one project on one day to `minutes` (TS-052). A cell with
  * no entry gains one, which starts where `gridEntryStart` says; a cell of one
- * entry has that entry's end moved; 0 deletes it. A cell of more than one
- * entry, or of a running one, is changed in the Day view.
+ * entry keeps its start and has its end moved; 0 deletes it. A cell of more
+ * than one entry, or of a running one, is changed in the Day view. Either way
+ * the entry is placed within its day by `placeOnDay` (TS-091, W08): it never
+ * ends past the end of the day or past now, and a day without room for the
+ * hours is refused, saying what it has left.
  */
 export async function setCellHours(scope: OrganisationScope, userId: string, cell: CellHours) {
 	const { projectId, day, minutes, zone, now } = cell;
@@ -198,58 +214,55 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 		return refuse("in-day-view");
 	}
 	const [entry] = inCell;
-	const length = minutes * 60_000;
-
-	if (entry) {
-		const at = subject(userId, entry.id);
-		if (minutes === 0) {
+	if (minutes === 0) {
+		if (entry) {
 			await scope.batch([
 				scope.timeEntries.statements.delete((e) => and(eq(e.id, entry.id), eq(e.userId, userId))),
 				recordStatement(
 					scope,
 					userId,
 					"time_entry.deleted",
-					at,
+					subject(userId, entry.id),
 					changes(entry, null, ENTRY_FIELDS),
-				),
-			]);
-		} else {
-			const endedAt = new Date(entry.startedAt.getTime() + length);
-			await scope.batch([
-				scope.timeEntries.statements.update({ endedAt }, (e) =>
-					and(eq(e.id, entry.id), eq(e.userId, userId)),
-				),
-				recordStatement(
-					scope,
-					userId,
-					"time_entry.updated",
-					at,
-					changes(entry, { endedAt }, ["endedAt"]),
 				),
 			]);
 		}
 		return { ok: true as const };
 	}
-	if (minutes === 0) return { ok: true as const };
-	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
-	const startedAt = gridEntryStart(day, zone, ofDay, now);
-	const added = {
-		id: uuidv7(),
-		userId,
-		projectId,
-		description: null,
-		startedAt: new Date(startedAt),
-		endedAt: new Date(startedAt + length),
+	if (!entry && !(await findActiveProject(scope, projectId))) return refuse("no-project");
+
+	const wanted = entry ? entry.startedAt.getTime() : gridEntryStart(day, zone, ofDay, now);
+	const placed = placeOnDay(day, zone, wanted, minutes, now);
+	if (!placed.fits) return dayFull(placed.minutesLeft);
+	const span = {
+		startedAt: new Date(placed.start),
+		endedAt: new Date(placed.start + minutes * 60_000),
 	};
-	await scope.batch([
-		scope.timeEntries.statements.insert(added),
-		recordStatement(
-			scope,
-			userId,
-			"time_entry.created",
-			subject(userId, added.id),
-			changes(null, added, ENTRY_FIELDS),
-		),
-	]);
+	if (entry) {
+		await scope.batch([
+			scope.timeEntries.statements.update(span, (e) =>
+				and(eq(e.id, entry.id), eq(e.userId, userId)),
+			),
+			recordStatement(
+				scope,
+				userId,
+				"time_entry.updated",
+				subject(userId, entry.id),
+				changes(entry, span, ["startedAt", "endedAt"]),
+			),
+		]);
+	} else {
+		const added = { id: uuidv7(), userId, projectId, description: null, ...span };
+		await scope.batch([
+			scope.timeEntries.statements.insert(added),
+			recordStatement(
+				scope,
+				userId,
+				"time_entry.created",
+				subject(userId, added.id),
+				changes(null, added, ENTRY_FIELDS),
+			),
+		]);
+	}
 	return { ok: true as const };
 }

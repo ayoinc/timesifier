@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import { useFetcher } from "react-router";
 
-import { Button } from "~/components/Button";
+import { Button, type ButtonVariant } from "~/components/Button";
 import { Sheet } from "~/components/Sheet";
 import type { Outcome } from "~/organisations/problems";
 
@@ -34,6 +34,10 @@ export interface FormSheetProps {
 	intent: string;
 	/** The label of the one primary action. */
 	submitLabel: string;
+	/** `danger` for the confirmation of a deletion. Defaults to `filled`. */
+	submitVariant?: ButtonVariant;
+	/** Holds the primary action back until what it needs is filled in: a typed name that matches. */
+	isSubmitDisabled?: boolean;
 	/** The label of the button that gives the task up. Defaults to "Cancel". */
 	cancelLabel?: string;
 	isOpen: boolean;
@@ -57,6 +61,8 @@ export function FormSheet({
 	title,
 	intent,
 	submitLabel,
+	submitVariant = "filled",
+	isSubmitDisabled = false,
 	cancelLabel = "Cancel",
 	isOpen,
 	onClose,
@@ -96,7 +102,7 @@ export function FormSheet({
 					<Button variant="text" slot="close">
 						{cancelLabel}
 					</Button>
-					<Button type="submit" form={form}>
+					<Button type="submit" form={form} variant={submitVariant} isDisabled={isSubmitDisabled}>
 						{submitLabel}
 					</Button>
 				</>

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { useMemo, useState } from "react";
 import { Link, redirect, replace, useFetcher, useRouteLoaderData } from "react-router";
 import * as z from "zod";
@@ -27,7 +28,12 @@ import {
 	colorSchemeCookie,
 	colorSchemeForm,
 } from "~/shell/color-scheme.server";
-import { APP_PATH, NEW_ORGANISATION_PATH } from "~/shell/destinations";
+import {
+	APP_PATH,
+	destinationPath,
+	membersPath,
+	NEW_ORGANISATION_PATH,
+} from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
 import { isTimeZone, TimeZone } from "~/time/zones";
@@ -53,14 +59,19 @@ export function meta() {
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { role, user, organisation } = membership;
-	const [organisations, ownZone, week] = await Promise.all([
+	const [organisations, ownZone, week, owners] = await Promise.all([
 		listOrganisations(request),
 		ownZoneOf(membership),
 		workingWeekOf(organisationScope(env.DB, organisation.id)),
+		// The only owner cannot leave (the auth server refuses it), so is not offered to.
+		role === "owner"
+			? organisationScope(env.DB, organisation.id).memberships.select((m) => eq(m.role, "owner"))
+			: [],
 	]);
 	return {
 		role,
 		hasOthers: organisations.ok && organisations.data.length > 1,
+		onlyOwner: owners.length === 1,
 		person: { name: user.name?.trim() || null, email: user.email },
 		timeZone: { own: ownZone, organisation: organisation.timeZone },
 		/** The organisation's working week, which is the person's (TS-061). */
@@ -149,7 +160,7 @@ const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
 type Task = "name" | "time-zone" | "leave";
 
 export default function Account({ loaderData }: Route.ComponentProps) {
-	const { person, role, hasOthers, timeZone, workingWeek } = loaderData;
+	const { person, role, hasOthers, onlyOwner, timeZone, workingWeek } = loaderData;
 	const organisation = useOrganisation();
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -250,21 +261,37 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 				</ul>
 			</Section>
 
-			{/* Leaving is last, under its own rule. */}
+			{/* Leaving is last, under its own rule. The only owner is told what to do instead. */}
 			<Section
 				id="leave"
 				heading="Leave organisation"
 				lead={
-					<>
-						You stop being a member of {organisation.name} and can no longer open it. Your account
-						stays.
-					</>
+					onlyOwner ? (
+						<>
+							You are the only owner of {organisation.name}. Make someone else an owner on{" "}
+							<Link to={membersPath(organisation.slug)} className={TEXT_LINK}>
+								Members
+							</Link>
+							, or delete the organisation in{" "}
+							<Link to={destinationPath(organisation.slug, "settings")} className={TEXT_LINK}>
+								Workspace settings
+							</Link>
+							.
+						</>
+					) : (
+						<>
+							You stop being a member of {organisation.name} and can no longer open it. Your account
+							stays.
+						</>
+					)
 				}
 				className="max-w-200"
 			>
-				<Button variant="outlined" onPress={() => setTask("leave")}>
-					Leave organisation
-				</Button>
+				{!onlyOwner && (
+					<Button variant="outlined" onPress={() => setTask("leave")}>
+						Leave organisation
+					</Button>
+				)}
 			</Section>
 
 			<FormSheet

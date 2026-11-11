@@ -176,14 +176,15 @@ describe("what the page shows", () => {
 		expect(invitations).not.toContain("hedy@example.com");
 	});
 
-	it("leaving is on My account, for every role", async () => {
+	it("leaving is on My account, for every role but the only owner (TS-091, W26)", async () => {
 		const linus = await memberOfAcme("member", "linus@example.com");
+		const leave = /<button[^>]*>Leave organisation<\/button>/;
 
-		for (const who of [ada, linus]) {
-			expect(await pageBody(await open(ACCOUNT, who))).toMatch(
-				/<button[^>]*>Leave organisation<\/button>/,
-			);
-		}
+		expect(await pageBody(await open(ACCOUNT, linus))).toMatch(leave);
+		// Ada is Acme's only owner: the auth server would refuse her, so she is not offered it.
+		expect(await pageBody(await open(ACCOUNT, ada))).not.toMatch(leave);
+		await memberOfAcme("owner", "grace@example.com");
+		expect(await pageBody(await open(ACCOUNT, ada))).toMatch(leave);
 	});
 
 	it("only the invitations that can still be accepted", async () => {

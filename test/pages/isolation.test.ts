@@ -4,7 +4,7 @@ import { organisationPath } from "~/shell/destinations";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, value } from "../organisations/harness";
-import { allRoutes, isMoved, routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
+import { allRoutes, isMoved, isNotFound, routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
 import { open, openData, type Person, pageBody, person, submit } from "./harness";
 
 // Criterion 4 of card TS-009: a member of one organisation receives 404 for
@@ -71,7 +71,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, the export of Reports, My account and the moved address", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, the export of Reports, My account, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -95,6 +95,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/settings",
 				"/app/acme/account",
 				"/app/acme/settings/members",
+				// Any other address: `*`, stood in for by `x`.
+				"/app/acme/x",
 			].sort(),
 		);
 	});
@@ -119,7 +121,11 @@ describe("a member of one organisation asking for another organisation's address
 	it.each(ofAnOrganisation)("$id: the page $address is 404", async (route) => {
 		const { address } = route;
 		const { ada } = await twoOrganisations();
-		expect((await open(address, ada)).status).toBe(isMoved(route) ? 301 : 200);
+		// A member is answered the page, or the redirect of a moved address, or,
+		// at an address that holds no page, the 404 drawn in their own shell.
+		expect((await open(address, ada)).status).toBe(
+			isMoved(route) ? 301 : isNotFound(route) ? 404 : 200,
+		);
 
 		const theirs = await open(address, grace);
 		const nobodys = await open(inNobodys(address), grace);
@@ -140,7 +146,9 @@ describe("a member of one organisation asking for another organisation's address
 		const { address } = route;
 		const { ada } = await twoOrganisations();
 		// A redirect is answered to a data request with 202 and where to go.
-		expect((await openData(address, ada)).status).toBe(isMoved(route) ? 202 : 200);
+		expect((await openData(address, ada)).status).toBe(
+			isMoved(route) ? 202 : isNotFound(route) ? 404 : 200,
+		);
 
 		const theirs = await openData(address, grace);
 		const nobodys = await openData(inNobodys(address), grace);

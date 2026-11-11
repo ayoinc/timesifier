@@ -95,8 +95,14 @@ for (const viewport of [
 					creating.getByText("Everyone in", { exact: false }),
 				);
 
-				await page.getByRole("button", { name: "Actions for Design" }).click();
-				await page.getByRole("menuitem", { name: "Archive" }).click();
+				// The row's name opens its sheet, which holds Archive (TS-091, W24). The
+				// check of the sheet closes it, so the name opens it again.
+				const row = page.getByRole("button", { name: "Design", exact: true });
+				await row.click();
+				const editing = page.getByRole("dialog", { name: "Edit Design" });
+				await expectNoProblemsInSheet(page, editing, editing.getByText("Done with it?"));
+				await row.click();
+				await editing.getByRole("button", { name: "Archive project" }).click();
 				const archiving = page.getByRole("dialog", { name: "Archive Design?" });
 				await archiving.getByRole("button", { name: "Archive project" }).click();
 				await expect(archiving).toBeHidden();
@@ -144,15 +150,14 @@ test("a project is created, renamed and archived with the keyboard alone", async
 	await expect(creating).toBeHidden();
 	await expect(page.getByRole("status")).toHaveText("Project created: Design.");
 
-	// Rename, from the project's menu.
-	const actions = page.getByRole("button", { name: "Actions for Design" });
+	// Rename: the project's name is a button in the tab order that opens its sheet (TS-091, W24).
+	const row = page.getByRole("button", { name: "Design", exact: true });
 	await heading.focus();
-	while (!(await actions.evaluate((element) => element === document.activeElement))) {
+	while (!(await row.evaluate((element) => element === document.activeElement))) {
 		await page.keyboard.press("Tab");
 	}
-	await expectFocusShown(actions);
-	await page.keyboard.press("Enter");
-	await expect(page.getByRole("menuitem", { name: "Edit" })).toBeFocused();
+	await expectFocusShown(row);
+	await expect(page.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
 	await page.keyboard.press("Enter");
 	const renaming = page.getByRole("dialog", { name: "Edit Design" });
 	const name = renaming.getByLabel("Project name");
@@ -163,13 +168,17 @@ test("a project is created, renamed and archived with the keyboard alone", async
 	await expect(renaming).toBeHidden();
 	await expect(page.getByRole("status")).toHaveText("Project saved: Design system.");
 
-	// Archive: the second item of the menu, then the sheet's own button.
-	const renamed = page.getByRole("button", { name: "Actions for Design system" });
+	// Archive: from the same sheet, then the confirming sheet's own button.
+	const renamed = page.getByRole("button", { name: "Design system", exact: true });
 	await renamed.focus();
 	await expectFocusShown(renamed);
 	await page.keyboard.press("Enter");
-	await page.keyboard.press("ArrowDown");
-	await expect(page.getByRole("menuitem", { name: "Archive" })).toBeFocused();
+	const editing = page.getByRole("dialog", { name: "Edit Design system" });
+	const archive = editing.getByRole("button", { name: "Archive project" });
+	while (!(await archive.evaluate((element) => element === document.activeElement))) {
+		await page.keyboard.press("Tab");
+	}
+	await expectFocusShown(archive);
 	await page.keyboard.press("Enter");
 	const archiving = page.getByRole("dialog", { name: "Archive Design system?" });
 	await expect(archiving).toBeVisible();

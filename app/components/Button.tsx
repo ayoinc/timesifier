@@ -3,8 +3,9 @@ import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react
 
 import { cx } from "./cx";
 
-// Material 3 Expressive button, small size: 40px tall, 16px either side, label-large.
-// Its corners are the corner scale's `large-increased` step; pressed, they settle
+// Material 3 Expressive button, small size: 44px tall, 16px either side, label-large.
+// Material draws it 40px; it is drawn 44px so that what is pressed is what is seen
+// (docs/design-system.md, "Targets"). Its corners are the corner scale's `large-increased` step; pressed, they settle
 // to the `small` step on the spring.
 //
 // The large size is the action of a page nobody is signed in on, as the home
@@ -19,15 +20,19 @@ const BASE =
 	"data-disabled:cursor-not-allowed data-disabled:text-disabled data-disabled:shadow-none";
 
 const SIZES = {
-	small:
-		"h-10 rounded-large-increased text-label-large data-pressed:rounded-small " +
-		// The touch target is 48px tall although the button is drawn 40px tall.
-		"before:absolute before:inset-x-0 before:-inset-y-1",
+	small: "h-11 min-w-11 rounded-large-increased text-label-large data-pressed:rounded-small",
 	large: "h-12 rounded-small px-6 text-title-medium",
 } as const;
 
 /** The padding at each side of a small button. A large one has its own. */
-const SMALL_PADDING = { filled: "px-4", tonal: "px-4", outlined: "px-4", text: "px-3" } as const;
+const SMALL_PADDING = {
+	filled: "px-4",
+	tonal: "px-4",
+	outlined: "px-4",
+	text: "px-3",
+	danger: "px-4",
+	"outlined-danger": "px-4",
+} as const;
 
 const VARIANTS = {
 	filled:
@@ -36,6 +41,13 @@ const VARIANTS = {
 		"over-secondary-container text-on-secondary-container data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
 	outlined: "border border-outline-variant text-on-surface-variant",
 	text: "text-primary",
+	// The error colour, for the one action that cannot be undone: the confirmation
+	// of a deletion. Disabled, it is drawn like any disabled filled button.
+	danger:
+		"over-error text-on-error data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
+	// The error colour, outlined: the action that opens a destructive confirmation
+	// ("Delete organisation"). The confirmation itself is `danger`.
+	"outlined-danger": "border border-error text-error data-disabled:border-outline-variant",
 } as const;
 
 export type ButtonVariant = keyof typeof VARIANTS;
@@ -57,7 +69,8 @@ export interface ButtonProps
 	> {
 	/**
 	 * How much the button stands out. `filled` is the one primary action of a view;
-	 * `tonal`, `outlined` and `text` step down from it. Defaults to `filled`.
+	 * `tonal`, `outlined` and `text` step down from it. `danger` takes the place of
+	 * `filled` when the action cannot be undone. Defaults to `filled`.
 	 */
 	variant?: ButtonVariant;
 	/**

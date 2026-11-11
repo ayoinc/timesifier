@@ -1,47 +1,29 @@
-import { useDateFormatter } from "react-aria";
-
 import type { Day } from "~/time/calendar";
+import { formatDay, formatRange, formatTime } from "~/time/format";
 
 /**
- * How the Timesheet writes days and times. A time is shown in the zone the
- * person's days are counted in, which the loader sends, not the browser's: the
- * same entry reads the same on every device (decision 26). A day is a date
- * with no time, so it is written as UTC writes it.
+ * How the Timesheet writes days and times: as every page does, through
+ * `app/time/format.ts`. A time is shown in the zone the person's days are
+ * counted in, which the loader sends, not the browser's: the same entry reads
+ * the same on every device (decision 26). Nothing here reads the browser's
+ * locale or zone, so the server's text and the browser's are the same and the
+ * page hydrates without a mismatch (audit W06). The `use` names are kept so the
+ * components that call them need no change; none of them holds state.
  */
-
-/** Midnight UTC of `day`: the instant a day is formatted from. */
-const asDate = (day: Day) => new Date(`${day}T00:00:00Z`);
 
 /** Writes an instant as a 24-hour time in `zone`: `09:30`. */
 export function useClockFormat(zone: string) {
-	const format = useDateFormatter({
-		hour: "2-digit",
-		minute: "2-digit",
-		hourCycle: "h23",
-		timeZone: zone,
-	});
-	return (instant: number) => format.format(new Date(instant));
+	return (instant: number) => formatTime(instant, zone);
 }
 
 /** Writes a day in full, `Wednesday 11 November`, or briefly, `Wed 11`. */
 export function useDayFormat(style: "long" | "short" = "long") {
-	const format = useDateFormatter(
-		style === "long"
-			? { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }
-			: { weekday: "short", day: "numeric", timeZone: "UTC" },
-	);
-	return (day: Day) => format.format(asDate(day));
+	return (day: Day) => formatDay(day, style);
 }
 
-/** Writes the days of a period, `9 – 15 November 2026`. */
+/** Writes the days of a period, `9–15 November 2026`. */
 export function usePeriodFormat() {
-	const format = useDateFormatter({
-		day: "numeric",
-		month: "long",
-		year: "numeric",
-		timeZone: "UTC",
-	});
-	return (startsOn: Day, endsOn: Day) => format.formatRange(asDate(startsOn), asDate(endsOn));
+	return formatRange;
 }
 
 /** A day as a whole number, which grows a day at a time: what the direction of travel is read from. */

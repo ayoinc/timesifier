@@ -82,18 +82,28 @@ describe("This week", () => {
 
 		const html = await pageBody(await open(`${TEAM}?week=${WEEK}`, ada));
 		const text = textOf(html);
-		expect(text).toContain("5 to 11 January 2026");
+		expect(text).toContain("5–11 January 2026");
 		expect(text).toMatch(/grace@example\.com Submitted 8:30/);
 		expect(text).toMatch(/linus@example\.com Not submitted · Timer running 0:00/);
-		// The week's total stands above the people (TS-058).
+		// The week's total is the sheet's footer, under the people (TS-091, W30).
 		expect(text).toContain("Week's total 8:30");
-		expect(text.indexOf("Week's total")).toBeLessThan(text.indexOf("grace@example.com Submitted"));
+		expect(text.indexOf("Week's total")).toBeGreaterThan(text.indexOf("linus@example.com"));
 		expect(html).toContain('href="/app/acme/team?week=2025-12-29"');
 		expect(html).toContain('href="/app/acme/team?week=2026-01-12"');
 		expect(html).toContain(`href="/app/acme/team?week=${WEEK}&amp;person=${grace.user.id}"`);
+		// Stepped by arrows named for their step, and back to this week while away (W23).
+		expect(html).toContain('aria-label="Previous week"');
+		expect(html).toContain('aria-label="Next week"');
+		const backToThisWeek =
+			/<a[^>]*href="\/app\/acme\/team\?week=\d{4}-\d{2}-\d{2}"[^>]*>This week<\/a>/;
+		expect(html).toMatch(backToThisWeek);
 
-		// The current week has no later one.
-		expect(textOf(await pageBody(await open(TEAM, ada)))).toContain("This is the current week");
+		// The current week has no later one, and no way back to itself.
+		const current = await pageBody(await open(TEAM, ada));
+		expect(current).toContain('aria-label="No later period"');
+		expect(current).not.toContain('aria-label="Next week"');
+		expect(current).not.toMatch(backToThisWeek);
+		expect(textOf(current)).not.toContain("This is the current week");
 	});
 
 	it("opens one person's week to read, and nobody else's", async () => {
@@ -180,7 +190,8 @@ describe("This week", () => {
 			const html = await pageBody(await open(`${TEAM}?week=${WEEK}&q=nobody`, ada));
 			const text = textOf(html);
 			expect(text).toContain("Nobody's name or address holds “nobody”.");
-			expect(text).toContain("Total for “nobody” 0:00");
+			// No sheet, so no total under it (TS-091, W30: the total is the sheet's footer).
+			expect(text).not.toContain("Total for “nobody”");
 			expect(html).toMatch(new RegExp(`href="/app/acme/team\\?week=${WEEK}"[^>]*>Show everyone`));
 		});
 
@@ -193,7 +204,7 @@ describe("This week", () => {
 			expect(theirs).toContain("Total for “grace” 2:00");
 			const outside = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}&q=linus`, mona)));
 			expect(outside).not.toContain(linus.user.email);
-			expect(outside).toContain("Total for “linus” 0:00");
+			expect(outside).toContain("Nobody's name or address holds “linus”.");
 			expect(textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, mona)))).toContain(
 				"Week's total 2:00",
 			);

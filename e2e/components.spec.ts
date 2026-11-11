@@ -37,7 +37,10 @@ async function tabTo(page: Page, control: Locator) {
 		if (!before) throw new Error("no focusable element comes before the control");
 		before.focus({ preventScroll: true });
 	});
-	await page.keyboard.press("Tab");
+	// Safari's Tab passes links by; Option-Tab stops on them, as a Safari user presses.
+	const isLink = await control.evaluate((element) => element.matches("a[href]"));
+	const webkit = page.context().browser()?.browserType().name() === "webkit";
+	await page.keyboard.press(isLink && webkit ? "Alt+Tab" : "Tab");
 	await expect(control).toBeFocused();
 }
 
@@ -263,14 +266,15 @@ test("Sheet is a modal dialog: it takes the focus, keeps it inside, and returns 
 	await expect(sheet).toBeVisible();
 	await expect.poll(() => focusIsInside(sheet)).toBe(true);
 
-	// It sits at the bottom edge of the window, over the view that opened it.
+	// From 600px it sits in the middle of the window, clear of the bottom edge
+	// (the W32 tests below hold its place at 390px and at 1280px).
 	await expect
 		.poll(() =>
 			sheet.evaluate(
 				(element) => window.innerHeight - Math.round(element.getBoundingClientRect().bottom),
 			),
 		)
-		.toBe(0);
+		.toBeGreaterThanOrEqual(24);
 
 	for (let presses = 0; presses < 6; presses++) {
 		await page.keyboard.press("Tab");
@@ -433,4 +437,181 @@ test("Ledger is a list of rows under a heading: a row is read as its title, its 
 			await rows.elementHandle(),
 		),
 	).toBe(true);
+});
+
+/** The size each element is drawn at, with what it shows for a name. */
+async function boxes(targets: Locator) {
+	return targets.evaluateAll((elements) =>
+		elements
+			.filter((element) => element.checkVisibility())
+			.map((element) => {
+				const box = element.getBoundingClientRect();
+				return {
+					name: element.getAttribute("aria-label") ?? element.textContent?.trim() ?? "",
+					width: box.width,
+					height: box.height,
+				};
+			}),
+	);
+}
+
+test("W10: at 390px every button, icon button and standalone link is at least 44 by 44px", async ({
+	page,
+}) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openGallery(page);
+	const half = gallery(page);
+	// A link inside a sentence is exempt (WCAG 2.5.8); every other link stands on its own.
+	const targets = half.locator("button, a[href]:not(p a), [role=link]");
+	const small = (await boxes(targets)).filter((box) => box.width < 44 || box.height < 44);
+	expect(small).toEqual([]);
+});
+
+test("FilterField applies after typing stops and on Enter, and Clear empties it and applies", async ({
+	page,
+}) => {
+	const field = gallery(page).getByRole("searchbox", { name: "Search projects or clients" });
+
+	await tabTo(page, field);
+	await page.keyboard.type("atlas");
+	await expect(page).toHaveURL(/[?&]q=atlas(&|$)/);
+	await expect(gallery(page).getByText("Applied: “atlas”")).toBeVisible();
+
+	await page.keyboard.type(" north");
+	await page.keyboard.press("Enter");
+	await expect(page).toHaveURL(/[?&]q=atlas(\+|%20)north(&|$)/);
+	await expect(field).toBeFocused();
+
+	const clear = gallery(page).getByRole("button", { name: "Clear search" });
+	await tabTo(page, clear);
+	await page.keyboard.press("Enter");
+	await expect(field).toHaveValue("");
+	await expect(page).not.toHaveURL(/[?&]q=/);
+	await expect(clear).toBeHidden();
+
+	// The field follows the address: opened with a search, it shows it.
+	await page.goto("/design?q=borealis");
+	await expect(field).toHaveValue("borealis");
+});
+
+test("PeriodStepper steps by keyboard and names each arrow by its step", async ({ page }) => {
+	const stepper = gallery(page).getByRole("group", { name: "Weeks, light" });
+	await expect(stepper).toContainText("9–15 November 2026");
+	await expect(stepper.getByRole("link", { name: "This week" })).toHaveCount(0);
+
+	await tabTo(page, stepper.getByRole("link", { name: "Next week" }));
+	await page.keyboard.press("Enter");
+	await expect(stepper).toContainText("16–22 November 2026");
+	await expect(stepper.getByRole("link", { name: "No later period" })).toHaveAttribute(
+		"aria-disabled",
+		"true",
+	);
+
+	const back = stepper.getByRole("link", { name: "This week" });
+	await tabTo(page, back);
+	await page.keyboard.press("Enter");
+	await expect(stepper).toContainText("9–15 November 2026");
+
+	await tabTo(page, stepper.getByRole("link", { name: "Previous week" }));
+	await page.keyboard.press("Enter");
+	await expect(stepper).toContainText("2–8 November 2026");
+
+	// One row at 390px, with the way back to this week on it.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(back).toBeVisible();
+	const height = await stepper.evaluate((element) => element.getBoundingClientRect().height);
+	expect(height).toBeLessThanOrEqual(48);
+});
+
+for (const [width, place] of [
+	[1280, "centred"],
+	[390, "bottom"],
+] as const) {
+	test(`W32: at ${width}px the sheet sits ${place === "centred" ? "in the middle, clear of every edge" : "along the bottom"}`, async ({
+		page,
+	}) => {
+		await page.setViewportSize({ width, height: 800 });
+		await openGallery(page, "/design?open=sheet&scheme=light");
+		const sheet = gallery(page).getByRole("dialog", { name: "Edit note" });
+		await expect(sheet).toBeVisible();
+		await page.waitForFunction(() => document.getAnimations().length === 0);
+		const box = await sheet.evaluate((element) => {
+			const panel = element.parentElement as HTMLElement;
+			const rect = panel.getBoundingClientRect();
+			return {
+				left: rect.left,
+				right: rect.right,
+				top: rect.top,
+				bottom: rect.bottom,
+				radius: getComputedStyle(panel).borderBottomLeftRadius,
+			};
+		});
+		if (place === "centred") {
+			expect(800 - box.bottom).toBeGreaterThanOrEqual(24);
+			expect(Math.abs(box.top - (800 - box.bottom))).toBeLessThanOrEqual(1);
+			expect(Math.abs(box.left - (width - box.right))).toBeLessThanOrEqual(1);
+			expect(box.right - box.left).toBeLessThanOrEqual(560);
+			expect(box.radius).not.toBe("0px");
+		} else {
+			expect(Math.abs(800 - box.bottom)).toBeLessThanOrEqual(1);
+			expect(box.radius).toBe("0px");
+		}
+	});
+}
+
+test("W27: a danger button is drawn in the error colour", async ({ page }) => {
+	const danger = gallery(page).getByRole("button", { name: "Save", exact: true }).nth(4);
+	const error = await gallery(page).evaluate((element) => {
+		// The theme's colours are inlined into the utilities, so the probe reads the
+		// Material tokens, mixed as the state layer mixes them so both read alike.
+		const probe = document.createElement("span");
+		probe.style.backgroundColor = "color-mix(in srgb, currentColor 0%, var(--md-sys-color-error))";
+		probe.style.color = "var(--md-sys-color-on-error)";
+		element.append(probe);
+		const { backgroundColor, color } = getComputedStyle(probe);
+		probe.remove();
+		return { backgroundColor, color };
+	});
+	const drawn = await danger.evaluate((element) => {
+		const { backgroundColor, color } = getComputedStyle(element);
+		return { backgroundColor, color };
+	});
+	expect(drawn).toEqual(error);
+	const disabled = gallery(page).getByRole("button", { name: "Disabled", exact: true }).nth(4);
+	await expect(disabled).toBeDisabled();
+	expect(await disabled.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(
+		error.backgroundColor,
+	);
+});
+
+test("W20: Tabs and LinkTabs draw the same row and the same indicator", async ({ page }) => {
+	const geometry = (selected: Locator) =>
+		selected.evaluate((tab) => {
+			const row = tab.parentElement as HTMLElement;
+			const indicator = [...tab.querySelectorAll<HTMLElement>("*")].find(
+				(child) => getComputedStyle(child).position === "absolute",
+			) as HTMLElement;
+			const tabBox = tab.getBoundingClientRect();
+			const mark = indicator.getBoundingClientRect();
+			return {
+				tabHeight: tabBox.height,
+				insetStart: mark.left - tabBox.left,
+				insetEnd: tabBox.right - mark.right,
+				indicatorHeight: mark.height,
+				gapBelow: tabBox.bottom - mark.bottom,
+				divider: getComputedStyle(row).borderBottomWidth,
+				font: getComputedStyle(tab).font,
+				color: getComputedStyle(tab).color,
+			};
+		});
+	const links = await geometry(
+		gallery(page).getByRole("group", { name: "Gallery views" }).getByRole("link", { name: "Week" }),
+	);
+	expect(links.indicatorHeight).toBe(3);
+	expect(links.insetStart).toBe(16);
+	// React Aria's indicator slides into place on a transition: wait for it to land.
+	const tab = gallery(page)
+		.getByRole("tablist", { name: "Report period" })
+		.getByRole("tab", { name: "Week" });
+	await expect.poll(() => geometry(tab)).toEqual(links);
 });

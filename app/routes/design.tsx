@@ -6,11 +6,14 @@ import { Button, type ButtonVariant } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
 import { Dialog, DialogTrigger } from "~/components/Dialog";
 import { Digits } from "~/components/Digits";
+import { FilterBar, FilterField, useApplyFilters } from "~/components/FilterBar";
 import { IconButton, type IconButtonVariant } from "~/components/IconButton";
 import { AddIcon } from "~/components/icons/AddIcon";
 import { MoreVertIcon } from "~/components/icons/MoreVertIcon";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
+import { LinkTabs } from "~/components/LinkTabs";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { PeriodStepper } from "~/components/PeriodStepper";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { Sheet } from "~/components/Sheet";
@@ -20,6 +23,17 @@ import { Tab, TabList, TabPanel, Tabs } from "~/components/Tabs";
 import { TextField } from "~/components/TextField";
 import { TimerMark } from "~/components/TimerMark";
 import { Tooltip } from "~/components/Tooltip";
+import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
+import {
+	formatDay,
+	formatDayAndTime,
+	formatDayWithYear,
+	formatDuration,
+	formatMonth,
+	formatRange,
+	formatTime,
+	formatTimeRange,
+} from "~/time/format";
 
 // The component gallery: every component in every state, in the light scheme and
 // the dark scheme side by side. It exists under `pnpm dev` and in a build made
@@ -27,6 +41,7 @@ import { Tooltip } from "~/components/Tooltip";
 //
 // An overlay opens from its button. `?open=<name>&scheme=<light|dark>` opens one
 // as the page loads, where <name> is select, menu, dialog, sheet, tooltip or snackbar.
+// `?tab=`, `?period=`, `?q=` and `?status=` drive LinkTabs, PeriodStepper and FilterBar.
 
 // No generated route types here: they exist only when the route is registered.
 export function meta() {
@@ -119,7 +134,39 @@ function stopwatchOf(seconds: number): string {
 	return `${Math.floor(seconds / 3600)}:${two(Math.floor(seconds / 60) % 60)}:${two(seconds % 60)}`;
 }
 
-const BUTTON_VARIANTS: ButtonVariant[] = ["filled", "tonal", "outlined", "text"];
+const BUTTON_VARIANTS: ButtonVariant[] = [
+	"filled",
+	"tonal",
+	"outlined",
+	"text",
+	"danger",
+	"outlined-danger",
+];
+
+const PERIODS = ["2–8 November 2026", "9–15 November 2026", "16–22 November 2026"];
+/** The gallery's PeriodStepper shows the middle period as "this week". */
+const THIS_PERIOD = 1;
+
+/** A Select inside a FilterBar applies as soon as it changes. */
+function StatusFilter() {
+	const apply = useApplyFilters();
+	const [parameters] = useSearchParams();
+	return (
+		<div className="w-48">
+			<Select
+				label="Status"
+				name="status"
+				options={[
+					{ id: "active", label: "Active" },
+					{ id: "archived", label: "Archived" },
+				]}
+				defaultValue={parameters.get("status") ?? "active"}
+				// The hidden select holds the new value once React has drawn it.
+				onChange={() => setTimeout(apply, 0)}
+			/>
+		</div>
+	);
+}
 const ICON_BUTTON_VARIANTS: IconButtonVariant[] = ["standard", "filled", "tonal", "outlined"];
 
 function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
@@ -130,6 +177,10 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 	const [presses, setPresses] = useState(0);
 	const [seconds, setSeconds] = useState(3598);
 	const title = scheme === "light" ? "Light scheme" : "Dark scheme";
+	const [parameters] = useSearchParams();
+	const tab = parameters.get("tab") ?? "week";
+	const asked = Number(parameters.get("period") ?? THIS_PERIOD);
+	const period = asked >= 0 && asked < PERIODS.length ? Math.trunc(asked) : THIS_PERIOD;
 
 	useEffect(() => {
 		if (open !== "snackbar") return;
@@ -370,7 +421,9 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 										<Button variant="text" slot="close">
 											Cancel
 										</Button>
-										<Button slot="close">Delete</Button>
+										<Button variant="danger" slot="close">
+											Delete
+										</Button>
 									</>
 								}
 							>
@@ -381,7 +434,7 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 				</Component>
 
 				<Component name="Sheet">
-					<Row label="a bottom sheet over the current view">
+					<Row label="a bottom sheet under 600px; a dialog in the middle from 600px">
 						<DialogTrigger defaultOpen={open === "sheet"}>
 							<Button variant="outlined">Edit note</Button>
 							<Sheet
@@ -433,6 +486,72 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 								</Forced>
 							</Forced>
 						</div>
+					</Row>
+				</Component>
+
+				<Component name="LinkTabs">
+					<Row label="each tab its own address; drawn exactly like Tabs">
+						<div className="w-full">
+							<LinkTabs
+								label="Gallery views"
+								current={tab}
+								tabs={[
+									{ id: "day", to: "?tab=day", label: "Day" },
+									{ id: "week", to: "?tab=week", label: "Week" },
+									{ id: "history", to: "?tab=history", label: "History" },
+								]}
+							/>
+						</div>
+					</Row>
+				</Component>
+
+				<Component name="FilterBar">
+					<Row label="applies 300ms after typing, at once on Enter or a change of Status; Clear empties it">
+						<div className="w-full">
+							<FilterBar name={`Filter projects, ${scheme}`}>
+								<FilterField label="Search projects or clients" param="q" />
+								<StatusFilter />
+							</FilterBar>
+						</div>
+					</Row>
+					<output className="text-body-medium text-on-surface-variant">
+						Applied: {parameters.get("q") ? `“${parameters.get("q")}”` : "no search"}
+						{parameters.get("status") ? `, ${parameters.get("status")}` : ""}
+					</output>
+				</Component>
+
+				<Component name="PeriodStepper">
+					<Row label="previous, the period, next, then the way back to this week">
+						<PeriodStepper
+							label={`Weeks, ${scheme}`}
+							period={PERIODS[period]}
+							previous={{ to: `?period=${Math.max(period - 1, 0)}`, label: "Previous week" }}
+							next={
+								period < PERIODS.length - 1
+									? { to: `?period=${period + 1}`, label: "Next week" }
+									: null
+							}
+							current={
+								period === THIS_PERIOD
+									? undefined
+									: { to: `?period=${THIS_PERIOD}`, label: "This week" }
+							}
+						/>
+					</Row>
+				</Component>
+
+				<Component name="Links">
+					<Row label="TEXT_LINK inside a sentence; ACTION_LINK on its own">
+						<p className="text-body-large">
+							Read the{" "}
+							<a href="#links" className={TEXT_LINK}>
+								weekly summary
+							</a>{" "}
+							before Friday.
+						</p>
+						<a href="#links" className={ACTION_LINK} data-standalone>
+							Export CSV
+						</a>
 					</Row>
 				</Component>
 
@@ -527,6 +646,38 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 							</Ledger>
 						</div>
 					</Row>
+				</Component>
+
+				<Component name="Dates">
+					{/* Written as the page renders, on the server and again in the browser: a
+					    browser that wrote one differently would fail to hydrate (audit W06). */}
+					<dl className="flex flex-col gap-2">
+						{[
+							["a day", formatDay("2026-11-11")],
+							["a day in a week's row", formatDay("2026-11-09", "short")],
+							["a day with its year", formatDayWithYear("2026-11-11")],
+							["a period", formatRange("2026-11-09", "2026-11-15")],
+							["a period across months", formatRange("2026-11-30", "2026-12-06")],
+							["a period across years", formatRange("2026-12-28", "2027-01-03")],
+							["a month", formatMonth("2026-11-11")],
+							["a time", formatTime(Date.parse("2026-11-11T09:30:00Z"), "Europe/London")],
+							[
+								"a stretch of time",
+								formatTimeRange(
+									Date.parse("2026-11-11T21:33:00Z"),
+									Date.parse("2026-11-12T02:33:00Z"),
+									"Europe/London",
+								),
+							],
+							["a moment", formatDayAndTime(Date.parse("2026-11-11T09:30:00Z"), "Europe/London")],
+							["a length of time", formatDuration(420)],
+						].map(([kind, text]) => (
+							<div key={kind} className="flex flex-wrap items-baseline gap-x-4">
+								<dt className="text-label-medium text-on-surface-variant">{kind}</dt>
+								<dd className="text-body-large tabular-nums">{text}</dd>
+							</div>
+						))}
+					</dl>
 				</Component>
 
 				<div ref={setOverlays} />
