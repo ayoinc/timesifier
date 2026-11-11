@@ -250,14 +250,26 @@ describe("the navigation's timer control (TS-051)", () => {
 	);
 });
 
-describe("My account", () => {
-	it.each(Object.keys(SHOWN))("is opened by a %s from the band", async (kind) => {
-		const who = people[kind] as Person;
-		const html = await pageBody(await open(organisationPath(ACME), who));
+describe("the profile menu (TS-063)", () => {
+	it.each(Object.keys(SHOWN))(
+		"is in the band for a %s, with no other way to My account there",
+		async (kind) => {
+			const who = people[kind] as Person;
+			const html = await pageBody(await open(organisationPath(ACME), who));
+			const band = /<header\b[^>]*>([\s\S]*?)<\/header>/.exec(html)?.[1] ?? "";
 
-		expect(html).toMatch(/<a[^>]*href="\/app\/acme\/account"[^>]*>My account<\/a>/);
-		expect((await open(`${organisationPath(ACME)}/account`, who)).status).toBe(200);
-	});
+			// Named after the person, who has given no name yet: their address, and its first letter.
+			const button = new RegExp(
+				`<button[^>]*aria-label="Account menu for ${who.user.email}, ${who.user.email.charAt(0).toUpperCase()}"[^>]*>[\\s\\S]*?<\\/button>`,
+			).exec(band)?.[0];
+			expect(button).toBeDefined();
+			expect(textOf(button ?? "")).toBe(who.user.email.charAt(0).toUpperCase());
+			// The menu is closed until it is opened: neither of its items is in the band.
+			expect(textOf(band)).not.toContain("My account");
+			expect(textOf(band)).not.toContain("Sign out");
+			expect((await open(`${organisationPath(ACME)}/account`, who)).status).toBe(200);
+		},
+	);
 });
 
 describe("the members' old address", () => {

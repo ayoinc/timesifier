@@ -21,7 +21,7 @@ import { declined, done, refused } from "~/organisations/outcome.server";
 import { AS_ROLE } from "~/organisations/people";
 import { SOMETHING_WENT_WRONG } from "~/organisations/problems";
 import type { loader as rootLoader } from "~/root";
-import { SignOut } from "~/routes/auth/AccountSettings";
+import { SignOutEverywhere } from "~/routes/auth/AccountSettings";
 import {
 	type ColorSchemeChoice,
 	colorSchemeCookie,
@@ -37,10 +37,11 @@ import type { Route } from "./+types/account";
 import { FormSheet } from "./FormSheet";
 import { useOrganisation } from "./useOrganisation";
 
-// My account: what is the person's own, opened from the band in every
+// My account: what is the person's own, opened from the profile menu in every
 // organisation they belong to and by every role (docs/navigation.md, "Utility
-// items"). Their name, the colour scheme, the ways to sign out, the way to their
-// other organisations, and leaving the one on screen.
+// items"). Their name, the colour scheme, signing out everywhere, the way to
+// their other organisations, and leaving the one on screen. Signing out of this
+// browser alone is in the profile menu.
 
 const TITLE = "My account";
 
@@ -205,7 +206,7 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 				</div>
 
 				<Appearance />
-				<SignOut email={person.email} />
+				<SignOutEverywhere />
 			</Section>
 
 			<Section

@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { accountPath, type Destination, destinations, HEADINGS } from "../app/shell/destinations";
+import { openProfileMenu, profileButton } from "./auth";
 import { SIGNED_IN_AS_MEMBER } from "./auth-state";
 import { destinationLinks, expect, openShell, test } from "./fixtures";
 import { homeOrganisation, homePath } from "./organisation";
@@ -167,14 +168,19 @@ test.describe("in a window 1280px wide", () => {
 		expect(before).toBe("Start timer");
 	});
 
-	test("My account is in the band, beside the organisation's name", async ({ page }) => {
+	test("the profile menu is in the band, beside the organisation's name, and leads to My account", async ({
+		page,
+	}) => {
 		await openShell(page, homePath(first.id));
-		const account = page.getByRole("banner").getByRole("link", { name: "My account" });
+		const band = page.getByRole("banner");
+		await expect(band.getByRole("link", { name: "My account" })).toHaveCount(0);
+		const name = await box(band.getByText(homeOrganisation().name, { exact: true }));
+		const avatar = await box(profileButton(page));
+		expect(avatar.x).toBeGreaterThan(name.x + name.width);
 
-		await account.click();
+		await (await openProfileMenu(page)).getByRole("menuitem", { name: "Account settings" }).click();
 		await expect(page).toHaveURL(accountPath(homeOrganisation().slug));
 		await expect(page.getByRole("heading", { level: 1, name: "My account" })).toBeFocused();
-		await expect(account).toHaveAttribute("aria-current", "page");
 		await expect(navigation(page).locator('[aria-current="page"]')).toHaveCount(0);
 	});
 });

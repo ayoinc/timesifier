@@ -6,6 +6,17 @@ How the board works, and what Ready and Done mean, is in `docs/ways-of-working.m
 
 ## In progress (limit 1 per builder)
 
+### TS-063 · The profile menu
+
+Builder: an AI session on branch `ts-063-profile-menu`. Harvest opens profile and sign out from the person at the top (`docs/research/harvest-app/*.txt`, "Profile and settings for <owner>"); Timesifier had a "My account" link in the band and a Sign out button on My account. This card puts both in one profile menu at the end of the band.
+
+- [ ] A round button with the person's initials (from their name, else the first letter of their address), named "Account menu for <name>, <initials>", stands in the band beside the organisation's name; design tokens only, 40px across, a visible focus ring, at 390px and 1280px in both schemes.
+- [ ] A click, Enter, Space or ArrowDown opens a menu with exactly Account settings (My account) and Sign out, under the person's name and address as plain text; Escape closes it and gives the focus back.
+- [ ] Sign out ends the session the way the old button did and lands on `/sign-in`.
+- [ ] The band's "My account" link and My account's Sign out are gone; Sign out everywhere stays on My account. Outside an organisation the same menu holds the way out alone, "Use a different email" on `/app/new`.
+- [ ] A worker test for the initials; a browser spec for the menu; every spec that used the link or the button uses the menu.
+- [ ] `docs/navigation.md` and `docs/design-system.md` say where My account and Sign out are.
+
 ### TS-031 · Apply the review of the plan
 
 Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the architecture, the design flow and the way of working. This card applies what they found to the documents, the board and the pipeline. It changes no application code.

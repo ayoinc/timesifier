@@ -18,3 +18,25 @@ export const PersonName = z
 	.max(PERSON_NAME_MAX)
 	.regex(/^[^\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]+$/u)
 	.regex(/^\S(?:.*\S)?$/u);
+
+/**
+ * The letters a person's avatar shows: the first letters of the first and the
+ * last word of their name, or of the only word, and the first letter of their
+ * address while they have given no name. Upper case, counted in characters a
+ * reader sees, so an accented letter or an emoji is never cut in half.
+ */
+export function initialsOf(name: string | null, email: string): string {
+	const words = name?.trim().split(/\s+/u).filter(Boolean) ?? [];
+	const first = words[0];
+	const last = words.length > 1 ? words[words.length - 1] : undefined;
+	const letters = first ? [first, last] : [email.trim()];
+	return letters
+		.map((word) => (word ? firstCharacter(word) : ""))
+		.join("")
+		.toLocaleUpperCase();
+}
+
+function firstCharacter(text: string): string {
+	const [segment] = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
+	return segment?.segment ?? "";
+}

@@ -3,11 +3,12 @@ import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { Button } from "~/components/Button";
 
 import { type Notice, NoticeLine, problem, useOneAtATime } from "./AuthPage";
-import { leaveFor, type Outcome, signOut, signOutEverywhere } from "./client";
+import { leaveFor, type Outcome, signOutEverywhere } from "./client";
 import { SIGN_IN_PATH } from "./paths";
 
-// The parts of Settings that are about the person's account: the two ways to
-// sign out.
+// The part of My account that is about the person's sessions: signing out
+// everywhere. Signing out of this browser alone is in the profile menu
+// (`app/shell/ProfileMenu.tsx`).
 
 const neverChanges = () => () => {};
 
@@ -23,24 +24,14 @@ export function useTimeZone(): string {
 		() => "UTC",
 	);
 }
-export interface SignOutProps {
-	/** The address of the account that is signed in. */
-	email: string;
-}
 
-/** The two ways out, each a section of its own: this browser alone, or every browser and device. */
-export function SignOut({ email }: SignOutProps) {
+/** Every browser and device at once, in a section of its own. */
+export function SignOutEverywhere() {
 	return (
-		<>
-			<Leaving id="sign-out" title="Sign out" end={signOut}>
-				You are signed in as <strong className="text-on-surface">{email}</strong>. Signing out ends
-				your session in this browser.
-			</Leaving>
-			<Leaving id="sign-out-everywhere" title="Sign out everywhere" end={signOutEverywhere}>
-				Ends every session of your account, on every browser and device, this one included. Use it
-				if you have lost a device or signed in somewhere you do not trust.
-			</Leaving>
-		</>
+		<Leaving id="sign-out-everywhere" title="Sign out everywhere" end={signOutEverywhere}>
+			Ends every session of your account, on every browser and device, this one included. Use it if
+			you have lost a device or signed in somewhere you do not trust.
+		</Leaving>
 	);
 }
 

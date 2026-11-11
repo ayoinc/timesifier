@@ -5,6 +5,7 @@
 		"e2e/**/*.ts",
 		"app/shell/destinations.ts",
 		"app/auth/code.ts",
+		"app/auth/person-name.ts",
 		"app/shell/color-scheme.server.ts"
 	],
 	"compilerOptions": {

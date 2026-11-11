@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
 import {
-	Link,
 	Outlet,
 	useLocation,
 	useNavigationType,
@@ -19,11 +18,11 @@ import {
 } from "~/shell/destinations";
 import { Navigation } from "~/shell/Navigation";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
+import { ProfileMenu } from "~/shell/ProfileMenu";
 import { finishRunningTransition, TRANSITION, useTravel } from "~/shell/transitions";
 
 import type { Route } from "./+types/layout";
 import type { loader as organisationLoader } from "./organisation";
-import { SignedInAs } from "./SignedInAs";
 
 // The application shell: a skip link, the navigation and the main region every
 // destination renders into. docs/design-system.md, "Shell", describes it.
@@ -42,13 +41,14 @@ import { SignedInAs } from "./SignedInAs";
 export const middleware: Route.MiddlewareFunction[] = [requireSession];
 
 /**
- * Whose session it is. Having a loader here also means that every move between
+ * Whose session it is, for the profile menu. Having a loader here also means that every move between
  * pages asks the server, and so passes the guard: without a loader on the way,
  * React Router moves between pages that have none without a request, and a
  * person whose session has ended would go on seeing the shell.
  */
 export function loader({ context }: Route.LoaderArgs) {
-	return { email: context.get(signedInContext).user.email };
+	const { user } = context.get(signedInContext);
+	return { name: user.name?.trim() || null, email: user.email };
 }
 
 const MAIN_ID = "main";
@@ -83,12 +83,10 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 	}, []);
 
 	// The organisation's name stands in the band, at the other end from the
-	// product's, and beside it the way to the person's own account.
+	// product's, and beside it the person's profile menu: the way to My account
+	// and the way out. Outside an organisation the band holds the menu alone,
+	// without My account, which belongs to an organisation.
 	const organisationData = useRouteLoaderData<typeof organisationLoader>("routes/app/organisation");
-	const onAccount =
-		organisationData !== undefined &&
-		pathname.replace(/\/+$/, "") === accountPath(organisationData.slug);
-
 	return (
 		<div className={cx(OUTSIDE_FRAME, organisation && "max-medium:pb-16")}>
 			{/* Off the top edge until it is focused. With script it moves the focus
@@ -108,27 +106,23 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 			)}
 
 			{/* The public pages' band: the lockup, which leads home, the
-			    organisation's name and My account. Outside an organisation it holds
-			    the lockup alone, as on the sign-in page. */}
+			    organisation's name and the profile menu. */}
 			<SiteHeader
 				current={pathname}
 				end={
-					organisationData ? (
-						<div className="flex min-w-0 items-center gap-6">
+					<div className="flex min-w-0 items-center gap-6">
+						{organisationData && (
 							<p className="min-w-0 truncate text-title-medium">{organisationData.name}</p>
-							<Link
-								to={accountPath(organisationData.slug)}
-								aria-current={onAccount ? "page" : undefined}
-								onClick={finishRunningTransition}
-								className={cx(
-									"inline-block shrink-0 rounded-extra-small py-2 text-label-large underline-offset-4 outline-none hover:underline focus-visible:focus-indicator",
-									onAccount && "underline",
-								)}
-							>
-								My account
-							</Link>
-						</div>
-					) : null
+						)}
+						<ProfileMenu
+							name={loaderData.name}
+							email={loaderData.email}
+							accountHref={organisationData && accountPath(organisationData.slug)}
+							// The page that creates an organisation is where a new account lands, and
+							// signing in with the wrong one of two addresses makes one: its way out says so.
+							wayOut={pathname === NEW_ORGANISATION_PATH ? "Use a different email" : "Sign out"}
+						/>
+					</div>
 				}
 			/>
 
@@ -175,15 +169,6 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 					</ViewTransition>
 				</ViewTransition>
 			</div>
-
-			{/* The page that creates an organisation is where a new account lands, and
-			    signing in with the wrong one of two addresses makes one: its way out says so. */}
-			{!organisation && (
-				<SignedInAs
-					email={loaderData.email}
-					wayOut={pathname === NEW_ORGANISATION_PATH ? "Use a different email" : "Sign out"}
-				/>
-			)}
 		</div>
 	);
 }

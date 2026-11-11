@@ -129,17 +129,19 @@ test("going back a view, with the keyboard alone, returns to the field that was 
 	await expect(page.getByLabel("Email")).toHaveValue(person.email);
 });
 
-test("signing out from My account, with the keyboard alone", async ({ page }) => {
+test("signing out from the profile menu, with the keyboard alone", async ({ page }) => {
 	await signIn(page, newPerson().email);
 	await expect(page).toHaveURL(ARRIVAL);
 	await openAccount(page);
 
-	// The two ways out follow each other in the tab order, and each shows the focus.
-	const out = page.getByRole("button", { name: "Sign out", exact: true });
-	await out.focus();
-	await tabTo(page, page.getByRole("button", { name: "Sign out everywhere" }));
-	await page.keyboard.press("Shift+Tab");
-	await expectFocusShown(out);
+	// The band, from the top of the page: the skip link, the product's name, the profile menu.
+	await tabThroughTheBand(page);
+	const profile = page.getByRole("banner").getByRole("button", { name: /^Account menu for / });
+	await tabTo(page, profile);
+	await page.keyboard.press("Space");
+	await expectFocusShown(page.getByRole("menuitem", { name: "Account settings" }));
+	await page.keyboard.press("ArrowDown");
+	await expectFocusShown(page.getByRole("menuitem", { name: "Sign out" }));
 
 	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL("/sign-in");
