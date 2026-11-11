@@ -1,0 +1,116 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/approvals?approval_status=submitted&group=user&period_start=2026-11-09&period_end=2026-11-15, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Approvals
+  - tablist:
+    - tab "Timesheets"
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - img "Unlock icon"
+    - paragraph: Time and expenses are still editable
+    - paragraph: You can set a recurring auto-lock from Settings or apply a one-time manual lock directly from here. Once set, time and expenses can’t be edited after that deadline.
+    - link "Gear icon Add auto-lock in Settings":
+      - /url: /company/preferences/edit
+      - img "Gear icon"
+      - text: Add auto-lock in Settings
+    - button "Apply one-time manual lock":
+      - img
+      - text: Apply one-time manual lock
+    - button "Week"
+    - button "Previous date range"
+    - button "Change date": 09 – 15 Nov 2026
+    - button "Next date range"
+    - 'button "Status: Pending Approval"'
+    - 'button "Group by: Person"'
+    - separator
+    - text: Filter
+    - button "Client"
+    - button "Project"
+    - button "Role" [disabled]
+    - button "Department" [disabled]
+    - button "Tags" [disabled]
+    - button "Teammate"
+    - text: Total time 0:00 Billable 0:00 (0%) Non-billable 0:00 (0%) Total expenses £0.00 Billable £0.00 (0%) Non-billable £0.00 (0%)
+    - img "No data"
+    - text: No approval data found matching your current filters. Try adjusting your filters or time range.
+    - button "approve visible timesheets and expenses": Approve visible timesheets and expenses
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"

@@ -1,0 +1,145 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/tasks, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Tasks
+  - button "New task":
+    - img "Plus icon"
+    - text: New task
+  - button "Export"
+  - button "Actions"
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - region "Harvest AI":
+      - text: What would you like to do with your tasks?
+      - combobox "What would you like to do with your tasks?"
+      - button "Send to Harvest AI"
+      - button "Minimize Harvest AI bar"
+    - search:
+      - searchbox "Filter by task name"
+    - table:
+      - rowgroup:
+        - row "Select all common tasks on this page Common tasks These tasks are automatically added to all new projects. Default billable rate Default assigned people":
+          - columnheader "Select all common tasks on this page":
+            - checkbox "Select all common tasks on this page"
+          - columnheader "Common tasks These tasks are automatically added to all new projects.":
+            - heading "Common tasks" [level=2]
+            - text: These tasks are automatically added to all new projects.
+          - columnheader "Default billable rate"
+          - columnheader "Default assigned people"
+          - columnheader
+      - rowgroup:
+        - row "Select Business Development Business Development £0.00 All assigned people Actions for Business Development":
+          - cell "Select Business Development":
+            - checkbox "Select Business Development"
+          - cell "Business Development":
+            - strong: Business Development
+          - cell "£0.00"
+          - cell "All assigned people"
+          - cell "Actions for Business Development":
+            - button "Actions for Business Development": Actions
+        - row "Select Design Design Billable £0.00 All assigned people Actions for Design":
+          - cell "Select Design":
+            - checkbox "Select Design"
+          - cell "Design Billable":
+            - strong: Design
+            - text: Billable
+          - cell "£0.00"
+          - cell "All assigned people"
+          - cell "Actions for Design":
+            - button "Actions for Design": Actions
+        - row "Select Marketing Marketing Billable £0.00 All assigned people Actions for Marketing":
+          - cell "Select Marketing":
+            - checkbox "Select Marketing"
+          - cell "Marketing Billable":
+            - strong: Marketing
+            - text: Billable
+          - cell "£0.00"
+          - cell "All assigned peopl
+[…12305B elided…]
+t" [disabled]
+    - button "Tags" [disabled]
+    - button "Teammate"
+    - text: Total time 0:00 Billable 0:00 (0%) Non-billable 0:00 (0%) Total expenses £0.00 Billable £0.00 (0%) Non-billable £0.00 (0%)
+    - img "No data"
+    - text: No approval data found matching your current filters. Try adjusting your filters or time range.
+    - button "approve visible timesheets and expenses": Approve visible timesheets and expenses
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"

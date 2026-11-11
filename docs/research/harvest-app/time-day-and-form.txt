@@ -1,0 +1,164 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/time after Track time, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Timesheet
+  - button "Day view" [disabled]: Day
+  - link "Week view":
+    - /url: /time/week/2026/11/9/<id>
+    - text: Week
+  - link "Calendar view":
+    - /url: https://<account>.harvestapp.com/time/calendar?timeframe=2026-11-11%2Fweek
+    - text: Calendar
+  - text: Getting started Â· Solo tracking
+  - heading "Track your first hour" [level=2]
+  - text: 0 of 3
+  - button "Collapse setup":
+    - img "Up chevron icon"
+  - list:
+    - listitem:
+      - button "Add a project Something to track time against. Add project Arrow right icon":
+        - text: Add a project Something to track time against. Add project
+        - img "Arrow right icon"
+    - listitem:
+      - button "Track your first entry Start the timer â thatâs it."
+    - listitem:
+      - button "Review your week See where your hours went."
+  - main:
+    - button "Track time":
+      - img "Plus icon"
+      - text: Track time
+    - button "Previous day"
+    - button "Change date": Today Wednesday, 11 Nov
+    - button "Next day"
+    - button "Recurring 0"
+    - region "Harvest AI":
+      - text: What would you like to add to your timesheet?
+      - combobox "What would you like to add to your timesheet?"
+      - button "Send to Harvest AI"
+      - button "Minimize Harvest AI bar"
+    - tablist:
+      - list:
+        - listitem:
+          - tab "Mon 0:00"
+        - listitem:
+          - tab "Tue 0:00"
+        - listitem:
+          - tab "Wed 0:00" [selected]
+        - listitem:
+          - tab "Thu 0:00"
+        - listitem:
+          - tab "Fri 0:00"
+        - listitem:
+          - tab "Sat 0:00"
+        - listitem:
+          - tab "Sun 0:00"
+        - listitem: Week total 0:00
+    - table:
+      - rowgroup:
+        - row
+    - text: This is the Day view of your timesheet.Keep track of where your time goes, down to the minute.
+    - button "Track time"
+    - button "Copy from previous day (projects only). There are no recent entries to copy." [disabled]: Copy from previous day (projects only)
+    - button "Copy with entries" [disabled]
+    - button "Submit week for approval"
+    - button "More submission options"
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"
+  - dialog "New time entry for Wednesday, 11 Nov":
+    - heading "New time entry for Wednesday, 11 Nov" [level=1]
+    - text: Project / Task
+    - button "Example Client Example Project"
+    - button "Design"
+    - textbox "Notes (optional)"
+    - textbox "hours":
+      - /placeholder: 0:00
+    - region "Repeat":
+      - status:
+        - button "Dismiss"
+        - paragraph: Make it repeat. Pick how often, and Harvest adds the entry to your timesheet for you.
+      - group "Repeat frequency":
+        - button "â Doesnât repeat" [pressed]
+        - button "Daily"
+        - button "Weekly"
+        - button "Monthly"
+        - button "Customâ¦"
+    - button "Start timer"
+    - button "Cancel and close dialog": Cancel
+    - button "Pull in a calendar event":
+      - img
+      - text: Pull in a calendar event

@@ -1,0 +1,138 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/projects?filter=active, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Projects
+  - link "New project":
+    - /url: /projects/new
+    - img
+    - text: New project
+  - button "Actions"
+  - button "Import"
+  - button "Export"
+  - search:
+    - searchbox "Search by client or project name"
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - region "Harvest AI":
+      - text: What would you like to do with your projects?
+      - combobox "What would you like to do with your projects?"
+      - button "Send to Harvest AI"
+      - button "Minimize Harvest AI bar"
+    - button "Filter projects": Active projects (1)
+    - button "Filter by client"
+    - button "Filter by manager"
+    - table:
+      - rowgroup:
+        - row "Select all projects on this page Client Budget Spent Remaining Costs":
+          - columnheader "Select all projects on this page":
+            - checkbox "Select all projects on this page"
+          - columnheader
+          - columnheader "Client"
+          - columnheader "Budget"
+          - columnheader "Spent"
+          - columnheader
+          - columnheader "Remaining"
+          - columnheader "Costs"
+          - columnheader
+      - rowgroup:
+        - row "Example Client":
+          - columnheader
+          - columnheader
+          - columnheader "Example Client":
+            - link "Example Client":
+              - /url: /clients/18205022/edit?return_to=%2Fprojects%3Ffilter%3Dactive
+        - 'row "Example Project Example Project Time & Materials 50.00 0.00 Budget: 0% 50.00 (100%) £0.00 Actions for Example Project"':
+          - cell "Example Project":
+            - checkbox "Example Project"
+          - cell
+          - cell "Example Project Time & Materials":
+            - link "Example Project Time & Materials":
+              - /url: /projects/49615869?return_to=%2Fprojects%3Ffilter%3Dactive
+          - cell "50.00"
+          - cell "0.00"
+          - 'cell "Budget: 0%"'
+          - cell "50.00"
+          - cell "(100%)"
+          - cell "£0.00"
+          - cell "Actions for Example Project":
+            - button "Actions for Example Project": Actions
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"

@@ -1,0 +1,122 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/company/account, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - text: Settings
+  - link "Need help?":
+    - /url: /company/billing/subscription/documentation
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - navigation "Navigation":
+      - list:
+        - listitem:
+          - link "Billing":
+            - /url: /company/account
+        - listitem:
+          - link "Company preferences":
+            - /url: /company/settings/preferences
+        - listitem:
+          - link "Modules":
+            - /url: /company/settings/modules
+        - listitem:
+          - link "Sign in security":
+            - /url: /company/settings/sign_in_security
+        - listitem:
+          - link "Import/Export":
+            - /url: /company/settings/import_export
+        - listitem:
+          - link "Bulk actions New":
+            - /url: /company/settings/bulk_actions
+        - listitem:
+          - link "Harvest AI Beta":
+            - /url: /company/settings/ai_assistant
+        - listitem:
+          - link "My preferences":
+            - /url: /settings/my_preferences
+    - heading "Harvest subscription" [level=1]
+    - tablist:
+      - tab "Your subscription" [selected]
+      - tab "Payment and billing"
+      - tab "Billing help & documentation"
+    - img
+    - paragraph:
+      - strong: Your free trial ends in 30 days.
+      - text: Upgrade to keep access and unlock everything Harvest has to offer for you and your team.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/plans
+    - link "Close account":
+      - /url: /company/cancel
+  - button "Harvest AI"

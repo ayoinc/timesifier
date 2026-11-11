@@ -1,0 +1,443 @@
+# rea capture_browser_scenario, https://<account>.harvestapp.com/people/<id>/edit, 2026-11-11
+- document:
+  - link "Skip navigation":
+    - /url: "#main"
+  - navigation "Main navigation":
+    - button "Switch app"
+    - button "Collapse sidebar"
+    - button "Timer shortcut": Timer
+    - button "Time shortcut"
+    - button "More actions"
+    - text: Track
+    - list:
+      - listitem:
+        - link "Timesheet":
+          - /url: https://<account>.harvestapp.com/time
+      - listitem:
+        - link "Time off":
+          - /url: /pto
+      - listitem:
+        - link "Expenses":
+          - /url: /expenses
+    - text: Organize
+    - list:
+      - listitem:
+        - link "Team":
+          - /url: /team
+      - listitem:
+        - link "Clients":
+          - /url: /clients
+      - listitem:
+        - link "Projects":
+          - /url: /projects
+      - listitem:
+        - link "Tasks":
+          - /url: /tasks
+    - text: Bill
+    - list:
+      - listitem:
+        - link "Invoices":
+          - /url: /invoices
+      - listitem:
+        - link "Estimates":
+          - /url: /estimates
+    - text: Review
+    - list:
+      - listitem:
+        - link "Approvals":
+          - /url: /approvals
+          - text: Approvals
+          - img
+      - listitem:
+        - link "Reports":
+          - /url: /reports
+      - listitem:
+        - link "Dashboards":
+          - /url: /dashboards
+    - button "Customize sidebar": Customize
+    - list:
+      - listitem:
+        - link "Integrations":
+          - /url: /company/settings/integrations
+      - listitem:
+        - link "Settings":
+          - /url: /company/account
+    - link "Upgrade":
+      - /url: /company/billing/subscription/checkout
+    - button "Profile and settings for <owner>": <owner> <account>
+    - button "Notifications"
+  - navigation
+  - alert
+  - alert:
+    - text: 30 days left before your free trial expires.
+    - link "Upgrade now":
+      - /url: /company/billing/subscription/checkout
+  - link "Back to Team":
+    - /url: /team
+  - text: "Getting started · Solo tracking Now: Add a project"
+  - button "Add project Arrow right icon":
+    - text: Add project
+    - img "Arrow right icon"
+  - main:
+    - heading "<owner>" [level=3]
+    - text: <email> Owner
+    - navigation "Navigation":
+      - list:
+        - link "Basic info":
+          - /url: /people/<id>/edit
+        - link "Rates":
+          - /url: /people/<id>/rates
+        - link "Assigned projects":
+          - /url: /people/<id>/edit/projects
+        - link "Assigned people":
+          - /url: /people/<id>/edit/teammates
+        - link "Permissions":
+          - /url: /people/<id>/edit/permissions
+        - link "Notifications":
+          - /url: /notifications/settings
+        - link "Security":
+          - /url: /people/<id>/security
+    - heading "Your basic info" [level=1]
+    - separator
+    - text: First name
+    - textbox "First name": <first>
+    - text: Last name
+    - textbox "Last name": <last>
+    - text: Work email
+    - textbox "Work email" [disabled]: <email>
+    - text: You can update your email from
+    - link "your Harvest ID settings":
+      - /url: https://id.getharvest.com/profile
+    - text: . Employee ID
+    - textbox "Employee ID"
+    - text: Optional. A unique identifier for this employee within your organization Employment start date
+    - textbox "Employment start date":
+      - /placeholder: dd/mm/yyyy
+    - text: Optional. The date this person started working for your organization. It can be used in time off accrual.
+    - separator
+    - text: Roles
+    - list:
+      - listitem:
+        - textbox
+    - list
+    - text: How you would describe this person, like Designer, Senior, NYC, etc. Roles help organize the Team section and other reports.
+    - button "Show role history"
+    - text: Departments
+    - list:
+      - listitem:
+        - textbox
+    - list
+    - text: The departments this person belongs to, like Design, Engineering, NYC, etc. People can be part of multiple departments. Capacity
+    - combobox "Capacity":
+      - option "0"
+      - option "0.5"
+      - option "1"
+      - option "1.5"
+      - option "2"
+      - option "2.5"
+      - option "3"
+      - option "3.5"
+      - option "4"
+      - option "4.5"
+      - option "5"
+      - option "5.5"
+      - option "6"
+      - option "6.5"
+      - option "7"
+      - option "7.5"
+      - option "8"
+      - option "8.5"
+      - option "9"
+      - option "9.5"
+      - option "10"
+      - option "10.5"
+      - option "11"
+      - option "11.5"
+      - option "12"
+      - option "12.5"
+      - option "13"
+      - option "13.5"
+      - option "14"
+      - option "14.5"
+      - option "15"
+      - option "15.5"
+      - option "16"
+      - option "16.5"
+      - option "17"
+      - option "17.5"
+      - option "18"
+      - option "18.5"
+      - option "19"
+      - option "19.5"
+      - option "20"
+      - option "20.5"
+      - option "21"
+      - option "21.5"
+      - option "22"
+      - option "22.5"
+      - option "23"
+      - option "23.5"
+      - option "24"
+      - option "24.5"
+      - option "25"
+      - option "25.5"
+      - option "26"
+      - option "26.5"
+      - option "27"
+      - option "27.5"
+      - option "28"
+      - option "28.5"
+      - option "29"
+      - option "29.5"
+      - option "30"
+      - option "30.5"
+      - option "31"
+      - option "31.5"
+      - option "32"
+      - option "32.5"
+      - option "33"
+      - option "33.5"
+      - option "34"
+      - option "34.5"
+      - option "35 (default)" [selected]
+      - option "35.5"
+      - option "36"
+      - option "36.5"
+      - option "37"
+      - option "37.5"
+      - option "38"
+      - option "38.5"
+      - option "39"
+      - option "39.5"
+      - option "40"
+      - option "40.5"
+      - option "41"
+      - option "41.5"
+      - option "42"
+      - option "42.5"
+      - option "43"
+      - option "43.5"
+      - option "44"
+      - option "44.5"
+      - option "45"
+      - option "45.5"
+      - option "46"
+      - option "46.5"
+      - option "47"
+      - option "47.5"
+      - option "48"
+      - option "48.5"
+      - option "49"
+      - option "49.5"
+      - option "50"
+      - option "50.5"
+      - option "51"
+      - option "51.5"
+      - option "52"
+      - option "52.5"
+      - option "53"
+      - option "53.5"
+      - option "54"
+      - option "54.5"
+      - option "55"
+      - option "55.5"
+      - option "56"
+      - option "56.5"
+      - option "57"
+      - option "57.5"
+      - option "58"
+      - option "58.5"
+      - option "59"
+      - option "59.5"
+      - option "60"
+    - text: hours per week The number of hours per week this person is available to work.
+    - button "Specify working hours Set which days this person works and the hours on each.":
+      - strong: Specify working hours
+      - text: Set which days this person works and the hours on each.
+    - text: Rates
+    - link "Edit rates":
+      - /url: /people/<id>/rates
+    - separator
+    - text: Timezone
+    - combobox "Timezone":
+      - option
+      - option "(GMT-10:00) Hawaii"
+      - option "(GMT-09:00) Alaska"
+      - option "(GMT-08:00) Pacific Time (US & Canada)"
+      - option "(GMT-07:00) Arizona"
+      - option "(GMT-07:00) Mountain Time (US & Canada)"
+      - option "(GMT-06:00) Central Time (US & Canada)"
+      - option "(GMT-05:00) Eastern Time (US & Canada)"
+      - option "(GMT-05:00) Indiana (East)"
+      - option "-------------" [disabled]
+      - option "(GMT-12:00) International Date Line West"
+      - option "(GMT-11:00) American Samoa"
+      - option "(GMT-11:00) Midway Island"
+      - option "(GMT-10:00) Hawaii"
+      - option "(GMT-09:00) Alaska"
+      - option "(GMT-08:00) Pacific Time (US & Canada)"
+      - option "(GMT-08:00) Tijuana"
+      - option "(GMT-07:00) Arizona"
+      - option "(GMT-07:00) Mazatlan"
+      - option "(GMT-07:00) Mountain Time (US & Canada)"
+      - option "(GMT-06:00) Central America"
+      - option "(GMT-06:00) Central Time (US & Canada)"
+      - option "(GMT-06:00) Chihuahua"
+      - option "(GMT-06:00) Guadalajara"
+      - option "(GMT-06:00) Mexico City"
+      - option "(GMT-06:00) Monterrey"
+      - option "(GMT-06:00) Saskatchewan"
+      - option "(GMT-05:00) Bogota"
+      - option "(GMT-05:00) Eastern Time (US & Canada)"
+      - option "(GMT-05:00) Indiana (East)"
+      - option "(GMT-05:00) Lima"
+      - option "(GMT-05:00) Quito"
+      - option "(GMT-04:00) Atlantic Time (Canada)"
+      - option "(GMT-04:00) Caracas"
+      - option "(GMT-04:00) Georgetown"
+      - option "(GMT-04:00) La Paz"
+      - option "(GMT-04:00) Puerto Rico"
+      - option "(GMT-04:00) Santiago"
+      - option "(GMT-03:30) Newfoundland"
+      - option "(GMT-03:00) Brasilia"
+      - option "(GMT-03:00) Buenos Aires"
+      - option "(GMT-03:00) Montevideo"
+      - option "(GMT-02:00) Greenland"
+      - option "(GMT-02:00) Mid-Atlantic"
+      - option "(GMT-01:00) Azores"
+      - option "(GMT-01:00) Cape Verde Is."
+      - option "(GMT+00:00) Casablanca"
+      - option "(GMT+00:00) Edinburgh"
+      - option "(GMT+00:00) Lisbon"
+      - option "(GMT+00:00) London" [selected]
+      - option "(GMT+00:00) Monrovia"
+      - option "(GMT+00:00) UTC"
+      - option "(GMT+01:00) Amsterdam"
+      - option "(GMT+01:00) Belgrade"
+      - option "(GMT+01:00) Berlin"
+      - option "(GMT+01:00) Bern"
+      - option "(GMT+01:00) Bratislava"
+      - option "(GMT+01:00) Brussels"
+      - option "(GMT+01:00) Budapest"
+      - option "(GMT+01:00) Copenhagen"
+      - option "(GMT+01:00) Dublin"
+      - option "(GMT+01:00) Ljubljana"
+      - option "(GMT+01:00) Madrid"
+      - option "(GMT+01:00) Paris"
+      - option "(GMT+01:00) Prague"
+      - option "(GMT+01:00) Rome"
+      - option "(GMT+01:00) Sarajevo"
+      - option "(GMT+01:00) Skopje"
+      - option "(GMT+01:00) Stockholm"
+      - option "(GMT+01:00) Vienna"
+      - option "(GMT+01:00) Warsaw"
+      - option "(GMT+01:00) West Central Africa"
+      - option "(GMT+01:00) Zagreb"
+      - option "(GMT+01:00) Zurich"
+      - option "(GMT+02:00) Athens"
+      - option "(GMT+02:00) Bucharest"
+      - option "(GMT+02:00) Cairo"
+      - option "(GMT+02:00) Harare"
+      - option "(GMT+02:00) Helsinki"
+      - option "(GMT+02:00) Jerusalem"
+      - option "(GMT+02:00) Kaliningrad"
+      - option "(GMT+02:00) Kyiv"
+      - option "(GMT+02:00) Pretoria"
+      - option "(GMT+02:00) Riga"
+      - option "(GMT+02:00) Sofia"
+      - option "(GMT+02:00) Tallinn"
+      - option "(GMT+02:00) Vilnius"
+      - option "(GMT+03:00) Baghdad"
+      - option "(GMT+03:00) Istanbul"
+      - option "(GMT+03:00) Kuwait"
+      - option "(GMT+03:00) Minsk"
+      - option "(GMT+03:00) Moscow"
+      - option "(GMT+03:00) Nairobi"
+      - option "(GMT+03:00) Riyadh"
+      - option "(GMT+03:00) St. Petersburg"
+      - option "(GMT+03:00) Volgograd"
+      - option "(GMT+03:30) Tehran"
+      - option "(GMT+04:00) Abu Dhabi"
+      - option "(GMT+04:00) Baku"
+      - option "(GMT+04:00) Muscat"
+      - option "(GMT+04:00) Samara"
+      - option "(GMT+04:00) Tbilisi"
+      - option "(GMT+04:00) Yerevan"
+      - option "(GMT+04:30) Kabul"
+      - option "(GMT+05:00) Almaty"
+      - option "(GMT+05:00) Astana"
+      - option "(GMT+05:00) Ekaterinburg"
+      - option "(GMT+05:00) Islamabad"
+      - option "(GMT+05:00) Karachi"
+      - option "(GMT+05:00) Tashkent"
+      - option "(GMT+05:30) Chennai"
+      - option "(GMT+05:30) Kolkata"
+      - option "(GMT+05:30) Mumbai"
+      - option "(GMT+05:30) New Delhi"
+      - option "(GMT+05:30) Sri Jayawardenepura"
+      - option "(GMT+05:45) Kathmandu"
+      - option "(GMT+06:00) Dhaka"
+      - option "(GMT+06:00) Urumqi"
+      - option "(GMT+06:30) Rangoon"
+      - option "(GMT+07:00) Bangkok"
+      - option "(GMT+07:00) Hanoi"
+      - option "(GMT+07:00) Jakarta"
+      - option "(GMT+07:00) Krasnoyarsk"
+      - option "(GMT+07:00) Novosibirsk"
+      - option "(GMT+08:00) Beijing"
+      - option "(GMT+08:00) Chongqing"
+      - option "(GMT+08:00) Hong Kong"
+      - option "(GMT+08:00) Irkutsk"
+      - option "(GMT+08:00) Kuala Lumpur"
+      - option "(GMT+08:00) Perth"
+      - option "(GMT+08:00) Singapore"
+      - option "(GMT+08:00) Taipei"
+      - option "(GMT+08:00) Ulaanbaatar"
+      - option "(GMT+09:00) Osaka"
+      - option "(GMT+09:00) Sapporo"
+      - option "(GMT+09:00) Seoul"
+      - option "(GMT+09:00) Tokyo"
+      - option "(GMT+09:00) Yakutsk"
+      - option "(GMT+09:30) Adelaide"
+      - option "(GMT+09:30) Darwin"
+      - option "(GMT+10:00) Brisbane"
+      - option "(GMT+10:00) Canberra"
+      - option "(GMT+10:00) Guam"
+      - option "(GMT+10:00) Hobart"
+      - option "(GMT+10:00) Melbourne"
+      - option "(GMT+10:00) Port Moresby"
+      - option "(GMT+10:00) Sydney"
+      - option "(GMT+10:00) Vladivostok"
+      - option "(GMT+11:00) Magadan"
+      - option "(GMT+11:00) New Caledonia"
+      - option "(GMT+11:00) Solomon Is."
+      - option "(GMT+11:00) Srednekolymsk"
+      - option "(GMT+12:00) Auckland"
+      - option "(GMT+12:00) Fiji"
+      - option "(GMT+12:00) Kamchatka"
+      - option "(GMT+12:00) Marshall Is."
+      - option "(GMT+12:00) Wellington"
+      - option "(GMT+12:45) Chatham Is."
+      - option "(GMT+13:00) Nuku'alofa"
+      - option "(GMT+13:00) Samoa"
+      - option "(GMT+13:00) Tokelau Is."
+    - text: Photo
+    - img "Avatar for <first>"
+    - checkbox "Remove photo"
+    - text: Remove photo
+    - button "Photo"
+    - text: "Suggested size: 100x100"
+    - separator
+    - text: Looking for the welcome page, Harvest AI, new look or navigation? They now live in
+    - link "My preferences":
+      - /url: /settings/my_preferences
+    - text: .
+    - button "Update info"
+    - link "Cancel":
+      - /url: /team/<id>
+  - text: You have
+  - strong: 30 days
+  - text: left in your free trial.
+  - link "Upgrade":
+    - /url: /company/edit_plan
+  - button "Harvest AI"
