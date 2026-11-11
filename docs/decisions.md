@@ -27,6 +27,8 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 19  | Motion library      | Not added yet: components animate with CSS transitions on the motion tokens (amends 10)  | Preparer                           |
 | 20  | Organisation        | Named by each request and checked on the server; never the session's active organisation | Preparer                           |
 | 21  | Route transitions   | React's `<ViewTransition>`, not React Router's `viewTransition` props (refines 10)       | Preparer                           |
+| 22  | Sign-in code        | Works only in the browser that asked for it                                              | Card TS-027, after its review      |
+| 23  | Passkeys            | None: the emailed code is the one way to sign up and sign in (amends 8 and 22)           | Owner                              |
 
 ## Evidence
 
@@ -239,6 +241,23 @@ The answer to a request for a code sets a cookie, `__Host-timesifier.sign_in_cod
 | A separate code for each requester          | Would also stop one person's request replacing another's code. The plugin keeps one live code per address and offers no other shape; it would mean writing the email-code flow ourselves.                                                                                                                                                                                                             |
 
 What it does not close, and why passkeys are the remedy, is in `docs/security.md`, "Known gaps". The cookie holds no address and is `HttpOnly`; the proof in it counts for the five minutes a code lasts, and the browser keeps it for an hour so that a late code is answered "expired" and not "wrong". The length of a code, eight digits, is one constant, `SIGN_IN_CODE_LENGTH` in `app/auth/code.ts`, read by the server and by the sign-in page.
+
+### 23. No passkeys: the emailed code is the one way in
+
+Decided by the owner on 2026-11-11, on card TS-029. It amends entry 8, under which passkeys shipped beside the email code, and the last paragraph of entry 22, which names passkeys as the remedy for a gap. Where those entries speak of passkeys they describe what was built and has since been removed.
+
+A person signs up and signs in with the emailed code and nothing else. `/sign-in` opens on the email address; `/sign-up` ends when the code is accepted and goes on to where the person was going; Settings has no Passkeys section.
+
+| Option                                            | Evidence                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The emailed code only (chosen)                    | One way in, the same on every device and in every browser, and the same two steps to sign up and to sign in. Every sign-in waits for an email, and the gap below stays open.                                                                                                |
+| A passkey first, the code as fallback (was built) | Sign-in with no email and no code, for a person who has made a passkey. It put a view in front of the email step on `/sign-in`, a third step after sign-up, a section in Settings, six endpoints, a table and a second dependency, `@better-auth/passkey`, to keep current. |
+
+What was removed: the passkey plugin and `@better-auth/passkey`; its six endpoints from `app/auth/endpoints.ts`, which now lists 20; its two rate-limit rules and its registration hook; the `passkeys` table, dropped by migration `0004_remove_passkeys` (production held no rows); and the passkey views, their tests and the virtual authenticator the browser tests used. `Permissions-Policy` now denies `publickey-credentials-get` and `publickey-credentials-create` like every other feature.
+
+**What it costs.** Passkeys were the remedy for a known gap (`docs/security.md`, "Known gaps", TS-027): somebody who knows a person's address can use up that address's five codes an hour, or keep replacing the code the person is about to type, and so keep them from signing in. A passkey signs in without a code and was out of that reach. With the code as the only way in, every person is exposed to it and nothing planned closes it. The bounds that remain are the ones entry 22 and the security document describe: each request for a code costs a Turnstile token, one client may ask three times a minute, and guessing a code needs the cookie of the browser that asked.
+
+Bringing passkeys back needs a new entry that names this one, the plugin and the table again, and the two permissions.
 
 ## To verify when the code is scaffolded
 
