@@ -1,113 +1,423 @@
 # Board
 
-How the board works, and what Ready and Done mean, is in `docs/ways-of-working.md`. Tick a criterion only with its evidence beside it.
+How the board works, and what Ready and Done mean, is in `docs/ways-of-working.md`. The columns are listed nearest to done first. Only the integrator edits this file; a criterion is ticked only with its evidence beside it.
 
-## In progress (limit 1 per worker)
+**The path.** The owner added two cards on 2026-11-11, and they come first: TS-036, one way in, and TS-037, the signed-in pages in the landing page's direction. After them the next three cards are TS-011a, TS-012a and TS-013, in that order. No card outside this path is pulled until a person can sign in for the first time, run a timer and see it in the week view in production. Three more things are named here so that nobody has to guess: the cards already in progress below finish; TS-022a is Done before TS-012a is pulled, because that is when the first data worth recovering arrives; and TS-043 is Done before TS-030 is deployed, because anyone may make an account. The cards for teams and managers, the month and year views, leave, the team calendar and policies (TS-038 to TS-042), which the owner asked for on 2026-11-11, wait behind this path.
 
-### TS-008 · Authentication
+## In progress (limit 1 per builder)
 
-Built in two passes. The server, then the pages: the sign-in and sign-up pages, passkeys in a browser and the guard on `/app` (pull request #17). One thing is left before Done: one real message received in production. Cloudflare's Turnstile asks an automated browser to prove it is a person, as it should, so the first sign-up is the owner's to make.
+### TS-030 · A home page, a privacy page, a terms page, and the visual direction
 
-- [x] The supported way to run Better Auth on D1 is confirmed against its documentation and written in `docs/decisions.md` entry 8. _The Drizzle adapter over `drizzle-orm/d1`, one of the two routes the documentation gives. `test/auth/schema.test.ts`: "pass Better Auth's own schema check; rename a property there and this fails". Every test in `test/auth/` drives the Worker against a local D1 built from `migrations/`. Built on `better-auth` 1.7.19._
-- [x] A person can sign up and sign in with a passkey and with email, sign out, and end all their sessions; each has a test. _In a browser, against the production build, with a virtual authenticator (`e2e/auth-journeys.spec.ts`): "with an email code makes the account, and a passkey is made straight after"; "sign out ends the session; the passkey alone signs back in"; "an email code signs in, and goes on to the page that was asked for"; "ends the session in a second browser too". What the pages say when the answer is no is in `e2e/auth-refusals.spec.ts`. On the server: `test/auth/email-code.test.ts`, `test/auth/passkey.test.ts` and `test/auth/session.test.ts`._
-- [x] The session cookie is `HttpOnly`, `Secure`, `SameSite=Lax` and uses the `__Host-` prefix (test reads the `Set-Cookie` header). _`test/auth/session.test.ts`, the test of the cookie's attributes, prefix, path and absent domain. The header sent: `__Host-timesifier.session_token=…; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax`. With the three cookie options removed the test fails: the library's default is not even `Secure`._
-- [x] The 11th sign-in attempt in one minute from one client returns status 429 (test). _`test/auth/rate-limit.test.ts`: "the 11th attempt in a minute from one client is answered 429, the first ten are not", for email-code sign-in and passkey sign-in. The minute is measured from the last attempt that was let through. Asking for a code is held tighter since TS-027: the 4th request in a minute is answered 429._
-- [x] Sign-up without a valid Turnstile token is rejected by the server (test with Turnstile's test keys). _`test/auth/turnstile.test.ts`, against Cloudflare's real `siteverify`: the always-pass key gives 200; the always-fail key gives 403; a missing token gives 400; neither refusal creates or sends a code. The check guards the request for a code, which is the only way into sign-up._
-- [x] A test lists every route under `/app` and shows each redirects to sign-in without a session. _`test/auth/guard.test.ts` reads the routes from the built route configuration, so a route added under `/app` is tested without anyone listing it: "without a session, every route under /app redirects to sign-in", for each route's page (302 to `/sign-in?next=…`), its data request (202 carrying the same redirect) and a posted form where the route has an action. In production on 2026-11-11: `/app`, `/app/settings` and `/app/reports?week=46` each answered 302 to `/sign-in` with the address in `next`._
-- [ ] Verification email is sent from a dedicated subdomain; the zone comparison from TS-003 shows no other record changed. _The subdomain is `mail.timesifier.com`, onboarded to Cloudflare Email Service on 2026-11-11 at 03:03 UTC: the zone went from 29 records to 35, the six new ones all under `mail.timesifier.com` (three MX and an SPF record at `cf-bounce.mail`, DKIM at `cf-bounce._domainkey.mail`, DMARC at `_dmarc.mail`), and no other record changed; the zone's public answers were compared again after the pages went live and differ from the first capture by those six alone. `test/auth/email.test.ts`: "comes from no-reply@mail.timesifier.com and carries the code once". Still to do: one real message received, which takes a person (see above)._
+Builder: an AI session on branch `ts-030-landing`. The owner's verdict on what was first deployed: it works, but it does not look like a designed product. This card writes the direction the product follows in `docs/design-direction.md`, changes the tokens to carry it, and replaces the three-line home page. It also takes the home-page criterion that TS-025 held. Because sign-up stays open to the public (the owner, 2026-11-11), the privacy page and the terms page ship with it. The evidence for each criterion is ticked in this card's pull request.
 
-### TS-009 · Organisations, teams and roles
+- [ ] The direction is written down before anything is built: who the product is for, the feeling, the typefaces, the palette, how imagery is used, three things the design refuses to do, and the shipped products it was checked against. It is in `docs/design-direction.md`, and an entry in `docs/decisions.md` replaces entries 4 and 16 with what stays, what goes and what is undecided. It is entry 24: entry 23 is the removal of passkeys.
+- [ ] The owner has approved the direction. TS-011a waits for this.
+- [ ] The tokens carry the direction and still come from one seed. Every text role is at least 4.5:1 on its background in both schemes (test).
+- [ ] `/` says what Timesifier does for a person, offers one primary action, "Create an account", with "Sign in" beside it, and shows the product before any scrolling at 390px and 1280px (browser test).
+- [ ] The page shows nothing the product will not do, and every total on it is the sum of what is shown above it (test).
+- [ ] The page is server rendered and works without script (browser test).
+- [ ] No accessibility violation at 390px and 1280px in the light and the dark scheme; the keyboard reaches the primary action, which shows its focus (browser test).
+- [ ] Every photograph is our own file with its size, a description and its source on record, and nothing moves when one arrives (tests).
+- [ ] The components still pass their own tests on the new tokens.
+- [ ] `/privacy` and `/terms` exist and are server rendered. The privacy page says what is stored about a person, why, that it rests in the EU, for how long, and how to have an account deleted before TS-021a is built. A test finds a link to each on `/`, `/sign-in` and `/sign-up`.
+- [ ] From TS-006: in the rail the travelling indicator no longer passes over the labels between two destinations; the skip link, while focused, no longer covers the top of the rail; the radio rings in Settings line up with the headings above them. Each has a browser test or a screenshot the owner has accepted.
+- [ ] Deployed after TS-043, and seen by the owner at `https://timesifier.com`.
 
-Built in two passes, like TS-008. The first, the server, is merged: the organisations, invitations and roles behind Better Auth's organization plugin, with one gate in front of every organisation endpoint. The second adds the pages under `/app/<organisation>/…` and the invitation page, once the shell (TS-006) and the sign-in pages (TS-008) are in. Teams are not built: no criterion asks for them.
+### TS-031 · Apply the review of the plan
 
-- [ ] A signed-in person can create an organisation and becomes its owner. _Server side proven in `test/organisations/create.test.ts`: "makes the signed-in person its only member, with the role owner"; refused without a session (401) and for an unverified address (403); the slug is derived on the server, is never a reserved word, and gets a number when taken. Still to do: the page._
-- [ ] An invitation link works once, expires after 7 days, and a test shows a used or expired link is rejected. _Server side proven in `test/organisations/invitations.test.ts`: "is accepted once, and makes its recipient a member as it said" (the second attempt is refused and adds no membership); "works for exactly seven days" (accepted one second before, refused one second after); refused when cancelled, declined, or opened by a person with another address; and "answers the same whether it is unknown, used, cancelled, expired or somebody else's". Still to do: the link's own page._
-- [x] Roles are owner, admin and member. A table in this card lists which role may do what, and a test covers every cell. _The table is below. `test/organisations/permissions.test.ts`: "has 27 cells, each with a trial, and no trial contradicts its cell", with 43 trials through the real endpoints, each asserting the status and what is stored. With a member wrongly allowed to invite, the test fails. The last-owner rule has six tests of its own, and a person who is not a member gets, for each of 15 attempts, the answer given about an organisation that does not exist._
-- [ ] A member of one organisation receives 404 for any URL of another organisation (test). _The function the pages will call, `requireMembership`, is proven in `test/organisations/membership.test.ts`: "says the same 'not found' for somebody else's organisation as for one that does not exist". Still to do: the routes, and the test that walks every one of them._
+Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the architecture, the design flow and the way of working. This card applies what they found to the documents, the board and the pipeline. It changes no application code.
 
-| Action                                               | owner                      | admin                | member |
-| ---------------------------------------------------- | -------------------------- | -------------------- | ------ |
-| See the organisation and its members                 | yes                        | yes                  | yes    |
-| Rename the organisation                              | yes                        | yes                  | no     |
-| Delete the organisation                              | yes                        | no                   | no     |
-| Invite a person                                      | yes                        | yes                  | no     |
-| Cancel an invitation                                 | yes                        | yes                  | no     |
-| Change a member's role between admin and member      | yes                        | yes                  | no     |
-| Make another person owner, or change an owner's role | yes                        | no                   | no     |
-| Remove a member                                      | yes                        | yes, except an owner | no     |
-| Leave the organisation                               | yes, unless the last owner | yes                  | yes    |
+- [ ] TS-011a, TS-012a and TS-013 are in Ready, each with its routes, tables and columns, a role table and criteria a test can decide.
+- [ ] `docs/ways-of-working.md` holds one procedure for a card, with each step given to the builder or the integrator.
+- [ ] Decisions 25 (time entries) and 26 (time zone) are written in `docs/decisions.md`.
+- [ ] The browser tests run in a job of their own, `browser tests`, beside `checks`; `preview` and `deploy` need both. The integrator adds `browser tests` to the checks `main` requires, in the same hour as the merge.
+- [ ] A pull request whose new migration holds `DROP` or `RENAME` fails the job `migration check` unless it changes only `migrations/` and `app/db/schema.ts`.
+- [ ] Done cards are in `docs/board-done.md`, and the board keeps one line for each.
+- [ ] TS-036 and TS-037, which the owner asked for on 2026-11-11, are on the board with their criteria.
+- [ ] `docs/ways-of-working.md` describes the goldfish review of a brief.
+- [ ] `docs/product.md` describes the product as the owner described it on 2026-11-11, and TS-038 to TS-042 are in Backlog with their criteria.
+- [ ] `pnpm format` and `pnpm lint` exit 0.
 
-An organisation always has at least one owner: the last owner cannot leave, be removed or be demoted.
-
-## Review (limit 2)
-
-### TS-002 · Pipeline: checks on every pull request
-
-Blocked on one criterion; the rest is merged.
-
-- [x] A workflow runs on every pull request and on `main`: install with a frozen lockfile, typecheck, lint, tests, build. _Pull request #2: job `checks` passed in 46 s._
-- [x] A secret scan and `pnpm audit --audit-level=high` run in the workflow, and a finding fails it. _Job `secret scan` passed; the audit is the last step of `checks`. The audit was shown failing on a real finding on 2026-11-11: with the gate at moderate it exited 1 on advisory GHSA-67mh-4wv8-2f99 (`esbuild` 0.18, under `drizzle-kit`), and 0 once an override removed that version. The gate has been moderate and above since then. The secret scan has not been shown failing._
-- [x] Every third-party action is pinned to a full commit SHA, and the workflow's default `permissions` are `contents: read`. _See `.github/workflows/ci.yml`._
-- [x] A throwaway pull request with a failing test shows a failed check; it is then closed. _Pull request #3: `checks` failed in 35 s; closed and its branch deleted._
-- [ ] `main` is protected: the check must pass before merging. _Blocked: GitHub answered "Upgrade to GitHub Pro or make this repository public to enable this feature." The owner decides. Until then, TS-003 deploys only after `checks` passes in the same workflow run._
-
-### TS-028 · A text field's label covers what a person types, in Safari
-
-Found on 2026-11-11 while checking the live sign-up page in a WebKit browser: the label of a field stayed on the line the person was typing on. Chromium was right, and every component test ran in Chromium. The cause is a defect in WebKit 27.2, reduced to a five-line page in `docs/design-system.md`, "State from another element": it does not restyle a text input's siblings for an attribute written during an event, which is when React Aria writes `data-focused` and `data-hovered`.
-
-- [x] A test fails for this reason before the fix, in WebKit. _`e2e/field-label.spec.ts` in WebKit 27.2, before the fix: on the sign-up page the label still reached 16px into the value's line after focus; in the gallery the line under a field stayed 2px after focus had left, and the label of a field left empty did not come back down. The same tests passed in Chromium._
-- [x] The label and the line of a text field and of a select follow focus, typing, a value that arrives without focus, and leaving, in Chromium and in WebKit. _The six tests of `e2e/field-label.spec.ts` pass in both engines. The label and the line now read the control's state through their container (`group-has-data-focused/field:`), which WebKit follows._
-- [x] The pattern cannot come back unseen. _`pnpm check:tokens` rejects a style read from a sibling's attribute (`scripts/check-tokens.test.ts`: `peer-data-focused:` and `peer-not-aria-invalid/field:` are reported; state from the element, an ancestor, `:has()` or a sibling's pseudo-class passes). The component tests, 44 with these, now run in WebKit as well as Chromium on every pull request._
-- [ ] Seen right in production in a WebKit browser.
-
-## Ready (limit 3)
+## Review (limit 2; a card waiting only on the owner is not counted)
 
 _Empty._
 
-## Backlog
+## Ready (limit 3)
 
-### TS-011 · Projects and clients
+The next cards, in the order they are pulled. A card is pulled only when every card on its "Depends on" line is Done. Ready holds four cards until TS-036 is pulled: the owner added it on 2026-11-11, ahead of the three that were here.
 
-Depends on: TS-009.
+### TS-036 · One way in
 
-- [ ] A member can create, rename and archive clients and projects within their organisation.
-- [ ] An archived project is hidden from the timer picker and still appears in reports.
-- [ ] Names are required, at most 120 characters, and unique within the organisation ignoring case (tests).
-- [ ] The empty state explains what a project is and offers one action: create the first.
+The owner, 2026-11-11: "We don't really need create accounts per se. We just need a word like get started or something like start tracking. When you click that, that's automatically taking us to a login page. That login page shouldn't be sloppy either. Every link we have at the bottom of the page should not be dead links."
 
-### TS-012 · Timer and manual entries
+**Depends on:** TS-029 (Done) and TS-030. The branch is cut from `main` after TS-030 merges.
 
-Depends on: TS-011.
+**Reference for the screen:** `docs/design-direction.md` and the home page, both from TS-030. The page uses the home page's header without its section links and its footer without "Sign in".
 
-- [ ] A person can start a timer on a project and stop it; the entry stores start and end in UTC.
-- [ ] Starting a timer while one is running stops the first at the same instant; a database constraint allows one running entry per person (test).
-- [ ] A running timer survives a reload and shows the same elapsed time, to the second, in a second browser.
-- [ ] A person can add, edit and delete an entry by hand; an end before its start is rejected.
-- [ ] Times are shown in the person's time zone; a test covers an entry that crosses midnight and one that crosses a clock change.
-- [ ] The timer digits animate when they change, and stay still with reduced motion requested.
+**Owns:** `app/routes/sign-in.tsx`, `app/routes/auth/`, the words of the home, privacy and terms pages, the answer to `/sign-up` under `workers/`, the keys `app/auth/sign-in-code.server.ts` accepts, the "Signed in as" line on `/app/new` and on the invitation page, and the browser tests of signing in with `e2e/auth.ts`.
+
+**Interfaces:** every later card signs a person in through the one page. The helper in `e2e/auth.ts` that makes a person does so, and sets a name in Settings where a test needs one.
+
+**Routes**
+
+- `/sign-in`, module `routes/sign-in.tsx`: one page with two views, the email address and then the eight-digit code, for new and returning people alike. It never says whether an address has an account.
+- `GET /sign-up` is no longer a page. The Worker answers it before the framework with status 302 and a `Location` built by the existing rule for `next` (`safeNext`), with every other query dropped. `sign-up` leaves the route configuration and stays among the reserved organisation slugs.
+- `POST /api/auth/sign-in/email-otp` stops taking a `name`. No name is asked on the way in: a person sets one in Settings, as today.
+
+**Tables:** none. The address and the time of a request for a code are kept in the tab's `sessionStorage` for the code's five minutes, and nothing else is stored in the browser.
+
+**Who may:** anyone, signed out. There is no role before a session.
+
+**The words**
+
+| Where                                                           | Words                                                                                 |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Home page, primary action (hero and closing band)               | Start tracking                                                                        |
+| Home page, quiet link beside the primary action, at every width | Sign in                                                                               |
+| Page title                                                      | Sign in · Timesifier                                                                  |
+| Heading, first view                                             | Enter your email                                                                      |
+| Lead, first view                                                | We will email you a code. If you are new here, the same code sets you up.             |
+| Button, both views                                              | Continue                                                                              |
+| Second view                                                     | As now, plus the sentence "We send at most five codes an hour to one address."        |
+| When Turnstile's check fails                                    | We could not confirm this browser. Wait a moment and press Continue again.            |
+| `/app/new` and the invitation page's "no longer valid" state    | "Signed in as" with the address, and a quiet "Use a different email", which signs out |
+
+**Acceptance criteria**
+
+- [ ] A new address goes from `/` by "Start tracking" to the email address, the code, "Create your organisation" and Today (browser test at 390px and 1280px).
+- [ ] A returning address with an organisation goes from `/` by "Sign in" to the email address, the code and Today (browser test).
+- [ ] An invited new address, signed out, goes from the invitation link to the email address, the code, the invitation's page, Join and the organisation (browser test).
+- [ ] A person who asks for a code, reloads the page and types the code is signed in, without asking again (browser test at 390px).
+- [ ] `GET /sign-up?next=/invitations/abc` answers 302 with `Location: /sign-in?next=%2Finvitations%2Fabc`, and `sign-up` appears under `app/` only in the reserved slugs (test).
+- [ ] `POST /api/auth/sign-in/email-otp` with a `name` is answered 400 (test).
+- [ ] No server-rendered page and no email contains "create an account", "create account" or "sign up" (a test over every server-rendered page).
+- [ ] Every `a[href]` on `/`, `/privacy`, `/terms` and `/sign-in` leads to a page that answers 200 or to an element on the page; `mailto:` links and other origins are listed in the test (test).
+- [ ] Moving between the home page and `/sign-in` is a whole page load in both directions; a test fails if a link or a redirect reaches `/sign-in` without one.
+- [ ] `/app/new` and the invitation page's "no longer valid" state each show "Signed in as" with the address, and "Use a different email" signs out and returns to `/sign-in` keeping `next` (browser test).
+- [ ] The existing accessibility, keyboard and reduced-motion tests of the sign-in pages pass, moved to the one page and extended only to what this card changes.
+- [ ] `docs/security.md`, `docs/architecture.md` and `README.md` describe one page, and the criteria of TS-008 and TS-025 that this card supersedes are marked as such.
+- [ ] The pull request shows the two views of `/sign-in`, each beside the home page, at 390px and 1280px in the light scheme and at 1280px in the dark, and the three refusals (too many attempts, a wrong code, the check failed). The owner has accepted them.
+
+Not in this card: the signed-in shell and pages (TS-037), the sign-in and invitation emails, and any change to the server beyond the two above.
+
+What holds for the three cards below, from `app/db/schema.ts`: an id is a UUID version 7 stored as text; a time is an integer of milliseconds since the Unix epoch, in UTC; a table with an `organisation_id` is added to `tenantTables` and reached only through `organisationScope`. The organisation's slug is the route parameter `organisation`, so the addresses below are written `/app/:organisation/…`. The integrator gives each card its migration number before work starts.
+
+### TS-011a · Projects
+
+**Depends on:** TS-009 (Done); TS-037, which writes the convention for a list page and an empty state and has the owner's approval of it. Decision 25 is written.
+
+**Reference for the screen:** the convention for a list page in `docs/design-direction.md` (TS-037), and the members page as the nearest page already built: a list, with a sheet for quick editing.
+
+**Owns:** `app/routes/app/projects.tsx`, a new folder `app/projects/`, one migration, the `projects` table in `app/db/schema.ts` and its line in `tenantTables`, and the tests of this page.
+
+**Interfaces:** a function in `app/projects/` that returns the active projects of an organisation, by name. TS-012a's timer reads it.
+
+**Routes:** `/app/:organisation/projects`, module `routes/app/projects.tsx`, the existing Projects destination. Its loader lists the projects. Its action takes the intents `create`, `rename`, `archive` and `restore`. No new address.
+
+**Tables:** `projects`
+
+| Column                     | Type and constraint                                                             |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| `id`                       | text, primary key                                                               |
+| `organisation_id`          | text, not null, references `organisations.id`, cascade on delete                |
+| `name`                     | text, not null, 1 to 120 characters after trimming                              |
+| `name_key`                 | text, not null: `name` normalised (NFKC), trimmed and lower-cased in the Worker |
+| `archived_at`              | integer, null while the project is active                                       |
+| `created_at`, `updated_at` | integer, not null                                                               |
+
+A unique index on `(organisation_id, name_key)`. It covers archived projects, so a restore can never clash. There is no client column: TS-011b adds a nullable `client_id`.
+
+**Who may** (the owner, 2026-11-11: every role manages projects)
+
+| Action                                               | owner | admin | member |
+| ---------------------------------------------------- | ----- | ----- | ------ |
+| See the organisation's projects, active and archived | yes   | yes   | yes    |
+| Create a project                                     | yes   | yes   | yes    |
+| Rename a project                                     | yes   | yes   | yes    |
+| Archive or restore a project                         | yes   | yes   | yes    |
+| Delete a project                                     | no    | no    | no     |
+
+**Acceptance criteria**
+
+- [ ] A migration creates `projects` as above, and `projects` is in `tenantTables` (test: the scope of one organisation returns none of another's rows).
+- [ ] `create` with a name of 1 to 120 characters after trimming stores one row and the list shows it. An empty name, a name of spaces and a name of 121 characters each answer 400 with the text "Enter a name of up to 120 characters." and store nothing (test).
+- [ ] A name is unique in its organisation ignoring case, archived projects included. After "Design", `create` "design" answers 400 with "A project with this name already exists." and stores nothing. The same name in another organisation is accepted (test).
+- [ ] `rename` obeys both rules, and renaming "Design" to "DESIGN" is accepted (test).
+- [ ] `archive` sets `archived_at`. The project leaves the default list and the function the timer reads, and appears under a filter named "Archived". `restore` clears `archived_at` (test).
+- [ ] The action answers 400 to any intent other than the four, and no request removes a `projects` row (test).
+- [ ] Every cell of the "Who may" table has a test through the real action.
+- [ ] A member of organisation A receives 404 for `/app/<slug of B>/projects`, and 404 with nothing changed for an action that names a project of B. `test/pages/isolation.test.ts` reads the routes from the route configuration, so the page is covered by sitting under the organisation's layout; this card adds the test of the action (test).
+- [ ] A new organisation has no projects (test).
+- [ ] With no projects the page shows a heading "No projects yet", the sentence "A project is what you track time against, such as a client job or a piece of your own work.", and exactly one button, named "Create project" (test).
+- [ ] A project can be created, renamed and archived with the keyboard alone (browser test).
+- [ ] axe with WCAG 2.2 AA tags reports no violations on the page, empty and filled, in both schemes (browser test).
+- [ ] The pull request shows the page at 390px and 1280px in both schemes, and the owner has accepted the screenshots.
+
+### TS-012a · Timer
+
+**Depends on:** TS-011a; TS-022a. Decisions 25 and 26 are written.
+
+**Reference for the screen:** `docs/design-direction.md`, and the timer shown on the home page of TS-030.
+
+**Owns:** `app/routes/app/today.tsx`, a new folder `app/time/`, one migration, `time_entries` and `users.time_zone` in `app/db/schema.ts`, the `batch` method in `app/db/scope.ts`, and the tests of the timer.
+
+**Interfaces:** reads the active projects through TS-011a's function. TS-013 reads `time_entries` and `users.time_zone` and builds on the same route module.
+
+**Routes**
+
+- `/app/:organisation`, module `routes/app/today.tsx`, the existing Today destination. Its action takes the intents `start` and `stop`.
+- `/app/:organisation/settings`, module `routes/app/settings.tsx`. Its action gains the intent `time-zone`.
+
+As built by TS-009, a new person creates an organisation at `/app/new`, then a project (TS-011a), then starts a timer. This card adds no step and removes none (the owner, 2026-11-11). No new address.
+
+**Tables**
+
+`users` gains `time_zone`: text, null until set. It holds an IANA name such as `Europe/London`, accepted only if it is `UTC` or `Intl.supportedValuesOf("timeZone")` holds it. While it is null, times are shown in UTC.
+
+`time_entries`
+
+| Column                     | Type and constraint                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------- |
+| `id`                       | text, primary key                                                                      |
+| `organisation_id`          | text, not null, references `organisations.id`, cascade on delete                       |
+| `user_id`                  | text, not null, references `users.id`, no cascade (decision 25)                        |
+| `project_id`               | text, not null, references `projects.id`                                               |
+| `description`              | text, null, at most 500 characters                                                     |
+| `started_at`               | integer, not null                                                                      |
+| `ended_at`                 | integer, null while the timer runs; check `ended_at IS NULL OR ended_at >= started_at` |
+| `created_at`, `updated_at` | integer, not null                                                                      |
+
+Indexes: unique on `(organisation_id, user_id) WHERE ended_at IS NULL`; `(organisation_id, user_id, started_at)`; `(organisation_id, project_id, started_at)`.
+
+`organisationScope` gains `batch`: several scoped statements sent as one D1 batch, all applied or none.
+
+**Who may**
+
+| Action                                    | owner | admin | member |
+| ----------------------------------------- | ----- | ----- | ------ |
+| Start a timer for themselves              | yes   | yes   | yes    |
+| Stop their own running timer              | yes   | yes   | yes    |
+| See their own running timer               | yes   | yes   | yes    |
+| Start, stop or see another person's timer | no    | no    | no     |
+| Set their own time zone                   | yes   | yes   | yes    |
+
+**Acceptance criteria**
+
+- [ ] A migration adds `users.time_zone` and creates `time_entries` with the columns, the check and the three indexes above; `time_entries` is in `tenantTables` (test).
+- [ ] A person whose `time_zone` is null has it set from the zone their browser reports the first time they open a page under `/app`. For a new account that is the page that follows the code: nothing is asked on the way in (TS-036). A name that is neither `UTC` nor known to `Intl` is not stored (test).
+- [ ] Settings shows the person's zone and lets them choose another. The intent `time-zone` with a known name stores it; an unknown name answers 400 and stores nothing (test).
+- [ ] `start` stores one row with `started_at` equal to the server's clock, whatever time the request claims, and `ended_at` null (test with a fixed clock).
+- [ ] `start` names an active project of this organisation. No project, an archived project, or a project of another organisation answers 400 and stores nothing (test).
+- [ ] A description of 500 characters is stored; one of 501 answers 400 and stores nothing (test).
+- [ ] `stop` sets `ended_at` to the server's clock on the caller's running entry. With nothing running it changes nothing and answers the page as it is (test).
+- [ ] A second running row for the same person and organisation is refused by the index when inserted directly (test).
+- [ ] `start` while a timer runs stops the first and starts the second in one `batch`, and the first entry's `ended_at` equals the second's `started_at`. When the insert is made to fail, the first entry is still running (test).
+- [ ] A person in two organisations can run one timer in each at the same time (test; decision 25).
+- [ ] Elapsed time is worked out from the stored `started_at`. Two browsers signed in as the same person show the same elapsed value, to the second, after each loads the page (browser test with a controlled clock).
+- [ ] The page reads its state again when the window gains focus and every 30 seconds. A stop made in one browser shows in the other within 30 seconds. There is no live push and no new platform part (browser test).
+- [ ] The start time is shown in the person's zone. For `Europe/London`, an entry started at 2026-03-29T00:30Z shows 00:30 and one started at 01:30Z shows 02:30. An entry running across that clock change shows an elapsed time equal to end minus start in real seconds (test).
+- [ ] With no active project, Today shows a heading "No project to track yet" and exactly one link, named "Create a project", which opens Projects. With at least one, it shows the active projects to choose from and one button named "Start timer" (test).
+- [ ] `stop` takes no entry id. An action sent to an organisation the caller is not in answers 404 and changes nothing, and both intents are tested beside `test/pages/isolation.test.ts` (test).
+- [ ] While the timer runs the seconds change once a second and the changed digit moves. With reduced motion requested, `getAnimations()` on the timer is empty (browser test, as `e2e/shell-transitions.spec.ts`).
+- [ ] The timer can be started and stopped with the keyboard alone, has an accessible name, and is not announced every second. axe with WCAG 2.2 AA tags reports no violations (browser test).
+- [ ] No log line holds a description: a failed statement during `start` logs the error's name and the path alone (test, as `test/error-log.test.ts`).
+- [ ] The pull request shows the page with no project, with a timer stopped and with one running, at 390px and 1280px in both schemes, and the owner has accepted the screenshots.
+
+Not in this card: adding, editing and deleting entries by hand (TS-012b).
 
 ### TS-013 · Today and week views
 
-Depends on: TS-012.
+**Depends on:** TS-012a. Decision 26 is written.
 
-- [ ] Today lists the day's entries in order with a total; Week shows seven days with a total for each day and each project.
-- [ ] Every total equals the sum of the entries shown (property test over random entries).
-- [ ] An entry can be added from the keyboard alone, without the pointer.
-- [ ] Moving between days and weeks animates in the direction of travel.
+**Reference for the screen:** `docs/design-direction.md`, and the day sheet and the week shown on the home page of TS-030.
 
-### TS-014 · Reports and CSV export
+**Owns:** the list and the totals in `app/routes/app/today.tsx`, a new module `app/routes/app/week.tsx` and its line in `app/routes.ts`, the day and week arithmetic in `app/time/`, and the tests of both pages.
+
+**Interfaces:** none new. TS-014a reuses the day arithmetic.
+
+**Routes**
+
+- `/app/:organisation`, module `routes/app/today.tsx`: one day. `?day=YYYY-MM-DD` chooses it; without it, today in the person's zone.
+- `/app/:organisation/week`, a new module `routes/app/week.tsx`, a page inside the Today destination: Monday to Sunday. `?start=YYYY-MM-DD` chooses the Monday; without it, the current week in the person's zone.
+
+**Tables:** none new. The pages read `time_entries`, `projects` and `users.time_zone`. The Worker works out the bounds of the day or the week in the person's zone and passes them to SQL as UTC integers.
+
+**Who may**
+
+| Action                                                | owner | admin | member |
+| ----------------------------------------------------- | ----- | ----- | ------ |
+| See their own entries and totals for a day or a week  | yes   | yes   | yes    |
+| See another person's entries or totals on these pages | no    | no    | no     |
+
+**Acceptance criteria**
+
+- [ ] Today lists the caller's entries whose start falls in the chosen local day, earliest first, each with its project's name, its description, start, end and duration, and one total for the day (test).
+- [ ] Week shows seven days from Monday, a total for each day, a total for each project (an archived project by its name) and one total for the week (test).
+- [ ] For random sets of entries, each day's total equals the sum of the durations listed for that day, and the week's total equals both the sum of its day totals and the sum of its project totals (property test).
+- [ ] A running entry is listed as "Running" and counted from its start to the time of the request (test with a fixed clock).
+- [ ] An entry belongs whole to the local day it starts in. For `Europe/London`, an entry from 23:30 to 00:30 is listed and counted under the first day only (test).
+- [ ] The same entry falls in different days for a person in `Pacific/Auckland` and a person in `Europe/London`. In the week of 2026-03-29 in London, an entry started at 00:30 local on the Sunday is in Sunday's column, and the week's bounds are right although that day has 23 hours (test).
+- [ ] A `day` or `start` value that is not a date, or a `start` that is not a Monday, answers 400 (test).
+- [ ] Links named "Previous day", "Next day", "Previous week", "Next week" and "Today" change the address and are reachable by keyboard. Going later moves forward and going earlier moves back. With reduced motion requested nothing moves (browser test, as `e2e/shell-transitions.spec.ts`).
+- [ ] The navigation marks Today as the current destination on `/app/:organisation/week` (test of `destinationIndex`, and browser test).
+- [ ] With two members in one organisation, neither page shows the other's entries or counts them in a total (test).
+- [ ] A member of organisation A receives 404 for both pages of organisation B, and `test/pages/isolation.test.ts` lists `/app/:organisation/week` among the routes it walks (test).
+- [ ] The query behind each page uses the index `(organisation_id, user_id, started_at)`: `EXPLAIN QUERY PLAN` names it (test).
+- [ ] With no entries in the day, the list shows the sentence "Nothing tracked on this day." and adds no button: the timer's is the page's one primary action (test).
+- [ ] One browser test starts from an address never seen before and does only this: enters the address on `/sign-in`, enters the code, names an organisation, creates one project, presses "Start timer" and opens Week. It finds the running entry in today's column. The test has a time limit of 120 seconds for all of it, so it fails when the steps take longer. This is the criterion for "under two minutes" in `docs/product.md`.
+- [ ] axe with WCAG 2.2 AA tags reports no violations on either page, empty and filled, in both schemes (browser test).
+- [ ] The pull request shows both pages at 390px and 1280px in both schemes, and the owner has accepted the screenshots.
+
+Moved out of this card: "an entry can be added from the keyboard alone" is on TS-012b, where entries are added by hand.
+
+## Backlog
+
+In priority order. Before a feature card enters Ready it gains "Routes", "Tables" and "Who may" sections like the three cards above, and the criterion that every new route joins the cross-organisation 404 test of TS-009.
+
+### TS-037 · The signed-in product in the landing page's direction
+
+Depends on: TS-030 and TS-036. Asked for by the owner on 2026-11-11. It enters Ready when TS-036 is pulled. It builds no timer and no feature card: Today, Reports and Projects stay empty until their own cards.
+
+- [ ] `docs/design-direction.md` holds the written convention for the shell, a form page, a list page, and an empty or error state.
+- [ ] One page, Settings, is built to the convention and seen by the owner before any other page is changed.
+- [ ] The shell follows the convention at 390px and 1280px in both schemes (browser test, and screenshots the owner has accepted).
+- [ ] The organisation chooser at `/app` and the page that creates an organisation at `/app/new` follow it.
+- [ ] Members and invitations at `/app/:organisation/settings/members` follow it.
+- [ ] The invitation page and its "no longer valid" state follow it.
+- [ ] The not-found page and the error page each have a heading, one sentence and one way out (test).
+- [ ] Today, Reports and Projects are honest empty states: each says what will be there and offers nothing that does not work (test).
+- [ ] A test follows every link a signed-in owner and a signed-in member can reach, and each answers 200 or leads to an element on the page.
+- [ ] The existing behaviour and tests of navigation, focus and transitions are kept: `e2e/shell-navigation.spec.ts`, `e2e/shell-transitions.spec.ts`, `e2e/shell-accessibility.spec.ts` and `e2e/reduced-motion.spec.ts` pass, changed only where a name on the page changed.
+
+### TS-022a · Recovery and one alert
+
+Depends on: TS-003. Done before TS-012a is pulled. The 5% figure and the one hour below are proposals; the owner confirms them by approving this board.
+
+- [ ] An in-place Time Travel restore has been rehearsed on `timesifier-preview`, and an export of that database has been imported into a scratch database. The steps and the date are on this card.
+- [ ] The pipeline prints `wrangler d1 time-travel info timesifier` before it applies migrations to production, so the log of every deploy holds the point to return to.
+- [ ] The smoke test makes one check through D1: `POST /api/auth/sign-in/email-otp` with a well-formed wrong code answers 400, not 500.
+- [ ] When more than 5% of requests are answered 5xx over 5 minutes, or one `email: send failed` line is logged, an email reaches the owner. Each has been triggered once on purpose, and the date is on this card.
+- [ ] No log line holds an entry's description (test).
+- [ ] `docs/architecture.md` states the recovery point (any minute of the last 30 days) and the recovery time (one hour).
+- [ ] `docs/security.md`, "Known gaps and accepted risks", says that the only copy of the data is the database's own history until TS-022b.
+
+From TS-027: an unexpected error is now logged as its name and the path, and nothing else. That keeps addresses and tokens out of the log, and it also keeps out what a person needs to find the fault. This card adds the stack without its message line, and a request id, to that line.
+
+### TS-043 · A ceiling on the email the application sends
+
+This card was TS-032 until 2026-11-11, when that number went to the card that took the deployment's settings out of the code.
+
+Depends on: nothing. Done before TS-030 is deployed: anyone may make an account, and today nothing bounds the total number of messages.
+
+- [ ] One client address is sent at most a fixed number of sign-in codes a day, whatever addresses it names; the next request is answered like a served one and nothing is sent (test). The number is written in `docs/architecture.md`.
+- [ ] The application sends at most a fixed number of messages a day in all, set below the Email Service quota; above it nothing is sent and one line is logged (test). The number is written in `docs/architecture.md`.
+- [ ] Both counts are kept under a keyed hash or a fixed name, never an address (test).
+
+### TS-021a · Account deletion
+
+Depends on: TS-012a. Moved ahead of reports by the owner on 2026-11-11, because anyone may make an account.
+
+- [ ] A signed-in person can delete their account from Settings. The confirmation is a sheet in which they type the account's email address.
+- [ ] Deleting an account ends every session of the person and removes their memberships, and the invitations they sent.
+- [ ] Time entries keep their `user_id`. The `users` row stays; its name becomes "Deleted person" and its address becomes a value that identifies nobody and can receive no mail. A test lists every table with a column that refers to a person and checks each; it fails when a table is added and not listed.
+- [ ] The last owner of an organisation with other members must hand it over first; the sheet says so and nothing is deleted (test).
+- [ ] The privacy page says how to delete an account, in the words of the Settings page.
+
+### TS-011b · Clients
+
+Depends on: TS-011a.
+
+- [ ] A table `clients` (the columns of `projects`, with the same name rules) and a nullable `client_id` on `projects`.
+- [ ] Every role can create, rename and archive a client, and give a project a client or none (a test for every cell, as TS-011a).
+- [ ] Names are required, at most 120 characters, and unique within the organisation ignoring case (tests).
+- [ ] An archived client is not offered when a project is edited, and its projects keep it.
+
+### TS-012b · Manual entries
 
 Depends on: TS-013.
 
-- [ ] A report covers a chosen date range, grouped by project, client or day.
+Not Ready. One decision is open, and it is the owner's: whether `style` attributes stay banned by the Content Security Policy. React Aria's date and time components write them. Either the policy gains `style-src-attr 'unsafe-inline'` and the components are used as shipped, or the ban stays and this card builds date and time fields on React Aria's hooks. The answer becomes decision 28 before this card enters Ready. TS-014a's date range waits on the same answer.
+
+- [ ] A person can add, edit and delete their own entries by hand; an end before its start is rejected (test).
+- [ ] An owner or admin can see another member's entries and cannot change them (a test for every cell of this card's role table).
+- [ ] An entry can be added from the keyboard alone, without the pointer (browser test).
+- [ ] A day and a time typed by a person are read in the person's time zone (decision 26); a time that does not exist on that day, in the hour a clock change skips, is rejected (test).
+
+### TS-014a · Reports
+
+Depends on: TS-013. The date range waits on the same decision as TS-012b.
+
+This is where "administrators can look at their time" (the owner, 2026-11-11) is built: the fourth criterion below. TS-038 adds the manager, who sees their team's.
+
+- [ ] A report covers a chosen range of days in the viewer's time zone, grouped by project, client or day.
+- [ ] An entry is counted in the local day it starts in, and a running entry is left out (test).
 - [ ] Report totals equal the sum of the underlying entries for the same range (property test).
-- [ ] The CSV export has one row per entry with ISO 8601 times, and opens correctly in a spreadsheet when a description contains commas, quotes or line breaks.
-- [ ] A cell that starts with `=`, `+`, `-` or `@` is escaped so that a spreadsheet does not run it as a formula (test).
-- [ ] The export contains only the caller's organisation (test).
+- [ ] A member sees their own entries. An owner or admin can also see every member's, and a report for one member (a test for every cell of this card's role table).
+- [ ] The report contains only the caller's organisation (test), and its route is in the cross-organisation 404 test.
+
+### TS-014b · CSV export
+
+Depends on: TS-014a.
+
+- [ ] The export of a report has one row for each entry and these columns in this order: `entry_id`, `person`, `project`, `client`, `description`, `started_at`, `ended_at`, `duration_seconds`. Times are in UTC, in ISO 8601 with `Z`.
+- [ ] The file parses back to the same values with an RFC 4180 parser (property test over descriptions with commas, quotes and line breaks).
+- [ ] A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is prefixed with `'` (test).
+- [ ] The response is streamed in pages keyed on `id`, and nothing is stored (test with more entries than one page).
+- [ ] A member exports their own entries; an owner or admin exports every member's (test). The export contains only the caller's organisation (test).
+
+### TS-038 · Teams and managers
+
+Depends on: TS-009 (Done) and TS-014b, because what a manager gains is a report and an export of their team. Decision 29 is settled on this card before anything is built.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: who creates a team and names its manager (proposed: an owner or admin, never the manager); and whether creating teams should be split into a card of its own that comes before reports.
+
+- [ ] A team belongs to one organisation: the scope of one organisation returns none of another's teams (test).
+- [ ] A member of an organisation is in none, one or several of its teams. Adding a person who is not a member of the organisation is refused (test).
+- [ ] `manager` is a role a person holds for one team, between admin and member. The permission table in `docs/security.md`, "Roles", gains its rows, and a test covers every cell, as `test/organisations/permissions.test.ts` does today.
+- [ ] A manager sees and exports the entries of the members of the teams they manage, and nobody else's (test with two teams). An owner or admin still sees and exports everyone's, and a member only their own.
+- [ ] A manager cannot change another person's entry (test).
+- [ ] Taking a person out of a team, or ending their time as its manager, takes effect on their next request (test).
+
+### TS-039 · Month and year views
+
+Depends on: TS-013.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: in the month view, whether a week that crosses the end of the month shows the whole week's total or only its days in that month (proposed: only its days in the month, so that the weeks add up to the month).
+
+- [ ] The month view shows one calendar month in the person's time zone: a total for each day, each week from Monday, each project, and one for the month (test).
+- [ ] The year view shows one calendar year: a total for each month, each project, and one for the year (test).
+- [ ] For random sets of entries, the month's total equals the sum of its day totals and the sum of its project totals; the year's total equals the sum of its month totals and the sum of its project totals; and a month's total in the year view equals the month view's total for that month (property test).
+- [ ] An entry belongs whole to the local day it starts in (decision 26): one from 23:30 on the last day of a month to 00:30 is counted in the first month only (test).
+- [ ] With two members in one organisation, neither view shows the other's entries or counts them in a total (test).
+
+### TS-020 · Audit log
+
+Depends on: TS-009.
+
+- [ ] A table `audit_records` with the columns `id`, `organisation_id` (null for an event outside any organisation), `actor_user_id` (null when nobody was signed in), `action`, `subject`, `created_at`.
+- [ ] Sign-in, role change, invitation, export and deletion each write a record. A failed sign-in is recorded without an organisation, under a keyed hash of the address.
+- [ ] Records cannot be changed or deleted through the application (test).
+- [ ] An owner or admin can read their organisation's records and no other organisation's; a member cannot (test).
+- [ ] No record contains a secret, a session token or entry text (test).
+- [ ] Audit records keep their user id. Account deletion removes the person's name and address, and the id then shows as "Deleted person". This is the one exception in TS-021a's table test.
+- [ ] A record is kept for a fixed period, written in `docs/security.md`; older records are deleted by TS-033's job.
+
+### TS-021b · Export of personal data
+
+Depends on: TS-014b, TS-020 and TS-018. Which of the last two stays in release 1 is an open question for the owner; this line follows the answer.
+
+- [ ] A person can download everything held about them as JSON.
+- [ ] `docs/data-protection.md` lists what personal data is held, why, where, and for how long.
 
 ### TS-015 · AI category suggestions
 
-Depends on: TS-012.
+Depends on: TS-012a.
+
+Not Ready: the model, the accuracy it must reach, the daily spend limit and what a person sees when the model fails are not decided.
 
 - [ ] For an entry with a description, the application suggests a project; the suggestion is applied only when the person accepts it.
 - [ ] A labelled set of at least 30 example entries is committed; `pnpm eval:categories` reports accuracy, and the threshold it must meet is written on this card before the first run.
@@ -119,22 +429,71 @@ Depends on: TS-012.
 
 Depends on: TS-013.
 
+Not Ready: the key the address is encrypted with and how it is replaced, the defence against an address that passes the check and then resolves somewhere else, and how often a feed is read again are not decided.
+
 - [ ] A person can add a calendar by its ICS address; its events appear beside tracked time in Today and Week.
 - [ ] The address is fetched by the server only if it is `https` and resolves to a public address; private, loopback and link-local addresses are refused (test).
 - [ ] The calendar address is stored encrypted and never returned to the browser after saving.
-- [ ] A feed that fails or exceeds 5 MB shows a clear message and leaves existing events in place.
+- [ ] A feed that fails or exceeds 5 MB shows the text "This calendar could not be read. The events already imported are unchanged." and leaves existing events in place (test).
 
 ### TS-017 · Focus blocks
 
 Depends on: TS-016.
 
+The owner, 2026-11-11: a focus rhythm in the Pomodoro manner, stretches of work and breaks. Open for the owner: how long a stretch and a break are, whether a person can change them, and whether a break is planned like a block or only timed. The criterion for the rhythm is written when the answer is.
+
 - [ ] A person can plan a focus block on a day; it appears in Today and Week.
-- [ ] A block that overlaps a calendar event is flagged before saving.
+- [ ] A block that overlaps a calendar event shows the text "This block overlaps" followed by the event's title before it is saved, and it can still be saved (test).
 - [ ] At the end of the day the view shows planned focus time beside the time actually tracked during those blocks; the two figures are covered by a test.
+
+### TS-040 · Leave
+
+Depends on: TS-038.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: the kinds of leave, and whether leave is counted in days, half days or hours; and who decides a request from a person who is in no team, or who is the only owner.
+
+- [ ] A person can ask for time off from a first day to a last day, in their time zone. A last day before the first is refused (test).
+- [ ] A request waits until a manager of a team the person is in, an owner or an admin approves or refuses it. A member who manages none of the person's teams cannot decide it (a test for every cell of this card's role table).
+- [ ] A request that has been approved or refused cannot be decided a second time (test).
+- [ ] Approved leave is shown beside worked time in the person's day and week views, and no total of worked time includes it (test).
+- [ ] A person sees their own requests, a manager their team's, an owner or admin everyone's, and a member nobody else's (a test for every cell).
+- [ ] A request of one organisation is never shown or decided in another (test).
+
+### TS-041 · The team calendar
+
+Depends on: TS-040 and TS-013. It does not need TS-016: events read from an outside calendar are that card's.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: whether a member sees when the others in their team are on leave, or only the manager does.
+
+- [ ] A person's calendar shows, for a chosen week or month in their time zone, their tracked entries and their approved leave, each on the local day it belongs to (test).
+- [ ] A team's calendar shows the same for every member of the team, to a manager of that team and to an owner or admin (a test for every cell of this card's role table).
+- [ ] A manager's calendar shows nobody from a team they do not manage (test with two teams).
+- [ ] The hours shown for a person's day on the calendar equal that day's total in their week view (property test).
+- [ ] The calendar can be moved through with the keyboard alone, and axe with WCAG 2.2 AA tags reports no violations (browser test).
+
+### TS-042 · Policies
+
+Depends on: TS-040.
+
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+
+Open for the owner: how leave accrues (a fixed number of days a year, or earned month by month); and whether a policy is one for the organisation or may differ by team.
+
+- [ ] An owner or admin sets the organisation's working week: the days worked and the hours in each. A manager or a member cannot (a test for every cell of this card's role table).
+- [ ] An owner or admin sets how leave accrues. For random policies and requests, a person's balance on any day equals what has accrued by that day less the approved leave taken (property test).
+- [ ] The policy says which requests for leave need approval. A request that needs none is approved when it is made, and one that needs it waits (test).
+- [ ] A change to a policy applies from the day it is made, and no request already decided changes (test).
+- [ ] The policy of one organisation is never read or changed from another (test).
 
 ### TS-018 · Weekly summary
 
-Depends on: TS-014.
+Depends on: TS-017.
+
+Not Ready: what the summary is (a page, an email or both) is not decided. When it is, the job is an hourly Cron Trigger that serves every person whose local time is between 07:00 and 07:59.
 
 - [ ] Each Monday at 07:00 in the person's time zone, a summary of the previous week is produced: total time, the three largest projects, focus time planned and achieved.
 - [ ] The figures equal those of the report for the same week (test).
@@ -143,172 +502,81 @@ Depends on: TS-014.
 
 ### TS-019 · Threat model
 
-Depends on: TS-009.
+Depends on: TS-014a, once a real person has used reports.
 
-- [ ] `docs/threat-model.md` covers each part in `docs/architecture.md` with its assets, entry points and threats.
-- [ ] Every threat has a rating and either a control already in place, a card that will add it, or a written acceptance by the owner.
+- [ ] `docs/threat-model.md` has one section for each row of "Parts" in `docs/architecture.md`, with its assets, entry points and threats; a test fails when a part has no section.
+- [ ] Every threat is rated high, medium or low and names either a control already in place, a card that will add it, or the date the owner accepted it.
 - [ ] No threat rated high is left without a control or a card.
-
-### TS-020 · Audit log
-
-Depends on: TS-009.
-
-- [ ] Sign-in, failed sign-in, role change, invitation, export and deletion each write a record with who, what, when and the organisation.
-- [ ] Records cannot be changed or deleted through the application (test).
-- [ ] An owner can read their organisation's records and no other organisation's (test).
-- [ ] No record contains a secret, a session token or entry text (test).
-
-### TS-021 · Export and deletion of personal data
-
-Depends on: TS-014.
-
-- [ ] A person can download everything held about them as JSON.
-- [ ] Deleting an account removes or anonymises every row that refers to the person; a test lists the tables and checks each.
-- [ ] `docs/data-protection.md` lists what personal data is held, why, where, and for how long.
-- [ ] Deletion asks for confirmation in a sheet with the account's email typed in.
-
-### TS-022 · Observability and recovery
-
-Depends on: TS-003.
-
-- [ ] Server logs are structured JSON with a request id; a test asserts no log line contains a cookie, a token or entry text.
-- [ ] An alert reaches the owner when the error rate passes a threshold written in `docs/architecture.md`; it has been triggered once on purpose.
-- [ ] The production database has been restored to an earlier point in time into a scratch database, and the steps are written down.
-
-From TS-027: an unexpected error is now logged as its name and the path, and nothing else. That keeps addresses and tokens out of the log, and it also keeps out what a person needs to find the fault. This card adds the stack without its message line, and the request id, to that line.
 
 ### TS-023 · Accessibility audit
 
-Depends on: TS-014.
+Depends on: the last card that builds a page in release 1.
 
-- [ ] An automated accessibility scan runs in the pipeline on every main route and reports no violations.
-- [ ] Every task in "What success looks like" in `docs/product.md` has been completed by keyboard alone and with a screen reader; findings are listed on this card and fixed.
+- [ ] axe with WCAG 2.2 AA tags runs in the pipeline on every route in the route configuration, read from it as `test/auth/guard.test.ts` reads it, and reports no violations.
+- [ ] Every task in "What success looks like" in `docs/product.md` has been completed by keyboard alone, and with VoiceOver in Safari; findings are listed on this card and fixed.
 
 ### TS-024 · Performance budget
 
-Depends on: TS-014.
+Depends on: the last card that builds a page in release 1, and TS-014a used by a real person. The conditions below are proposals; the owner confirms them by approving this board.
 
-- [ ] The pipeline measures the home page, Today and Reports and fails when Largest Contentful Paint exceeds 2.5 s, Interaction to Next Paint exceeds 200 ms, or Cumulative Layout Shift exceeds 0.1.
-- [ ] The budget and the test conditions are written in `docs/architecture.md`.
+- [ ] The pipeline measures the home page, Today and Reports with Lighthouse, on its mobile profile (simulated slow 4G, CPU slowed four times), against the production build the browser tests serve, signed in as a seeded person whose organisation holds 500 entries over 8 weeks. It takes the median of 5 runs.
+- [ ] It fails when Largest Contentful Paint exceeds 2.5 s or Cumulative Layout Shift exceeds 0.1 on any of the three pages.
+- [ ] Interaction to Next Paint is measured by a browser test that starts and stops the timer on Today five times under the same CPU slowdown; it fails when the slowest interaction exceeds 200 ms.
+- [ ] The budget and these conditions are written in `docs/architecture.md`.
+- [ ] Whether to turn on smart placement, join the membership queries into one, or set a limit on queries per request is decided here, from the measurements.
 
-### TS-025 · Public pages
+### TS-025 · Public pages: metadata, and links from every page
 
-Depends on: TS-006.
+Depends on: TS-030, which took this card's home page, privacy page and terms page.
 
-- [ ] `https://timesifier.com` explains what Timesifier does and offers one action: create an account.
-- [ ] Privacy and terms pages exist and are linked from every page.
-- [ ] Each public page has a title, a description and a social preview image, and is server rendered (the text is present in `curl` output).
+- [ ] Each public page has a title, a description and a social preview image, and is server rendered (a test finds each in the HTML the server sends).
+- [ ] The privacy page and the terms page are linked from every page, signed-in pages included (a test walks the route configuration).
+
+### TS-022b · A nightly copy of the database
+
+Depends on: TS-022a.
+
+- [ ] A nightly export of the production database is written to an R2 bucket created with `--jurisdiction eu`, and one export has been imported into a scratch database.
+- [ ] Exports older than a fixed period, written in `docs/architecture.md`, are deleted.
+
+### TS-033 · Delete expired rows every day
+
+Depends on: TS-013.
+
+- [ ] A daily Cron Trigger deletes rows of `verifications`, `sessions` and `invitations` that expired more than a fixed period ago; the period for each is written in `docs/architecture.md`, "Tables" (test with a fixed clock).
+- [ ] The job can run twice in a day without error (test).
+
+### TS-034 · Rehearse cancelling a preview that is still being created
+
+Depends on: nothing. Left over from TS-026.
+
+- [ ] A pull request is closed while its `preview` job is running; the job is cancelled, and no preview exists afterwards. The run numbers are on this card.
+
+### TS-035 · Show the secret scan failing
+
+Depends on: nothing. Left over from TS-002.
+
+- [ ] A throwaway pull request that adds a made-up value in the shape of a real key shows a failed `secret scan`; it is then closed and its branch deleted.
 
 ## Done
 
-### TS-027 · Close the findings of the authentication security review
+The newest first. Each card, with its criteria and their evidence, is in `docs/board-done.md`.
 
-Done 2026-11-11. Pull request #18. An independent, read-only review of the authentication and organisation servers found four medium and seven low findings, none high, before any sign-in page was live. Each was reproduced by a failing test before it was fixed. What stays open is in `docs/security.md`, "Known gaps and accepted risks".
-
-- [x] A sign-in code has eight digits. One address is sent at most five in any hour and one client may ask three times a minute; above the hourly cap the answer is the same and nothing is issued or sent. _`test/auth/email-code.test.ts`: "sends a code of eight digits, the length the sign-in page asks for"; "are five in an hour, whoever asks and however the address is written: the sixth request is answered like the first and nothing is issued or sent"; "are counted over any hour, not over hours by the clock". `test/auth/rate-limit.test.ts`: "asking for an email code: the 4th request in a minute from one client is answered 429, the first three are served"._
-- [x] A code is accepted only in the browser that asked for it; a guess from anywhere else gets the wrong-code answer and uses up none of the three attempts. _`test/auth/email-code.test.ts`: "refuses a stranger's guesses with the answer a wrong code gets, and they use up none of the three attempts", and a forged, altered or empty cookie is refused "even with the right code". In a browser, `e2e/auth-refusals.spec.ts`: a code asked for in one browser and typed in another is refused, and then signs in the browser that asked. Decision 22._
-- [x] An invitation cannot be read or accepted once the person who sent it may no longer invite. _`test/organisations/invitations.test.ts`, "an invitation whose sender may no longer invite": removed, demoted, left, and "cannot be accepted once the owner who sent it has handed the organisation over and become a member"; each answers the 404 every invalid invitation gets._
-- [x] An invitation email cannot carry a stranger's text in its subject, one person sends at most twenty invitations in 24 hours, and owns at most five organisations. _`test/organisations/invitations.test.ts`: "has the same subject whatever the organisation is called: the name is in the body alone"; "are twenty in 24 hours across all their organisations: the 21st is refused, stores nothing and sends nothing". `test/organisations/create.test.ts`: "are five: the sixth is refused in words a page can show, and creates nothing"._
-- [x] The application answers only the endpoints it offers: 26, on one list. Everything else the library registers is answered 404 before the database or the rate limit is touched. _`test/auth/endpoints.test.ts`: "are these 26 and no other"; "answers 404 for every other endpoint the installed library registers, before the database is touched", which reads the endpoints from the installed library, so an upgrade that adds one fails the test. The library registers 70 under this configuration._
-- [x] Each environment trusts only its own hosts, and no answer sends the browser anywhere but a path on the same origin. _`test/auth/session.test.ts`, "hosts": production trusts `timesifier.com` alone, a preview its own `workers.dev` name, anything else `localhost`; "accepts a path on its own origin as a place to send the browser", and every other value of the four redirect fields is answered 403 with the library's code for that field._
-- [x] A passkey is accepted only when the authenticator verified the person, and a credential id is stored once. _`test/auth/passkey.test.ts`, with a software authenticator running both ceremonies: "refuse to add a passkey when the authenticator did not verify the person"; "refuse a sign-in with a passkey when the authenticator did not verify the person"; "refuse a second passkey with the id of somebody's first as the caller's mistake, and the first goes on signing its owner in". Migration `0003_passkey_credential_unique.sql`._
-- [x] An unexpected error is logged as its name and the path, with path parameters by name, and never its message, a parameter or a query string, inside authentication and outside it. _`test/error-log.test.ts`: "in a loader whose database statement fails: a plain 500 page, and the log has the error's name and the path alone"; "is logged without its message, the query string or the values in the path". Before the fix a failed statement put a session token in the log. The log lines about email say nothing about the recipient._
-- [x] A sign-in code is stored as an HMAC under the application's secret, so a copy of the database alone does not give codes up. _`test/auth/email-code.test.ts`: "keeps the code in the database as a keyed hash: neither the code nor its plain SHA-256 is there"._
-- [x] A Turnstile token solved on another site is refused. _`test/auth/turnstile.test.ts`, "the site a token was solved on", against Cloudflare's real `siteverify`; Cloudflare's test keys answer with one fixed hostname, which is accepted only while the configured secret is one of the published test secrets._
-- [x] Deployed, and checked in production: an endpoint that is not offered answers 404, a request for a code without Turnstile's token is refused, a code without the browser's cookie is refused, and the pages load. _At `https://timesifier.com` on 2026-11-11 at 06:58 UTC: `/api/auth/ok`, `/error`, `/update-user`, `/sign-up/email` and `/organization/list-user-invitations` answered 404; asking for a code answered 400 `MISSING_RESPONSE` without a token and 403 `VERIFICATION_FAILED` with a made-up one; using a code without the cookie answered 400 `INVALID_OTP`; signing out with a `callbackURL` on another site answered 403 `INVALID_CALLBACK_URL`; `/sign-in` and `/sign-up` answered 200 and `/app` 302 to sign-in. A whole sign-in in production takes a person, and is the last step of TS-008._
-
-### TS-006 · Application shell
-
-Done 2026-11-11. Pull request #16.
-
-- [x] Below 600px the shell shows a navigation bar; from 600px it shows a navigation rail with the same destinations. _`e2e/shell-navigation.spec.ts`: "in a window 390px wide › the navigation is a bar along the bottom with the four destinations"; "in a window 1280px wide › the navigation is a rail down the side with the same four destinations"; "the bar becomes the rail at 600px, and back, without the page loading again"; and without script the server's one navigation is right at both widths. One `nav` element, drawn either way by CSS._
-- [x] Moving between destinations animates in the direction of travel using view transitions; with reduced motion requested there is no movement. _`e2e/shell-transitions.spec.ts`, at both widths: "the content moves across, one way going forward and the other way going back" (up and down in the rail); "the navigation stays still and its active indicator travels as one element"; "a second press during a transition interrupts it"; "with reduced motion requested › a change of destination fades and nothing moves". Removing the interrupt and the reduced-motion rule makes exactly those tests fail._
-- [x] The page has a skip link and landmarks, and after navigation focus is on the main heading (test). _`e2e/shell-navigation.spec.ts`, at both widths: "the first Tab reaches a skip link, and Enter moves the focus into the main region"; "the page has one navigation landmark with a name and one main landmark"; "after a move to each destination the focus is on its heading and the title has changed"; "every destination is reached with Tab and Enter alone"._
-- [x] The colour scheme follows the system, can be overridden, and the override survives a reload. _`e2e/shell-color-scheme.spec.ts`: "the page follows the device until a scheme is chosen"; "choosing Light makes the page light at once, and it stays light" (the cookie sent is `__Host-color-scheme=light; Max-Age=31536000; Path=/; Secure; SameSite=Lax`, and the server renders the scheme after a reload and in a new page); "choosing System deletes the cookie and the page follows the device again"; the form also works without script. `test/color-scheme.test.ts` covers the action and the root loader._
-- [x] Lighthouse reports an accessibility score of 100 for the shell. _Lighthouse 13.6.0 with Chrome 158 against `/app` on a production build served by `vite preview`: 100 on the mobile form factor and 100 on desktop, no audit below 1. Command: `pnpm dlx lighthouse http://localhost:5391/app --only-categories=accessibility --chrome-flags="--headless=new"`, and the same with `--preset=desktop`. Not in the pipeline; TS-023 and TS-024 put such measurements there._
-
-Beyond the criteria: an axe scan of the four destinations at both widths in both schemes finds no violation; React Aria's locale is negotiated on the server; a RadioGroup component joined the library for the colour-scheme choice. Three things look slightly off and are left for a design pass: in the rail the travelling indicator passes over the labels between the old and the new destination; the skip link, while focused, covers the top of the rail; the radio rings in Settings sit 12px in from the headings above them. `/app` is open to anyone until TS-008's second pass adds the guard; it holds no data.
-
-### TS-005 · Component foundation
-
-Done 2026-11-11. Pull request #13.
-
-- [x] The headless library choice is confirmed against the current documentation of React Aria Components, Base UI and Radix, and `docs/decisions.md` entry 6 is updated with what was found. _Entry 6 now holds the comparison with sources. Measured on the installed versions (React Aria Components 1.22.1, Base UI 1.9.0, Radix 1.8.1): all three write `style` attributes into server HTML for Checkbox, Switch and Select, which the Content Security Policy ignores. Only React Aria documents hooks that let us render those elements ourselves, and only it has the date and time components later cards need. React Aria stays._
-- [x] Button, IconButton, TextField, Checkbox, Switch, Select, Menu, Dialog, Sheet, Tabs, Snackbar and Tooltip exist and are styled only with tokens. _Twelve files in `app/components/`. `pnpm lint`: "No raw colours or arbitrary values under app." The HTML of `/design` in a production build contains no `style` attribute and no `<style>` element._
-- [x] Each component has a test that operates it by keyboard and asserts its role and accessible name. _`e2e/components.spec.ts`, 13 tests in a real browser against a production build, for example "Dialog takes the focus, keeps it inside, and returns it to the button on Escape". The Tooltip test also uses the pointer once, for hover._
-- [x] The `/design` route shows every component in every state in light and dark, and returns 404 in a production build. _`e2e/design.spec.ts`, 6 tests: twelve headings in each scheme; hover, focus and pressed held in place; disabled, invalid and selected shown. An overlay shows its open state when its button is pressed, or by `/design?open=dialog&scheme=dark`. `test/design-route.test.ts`: "answers 404 for /design in a normal build"._
-- [x] An automated accessibility scan of `/design` reports no violations. _`e2e/accessibility.spec.ts`, 16 tests with axe: the page closed and with each overlay open, in both schemes, against WCAG 2.0, 2.1 and 2.2 at A and AA, no rule disabled. The scan found one real defect, fixed: a hovered field's label measured 4.33:1 in the light scheme._
-- [x] With reduced motion requested, a test finds no animation of position or scale in any component. _`e2e/reduced-motion.spec.ts`: "no component animates position or scale". With the Sheet's reduced-motion classes removed it fails naming the transition; a second test with motion allowed requires ten named movements to be seen, so the watcher is known to work._
-
-Beyond the criteria: every browser test fails on a Content Security Policy violation or a console error, and none occurred, in Chromium and in WebKit on React Aria's iOS path. The policy gained two SHA-256 hashes for the two fixed `<style>` elements React Aria inserts from script; a test fails when the library's text and the hashes disagree. The Motion library was not needed and is not installed: decision 19.
-
-### TS-026 · Close the findings of the foundation security review
-
-Done 2026-11-11. Pull requests #9 and #10. An independent review of the merged foundation found three medium and eleven low findings, none high. What was fixed is below; what was accepted is in `docs/security.md`, "Known gaps and accepted risks".
-
-- [x] A raw SQL filter with a top-level OR cannot read, change or delete another organisation's rows (test). _`test/db/scope.test.ts`: "keeps a raw SQL condition with a top-level OR inside the organisation". With the parentheses removed from `app/db/scope.ts` it fails; restored, it passes._
-- [x] An update or delete through the scope names its rows: a missing condition is refused, and every row of the organisation takes `everyRow` (test). _`test/db/scope.test.ts`: "refuses an update or delete whose filter produces no condition". `test/db/scope.typecheck.ts` shows a call without a filter does not compile._
-- [x] Tables with an organisation id can be imported only by the data layer: the linter refuses it elsewhere, and a test fails when such a table is missing from the scope or exported (test). _A file under `app/routes/` importing `~/db/schema` fails `biome check` with `lint/style/noRestrictedImports`. `test/db/scope.test.ts`: "covers every table that has an organisation id, and exports none of them"._
-- [x] In production the Worker answers only on `timesifier.com`: `www` is redirected and any other host, including the workers.dev address of a version, gets 404; previews and local hosts are served (test). _`test/canonical-host.test.ts` (12 cases) and, through the Worker, `test/browser-policy.test.ts`: "answers 404 on the workers.dev address Cloudflare gives each production version"._
-- [x] A request body over the limit is answered 413 and is not read past the limit; a form field named `__proto__` does not change the parsed object's prototype (tests). _`app/lib/validate.test.ts`: "answers 413 for a body that declares more than the limit, and never reads it", "answers 413 for a streamed body once it passes the limit, and stops reading", and the test of a form field called `__proto__`._
-- [x] A response that is not HTML carries a policy under which nothing loads, and a WebSocket handshake from a foreign origin is rejected with 403 (tests). _`test/browser-policy.test.ts`: "sends HSTS, nosniff and a policy under which nothing loads on a response that is not HTML", "rejects a WebSocket handshake from a foreign Origin, and lets one from our own through"._
-- [x] Closing a pull request cancels a preview that is still being created. _Both workflows put a pull request's runs in the group `ci-pr-<number>`, and the clean-up cancels what is in progress there. The first version of this (pull request #9) used `github.ref`, which for a merged pull request is `main`: the clean-up cancelled the production deploy of its own merge, run 42952382551, before any step ran. Pull request #10 fixed the group; on its merge the clean-up (run 42953098336) and the deploy (run 42953097160) ran side by side and both succeeded. Cancelling an unfinished preview has not been rehearsed._
-- [x] Every finding that is accepted rather than fixed is written in `docs/security.md` with the reason and what would close it. _Section "Known gaps and accepted risks": six rows._
-- [x] After the deploy, the new version's workers.dev address answers 404 and the smoke test checks it on every deploy. _Run 42953097160 deployed version `264bc1cc` and its smoke test printed "ok: https://264bc1cc-timesifier.ayoinc.workers.dev/ answered 404". Run against a version uploaded before this card, the same script fails: "answered 200, expected 404"._
-- [x] On the live site a static asset carries the "nothing loads" policy, and plain HTTP is redirected to HTTPS. _`curl -sI https://timesifier.com/assets/entry.client-ChhaeA7v.js` shows `content-security-policy: default-src 'none'; frame-ancestors 'none'`; `http://timesifier.com/` answers 301 to `https://timesifier.com/`, and the smoke test checks that on every deploy._
-
-### TS-004 · Design tokens
-
-Done 2026-11-11. Pull request #7.
-
-- [x] `pnpm tokens` generates the Material 3 colour roles for light and dark schemes from one seed colour, as CSS custom properties, and the output is committed. _`app/styles/tokens.css` holds 53 `--md-sys-color-*` roles, each as `light-dark(light, dark)`, from `SEED_COLOUR` in `scripts/tokens.ts`. `scripts/tokens.test.ts`: "gives byte-identical output on every run, equal to the committed file"._
-- [x] Type scale, shape, spacing, elevation and motion tokens (durations, easings, one spring) exist as CSS custom properties and as Tailwind theme variables. _Counted in `app/styles/tokens.css`: 75 type scale properties (15 roles), 10 corners, 1 spacing unit, 6 elevation levels, 16 durations, 10 easings, 4 for the spring. `app/app.css` points 162 Tailwind theme variables at them. Compiling it emits `text-headline-medium`, `bg-primary`, `rounded-medium`, `shadow-level2`, `ease-emphasized`, `duration-short4` and `p-4`, and nothing for `text-3xl`, `bg-red-500`, `rounded-lg`, `shadow-md` or `ease-in-out`: Tailwind's own scales are cleared._
-- [x] `pnpm check:tokens` exits non-zero when a file under `app/` contains a hex colour or an arbitrary Tailwind value; a test fixture proves it. _`node scripts/check-tokens.ts scripts/fixtures/check-tokens/dirty` exits 1 and lists nine findings; on `app/` it exits 0. `scripts/check-tokens.test.ts`: "fails on the dirty fixture and lists every raw value with its file, line and match", "passes array indexing, index signatures, attribute selectors and URL fragments". `pnpm lint` now runs it._
-- [x] A test checks every text colour role against its background role in both schemes: each pair is at least 4.5:1. _`scripts/tokens.test.ts`, "colour roles": 39 pairs in each scheme, 78 cases, all pass at standard contrast with no adjustment._
-- [x] The Tokens table in `docs/design-system.md` is filled in. _Eight rows: seed, colour roles, typeface, type scale, shape, spacing, elevation, motion; and how to change the seed._
-
-### TS-007 · Database foundation
-
-Done 2026-11-11. Pull request #6.
-
-- [x] The D1 database is created in the EU; the option used is confirmed against Cloudflare's documentation and written in `docs/architecture.md`. _`wrangler d1 create <name> --jurisdiction eu`; `wrangler d1 list --json` reports `"jurisdiction":"eu"` for `timesifier` and `timesifier-preview`. Confirmed against <https://developers.cloudflare.com/d1/configuration/data-location/>: a jurisdiction keeps the database running and storing data inside the region, where a location hint is only a preference._
-- [x] `pnpm db:migrate:local` builds the schema from an empty database using committed SQL migrations. _After `rm -rf .wrangler/state/v3/d1`, the command applied `0000_init.sql` ("8 commands executed successfully"); `sqlite_master` then listed `users`, `organisations` and `memberships`; a second run printed "No migrations to apply!"._
-- [x] Tables `users`, `organisations` and `memberships` exist with time-sortable ids and UTC timestamps. _`test/db/schema.test.ts`: "has the users, organisations and memberships tables", "gives each new row a UUIDv7 id that carries its creation time", "stores timestamps as integer milliseconds since the Unix epoch". `test/db/uuidv7.test.ts`: ids from later milliseconds sort after earlier ones; 10,000 ids are unique._
-- [x] A test seeds two organisations and shows that the organisation-scoped data layer returns no rows of one to a caller scoped to the other. _`test/db/scope.test.ts`: "selects the rows of its own organisation and none of another's", and the same for update and delete; "cannot insert into another organisation, even when the values name it"; "cannot move a row to another organisation with an update". Removing the organisation filter from the code failed five of them._
-- [x] Remote migrations run only from the pipeline; the README says so. _Pull request #6: the `preview` job applied `0000_init.sql` to `timesifier-preview` ("Executed 8 commands"). Its merge started run 42948925785, whose `deploy` job applied the same file to `timesifier` before deploying version `166533bb`; production then listed the tables `users`, `organisations` and `memberships`. The README states the rule, and `package.json` has no script that migrates a remote database._
-
-### TS-010 · Security headers and request checks
-
-Done 2026-11-11. Pull request #5.
-
-- [x] Every HTML response carries a Content Security Policy with a per-request nonce and no `unsafe-inline`, plus HSTS, `frame-ancestors 'none'`, Referrer-Policy and Permissions-Policy (test). _`test/browser-policy.test.ts`, run against the Worker's real handler: "sends the full policy on an HTML page, with the page's scripts carrying the nonce", "uses a different nonce for every request", "sends the same policy on a 404 page". In headless Chrome against a production build, `/` and a 404 page raised no policy violation and hydrated._
-- [x] A state-changing request whose `Origin` is not the application's is rejected with 403 (test). _`test/browser-policy.test.ts`, "origin check on state-changing requests": POST, PUT, PATCH and DELETE with a foreign `Origin`, `Origin: null`, or `Sec-Fetch-Site: cross-site` or `same-site` receive 403; the application's own origin, a request with neither header, and a GET pass._
-- [x] Every action validates its input with a schema; a test sends malformed input to each and receives 400. _`app/lib/validate.test.ts` (10 tests) proves the helper: typed data for valid input, 400 for malformed form data and JSON, submitted values never echoed. `test/action-validation.test.ts` finds every route with an action and fails for one without a malformed-input case; it was shown failing with a temporary action. The application has no actions yet, so the list of cases is empty._
-- [x] securityheaders.com grades production A or better, once TS-003 is done. _Grade A+ for `https://timesifier.com/`, report time 11 Nov 2026 02:49:04 UTC, after run 42948361495 deployed version `41b1b1d9`. The scanner calls six Permissions-Policy directives invalid, among them `publickey-credentials-create`; they are features its list does not know, and Chrome logged no complaint about them._
-
-### TS-003 · Pipeline: preview and production deploys to timesifier.com
-
-Done 2026-11-11. Pull request #4.
-
-- [x] The zone's DNS records are exported before the change and after it. The only differences are the Worker custom-domain records for `timesifier.com` and `www.timesifier.com`. _Before: the 26 record values then known, captured one by one. After: the same 26 values, and new address records for the apex and `www`. The capture before missed one record, `paperclip` (another Worker's custom domain), so the dashboard's own list was checked as well: of 29 records, exactly two were created or modified on 2026-11-11, `timesifier.com AAAA 100::` and `www.timesifier.com AAAA 100::`, both at 02:26 UTC; the newest change to any other record is dated 2026-09-28._
-- [x] `dig MX timesifier.com` and the zone's SPF, DKIM and DMARC records return the same values before and after. _`dig +short MX timesifier.com` returned `0 timesifier-com.mail.protection.outlook.com.` both times; `diff` of the two captures shows no MX, TXT or CNAME line changed._
-- [x] The pipeline's Cloudflare token is limited to this account's Workers and D1 and to this zone, and is stored as a GitHub Actions secret. _Token `timesifier-ci-deploy`: Editor on the Worker `timesifier` only, Workers Routes on the zone `timesifier.com` only, D1 write on the account, expires 2027-11-11. With it, another Worker's settings answered "No access to the specified resource" and this zone's DNS records answered "Authentication error". `gh secret list` shows `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. D1 write covers every database in the account because Cloudflare offers no narrower scope; see `docs/architecture.md`._
-- [x] A smoke test after each deploy fails the workflow when the home page does not return 200. _`scripts/smoke.sh` against a live preview: "ok … answered 200", exit 0. Against the same URL after the preview was deleted: "FAIL … answered 404, expected 200", exit 1._
-- [x] The rollback command is written in `docs/architecture.md`, and one rollback has been carried out and recorded on this card. _2026-11-11 02:36:49 UTC: `wrangler rollback d1625379-615a-4bf9-bdb8-d6fdb2da73b7` moved production from version `05a58e49` to `d1625379`; the home page answered 200. 02:37:07 UTC: returned to `05a58e49`; 200 again._
-- [x] Merging to `main` deploys to production: `curl -sI https://timesifier.com` returns status 200, and `https://www.timesifier.com` redirects to the apex. _Merging pull request #4 started run 42947786765: `checks`, `secret scan` and `deploy` succeeded, version `e0bb96e6` went live, and the smoke test printed "ok: https://timesifier.com/ answered 200" and "ok: https://www.timesifier.com/smoke?check=1 redirects to the apex". The very first deploy was made by hand, because a token limited to one Worker cannot create it._
-- [x] Each pull request receives a comment with its preview URL. _Pull request #4 received "Preview of d1b50a6: https://pr-4-timesifier.ayoinc.workers.dev" from `github-actions`, and that URL answered 200. Closing the pull request deleted the preview: the URL then answered 404._
-
-### TS-001 · Scaffold the application on Cloudflare
-
-Done 2026-11-11. Created with `pnpm create cloudflare@latest` using the React Router template, in TypeScript strict mode, with Biome.
-
-- [x] `pnpm dev` serves a page at the local address whose text includes "Timesifier". _`curl http://localhost:5273/` returned 200 with `<h1>Timesifier</h1>`._
-- [x] `pnpm typecheck`, `pnpm lint` and `pnpm build` each exit with status 0. _All three exited 0 in a fresh clone._
-- [x] `wrangler.jsonc` sets `compatibility_date` to the date the scaffold tool selected (2026-11-09), and `observability.enabled` and `observability.traces.enabled` to `true`. _See `wrangler.jsonc`._
-- [x] Binding types are generated by `wrangler types`; a search of the source for `interface Env` finds nothing. _`grep -R "interface Env" app workers test` found 0 lines._
-- [x] `.gitignore` covers `.dev.vars`; `.dev.vars.example` exists and holds names only. _Both in the repository._
-- [x] The Versions table in `docs/architecture.md` is filled in from the lockfile. _17 rows._
-- [x] The quick start in `README.md` works in a fresh clone in a temporary folder. _Clone, `pnpm install --frozen-lockfile`, then typecheck, lint, test (1 passed) and build all succeeded._
+- TS-032 · Nothing of one deployment in the code. Merged 2026-11-11, pull request #23; the integrator is checking its production deploy.
+- TS-008 · Authentication. Done 2026-11-11, pull request #17.
+- TS-009 · Organisations and roles. Done 2026-11-11, pull request #20.
+- TS-029 · Remove passkeys: the emailed code is the one way in. Done 2026-11-11, pull request #21.
+- TS-028 · A text field's label covers what a person types, in Safari. Done 2026-11-11, pull request #19.
+- TS-002 · Pipeline: checks on every pull request. Done 2026-11-11, pull request #2.
+- TS-027 · Close the findings of the authentication security review. Done 2026-11-11, pull request #18.
+- TS-006 · Application shell. Done 2026-11-11, pull request #16.
+- TS-005 · Component foundation. Done 2026-11-11, pull request #13.
+- TS-026 · Close the findings of the foundation security review. Done 2026-11-11, pull requests #9 and #10.
+- TS-004 · Design tokens. Done 2026-11-11, pull request #7.
+- TS-007 · Database foundation. Done 2026-11-11, pull request #6.
+- TS-010 · Security headers and request checks. Done 2026-11-11, pull request #5.
+- TS-003 · Pipeline: preview and production deploys to timesifier.com. Done 2026-11-11, pull request #4.
+- TS-001 · Scaffold the application on Cloudflare. Done 2026-11-11, pull request #1.
 
 ## Later
 
