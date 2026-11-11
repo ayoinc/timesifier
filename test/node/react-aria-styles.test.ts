@@ -35,7 +35,7 @@ function styleTexts(source: string): string[] {
 
 async function sha256(text: string): Promise<string> {
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-	return `sha256-${Buffer.from(digest).toString("base64")}`;
+	return `sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}`;
 }
 
 const inserting = Object.entries(sources)
