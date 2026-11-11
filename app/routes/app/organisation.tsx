@@ -1,13 +1,26 @@
 import { Outlet } from "react-router";
 
-import { membershipContext, requireMembershipOf } from "~/organisations/membership.server";
+import {
+	membershipContext,
+	notFound,
+	requireMembershipOf,
+	viewerOf,
+} from "~/organisations/membership.server";
 import { signedInContext } from "~/routes/auth/session.server";
+import {
+	canSee,
+	destinationIndex,
+	destinations,
+	ORGANISATION_PARAM,
+	visibleDestinations,
+} from "~/shell/destinations";
 
 import type { Route } from "./+types/organisation";
 
 // The layout of one organisation's pages: everything under `/app/<slug>/`. It
-// draws nothing of its own. It is here for the check below, and to hand the
-// organisation and the person's role in it to the pages.
+// draws nothing of its own. It is here for the checks below, and to hand the
+// organisation, the person's role in it and the destinations they are shown
+// to the pages.
 
 /**
  * The membership check (docs/security.md, "Organisations and roles"). It runs
@@ -27,17 +40,39 @@ const requireOrganisation: Route.MiddlewareFunction = async ({ params, context }
 	context.set(membershipContext, await requireMembershipOf(user, params.organisation));
 };
 
-export const middleware: Route.MiddlewareFunction[] = [requireOrganisation];
+/** The address every route's pattern starts with under this layout. */
+const PATTERN_SLUG = `:${ORGANISATION_PARAM}`;
 
 /**
- * What every page of the organisation may show: its name, its slug and the
- * person's role. The id stays on the server. Having a loader here also means
- * every move between the organisation's pages asks the server, and so passes
- * the check above.
+ * The destination check: a member at a destination their role is not shown,
+ * or at any page below it, gets the same 404 as a person who is not a member.
+ * The destination is read from the pattern of the route that matched, which
+ * comes from the route configuration and not from what was typed, so no way of
+ * spelling an address reaches a page by another route.
+ */
+const requireDestination: Route.MiddlewareFunction = ({ pattern, context }) => {
+	const path = pattern.startsWith("/") ? pattern : `/${pattern}`;
+	const at = destinations[destinationIndex(PATTERN_SLUG, path)];
+	if (at && !canSee(viewerOf(context.get(membershipContext)), at.id)) throw notFound();
+};
+
+export const middleware: Route.MiddlewareFunction[] = [requireOrganisation, requireDestination];
+
+/**
+ * What every page of the organisation may show: its name, its slug, the
+ * person's role and the destinations they are shown. The id stays on the
+ * server. Having a loader here also means every move between the
+ * organisation's pages asks the server, and so passes the checks above.
  */
 export function loader({ context }: Route.LoaderArgs) {
-	const { organisation, role } = context.get(membershipContext);
-	return { name: organisation.name, slug: organisation.slug, role };
+	const membership = context.get(membershipContext);
+	const { organisation, role } = membership;
+	return {
+		name: organisation.name,
+		slug: organisation.slug,
+		role,
+		destinations: visibleDestinations(viewerOf(membership)),
+	};
 }
 
 export default function Organisation() {

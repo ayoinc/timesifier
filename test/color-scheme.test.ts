@@ -1,22 +1,22 @@
 import { exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { destinationPath } from "../app/shell/destinations";
+import { accountPath, destinationPath } from "../app/shell/destinations";
 import { captureEmail, type Mailbox, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
 import { createOrganisation } from "./organisations/harness";
 
-// The colour scheme a person chooses in Settings: the action that stores it in
+// The colour scheme a person chooses on My account: the action that stores it in
 // the `__Host-color-scheme` cookie, and the root loader that renders it on <html>.
 // Both are driven through the Worker's real fetch handler.
 
 const ORIGIN = "https://timesifier.example";
-const SETTINGS = destinationPath("acme", "settings");
-const TODAY = destinationPath("acme", "today");
+const ACCOUNT = accountPath("acme");
+const TIMESHEET = destinationPath("acme", "timesheet");
 
 const worker = exports.default;
 
-// Settings and Today belong to an organisation, under /app/<slug>, which needs a
+// My account and Timesheet belong to an organisation, under /app/<slug>, which needs a
 // session and a member: every request these helpers make carries the session
 // cookie of a person who has signed in and created the organisation at /app/acme. The
 // sign-in happens in the test, not in a hook: the first request to the Worker
@@ -38,10 +38,10 @@ async function session(): Promise<string> {
 	return cookie;
 }
 
-/** The Settings form as a browser posts it from our own page. */
+/** The My account form as a browser posts it from our own page. */
 async function choose(body: string): Promise<Response> {
 	return worker.fetch(
-		new Request(`${ORIGIN}${SETTINGS}`, {
+		new Request(`${ORIGIN}${ACCOUNT}`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/x-www-form-urlencoded",
@@ -58,7 +58,7 @@ async function choose(body: string): Promise<Response> {
 async function htmlTag(cookie?: string): Promise<string> {
 	const signedIn = await session();
 	const response = await worker.fetch(
-		new Request(`${ORIGIN}${TODAY}`, {
+		new Request(`${ORIGIN}${TIMESHEET}`, {
 			headers: { Cookie: cookie ? `${signedIn}; ${cookie}` : signedIn },
 		}),
 	);
@@ -71,7 +71,7 @@ describe("the colour-scheme action", () => {
 		const response = await choose(`scheme=${scheme}`);
 
 		expect(response.status).toBe(303);
-		expect(response.headers.get("Location")).toBe(SETTINGS);
+		expect(response.headers.get("Location")).toBe(ACCOUNT);
 		// `__Host-` needs Secure, Path=/ and no Domain. No HttpOnly: the value is no secret.
 		expect(response.headers.getSetCookie()).toEqual([
 			`__Host-color-scheme=${scheme}; Max-Age=31536000; Path=/; Secure; SameSite=Lax`,
@@ -93,7 +93,7 @@ describe("the colour-scheme action", () => {
 
 	it("is refused from another origin before it runs", async () => {
 		const response = await worker.fetch(
-			new Request(`${ORIGIN}${SETTINGS}`, {
+			new Request(`${ORIGIN}${ACCOUNT}`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/x-www-form-urlencoded",

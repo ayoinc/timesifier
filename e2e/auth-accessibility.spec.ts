@@ -14,9 +14,9 @@ import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems } from "./axe";
 import { expect, test } from "./fixtures";
 import { movement, watchForMovement } from "./motion";
-import { openSettings } from "./organisation";
+import { openAccount } from "./organisation";
 
-// Both views of the sign-in page and the account part of Settings: no WCAG 2.2
+// Both views of the sign-in page and My account: no WCAG 2.2
 // A or AA violation and every text's contrast measured, at both window sizes
 // and in both schemes (rules 14 and 16). Then rule 9: with reduced motion
 // requested nothing on the page moves or changes size.
@@ -68,13 +68,13 @@ for (const viewport of [
 				).toBe(0);
 			});
 
-			test("the account part of Settings has no accessibility violations", async ({ page }) => {
+			test("My account has no accessibility violations", async ({ page }) => {
 				await signIn(page, newPerson().email);
 				await expect(page).toHaveURL(ARRIVAL);
 
-				await openSettings(page);
+				await openAccount(page);
 				await expect(page.getByRole("button", { name: "Sign out everywhere" })).toBeVisible();
-				await expectNoProblems(page, "Settings");
+				await expectNoProblems(page, "My account");
 			});
 		});
 	}

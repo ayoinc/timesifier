@@ -17,7 +17,7 @@ import {
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { expect, openShell, test } from "./fixtures";
-import { createOrganisation, openSettings } from "./organisation";
+import { createOrganisation, openAccount } from "./organisation";
 
 // The journeys of card TS-008 as card TS-036 left them, each walked in a
 // browser against the production build: one page signs in a person who is new
@@ -26,7 +26,7 @@ import { createOrganisation, openSettings } from "./organisation";
 //
 // A person who has just signed in for the first time belongs to no
 // organisation, so `/app` sends them to the page that creates one (`ARRIVAL`).
-// Settings is in an organisation: a journey that needs it creates one first
+// My account is in an organisation: a journey that needs it creates one first
 // (./organisation.ts).
 
 test.use({ storageState: SIGNED_OUT });
@@ -66,8 +66,8 @@ test.describe("an address that is new", () => {
 			name: "",
 		});
 
-		// Until they give a name, people see their address; Settings is where they give it.
-		await openSettings(page);
+		// Until they give a name, people see their address; My account is where they give it.
+		await openAccount(page);
 		await expect(
 			page.getByText(`Not set. People see your address, ${person.email}.`),
 		).toBeVisible();
@@ -275,7 +275,7 @@ test.describe("what the pages ask of the server", () => {
 		const person = newPerson();
 		await signIn(page, person.email);
 		await expect(page).toHaveURL(ARRIVAL);
-		// "Sign out everywhere" is in Settings, and Settings is in an organisation.
+		// "Sign out everywhere" is on My account, and My account is in an organisation.
 		const { slug } = await createOrganisation(page);
 		await signOut(page, "Sign out everywhere");
 

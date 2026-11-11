@@ -1,11 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { membersPath } from "../app/shell/destinations";
+import { accountPath, invitationsPath, membersPath } from "../app/shell/destinations";
 import { expect, openShell, test } from "./fixtures";
 import { homeOrganisation, homePath, openOutsideOrganisation } from "./organisation";
 
 // Design rule 15: everything works by keyboard, with a visible focus indicator.
-// The members page is walked here with the keyboard alone, from Settings: no
+// The members and invitations are walked here with the keyboard alone, from Team: no
 // pointer touches the page after it has loaded. Every sheet is opened and
 // given up, so the organisation is left as it was; the journeys
 // (./organisations-journeys.spec.ts) send an invitation with the keyboard.
@@ -39,41 +39,19 @@ for (const viewport of [
 	test.describe(`in a window ${viewport.width}px wide`, () => {
 		test.use({ viewport });
 
-		test("the members page: every control, the menu and every sheet, with the keyboard alone", async ({
+		test("the members and invitations: every control, the menu and every sheet, with the keyboard alone", async ({
 			page,
 		}) => {
 			const { slug, name, member, guest } = homeOrganisation();
-			await openShell(page, homePath("settings"));
+			await openShell(page, homePath("team"));
 
-			// From Settings to the members, by the link, with Enter.
-			const toMembers = page.getByRole("link", { name: "Members and invitations" });
+			// From Team to the members, by the link, with Enter.
+			const toMembers = page.getByRole("main").getByRole("link", { name: "Members", exact: true });
 			await toMembers.focus();
 			await page.keyboard.press("Enter");
 			await expect(page).toHaveURL(membersPath(slug));
 			// The move puts the focus on the page's heading; Tab goes on from there.
 			await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
-
-			// Invite: Enter opens the sheet with the focus in its field.
-			const invite = page.getByRole("button", { name: "Invite a person" });
-			await tabTo(page, invite);
-			await page.keyboard.press("Enter");
-			const inviting = page.getByRole("dialog", { name: "Invite a person" });
-			await expect(inviting.getByLabel("Email address")).toBeFocused();
-			// Tab reaches the role, where the arrow keys choose, then the two buttons.
-			await page.keyboard.press("Tab");
-			await expectRadioFocused(inviting.getByRole("radio", { name: /^Member/ }));
-			await page.keyboard.press("ArrowDown");
-			await expectRadioFocused(inviting.getByRole("radio", { name: /^Admin/ }));
-			await expect(inviting.getByRole("radio", { name: /^Admin/ })).toBeChecked();
-			await tabTo(page, inviting.getByRole("button", { name: "Cancel" }));
-			await tabTo(page, inviting.getByRole("button", { name: "Send invitation" }));
-			// The focus stays inside the sheet.
-			await page.keyboard.press("Tab");
-			await expect(inviting.getByLabel("Email address")).toBeFocused();
-			// Escape gives the task up and gives the focus back.
-			await page.keyboard.press("Escape");
-			await expect(inviting).toBeHidden();
-			await expectFocusShown(invite);
 
 			// The member's actions: a menu the arrow keys move through.
 			const actions = page.getByRole("button", { name: `Actions for ${member.name}` });
@@ -113,6 +91,35 @@ for (const viewport of [
 			await expect(remove).toBeHidden();
 			await expectFocusShown(actions);
 
+			// On to the invitations, by the link under the members.
+			const toInvitations = page.getByRole("main").getByRole("link", { name: "Invitations" });
+			await tabTo(page, toInvitations);
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(invitationsPath(slug));
+			await expect(page.getByRole("heading", { level: 1, name: "Invitations" })).toBeFocused();
+
+			// Invite: Enter opens the sheet with the focus in its field.
+			const invite = page.getByRole("button", { name: "Invite a person" });
+			await tabTo(page, invite);
+			await page.keyboard.press("Enter");
+			const inviting = page.getByRole("dialog", { name: "Invite a person" });
+			await expect(inviting.getByLabel("Email address")).toBeFocused();
+			// Tab reaches the role, where the arrow keys choose, then the two buttons.
+			await page.keyboard.press("Tab");
+			await expectRadioFocused(inviting.getByRole("radio", { name: /^Member/ }));
+			await page.keyboard.press("ArrowDown");
+			await expectRadioFocused(inviting.getByRole("radio", { name: /^Admin/ }));
+			await expect(inviting.getByRole("radio", { name: /^Admin/ })).toBeChecked();
+			await tabTo(page, inviting.getByRole("button", { name: "Cancel" }));
+			await tabTo(page, inviting.getByRole("button", { name: "Send invitation" }));
+			// The focus stays inside the sheet.
+			await page.keyboard.press("Tab");
+			await expect(inviting.getByLabel("Email address")).toBeFocused();
+			// Escape gives the task up and gives the focus back.
+			await page.keyboard.press("Escape");
+			await expect(inviting).toBeHidden();
+			await expectFocusShown(invite);
+
 			// The invitation that is waiting.
 			const cancel = page.getByRole("button", { name: `Cancel the invitation to ${guest.email}` });
 			await tabTo(page, cancel);
@@ -124,9 +131,23 @@ for (const viewport of [
 			await expect(cancelling).toBeHidden();
 			await expectFocusShown(cancel);
 
-			// Leaving.
+			// Back to Team by the link above the heading.
+			const back = page.getByRole("main").getByRole("link", { name: "Team" });
+			await back.focus();
+			await expectFocusShown(back);
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(homePath("team"));
+			await expect(page.getByRole("heading", { level: 1, name: "Team" })).toBeFocused();
+
+			// Leaving is on My account, which the band leads to.
+			const toAccount = page.getByRole("banner").getByRole("link", { name: "My account" });
+			await toAccount.focus();
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(accountPath(slug));
+			await expect(page.getByRole("heading", { level: 1, name: "My account" })).toBeFocused();
 			const leave = page.getByRole("button", { name: "Leave organisation" });
-			await tabTo(page, leave);
+			await leave.focus();
+			await expectFocusShown(leave);
 			await page.keyboard.press("Enter");
 			const leaving = page.getByRole("dialog", { name: `Leave ${name}?` });
 			await expect(leaving).toBeVisible();
@@ -135,14 +156,6 @@ for (const viewport of [
 			await page.keyboard.press("Escape");
 			await expect(leaving).toBeHidden();
 			await expectFocusShown(leave);
-
-			// And back to Settings by the link above the heading.
-			const back = page.getByRole("main").getByRole("link", { name: "Settings" });
-			await back.focus();
-			await expectFocusShown(back);
-			await page.keyboard.press("Enter");
-			await expect(page).toHaveURL(homePath("settings"));
-			await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeFocused();
 		});
 	});
 }

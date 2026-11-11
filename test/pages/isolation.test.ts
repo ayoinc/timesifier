@@ -4,7 +4,7 @@ import { organisationPath } from "~/shell/destinations";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, value } from "../organisations/harness";
-import { allRoutes, routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
+import { allRoutes, isMoved, routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
 import { open, openData, type Person, pageBody, person, submit } from "./harness";
 
 // Criterion 4 of card TS-009: a member of one organisation receives 404 for
@@ -71,14 +71,20 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the four destinations and the members page", () => {
+	it("holds the layout, the seven destinations, the pages of Team, My account and the moved address", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
 				"/app/acme",
 				"/app/acme/projects",
+				"/app/acme/clients",
+				"/app/acme/team",
+				"/app/acme/team/members",
+				"/app/acme/team/invitations",
+				"/app/acme/approvals",
 				"/app/acme/reports",
 				"/app/acme/settings",
+				"/app/acme/account",
 				"/app/acme/settings/members",
 			].sort(),
 		);
@@ -86,6 +92,8 @@ describe("the list of an organisation's routes", () => {
 
 	it("has routes with an action, so a POST is covered too", () => {
 		expect(withAction.map(({ id }) => id).sort()).toEqual([
+			"routes/app/account",
+			"routes/app/invitations",
 			"routes/app/members",
 			"routes/app/settings",
 		]);
@@ -93,9 +101,10 @@ describe("the list of an organisation's routes", () => {
 });
 
 describe("a member of one organisation asking for another organisation's address", () => {
-	it.each(ofAnOrganisation)("$id: the page $address is 404", async ({ address }) => {
+	it.each(ofAnOrganisation)("$id: the page $address is 404", async (route) => {
+		const { address } = route;
 		const { ada } = await twoOrganisations();
-		expect((await open(address, ada)).status).toBe(200);
+		expect((await open(address, ada)).status).toBe(isMoved(route) ? 301 : 200);
 
 		const theirs = await open(address, grace);
 		const nobodys = await open(inNobodys(address), grace);
@@ -108,9 +117,11 @@ describe("a member of one organisation asking for another organisation's address
 		expect(body).not.toContain("Acme");
 	});
 
-	it.each(ofAnOrganisation)("$id: the data of $address is 404", async ({ address }) => {
+	it.each(ofAnOrganisation)("$id: the data of $address is 404", async (route) => {
+		const { address } = route;
 		const { ada } = await twoOrganisations();
-		expect((await openData(address, ada)).status).toBe(200);
+		// A redirect is answered to a data request with 202 and where to go.
+		expect((await openData(address, ada)).status).toBe(isMoved(route) ? 202 : 200);
 
 		const theirs = await openData(address, grace);
 		const nobodys = await openData(inNobodys(address), grace);
@@ -126,7 +137,9 @@ describe("a member of one organisation asking for another organisation's address
 	// for who is asking, not for what was sent.
 	const FORMS: Record<string, Record<string, string>> = {
 		"routes/app/settings": { intent: "rename", name: "Taken over" },
-		"routes/app/members": { intent: "leave" },
+		"routes/app/members": { intent: "role", memberId: "m-ada", role: "member" },
+		"routes/app/invitations": { intent: "invite", email: "mallory@example.com", role: "admin" },
+		"routes/app/account": { intent: "leave" },
 	};
 
 	it.each(withAction)(
@@ -146,6 +159,7 @@ describe("a member of one organisation asking for another organisation's address
 			}
 			expect(await value("select name from organisations where slug = ?", THEIRS)).toBe("Acme");
 			expect(await value("select count(*) from memberships")).toBe(2);
+			expect(await value("select count(*) from invitations")).toBe(0);
 		},
 	);
 

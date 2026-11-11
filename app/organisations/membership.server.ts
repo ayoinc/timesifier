@@ -6,17 +6,29 @@
  * database every time (docs/decisions.md entry 20).
  */
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { createContext, data } from "react-router";
 import { getSession, type SignedIn } from "~/auth/auth.server";
 import { organisationScope, organisations } from "~/db";
+import type { Viewer } from "~/shell/destinations";
 import { Role } from "./roles";
 
 /** A signed-in person, an organisation they belong to, and their role in it. */
 export type Membership = {
-	organisation: { id: string; name: string; slug: string };
+	organisation: {
+		id: string;
+		name: string;
+		slug: string;
+		/** The zone of a member who has not set their own (TS-048). */
+		timeZone: string;
+		/** The day its timesheet periods start on: 1 is Monday, 7 is Sunday. */
+		weekStartsOn: number;
+		clientsEnabled: boolean;
+	};
 	role: Role;
+	/** Whether the person manages at least one of the organisation's teams (TS-038). */
+	managesTeams: boolean;
 	user: SignedIn["user"];
 };
 
@@ -26,7 +38,7 @@ export type Membership = {
  *
  * `null` means only "not for you". It is the answer when nobody is signed in,
  * when no organisation has that slug, and when one has and the person is not a
- * member of it. For a signed-in person the last two also run the same two
+ * member of it. For a signed-in person the last two also run the same three
  * queries, so neither the answer nor the work done says whether the
  * organisation exists.
  */
@@ -37,28 +49,45 @@ export async function findMembership(request: Request, slug: string): Promise<Me
 
 /**
  * The same, for a person a guard has already read from the request: the
- * membership of `user` in the organisation at `slug`, or `null`. The same two
- * queries run whether or not the organisation exists.
+ * membership of `user` in the organisation at `slug`, or `null`. The same three
+ * queries run whether or not the organisation exists: the organisation, the
+ * person's membership of it, and whether they manage one of its teams.
  */
 export async function membershipOf(
 	user: SignedIn["user"],
 	slug: string,
 ): Promise<Membership | null> {
 	const [organisation] = await drizzle(env.DB)
-		.select({ id: organisations.id, name: organisations.name, slug: organisations.slug })
+		.select({
+			id: organisations.id,
+			name: organisations.name,
+			slug: organisations.slug,
+			timeZone: organisations.timeZone,
+			weekStartsOn: organisations.weekStartsOn,
+			clientsEnabled: organisations.clientsEnabled,
+		})
 		.from(organisations)
 		.where(eq(organisations.slug, slug))
 		.limit(1);
 	// No organisation has an empty id, so an unknown slug is looked up as a
 	// membership that cannot exist.
-	const [membership] = await organisationScope(env.DB, organisation?.id ?? "").memberships.select(
-		(m) => eq(m.userId, user.id),
-	);
+	const scope = organisationScope(env.DB, organisation?.id ?? "");
+	const [[membership], managed] = await Promise.all([
+		scope.memberships.select((m) => eq(m.userId, user.id)),
+		scope.teamMembers.select((t) => and(eq(t.userId, user.id), eq(t.isManager, true)), {
+			limit: 1,
+		}),
+	]);
 
 	// A role this application does not know grants nothing.
 	const role = Role.safeParse(membership?.role);
 	if (!organisation || !role.success) return null;
-	return { organisation, role: role.data, user };
+	return { organisation, role: role.data, managesTeams: managed.length > 0, user };
+}
+
+/** What decides the destinations a member is shown (`app/shell/destinations.ts`). */
+export function viewerOf({ role, managesTeams, organisation }: Membership): Viewer {
+	return { role, managesTeams, clientsEnabled: organisation.clientsEnabled };
 }
 
 /**

@@ -54,3 +54,8 @@ export const allRoutes: RouteUnderTest[] = Object.values(routes)
 export function routesAtOrUnder(path: string): RouteUnderTest[] {
 	return allRoutes.filter(({ address }) => address === path || address.startsWith(`${path}/`));
 }
+
+/** Whether the route answers an address that has moved (`MOVED` in app/shell/destinations.ts) with a redirect. */
+export function isMoved(route: RouteUnderTest): boolean {
+	return route.id.startsWith("routes/app/moved/");
+}

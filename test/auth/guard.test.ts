@@ -4,15 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeNext, signInPath } from "~/routes/auth/paths";
 import {
 	APP_PATH,
+	accountPath,
 	destinationPath,
 	destinations,
+	invitationsPath,
 	membersPath,
 	NEW_ORGANISATION_PATH,
 	organisationPath,
 } from "~/shell/destinations";
 import { freshDatabase } from "../db/database";
 import { createOrganisation } from "../organisations/harness";
-import { routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
+import { isMoved, routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
 import { captureEmail, type Mailbox, ORIGIN, post, signIn } from "./harness";
 
 // Criterion 6 of card TS-008: every route under /app redirects to sign-in
@@ -84,10 +86,12 @@ describe("the list of routes under /app", () => {
 			expect(addresses).toContain(destinationPath(ORGANISATION, id));
 		}
 		expect(addresses).toContain(membersPath(ORGANISATION));
+		expect(addresses).toContain(invitationsPath(ORGANISATION));
+		expect(addresses).toContain(accountPath(ORGANISATION));
 		expect(addresses).toContain(NEW_ORGANISATION_PATH);
 		// The two layouts, `/app` itself, the page that creates an organisation,
-		// one route for each destination and the members page.
-		expect(underApp.length).toBeGreaterThanOrEqual(destinations.length + 5);
+		// one route for each destination, the members, the invitations and My account.
+		expect(underApp.length).toBeGreaterThanOrEqual(destinations.length + 7);
 	});
 
 	it("leaves out the pages a person uses without a session", () => {
@@ -142,7 +146,9 @@ describe("without a session, every route under /app redirects to sign-in", () =>
 describe("with a session", () => {
 	// `/app` itself shows a page only to a person with several organisations;
 	// test/pages/app.test.ts follows where it sends everybody else.
-	const pages = underApp.filter(({ address }) => address !== APP_PATH);
+	// An address that has moved answers with a redirect to its new place;
+	// test/pages/destinations.test.ts follows it.
+	const pages = underApp.filter((route) => route.address !== APP_PATH && !isMoved(route));
 
 	it.each(pages)("$id: $address is served", async ({ address }) => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");

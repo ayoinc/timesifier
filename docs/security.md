@@ -145,6 +145,26 @@ An organisation always has at least one owner: the last owner cannot leave, be r
 
 `test/organisations/permissions.test.ts` holds a copy of this table and has a trial through the real endpoint for each of its 27 cells; it fails when a cell has no trial or a trial contradicts its cell. Change the table here, in the test and in `roles.ts` together.
 
+### Destinations by role
+
+Which destinations a person is shown is `canSee` in `app/shell/destinations.ts`, from `docs/navigation.md`. A manager is a person who manages at least one team (`team_members.is_manager`), read from the database on every request like the role.
+
+| Destination        | owner | admin | manager | member |
+| ------------------ | ----- | ----- | ------- | ------ |
+| Timesheet          | yes   | yes   | yes     | yes    |
+| Projects           | yes   | yes   | yes     | yes    |
+| Clients            | yes   | yes   | no      | no     |
+| Team               | yes   | yes   | yes     | no     |
+| Approvals          | yes   | yes   | yes     | no     |
+| Reports            | yes   | yes   | yes     | yes    |
+| Workspace settings | yes   | yes   | no      | no     |
+
+Clients is hidden from everyone while the organisation has `clients_enabled` off. A destination a person is not shown answers 404 at its address and at every address below it, for a page, a data request and a form alike: the organisation layout's second `middleware` reads the destination from the pattern of the route that matched, so no spelling of an address reaches a page by another route, and the 404 is the one a stranger gets (`test/pages/destinations.test.ts`). My account, at `/app/<slug>/account`, is every member's.
+
+### Whose time
+
+`app/organisations/access.ts` holds the rules inside the destinations, and `accessOf` reads what they take on every request. A person sees, adds and changes their own entries and submits their own periods. An owner or admin sees everyone's time, decides everyone's periods and alone reopens an approved one. A manager sees the time of the members of the teams they manage and decides their periods, never their own. Nobody changes another person's entries (decision 25). A submitted or approved period locks the entries that start on its days (`app/periods/`). A list or report passes the people it may hold to SQL (`timeScopeOf`); it never filters afterwards.
+
 ### The gate in front of the plugin
 
 Every request to `/organization/*` passes one check of ours before the plugin sees it (`organisationRules` in `app/auth/organisations.server.ts`):

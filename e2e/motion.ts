@@ -55,12 +55,20 @@ export async function watchForMovement(page: Page) {
 					}
 					continue;
 				}
+				// An animation that lasts no time moves nothing: it only sets a value at
+				// once. React makes one on ::view-transition when it leaves the root out
+				// of a transition, sizing it 0 by 0 for no time.
+				if (animation.effect?.getComputedTiming().activeDuration === 0) continue;
 				const keyframes = (animation.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
 				for (const keyframe of keyframes) {
 					for (const property of Object.keys(keyframe)) {
 						// Keyframes name properties in camel case: marginTop.
 						const css = property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-						if (moves(css)) found.add(`animation of ${css} on ${name(target)}`);
+						if (moves(css)) {
+							// A view transition's parts are pseudo-elements of <html>: name the part.
+							const part = (animation.effect as KeyframeEffect | null)?.pseudoElement;
+							found.add(`animation of ${css} on ${name(target)}${part ? ` ${part}` : ""}`);
+						}
 					}
 				}
 			}

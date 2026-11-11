@@ -29,13 +29,18 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			body: '{"email": "ada@example.com", "otp":',
 		});
 	},
+	// An organisation's name is 1 to 80 characters; this is none.
+	"routes/app/settings": () => formFromAMember("/app/acme/settings", "intent=rename&name="),
 	// The colour scheme is one of three words; this is none of them.
-	"routes/app/settings": () => formFromAMember("/app/acme/settings", "scheme=sepia"),
+	"routes/app/account": () => formFromAMember("/app/acme/account", "scheme=sepia"),
 	// An organisation's name is 1 to 80 characters; this is none.
 	"routes/app/new": () => formFromAMember("/app/new", "name="),
 	// A role is one of three words; this is none of them.
 	"routes/app/members": () =>
-		formFromAMember("/app/acme/settings/members", "intent=role&memberId=m1&role=emperor"),
+		formFromAMember("/app/acme/team/members", "intent=role&memberId=m1&role=emperor"),
+	// An invitation gives the role of a member or an admin; this is neither.
+	"routes/app/invitations": () =>
+		formFromAMember("/app/acme/team/invitations", "intent=invite&email=bob@example.com&role=owner"),
 	// An invitation is joined or declined; this asks for neither. The invitation
 	// is one the person could join, so only the input is wrong.
 	"routes/invitations.$id": async () => {

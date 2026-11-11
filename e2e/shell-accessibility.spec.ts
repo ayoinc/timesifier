@@ -35,7 +35,7 @@ test.describe("with the keyboard focus showing", () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
 	test("the skip link, shown, has no accessibility violations", async ({ page }) => {
-		await openShell(page, homePath("today"));
+		await openShell(page, homePath("timesheet"));
 		await page.keyboard.press("Tab");
 		await expect(page.getByRole("link", { name: "Skip to main content" })).toBeInViewport();
 

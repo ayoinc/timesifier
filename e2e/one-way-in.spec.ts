@@ -19,9 +19,9 @@ import {
 	createOrganisation,
 	INVITATION_LINK,
 	invite,
-	openMembers,
+	openAccount,
+	openInvitations,
 	openOutsideOrganisation,
-	openSettings,
 } from "./organisation";
 
 // Card TS-036, one way in: the home page's one action and its quiet "Sign in"
@@ -70,7 +70,7 @@ for (const viewport of [COMPACT, WIDE]) {
 	test.describe(`in a window ${viewport.width}px wide`, () => {
 		test.use({ viewport });
 
-		test("a new address: the home page, its one action, an address, a code, an organisation, Today", async ({
+		test("a new address: the home page, its one action, an address, a code, an organisation, Timesheet", async ({
 			page,
 		}) => {
 			const person = newPerson();
@@ -89,11 +89,11 @@ for (const viewport of [COMPACT, WIDE]) {
 			await expect(page.getByText(`Signed in as ${person.email}`)).toBeVisible();
 
 			const { name } = await createOrganisation(page);
-			await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+			await expect(page.getByRole("heading", { level: 1, name: "Timesheet" })).toBeVisible();
 			await expect(page.getByText(`${name} is ready`)).toBeVisible();
 		});
 
-		test("a returning address with an organisation: the home page, Sign in, an address, a code, Today", async ({
+		test("a returning address with an organisation: the home page, Sign in, an address, a code, Timesheet", async ({
 			page,
 		}) => {
 			const person = newPerson();
@@ -109,7 +109,7 @@ for (const viewport of [COMPACT, WIDE]) {
 			await enterAddressAndCode(page, person.email);
 
 			await expect(page).toHaveURL(organisationPath(slug));
-			await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+			await expect(page.getByRole("heading", { level: 1, name: "Timesheet" })).toBeVisible();
 		});
 
 		test("the sign-in page stands in the frame of the public pages: their band, their foot, and no way in on the way in", async ({
@@ -180,7 +180,7 @@ test("an invited new address, signed out: the link, an address, a code, the invi
 	const invited = newPerson();
 	await signIn(page, newPerson().email);
 	const { name, slug } = await createOrganisation(page);
-	await openMembers(page, slug);
+	await openInvitations(page, slug);
 	const link = await foundInMessageSentBy(
 		() => invite(page, invited.email),
 		INVITATION_LINK,
@@ -200,7 +200,7 @@ test("an invited new address, signed out: the link, an address, a code, the invi
 	await expect(other.getByRole("heading", { level: 1, name: `Join ${name}?` })).toBeVisible();
 	await other.getByRole("button", { name: "Join" }).click();
 	await expect(other).toHaveURL(organisationPath(slug));
-	await expect(other.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+	await expect(other.getByRole("heading", { level: 1, name: "Timesheet" })).toBeVisible();
 	await theirs.close();
 });
 
@@ -397,7 +397,7 @@ test.describe("whose account this is", () => {
 		const invited = newPerson();
 		await signIn(page, newPerson().email);
 		const { name, slug } = await createOrganisation(page);
-		await openMembers(page, slug);
+		await openInvitations(page, slug);
 		const link = await foundInMessageSentBy(
 			() => invite(page, invited.email),
 			INVITATION_LINK,
@@ -445,7 +445,7 @@ test.describe("every way to the sign-in page is a whole page load", () => {
 		});
 	}
 
-	test("the guard, the shell after its session has ended, both ways out of Settings, and the address a page for new people once had", async ({
+	test("the guard, the shell after its session has ended, both ways out of My account, and the address a page for new people once had", async ({
 		page,
 		browser,
 		baseURL,
@@ -463,8 +463,8 @@ test.describe("every way to the sign-in page is a whole page load", () => {
 		await signIn(other, person.email);
 		await openShell(other, home);
 
-		// "Sign out everywhere", from Settings.
-		await openSettings(page);
+		// "Sign out everywhere", from My account.
+		await openAccount(page);
 		await page.getByRole("button", { name: "Sign out everywhere" }).click();
 		await expectLoadedWhole(page);
 
@@ -483,10 +483,10 @@ test.describe("every way to the sign-in page is a whole page load", () => {
 		await expectLoadedWhole(page);
 		await expect(page).toHaveURL(`/sign-in?next=${encodeURIComponent(home)}`);
 
-		// "Sign out", from Settings. And after each of them the page can still send a code.
+		// "Sign out", from My account. And after each of them the page can still send a code.
 		await enterAddressAndCode(page, person.email);
 		await expect(page).toHaveURL(home);
-		await openSettings(page);
+		await openAccount(page);
 		await page.getByRole("button", { name: "Sign out", exact: true }).click();
 		await expectLoadedWhole(page);
 		await enterAddressAndCode(page, person.email);

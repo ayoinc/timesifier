@@ -1,11 +1,17 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { membersPath } from "../app/shell/destinations";
+import { accountPath, membersPath } from "../app/shell/destinations";
 import { SIGNED_IN_AS_GUEST, SIGNED_IN_AS_MEMBER } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { movement, watchForMovement } from "./motion";
-import { homeOrganisation, homePath, openMembers, openOutsideOrganisation } from "./organisation";
+import {
+	homeOrganisation,
+	homePath,
+	openInvitations,
+	openMembers,
+	openOutsideOrganisation,
+} from "./organisation";
 
 // Every view card TS-009 adds, at both window sizes and in both schemes: no
 // WCAG 2.2 A or AA violation, and every text's contrast measured (rules 14 and
@@ -61,15 +67,15 @@ for (const viewport of [
 					await expect(page.getByText("Enter a name.")).toBeVisible();
 					await expectNoProblems(page, "Create an organisation");
 
-					await openShell(page, `${homePath("today")}?welcome=1`);
+					await openShell(page, `${homePath("timesheet")}?welcome=1`);
 					await expect(page.getByText(`${homeOrganisation().name} is ready`)).toBeVisible();
-					await expectNoProblems(page, "Today");
+					await expectNoProblems(page, "Timesheet");
 				});
 
-				test("Settings, and each of its sheets", async ({ page }) => {
-					const { name } = homeOrganisation();
+				test("Workspace settings, My account, and each of their sheets", async ({ page }) => {
+					const { name, slug } = homeOrganisation();
 					await openShell(page, homePath("settings"));
-					await expectNoProblems(page, "Settings");
+					await expectNoProblems(page, "Workspace settings");
 
 					await page.getByRole("button", { name: "Rename" }).click();
 					const rename = page.getByRole("dialog", { name: "Rename the organisation" });
@@ -78,10 +84,6 @@ for (const viewport of [
 						rename,
 						rename.getByText("Everyone in the organisation"),
 					);
-
-					await page.getByRole("button", { name: "Change name" }).click();
-					const own = page.getByRole("dialog", { name: "Your name" });
-					await expectNoProblemsInSheet(page, own, own.getByText("Shown to the people"));
 
 					await page.getByRole("button", { name: "Delete organisation" }).click();
 					const deleting = page.getByRole("dialog", { name: `Delete ${name}?` });
@@ -97,16 +99,26 @@ for (const viewport of [
 						deleting,
 						deleting.getByText("This removes the organisation"),
 					);
+
+					await openShell(page, accountPath(slug));
+					await expectNoProblems(page, "My account");
+					await page.getByRole("button", { name: "Change name" }).click();
+					const own = page.getByRole("dialog", { name: "Your name" });
+					await expectNoProblemsInSheet(page, own, own.getByText("Shown to the people"));
+
+					await page.getByRole("button", { name: "Leave organisation" }).click();
+					const leave = page.getByRole("dialog", { name: `Leave ${name}?` });
+					await expectNoProblemsInSheet(page, leave, leave.getByText("You will no longer"));
 				});
 
-				test("the members page, its menu and each of its sheets", async ({ page }) => {
-					const { slug, name, member, guest } = homeOrganisation();
+				test("the members and invitations pages, the menu and each of their sheets", async ({
+					page,
+				}) => {
+					const { slug, member, guest } = homeOrganisation();
+					await openShell(page, homePath("team"));
+					await expectNoProblems(page, "Team");
 					await openMembers(page, slug);
 					await expectNoProblems(page, "Members");
-
-					await page.getByRole("button", { name: "Invite a person" }).click();
-					const inviting = page.getByRole("dialog", { name: "Invite a person" });
-					await expectNoProblemsInSheet(page, inviting, inviting.getByText("They get an email"));
 
 					const actions = page.getByRole("button", { name: `Actions for ${member.name}` });
 					await actions.click();
@@ -125,35 +137,45 @@ for (const viewport of [
 					const remove = page.getByRole("dialog", { name: `Remove ${member.name}?` });
 					await expectNoProblemsInSheet(page, remove, remove.getByText("They stop being a member"));
 
+					await openInvitations(page, slug);
+					await expectNoProblems(page, "Invitations");
+					await page.getByRole("button", { name: "Invite a person" }).click();
+					const inviting = page.getByRole("dialog", { name: "Invite a person" });
+					await expectNoProblemsInSheet(page, inviting, inviting.getByText("They get an email"));
+
 					await page
 						.getByRole("button", { name: `Cancel the invitation to ${guest.email}` })
 						.click();
 					const cancel = page.getByRole("dialog", { name: "Cancel this invitation?" });
 					await expectNoProblemsInSheet(page, cancel, cancel.getByText("stops working"));
+				});
 
-					await page.getByRole("button", { name: "Leave organisation" }).click();
-					const leave = page.getByRole("dialog", { name: `Leave ${name}?` });
-					await expectNoProblemsInSheet(page, leave, leave.getByText("You will no longer"));
+				test("the destinations still to be built, each with its empty sheet", async ({ page }) => {
+					for (const [id, heading] of [
+						["projects", "Projects"],
+						["clients", "Clients"],
+						["approvals", "Approvals"],
+						["reports", "Reports"],
+					] as const) {
+						await openShell(page, homePath(id));
+						await expectNoProblems(page, heading);
+					}
 				});
 			});
 
 			test.describe("for a member who belongs to two organisations", () => {
 				test.use({ storageState: SIGNED_IN_AS_MEMBER });
 
-				test("the choice of organisation, and the pages without an owner's controls", async ({
-					page,
-				}) => {
+				test("the choice of organisation, and the pages a member is shown", async ({ page }) => {
 					const { slug } = homeOrganisation();
 					await openOutsideOrganisation(page, "/app");
 					await expectNoProblems(page, "Your organisations");
 
-					await openMembers(page, slug);
-					await expect(page.getByRole("button", { name: "Invite a person" })).toHaveCount(0);
-					await expectNoProblems(page, "Members");
+					await openShell(page, homePath("timesheet"));
+					await expectNoProblems(page, "Timesheet");
 
-					await openShell(page, homePath("settings"));
-					await expect(page.getByRole("button", { name: "Rename" })).toHaveCount(0);
-					await expectNoProblems(page, "Settings");
+					await openShell(page, accountPath(slug));
+					await expectNoProblems(page, "My account");
 				});
 			});
 
@@ -176,23 +198,25 @@ for (const viewport of [
 
 /**
  * Every change of view these pages make without sending anything: the welcome
- * arriving, a move to Settings and on to the members, the menu, and a sheet
+ * arriving, a move to Workspace settings, to Team and on to the members, the menu, and a sheet
  * opening and closing on each page.
  */
 async function walkTheViews(page: Page) {
 	const { slug, name, member } = homeOrganisation();
-	await openShell(page, `${homePath("today")}?welcome=1`);
+	await openShell(page, `${homePath("timesheet")}?welcome=1`);
 	await expect(page.getByText(`${name} is ready`)).toBeVisible();
 
-	await page.getByRole("navigation").getByRole("link", { name: "Settings" }).click();
-	await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeFocused();
+	await page.getByRole("navigation").getByRole("link", { name: "Workspace settings" }).click();
+	await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeFocused();
 	await page.getByRole("button", { name: "Rename" }).click();
 	const rename = page.getByRole("dialog", { name: "Rename the organisation" });
 	await expect(rename.getByLabel("Organisation name")).toBeFocused();
 	await page.keyboard.press("Escape");
 	await expect(rename).toBeHidden();
 
-	await page.getByRole("link", { name: "Members and invitations" }).click();
+	await page.getByRole("navigation").getByRole("link", { name: "Team" }).click();
+	await expect(page.getByRole("heading", { level: 1, name: "Team" })).toBeFocused();
+	await page.getByRole("main").getByRole("link", { name: "Members", exact: true }).click();
 	await expect(page).toHaveURL(membersPath(slug));
 	await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
 	await page.getByRole("button", { name: `Actions for ${member.name}` }).click();

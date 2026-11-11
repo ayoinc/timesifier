@@ -5,8 +5,10 @@ import type { Page } from "@playwright/test";
 
 import {
 	APP_PATH,
+	accountPath,
 	type DestinationId,
 	destinationPath,
+	invitationsPath,
 	membersPath,
 	NEW_ORGANISATION_PATH,
 	organisationPath,
@@ -40,7 +42,7 @@ export interface HomeOrganisation extends Organisation {
 	/**
 	 * A person with an invitation to it that they have not answered
 	 * (`SIGNED_IN_AS_GUEST`). They are in no organisation, so they have no
-	 * Settings and have given no name.
+	 * My account and have given no name.
 	 */
 	guest: { email: string };
 	/** The address of the page of the guest's invitation. */
@@ -84,7 +86,7 @@ export async function openOutsideOrganisation(page: Page, path: string) {
 
 /**
  * Creates an organisation through the page, as the signed-in person, and
- * arrives at its Today.
+ * arrives at its Timesheet.
  */
 export async function createOrganisation(
 	page: Page,
@@ -115,10 +117,10 @@ export async function ownOrganisation(page: Page): Promise<string> {
 	return pathname.slice(APP_PATH.length + 1);
 }
 
-/** Opens Settings in the person's organisation, which is created first if they have none. */
-export async function openSettings(page: Page): Promise<string> {
+/** Opens My account in the person's organisation, which is created first if they have none. */
+export async function openAccount(page: Page): Promise<string> {
 	const slug = await ownOrganisation(page);
-	await openShell(page, destinationPath(slug, "settings"));
+	await openShell(page, accountPath(slug));
 	return slug;
 }
 
@@ -128,12 +130,18 @@ export async function openMembers(page: Page, slug: string) {
 	await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeVisible();
 }
 
+/** Opens the invitations page of the organisation with this slug. */
+export async function openInvitations(page: Page, slug: string) {
+	await openShell(page, invitationsPath(slug));
+	await expect(page.getByRole("heading", { level: 1, name: "Invitations" })).toBeVisible();
+}
+
 /** The address of an invitation's page, as its email gives it. */
 export const INVITATION_LINK = /\/invitations\/[0-9a-f-]{36}\b/;
 
 /**
- * Fills in the sheet that "Invite a person" opens and sends it. The members
- * page is open, and the person on it may invite. Returns when the page has
+ * Fills in the sheet that "Invite a person" opens and sends it. The
+ * invitations page is open, and the person on it may invite. Returns when the page has
  * said the invitation is on its way.
  */
 export async function invite(page: Page, email: string, role: "Member" | "Admin" = "Member") {

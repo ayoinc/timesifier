@@ -27,10 +27,10 @@ export type Refusals = Record<string, number[]>;
  * refusal with `test.use({ refusals: { "/path": [403] } })`; any other error
  * still fails it.
  *
- * Every page is light unless the person chose otherwise in Settings, whatever
+ * Every page is light unless the person chose otherwise on My account, whatever
  * the device prefers. A test of a page in another scheme is a test of a person
  * who chose it: `test.use({ chosenScheme: "dark" })` gives the browser the
- * cookie Settings would have set.
+ * cookie My account would have set.
  */
 export const test = base.extend<{
 	pageHealth: undefined;

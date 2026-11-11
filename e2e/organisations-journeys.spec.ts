@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 
 import {
+	accountPath,
 	destinationPath,
 	destinations,
+	invitationsPath,
 	membersPath,
 	organisationPath,
 } from "../app/shell/destinations";
@@ -24,6 +26,7 @@ import {
 	homeOrganisation,
 	homePath,
 	INVITATION_LINK,
+	openInvitations,
 	openMembers,
 	openOutsideOrganisation,
 } from "./organisation";
@@ -52,7 +55,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		test.describe(`in a window ${viewport.width}px wide`, () => {
 			test.use({ viewport });
 
-			test("creates their first organisation and lands on its Today, with the navigation in it", async ({
+			test("creates their first organisation and lands on its Timesheet, with the navigation in it", async ({
 				page,
 				refusals,
 			}) => {
@@ -73,12 +76,12 @@ test.describe("a person who has just signed in for the first time", () => {
 
 				const { name, slug } = await createOrganisation(page);
 
-				// Its Today, with the moment marked.
-				await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+				// Its Timesheet, with the moment marked.
+				await expect(page.getByRole("heading", { level: 1, name: "Timesheet" })).toBeVisible();
 				await expect(page.getByText(`${name} is ready`)).toBeVisible();
 				await expect(page.getByText("You are its owner.")).toBeVisible();
 
-				// The four destinations, each at its address in this organisation.
+				// Every destination, for its owner, each at its address in this organisation.
 				const links = page.getByRole("navigation", { name: "Main" }).getByRole("link");
 				await expect(links).toHaveText(destinations.map(({ label }) => label));
 				for (const { id, label } of destinations) {
@@ -87,13 +90,16 @@ test.describe("a person who has just signed in for the first time", () => {
 						destinationPath(slug, id),
 					);
 				}
-				await expect(links.filter({ hasText: "Today" })).toHaveAttribute("aria-current", "page");
+				await expect(links.filter({ hasText: "Timesheet" })).toHaveAttribute(
+					"aria-current",
+					"page",
+				);
 
 				// A move stays inside the organisation, and the welcome was for the moment alone.
 				await links.filter({ hasText: "Reports" }).click();
 				await expect(page).toHaveURL(destinationPath(slug, "reports"));
 				await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeFocused();
-				await links.filter({ hasText: "Today" }).click();
+				await links.filter({ hasText: "Timesheet" }).click();
 				await expect(page).toHaveURL(organisationPath(slug));
 				await expect(page.getByText(`${name} is ready`)).toHaveCount(0);
 
@@ -102,7 +108,7 @@ test.describe("a person who has just signed in for the first time", () => {
 				await expect(page).toHaveURL(organisationPath(slug));
 
 				// Another organisation's address is the 404 page, and says nothing of it.
-				for (const id of ["today", "settings"] as const) {
+				for (const id of ["timesheet", "settings"] as const) {
 					expectRefusal(refusals, homePath(id), 404);
 					const response = await page.goto(homePath(id));
 					expect(response?.status()).toBe(404);
@@ -137,6 +143,8 @@ test.describe("a person who has just signed in for the first time", () => {
 		await setName(page, ada.name);
 		const settings = destinationPath(slug, "settings");
 		const members = membersPath(slug);
+		const invitations = invitationsPath(slug);
+		const account = accountPath(slug);
 
 		// Rename it, in a sheet. Its address stays.
 		await openShell(page, settings);
@@ -151,14 +159,19 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(page.getByText(`Shared by everyone in ${name}.`)).toBeVisible();
 		await expect(page).toHaveURL(settings);
 
-		// The members page of a new organisation: the one member, and what inviting does.
-		await page.getByRole("link", { name: "Members and invitations" }).click();
+		// The members of a new organisation, under Team: the one member, and where inviting is.
+		await page.getByRole("navigation").getByRole("link", { name: "Team" }).click();
+		await page.getByRole("main").getByRole("link", { name: "Members", exact: true }).click();
 		await expect(page).toHaveURL(members);
 		await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
 		const listed = page.getByRole("list", { name: "Members" }).getByRole("listitem");
 		await expect(listed).toHaveCount(1);
 		await expect(listed).toContainText([`${ada.name} (you)`]);
 		await expect(page.getByText("You are the only one here.")).toBeVisible();
+		await page.getByRole("main").getByRole("link", { name: "Invitations" }).click();
+		await expect(page).toHaveURL(invitations);
+		await expect(page.getByRole("heading", { level: 1, name: "Invitations" })).toBeFocused();
+		await expect(page.getByText("No invitation is waiting.")).toBeVisible();
 
 		// Invite Bob, with the keyboard alone: Enter opens the sheet, and Enter in its field sends it.
 		const inviteButton = page.getByRole("button", { name: "Invite a person" });
@@ -181,7 +194,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(waiting).toHaveCount(1);
 		await expect(waiting).toContainText([bob.email]);
 		await expect(waiting).toContainText(["Invited as a member."]);
-		await expect(page.getByText("You are the only one here.")).toHaveCount(0);
+		await expect(page.getByText("No invitation is waiting.")).toHaveCount(0);
 
 		// Bob opens the link from his email in a browser of his own. He has no
 		// session and no account, so he is sent to the one page that signs
@@ -201,7 +214,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(other.getByRole("main").getByRole("button")).toHaveText(["Join", "Decline"]);
 		await other.getByRole("button", { name: "Join" }).click();
 		await expect(other).toHaveURL(organisationPath(slug));
-		await expect(other.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+		await expect(other.getByRole("heading", { level: 1, name: "Timesheet" })).toBeVisible();
 
 		// The link works once.
 		const used = await other.goto(link);
@@ -213,24 +226,25 @@ test.describe("a person who has just signed in for the first time", () => {
 		await other.getByRole("link", { name: "Go to Timesifier" }).click();
 		await expect(other).toHaveURL(organisationPath(slug));
 
-		// Until he gives a name, the others see his address. He gives one in Settings.
+		// Until he gives a name, the others see his address. He gives one on My account.
 		await setName(other, bob.name);
 
-		// Bob, a member, sees who is in the organisation and none of the owner's controls.
-		await openMembers(other, slug);
-		const bobSees = other.getByRole("list", { name: "Members" }).getByRole("listitem");
-		await expect(bobSees).toHaveCount(2);
-		await expect(bobSees.filter({ hasText: bob.email })).toContainText(`${bob.name} (you)`);
-		await expect(bobSees.filter({ hasText: bob.email })).toContainText("Member");
-		await expect(bobSees.filter({ hasText: ada.email })).toContainText("Owner");
-		await expect(other.getByRole("button", { name: "Invite a person" })).toHaveCount(0);
-		await expect(other.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
-		await expect(other.getByRole("heading", { name: "Invitations" })).toHaveCount(0);
-		await expect(other.getByRole("main").getByRole("button")).toHaveText(["Leave organisation"]);
-		await openShell(other, settings);
-		await expect(other.getByText(`Shared by everyone in ${name}. You are a member.`)).toBeVisible();
-		await expect(other.getByRole("button", { name: "Rename" })).toHaveCount(0);
-		await expect(other.getByRole("button", { name: "Delete organisation" })).toHaveCount(0);
+		// Bob, a member, is shown Timesheet, Projects and Reports. Team and
+		// Workspace settings are not his to open: their addresses are the 404 page.
+		await openShell(other, organisationPath(slug));
+		await expect(other.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveText([
+			"Timesheet",
+			"Projects",
+			"Reports",
+		]);
+		for (const address of [members, invitations, settings]) {
+			expect((await other.goto(address))?.status(), address).toBe(404);
+			await expect(other.getByText(NOT_FOUND)).toBeVisible();
+		}
+		// Leaving is his, on My account.
+		await openShell(other, account);
+		await expect(other.getByText(`You are a member of ${name}.`)).toBeVisible();
+		await expect(other.getByRole("button", { name: "Leave organisation" })).toBeVisible();
 
 		// Ada sees Bob listed, and the invitation is no longer waiting.
 		await openMembers(page, slug);
@@ -238,7 +252,9 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(listed).toHaveCount(2);
 		await expect(bobsRow).toContainText(bob.name);
 		await expect(bobsRow).toContainText("Member");
-		await expect(page.getByRole("heading", { name: "Invitations" })).toHaveCount(0);
+		await openInvitations(page, slug);
+		await expect(page.getByText("No invitation is waiting.")).toBeVisible();
+		await openMembers(page, slug);
 
 		// She makes him an admin.
 		await page.getByRole("button", { name: `Actions for ${bob.name}` }).click();
@@ -250,10 +266,11 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(role).toBeHidden();
 		await expect(page.getByRole("status")).toHaveText("Role changed. They are now an admin.");
 		await expect(bobsRow).toContainText("Admin");
-		// Which Bob's own page now shows him, with what an admin may do.
+		// Which Bob's own pages now show him, with what an admin may do.
 		await openMembers(other, slug);
-		await expect(other.getByRole("button", { name: "Invite a person" })).toBeVisible();
 		await expect(other.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
+		await openInvitations(other, slug);
+		await expect(other.getByRole("button", { name: "Invite a person" })).toBeVisible();
 
 		// She removes him, and the organisation is the 404 page to him.
 		await page.getByRole("button", { name: `Actions for ${bob.name}` }).click();
@@ -265,7 +282,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(listed).toHaveCount(1);
 		// The control that opened the sheet has gone with him: the focus is on the heading.
 		await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
-		for (const address of [members, settings, organisationPath(slug)]) {
+		for (const address of [members, settings, account, organisationPath(slug)]) {
 			const response = await other.goto(address);
 			expect(response?.status(), address).toBe(404);
 			await expect(other.getByText(NOT_FOUND)).toBeVisible();
@@ -273,7 +290,9 @@ test.describe("a person who has just signed in for the first time", () => {
 		await bobs.close();
 
 		// The last owner cannot leave, and is told why.
-		expectRefusal(refusals, `${members}.data`, 400);
+		await page.getByRole("banner").getByRole("link", { name: "My account" }).click();
+		await expect(page).toHaveURL(account);
+		expectRefusal(refusals, `${account}.data`, 400);
 		await page.getByRole("button", { name: "Leave organisation" }).click();
 		const leave = page.getByRole("dialog", { name: `Leave ${name}?` });
 		await leave.getByRole("button", { name: "Leave", exact: true }).click();
@@ -283,10 +302,9 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(leave).toBeVisible();
 		await leave.getByRole("button", { name: "Cancel" }).click();
 		await expect(leave).toBeHidden();
-		await expect(listed).toHaveCount(1);
 
-		// Deleting is behind its own control in Settings, and asks for the name.
-		await page.getByRole("main").getByRole("link", { name: "Settings" }).click();
+		// Deleting is behind its own control in Workspace settings, and asks for the name.
+		await page.getByRole("navigation").getByRole("link", { name: "Workspace settings" }).click();
 		await expect(page).toHaveURL(settings);
 		await page.getByRole("button", { name: "Delete organisation" }).click();
 		const deleting = page.getByRole("dialog", { name: `Delete ${name}?` });
@@ -315,7 +333,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
 		await signIn(page, newPerson().email);
 		const { slug } = await createOrganisation(page);
-		await openMembers(page, slug);
+		await openInvitations(page, slug);
 		await page.getByRole("button", { name: "Invite a person" }).click();
 		const inviting = page.getByRole("dialog", { name: "Invite a person" });
 		await inviting.getByLabel("Email address").fill(bob.email);
@@ -344,8 +362,9 @@ test.describe("a person who has just signed in for the first time", () => {
 		await bobs.close();
 
 		// Ada cancels nothing: the invitation is simply no longer waiting.
+		await openInvitations(page, slug);
+		await expect(page.getByText("No invitation is waiting.")).toBeVisible();
 		await openMembers(page, slug);
-		await expect(page.getByRole("heading", { name: "Invitations" })).toHaveCount(0);
 		await expect(page.getByRole("list", { name: "Members" }).getByRole("listitem")).toHaveCount(1);
 	});
 
@@ -358,7 +377,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		const bob: Person = { name: "Bob Babbage", email: `bob-${randomUUID()}@example.com` };
 		await signIn(page, newPerson().email);
 		const { slug } = await createOrganisation(page);
-		await openMembers(page, slug);
+		await openInvitations(page, slug);
 		await page.getByRole("button", { name: "Invite a person" }).click();
 		const inviting = page.getByRole("dialog", { name: "Invite a person" });
 		await inviting.getByLabel("Email address").fill(bob.email);
@@ -381,7 +400,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(asking).toBeHidden();
 		await expect(page.getByRole("status")).toContainText("Invitation cancelled.");
 		await expect(cancel).toHaveCount(0);
-		await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
+		await expect(page.getByRole("heading", { level: 1, name: "Invitations" })).toBeFocused();
 
 		const bobs = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
 		await ownAddress(bobs, baseURL);
@@ -419,21 +438,17 @@ test.describe("a person who belongs to two organisations", () => {
 
 		await choices.filter({ hasText: home.membersOwn.name }).click();
 		await expect(page).toHaveURL(organisationPath(home.membersOwn.slug));
-		await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeFocused();
+		await expect(page.getByRole("heading", { level: 1, name: "Timesheet" })).toBeFocused();
 
-		// Settings says whose it is, and leads back to the choice.
-		await page.getByRole("navigation").getByRole("link", { name: "Settings" }).click();
-		await expect(
-			page.getByText(`Shared by everyone in ${home.membersOwn.name}. You are an owner.`),
-		).toBeVisible();
+		// My account says whose organisation it is, and leads back to the choice.
+		await page.getByRole("banner").getByRole("link", { name: "My account" }).click();
+		await expect(page.getByText(`You are an owner of ${home.membersOwn.name}.`)).toBeVisible();
 		await page.getByRole("link", { name: "Switch organisation" }).click();
 		await expect(page).toHaveURL("/app");
 		await page.getByRole("link", { name: home.name, exact: true }).click();
 		await expect(page).toHaveURL(organisationPath(home.slug));
-		await page.getByRole("navigation").getByRole("link", { name: "Settings" }).click();
-		await expect(
-			page.getByText(`Shared by everyone in ${home.name}. You are a member.`),
-		).toBeVisible();
+		await page.getByRole("banner").getByRole("link", { name: "My account" }).click();
+		await expect(page.getByText(`You are a member of ${home.name}.`)).toBeVisible();
 	});
 
 	test("creating another organisation is not the first: no welcome, and a way back", async ({

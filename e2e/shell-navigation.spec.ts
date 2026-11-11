@@ -1,11 +1,14 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { type Destination, destinations } from "../app/shell/destinations";
+import { accountPath, type Destination, destinations, HEADINGS } from "../app/shell/destinations";
+import { SIGNED_IN_AS_MEMBER } from "./auth-state";
 import { expect, openShell, test } from "./fixtures";
-import { homePath } from "./organisation";
+import { homeOrganisation, homePath } from "./organisation";
 
-// The shell's navigation, landmarks and focus (TS-006, criteria 1 and 3). Every
-// path and label comes from the one list of destinations.
+// The shell's navigation, landmarks and focus (TS-006, criteria 1 and 3), and
+// its headings by role (TS-053). Every path and label comes from the one list
+// of destinations. The person signed in owns the organisation, so is shown
+// every destination; the member of it is shown three.
 
 const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
@@ -35,7 +38,10 @@ async function drawn(page: Page): Promise<{ container: Box; links: Box[] }> {
 	return { container: await box(navigation(page)), links: await Promise.all(links.map(box)) };
 }
 
-/** A navigation bar: along the bottom edge, as wide as the window, its destinations side by side. */
+/**
+ * A navigation bar: along the bottom edge, as wide as the window, its
+ * destinations side by side in one row, and no heading.
+ */
 async function expectBar(page: Page) {
 	const window = page.viewportSize() ?? COMPACT;
 	const { container, links } = await drawn(page);
@@ -50,6 +56,9 @@ async function expectBar(page: Page) {
 	const lefts = links.map((link) => link.x);
 	expect(lefts).toEqual([...lefts].sort((a, b) => a - b));
 	expect(new Set(lefts).size).toBe(links.length);
+	for (const heading of HEADINGS) {
+		await expect(navigation(page).getByText(heading, { exact: true })).toBeHidden();
+	}
 }
 
 /** A column of links beside the page, under the band, its destinations stacked. */
@@ -70,9 +79,18 @@ async function expectRail(page: Page) {
 	const tops = links.map((link) => link.y);
 	expect(tops).toEqual([...tops].sort((a, b) => a - b));
 	expect(new Set(tops).size).toBe(links.length);
+	// Each heading stands above its first link, and each link below its heading.
+	for (const heading of HEADINGS) {
+		const label = await box(navigation(page).getByText(heading, { exact: true }));
+		const under = destinations.filter((each) => each.heading === heading);
+		for (const each of under) {
+			const link = await box(navigation(page).getByRole("link", { name: each.label, exact: true }));
+			expect(link.y, `${each.label} is under ${heading}`).toBeGreaterThan(label.y);
+		}
+	}
 }
 
-/** The same four links, by role and name, in the order of the list, each to its own address. */
+/** The same links, by role and name, in the order of the list, each to its own address. */
 async function expectDestinations(page: Page, current: Destination) {
 	const links = navigation(page).getByRole("link");
 	await expect(links).toHaveText(destinations.map((destination) => destination.label));
@@ -103,19 +121,27 @@ async function focused(page: Page): Promise<string> {
 test.describe("in a window 390px wide", () => {
 	test.use({ viewport: COMPACT });
 
-	test("the navigation is a bar along the bottom with the four destinations", async ({ page }) => {
+	test("the navigation is a bar along the bottom with every destination", async ({ page }) => {
 		await openShell(page, homePath(first.id));
 
 		await expectBar(page);
 		await expectDestinations(page, first);
 		await expectContentClearOfNavigation(page);
 	});
+
+	test("every destination an owner is shown fits in the bar, whole", async ({ page }) => {
+		await openShell(page, homePath(last.id));
+
+		for (const link of await navigation(page).getByRole("link").all()) {
+			await expect(link).toBeInViewport({ ratio: 1 });
+		}
+	});
 });
 
 test.describe("in a window 1280px wide", () => {
 	test.use({ viewport: MEDIUM });
 
-	test("the navigation is a rail down the side with the same four destinations", async ({
+	test("the navigation is a rail down the side with the same destinations under their headings", async ({
 		page,
 	}) => {
 		await openShell(page, homePath(first.id));
@@ -123,6 +149,43 @@ test.describe("in a window 1280px wide", () => {
 		await expectRail(page);
 		await expectDestinations(page, first);
 		await expectContentClearOfNavigation(page);
+	});
+
+	test("nothing stands before the first heading: the timer's place is empty", async ({ page }) => {
+		await openShell(page, homePath(first.id));
+
+		const before = await navigation(page).evaluate((nav) => nav.firstElementChild?.localName);
+		expect(before).toBe("ul");
+	});
+
+	test("My account is in the band, beside the organisation's name", async ({ page }) => {
+		await openShell(page, homePath(first.id));
+		const account = page.getByRole("banner").getByRole("link", { name: "My account" });
+
+		await account.click();
+		await expect(page).toHaveURL(accountPath(homeOrganisation().slug));
+		await expect(page.getByRole("heading", { level: 1, name: "My account" })).toBeFocused();
+		await expect(account).toHaveAttribute("aria-current", "page");
+		await expect(navigation(page).locator('[aria-current="page"]')).toHaveCount(0);
+	});
+});
+
+test.describe("signed in as a member of the organisation", () => {
+	test.use({ storageState: SIGNED_IN_AS_MEMBER, viewport: MEDIUM });
+
+	test("the navigation shows Timesheet, Projects and Reports, each under its heading", async ({
+		page,
+	}) => {
+		await openShell(page, homePath(first.id));
+
+		await expect(navigation(page).getByRole("link")).toHaveText([
+			"Timesheet",
+			"Projects",
+			"Reports",
+		]);
+		for (const heading of HEADINGS) {
+			await expect(navigation(page).getByText(heading, { exact: true })).toBeVisible();
+		}
 	});
 });
 

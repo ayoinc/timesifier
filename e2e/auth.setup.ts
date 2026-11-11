@@ -7,17 +7,17 @@ import {
 	createOrganisation,
 	INVITATION_LINK,
 	invite,
-	openMembers,
+	openInvitations,
 	saveHomeOrganisation,
 } from "./organisation";
 
 // Runs once, before the Chromium tests. Everything under /app needs a session,
 // and the shell belongs to an organisation, so one person signs in through the
-// page here for the first time, creates an organisation and gives their name in
-// its Settings. Two more people follow, for the tests of an organisation's
+// page here for the first time, creates an organisation and gives their name on
+// its My account. Two more people follow, for the tests of an organisation's
 // pages that only look: one accepts an invitation to it, gives their name, and
 // creates an organisation of their own; the other leaves theirs unanswered, and
-// so has no Settings and no name. The three sessions and what the tests need to
+// so has no My account and no name. The three sessions and what the tests need to
 // know about the organisation are saved (./auth-state.ts, ./organisation.ts).
 //
 // No test may end one of these sessions or change this organisation: a test
@@ -58,7 +58,7 @@ setup(
 		await setName(page, owner.name);
 		await context.storageState({ path: SIGNED_IN });
 
-		await openMembers(page, home.slug);
+		await openInvitations(page, home.slug);
 		const forMember = await foundInMessageSentBy(
 			() => invite(page, member.email),
 			INVITATION_LINK,
@@ -73,8 +73,8 @@ setup(
 		const membersPage = await newBrowser(browser, baseURL);
 		await signInFor(membersPage, member.email, forMember, home.name);
 		await membersPage.getByRole("button", { name: "Join" }).click();
-		await expect(membersPage.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
-		// While this is their one organisation, its Settings is where `/app` leads.
+		await expect(membersPage.getByRole("heading", { level: 1, name: "Timesheet" })).toBeVisible();
+		// While this is their one organisation, its My account is where `setName` leads.
 		await setName(membersPage, member.name);
 		const membersOwn = await createOrganisation(membersPage);
 		await membersPage.context().storageState({ path: SIGNED_IN_AS_MEMBER });
