@@ -28,6 +28,10 @@ const SETUP = /auth\.setup\.ts/;
 // writes for another test, which then fails with a 500. They run after every
 // other Chromium test, one at a time.
 const SEEDS_THE_DATABASE = /[\\/](?:people|reports)\.spec\.ts$/;
+// Chromium on Linux draws a time field from its own interface language, not
+// the page's locale: with none set, as in the pipeline's image, it asks for AM
+// or PM. The product's people are in the UK and type times on a 24-hour clock.
+const IN_BRITISH_ENGLISH = { locale: "en-GB", launchOptions: { args: ["--lang=en-GB"] } };
 
 // What the server under test is given. None of it is a secret: the first signs
 // cookies for this run only, and the second is Cloudflare's published Turnstile
@@ -79,14 +83,14 @@ export default defineConfig({
 			name: "chromium",
 			testIgnore: [IOS_ONLY, SEEDS_THE_DATABASE],
 			dependencies: ["setup"],
-			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
+			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN, ...IN_BRITISH_ENGLISH },
 		},
 		{
 			name: "chromium-seeded",
 			testMatch: SEEDS_THE_DATABASE,
 			dependencies: ["chromium"],
 			workers: 1,
-			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
+			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN, ...IN_BRITISH_ENGLISH },
 		},
 		{
 			// React Aria locks page scrolling differently on iOS. Only the tests that

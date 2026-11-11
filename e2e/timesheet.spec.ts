@@ -18,9 +18,6 @@ const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
 
 test.use({ storageState: SIGNED_OUT });
-// Times are typed as a person in the UK types them, on a 24-hour clock: a
-// browser in another locale shows AM and PM, which the keystrokes do not fill.
-test.use({ locale: "en-GB" });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
 
 test.beforeEach(async ({ context, baseURL }) => {
