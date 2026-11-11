@@ -10,7 +10,7 @@
 		"build": "react-router build",
 		"dev": "react-router dev",
 		"typecheck": "wrangler types && react-router typegen && tsc -b",
-		"lint": "biome check .",
+		"lint": "biome check . && pnpm check:tokens",
 		"format": "biome check --write .",
 		"test": "vitest run",
 		"tokens": "node scripts/tokens.ts",
