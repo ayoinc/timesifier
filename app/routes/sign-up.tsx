@@ -1,4 +1,4 @@
-import { startTransition, useState } from "react";
+import { useState } from "react";
 
 import { PERSON_NAME_MAX } from "~/auth/person-name";
 import { Button } from "~/components/Button";
@@ -8,6 +8,7 @@ import { POLICY_ADDITION_HEADER, TURNSTILE_ADDITION } from "../../workers/securi
 import type { Route } from "./+types/sign-up";
 import {
 	AuthPage,
+	changeStep,
 	DoneMark,
 	type Notice,
 	NoticeLine,
@@ -52,8 +53,8 @@ export default function SignUp({ loaderData }: Route.ComponentProps) {
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 
-	// A change of step is a transition, so it moves (./auth/AuthPage.tsx).
-	const go = (to: Step) => startTransition(() => setStep(to));
+	// How a change of step moves, and when it does not: ./auth/AuthPage.tsx.
+	const go = (to: Step) => changeStep(() => setStep(to));
 	const enter = () => leaveFor(next);
 
 	return (
