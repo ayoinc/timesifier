@@ -33,6 +33,10 @@ Builder: an AI session on branch `ts-055-session`. The owner asked on 2026-11-11
 - [x] Every page and every page's data is sent with `Cache-Control: private, no-store` (same file).
 - [x] Going back through a tab's history after signing in never shows the home page; going back after signing out never shows the application (`e2e/auth-journeys.spec.ts`, "the home page and the session", Chromium and WebKit).
 
+### Timesheet slice · TS-012a, TS-013, TS-012b, TS-046, TS-051, TS-052
+
+Builder: an AI session on branch `ts-054-timesheet`. In review: its pull request. Timesheet's Day view (timer, entries, entries by hand), Week view (grid of projects by days, totals, Submit week, Withdraw), History, and the timer's control in the navigation, on the foundation of TS-053. The cards' criteria stay on the cards below; tests: `test/pages/timesheet.test.ts`, `test/timesheet/sheets.test.ts`, `test/db/timesheet-index.test.ts`, `e2e/timesheet.spec.ts`. Two departures from the card texts, both from `docs/navigation.md`: the views are `?view=week` and `?view=history` on Timesheet's own address, not `/week`; the person's zone is set on My account, not Settings. TS-012b uses the browser's own date and time inputs, which write no `style` attribute, so decision 28 is not needed for it. The browser tests seed the project in the database: the Projects page is TS-011a's. Not yet done: the owner's screenshots.
+
 ### TS-053 · Foundation for the heading features
 
 Builder: an AI session on branch `ts-053-foundation`. In review: the pull request against `main`. The owner asked on 2026-11-11 for every feature under the headings of `docs/navigation.md` to be built. The work runs in two waves: this card first, then four slices built side by side, each owning its own pages (Timesheet; Projects, Clients and Workspace settings; Teams, Team and Approvals; Reports and the CSV export). This card lays what the four share: the navigation by heading and role, one migration with every table they need, and the rules in `app/` that more than one of them reads. It builds no feature page.

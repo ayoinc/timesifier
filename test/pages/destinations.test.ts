@@ -88,9 +88,10 @@ function navigationOf(html: string): string {
 	return nav;
 }
 
-/** The labels of the links in a navigation, in order. */
+/** The labels of the destinations' links in a navigation, in order: what follows the timer's control. */
 function linksOf(nav: string): string[] {
-	return [...nav.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)].map(([, inner]) => textOf(inner ?? ""));
+	const list = nav.slice(nav.indexOf("<ul"));
+	return [...list.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/g)].map(([, inner]) => textOf(inner ?? ""));
 }
 
 /** A 404's body, with the organisation's address taken out. */
@@ -208,11 +209,20 @@ describe("a destination a person is not shown", () => {
 	});
 });
 
-describe("the navigation's place for the timer", () => {
-	it("is empty: nothing comes before the first heading", async () => {
-		const nav = navigationOf(await pageBody(await open(organisationPath(ACME), people.owner)));
-		expect(nav.trimStart()).toMatch(/^<ul\b/);
-	});
+describe("the navigation's timer control (TS-051)", () => {
+	it.each(Object.keys(SHOWN))(
+		"comes before the first heading for a %s, and with nothing running is Start timer, to the Day view's timer",
+		async (kind) => {
+			const nav = navigationOf(
+				await pageBody(await open(organisationPath(ACME), people[kind] as Person)),
+			);
+			const timer = nav.slice(0, nav.indexOf("<ul"));
+
+			expect(nav.indexOf("<ul")).toBeGreaterThan(0);
+			expect(timer).toMatch(/<a[^>]*href="\/app\/acme#timer"[^>]*>[\s\S]*Start timer[\s\S]*<\/a>/);
+			expect(textOf(timer)).toBe("Start timer");
+		},
+	);
 });
 
 describe("My account", () => {

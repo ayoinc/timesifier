@@ -15,9 +15,6 @@ import { dayOf } from "./calendar";
  * the server's clock; a time the browser claims is never used.
  */
 
-/** The longest description an entry takes (TS-012a). */
-export const ENTRY_DESCRIPTION_MAX_LENGTH = 500;
-
 /** The entry of `userId` that is running in the organisation, or null. */
 export async function runningEntry(scope: OrganisationScope, userId: string) {
 	const [entry] = await scope.timeEntries.select(
@@ -50,12 +47,12 @@ export type NotStarted = "no-project" | "locked";
 export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const { userId, projectId, description, zone, now } = start;
 	if (!(await findActiveProject(scope, projectId))) {
-		return { ok: false as const, reason: "no-project" satisfies NotStarted };
+		return { ok: false as const, reason: "no-project" as NotStarted };
 	}
 	const running = await runningEntry(scope, userId);
 	const days = [dayOf(now, zone), ...(running ? [dayOf(running.startedAt, zone)] : [])];
 	if ((await lockedDays(scope, userId, days)).size > 0) {
-		return { ok: false as const, reason: "locked" satisfies NotStarted };
+		return { ok: false as const, reason: "locked" as NotStarted };
 	}
 
 	const at = new Date(now);
