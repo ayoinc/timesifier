@@ -254,6 +254,10 @@ A body larger than 64 KiB is answered 413 and is not read past the limit; an act
 
 `test/action-validation.test.ts` finds every route that exports an `action` and fails until that route has a malformed request listed there that receives 400.
 
+### The colour-scheme cookie
+
+`__Host-color-scheme` holds the word `light` or `dark`, the scheme a person chose in Settings, with `Secure`, `SameSite=Lax`, `Path=/`, no `Domain` and a life of one year; it is not `HttpOnly` because it identifies nobody and grants nothing, so there is nothing for a script to steal. The server writes it only from the validated Settings form and renders from it only one of those two words: any other value is ignored (`app/shell/color-scheme.server.ts`, `test/color-scheme.test.ts`).
+
 ### What TS-008 must add for Turnstile
 
 Turnstile loads a script from Cloudflare and runs in a frame. On the pages that show the widget, the policy needs:
