@@ -20,7 +20,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
 				<Meta />
-				<Links />
+				{/* Stylesheets and preloads are allowed by 'self', so they carry no CSP
+				    nonce. An empty one keeps the server and client markup identical:
+				    the browser hides nonce values from the page, so hydration would
+				    otherwise see a difference. */}
+				<Links nonce="" />
 			</head>
 			<body>
 				{children}
