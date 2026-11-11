@@ -4,6 +4,7 @@ import { getSession } from "~/auth/auth.server";
 import { freshDatabase } from "../db/database";
 import {
 	captureEmail,
+	codeCookie,
 	countRows,
 	get,
 	type Mailbox,
@@ -138,8 +139,8 @@ describe("logs", () => {
 		{
 			table: "sessions",
 			holds: "the new session's token and the client's address",
-			ask: async () =>
-				post("/sign-in/email-otp", { email: EMAIL, otp: await mailbox.codeFor(EMAIL) }),
+			ask: async (browser: { cookie: string }) =>
+				post("/sign-in/email-otp", { email: EMAIL, otp: await mailbox.codeFor(EMAIL) }, browser),
 			path: "/sign-in/email-otp",
 		},
 		{
@@ -151,13 +152,13 @@ describe("logs", () => {
 	])(
 		"when a statement on $table fails, which holds $holds, the answer is a plain 500 and the log has the error's name and the path alone",
 		async ({ table, ask, path }) => {
-			await requestCode(EMAIL);
+			const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 			await mailbox.codeFor(EMAIL);
 			await env.DB.exec(`drop table ${table}`);
 
 			let response: Response | undefined;
 			const lines = await logLinesDuring(async () => {
-				response = await ask();
+				response = await ask(browser);
 			});
 
 			expect(lines.join("\n")).toMatch(new RegExp(`^auth: \\w+ at ${path}$`));

@@ -4,6 +4,7 @@ import { SIGN_IN_CODE_LENGTH } from "~/auth/code";
 import { freshDatabase } from "../db/database";
 import {
 	captureEmail,
+	codeCookie,
 	countRows,
 	type Mailbox,
 	post,
@@ -31,13 +32,15 @@ afterEach(() => {
 
 describe("signing in with a code sent by email", () => {
 	it("creates one user with a verified address and signs them in, the first time", async () => {
-		expect((await requestCode(EMAIL)).status).toBe(200);
+		const asked = await requestCode(EMAIL);
+		expect(asked.status).toBe(200);
 		expect(await countRows("users"), "asking for a code creates no account").toBe(0);
 
-		const response = await post("/sign-in/email-otp", {
-			email: EMAIL,
-			otp: await mailbox.codeFor(EMAIL),
-		});
+		const response = await post(
+			"/sign-in/email-otp",
+			{ email: EMAIL, otp: await mailbox.codeFor(EMAIL) },
+			{ cookie: codeCookie(asked) },
+		);
 
 		expect(response.status).toBe(200);
 		expect(await countRows("users")).toBe(1);
@@ -58,11 +61,11 @@ describe("signing in with a code sent by email", () => {
 	});
 
 	it("refuses a wrong code and creates no user and no session", async () => {
-		await requestCode(EMAIL);
+		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const right = await mailbox.codeFor(EMAIL);
 		const wrong = wrongCode(right);
 
-		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: wrong });
+		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: wrong }, browser);
 
 		expect(response.status).toBe(400);
 		expect(response.headers.getSetCookie()).toEqual([]);
@@ -71,15 +74,15 @@ describe("signing in with a code sent by email", () => {
 	});
 
 	it("stops accepting a code after three wrong attempts, even the right one", async () => {
-		await requestCode(EMAIL);
+		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const right = await mailbox.codeFor(EMAIL);
 		const wrong = wrongCode(right);
 
 		for (let attempt = 1; attempt <= 3; attempt++) {
-			const refused = await post("/sign-in/email-otp", { email: EMAIL, otp: wrong });
+			const refused = await post("/sign-in/email-otp", { email: EMAIL, otp: wrong }, browser);
 			expect(refused.status, `wrong attempt ${attempt}`).toBe(400);
 		}
-		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: right });
+		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: right }, browser);
 
 		expect(response.status).toBe(403);
 		expect(response.headers.getSetCookie()).toEqual([]);
@@ -88,11 +91,11 @@ describe("signing in with a code sent by email", () => {
 
 	it("refuses a code that is more than five minutes old", async () => {
 		vi.useFakeTimers({ toFake: ["Date"] });
-		await requestCode(EMAIL);
+		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const code = await mailbox.codeFor(EMAIL);
 
 		vi.setSystemTime(Date.now() + 5 * 60_000 + 1000);
-		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: code });
+		const response = await post("/sign-in/email-otp", { email: EMAIL, otp: code }, browser);
 
 		expect(response.status).toBe(400);
 		expect(response.headers.getSetCookie()).toEqual([]);
@@ -100,11 +103,12 @@ describe("signing in with a code sent by email", () => {
 	});
 
 	it("accepts a code once", async () => {
-		await requestCode(EMAIL);
+		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const code = await mailbox.codeFor(EMAIL);
-		expect((await post("/sign-in/email-otp", { email: EMAIL, otp: code })).status).toBe(200);
+		const signInWith = () => post("/sign-in/email-otp", { email: EMAIL, otp: code }, browser);
+		expect((await signInWith()).status).toBe(200);
 
-		const again = await post("/sign-in/email-otp", { email: EMAIL, otp: code });
+		const again = await signInWith();
 
 		expect(again.status).toBe(400);
 		expect(await countRows("sessions")).toBe(1);
@@ -112,13 +116,16 @@ describe("signing in with a code sent by email", () => {
 
 	it("answers a request for a code the same way whether or not the address has an account", async () => {
 		await signIn(mailbox, EMAIL);
+		// The cookie's value is made from the address. Everything around it is compared.
+		const cookiesOf = (response: Response) =>
+			response.headers.getSetCookie().map((cookie) => cookie.replace(/=[^;]*/, "="));
 
 		const known = await requestCode(EMAIL);
 		const unknown = await requestCode("nobody@example.com");
 
 		expect(unknown.status).toBe(known.status);
 		expect(await unknown.text()).toBe(await known.text());
-		expect(unknown.headers.getSetCookie()).toEqual(known.headers.getSetCookie());
+		expect(cookiesOf(unknown)).toEqual(cookiesOf(known));
 		expect(await mailbox.codeFor("nobody@example.com")).toMatch(/^\d{8}$/);
 	});
 
@@ -232,6 +239,108 @@ describe("the codes one address can be sent", () => {
 	});
 });
 
+describe("a code is used in the browser that asked for it", () => {
+	const guess = (otp: string, cookie?: string) =>
+		post("/sign-in/email-otp", { email: EMAIL, otp }, { cookie });
+
+	it("answers a request for a code with a cookie that script cannot read, for this host alone, lasting as long as the code, with no address in it", async () => {
+		const response = await requestCode(EMAIL);
+
+		const cookies = response.headers.getSetCookie();
+		expect(cookies).toHaveLength(1);
+		const [nameAndValue = "", ...attributes] = (cookies[0] ?? "").split("; ");
+		expect(nameAndValue).toMatch(/^__Host-timesifier\.sign_in_code=\d+\.[0-9a-f]{64}$/);
+		expect(attributes.sort()).toEqual([
+			"HttpOnly",
+			"Max-Age=300",
+			"Path=/",
+			"SameSite=Lax",
+			"Secure",
+		]);
+		expect(decodeURIComponent(nameAndValue)).not.toMatch(/ada|example/i);
+	});
+
+	it("refuses a stranger's guesses with the answer a wrong code gets, and they use up none of the three attempts", async () => {
+		const browser = codeCookie(await requestCode(EMAIL));
+		const right = await mailbox.codeFor(EMAIL);
+		const wrong = wrongCode(right);
+		const wrongInTheBrowserThatAsked = await guess(wrong, browser);
+
+		// Five more than a code allows, from somebody elsewhere who knows only the address.
+		const elsewhere = { client: "203.0.113.66" };
+		const fromAStranger = [];
+		for (let n = 0; n < 8; n++) {
+			fromAStranger.push(await post("/sign-in/email-otp", { email: EMAIL, otp: wrong }, elsewhere));
+		}
+		const rightFromAStranger = await post(
+			"/sign-in/email-otp",
+			{ email: EMAIL, otp: right },
+			elsewhere,
+		);
+		const rightInTheBrowserThatAsked = await guess(right, browser);
+
+		const answer = await wrongInTheBrowserThatAsked.text();
+		expect(wrongInTheBrowserThatAsked.status).toBe(400);
+		for (const refused of [...fromAStranger, rightFromAStranger]) {
+			expect(refused.status).toBe(400);
+			expect(await refused.text()).toBe(answer);
+			expect(refused.headers.getSetCookie()).toEqual([]);
+		}
+		expect(rightInTheBrowserThatAsked.status).toBe(200);
+		expect(await countRows("sessions")).toBe(1);
+	});
+
+	it("refuses the cookie of a browser that asked for a code for another address", async () => {
+		const victim = codeCookie(await requestCode(EMAIL));
+		const right = await mailbox.codeFor(EMAIL);
+		const attacker = codeCookie(
+			await requestCode("mallory@example.com", { client: "203.0.113.66" }),
+		);
+
+		const withTheirOwnCookie = [];
+		for (let n = 0; n < 4; n++)
+			withTheirOwnCookie.push((await guess(wrongCode(right), attacker)).status);
+		const stolenCode = await guess(right, attacker);
+
+		expect([...withTheirOwnCookie, stolenCode.status]).toEqual([400, 400, 400, 400, 400]);
+		expect((await guess(right, victim)).status).toBe(200);
+	});
+
+	it.each([
+		[
+			"a later expiry written into it",
+			(value: string) => value.replace(/^\d+/, (expiry) => `${Number(expiry) + 3600}`),
+		],
+		["another hash", (value: string) => value.replace(/[0-9a-f]{64}$/, "0".repeat(64))],
+		["no hash", (value: string) => value.replace(/\..*$/, "")],
+		["nothing in it", () => ""],
+	])("refuses a cookie with %s, even with the right code", async (_name, change) => {
+		const browser = codeCookie(await requestCode(EMAIL));
+		const right = await mailbox.codeFor(EMAIL);
+		const [name = "", value = ""] = browser.split("=");
+
+		const forged = await guess(right, `${name}=${change(value)}`);
+
+		expect(forged.status).toBe(400);
+		expect((await guess(right, browser)).status).toBe(200);
+	});
+
+	it("stops accepting the cookie when the code's five minutes are over", async () => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		const early = codeCookie(await requestCode(EMAIL));
+		await mailbox.codeFor(EMAIL);
+		vi.setSystemTime(Date.now() + 5 * 60_000 + 1000);
+		// A new code for the address, asked for elsewhere: the old cookie must not open it.
+		await requestCode(EMAIL, { client: "203.0.113.66" });
+		await vi.waitFor(() => expect(mailbox.sent()).toHaveLength(2));
+
+		const response = await guess(await mailbox.codeFor(EMAIL), early);
+
+		expect(response.status).toBe(400);
+		expect(await countRows("sessions")).toBe(0);
+	});
+});
+
 describe("what is not offered", () => {
 	it("has no password sign-up or sign-in", async () => {
 		const credentials = { email: EMAIL, password: "correct horse battery staple", name: "Ada" };
@@ -280,10 +389,10 @@ describe("what is not offered", () => {
 		["a name", { name: "A name of a stranger's choosing" }],
 		["an image", { image: "https://elsewhere.example/tracker.png" }],
 	])("takes %s from nobody, not even for a new account", async (_name, extra) => {
-		await requestCode(EMAIL);
+		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const otp = await mailbox.codeFor(EMAIL);
 
-		const response = await post("/sign-in/email-otp", { email: EMAIL, otp, ...extra });
+		const response = await post("/sign-in/email-otp", { email: EMAIL, otp, ...extra }, browser);
 
 		expect(response.status).toBe(400);
 		expect(await countRows("users")).toBe(0);

@@ -12,21 +12,42 @@
  */
 const encoder = new TextEncoder();
 
-/** The keyed hash of `value` for `purpose`, as 64 hexadecimal characters. */
-export async function keyedHash(secret: string, purpose: string, value: string): Promise<string> {
-	const key = await crypto.subtle.importKey(
+function hmacKey(secret: string): Promise<CryptoKey> {
+	return crypto.subtle.importKey(
 		"raw",
 		encoder.encode(secret),
 		{ name: "HMAC", hash: "SHA-256" },
 		false,
-		["sign"],
+		["sign", "verify"],
 	);
-	const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(`${purpose}\n${value}`));
+}
+
+/** The keyed hash of `value` for `purpose`, as 64 hexadecimal characters. */
+export async function keyedHash(secret: string, purpose: string, value: string): Promise<string> {
+	const mac = await crypto.subtle.sign(
+		"HMAC",
+		await hmacKey(secret),
+		encoder.encode(`${purpose}\n${value}`),
+	);
 	return Array.from(new Uint8Array(mac), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Whether two hashes are the same, in a time that does not depend on where they differ. */
-export function sameHash(one: string, other: string): boolean {
-	const [a, b] = [encoder.encode(one), encoder.encode(other)];
-	return a.byteLength === b.byteLength && crypto.subtle.timingSafeEqual(a, b);
+/**
+ * Whether `hash` is the keyed hash of `value` for `purpose`. The comparison is
+ * the platform's, which takes the same time wherever the two differ.
+ */
+export async function isKeyedHash(
+	secret: string,
+	purpose: string,
+	value: string,
+	hash: string,
+): Promise<boolean> {
+	if (!/^[0-9a-f]{64}$/.test(hash)) return false;
+	const bytes = Uint8Array.from(hash.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));
+	return crypto.subtle.verify(
+		"HMAC",
+		await hmacKey(secret),
+		bytes,
+		encoder.encode(`${purpose}\n${value}`),
+	);
 }

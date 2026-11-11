@@ -17,6 +17,8 @@ export const TURNSTILE_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
 export const TURNSTILE_SECRET_THAT_FAILS = "2x0000000000000000000000000000000AA";
 
 export const SESSION_COOKIE = "__Host-timesifier.session_token";
+/** Proves that a browser asked for a code for an address (app/auth/sign-in-code.server.ts). */
+export const CODE_COOKIE = "__Host-timesifier.sign_in_code";
 
 /** A sign-in code where it stands alone in a message. */
 const CODE = new RegExp(`\\b\\d{${SIGN_IN_CODE_LENGTH}}\\b`);
@@ -118,13 +120,23 @@ export function captureEmail(): Mailbox {
 	};
 }
 
+function cookieNamed(name: string, response: Response): string {
+	const cookie = response.headers.getSetCookie().find((header) => header.startsWith(`${name}=`));
+	if (!cookie) throw new Error(`the response set no ${name} cookie`);
+	return cookie.slice(0, cookie.indexOf(";"));
+}
+
 /** The `name=value` of the session cookie a response sets, ready for a `Cookie` header. */
 export function sessionCookie(response: Response): string {
-	const cookie = response.headers
-		.getSetCookie()
-		.find((header) => header.startsWith(`${SESSION_COOKIE}=`));
-	if (!cookie) throw new Error("the response set no session cookie");
-	return cookie.slice(0, cookie.indexOf(";"));
+	return cookieNamed(SESSION_COOKIE, response);
+}
+
+/**
+ * The `name=value` of the cookie that the answer to a request for a code sets:
+ * what the browser that asked sends back with the code.
+ */
+export function codeCookie(response: Response): string {
+	return cookieNamed(CODE_COOKIE, response);
 }
 
 const SignedIn = z.object({ user: z.object({ id: z.string(), email: z.string() }) });
@@ -140,11 +152,12 @@ let journeys = 0;
  */
 export async function signIn(mailbox: Mailbox, email: string, options: RequestOptions = {}) {
 	const from = { ...options, client: options.client ?? `198.51.100.${(journeys++ % 250) + 1}` };
-	expect((await requestCode(email, from)).status).toBe(200);
+	const asked = await requestCode(email, from);
+	expect(asked.status).toBe(200);
 	const response = await post(
 		"/sign-in/email-otp",
 		{ email, otp: await mailbox.codeFor(email) },
-		from,
+		{ ...from, cookie: codeCookie(asked) },
 	);
 	expect(response.status).toBe(200);
 	const { user } = SignedIn.parse(await response.clone().json());
