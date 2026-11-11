@@ -8,8 +8,10 @@ import { fileURLToPath } from "node:url";
 
 const repository = fileURLToPath(new URL("..", import.meta.url));
 
-/** The generated token file is the one place raw values belong. */
-const EXEMPT = join(repository, "app/styles/tokens.css");
+/** The files `pnpm tokens` generates are the one place raw values belong. */
+const EXEMPT = new Set(
+	["app/styles/tokens.css", "app/styles/theme-colour.ts"].map((file) => join(repository, file)),
+);
 
 const SCANNED = /\.(?:tsx?|jsx?|mjs|cjs|css|html|svg|mdx?|json)$/;
 
@@ -58,7 +60,7 @@ function filesUnder(directory: string): string[] {
 		.flatMap((entry) => {
 			const path = join(directory, entry.name);
 			if (entry.isDirectory()) return filesUnder(path);
-			return SCANNED.test(entry.name) && path !== EXEMPT ? [path] : [];
+			return SCANNED.test(entry.name) && !EXEMPT.has(path) ? [path] : [];
 		});
 }
 

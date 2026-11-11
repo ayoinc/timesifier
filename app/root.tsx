@@ -16,20 +16,31 @@ import condensedFont from "./fonts/sofia-sans-condensed-latin-wght-normal.woff2?
 import plainFont from "./fonts/sofia-sans-latin-wght-normal.woff2?url";
 import { readColorScheme } from "./shell/color-scheme.server";
 import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
+import { THEME_COLOUR } from "./styles/theme-colour";
 
 // Fonts are self-hosted: app.css imports the font files through styles/tokens.css,
 // so nothing in our own markup asks another origin for anything. The two files
 // every page in English uses are asked for at once, with the stylesheet: the
 // first words are drawn in their own typeface and do not change shape a moment
 // later. A font is always fetched without credentials, hence `crossOrigin`.
-export const links: Route.LinksFunction = () =>
-	[condensedFont, plainFont].map((href) => ({
+//
+// The icons are the product's mark on its charcoal tile, as files in public/
+// (`pnpm icons` draws them): an SVG for browsers that take one, the .ico for
+// those that ask for /favicon.ico, the touch icon for a home screen, and the
+// manifest for the two sizes an installed page is shown with.
+export const links: Route.LinksFunction = () => [
+	...[condensedFont, plainFont].map((href) => ({
 		rel: "preload",
 		as: "font",
 		type: "font/woff2",
 		href,
-		crossOrigin: "anonymous",
-	}));
+		crossOrigin: "anonymous" as const,
+	})),
+	{ rel: "icon", href: "/favicon.ico", sizes: "48x48" },
+	{ rel: "icon", href: "/favicon.svg", type: "image/svg+xml", sizes: "any" },
+	{ rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+	{ rel: "manifest", href: "/site.webmanifest" },
+];
 
 /**
  * What the server works out from the request for every page: the colour scheme
@@ -66,6 +77,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 			<head>
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
+				{/* The browser's own frame takes the colour of the band at the top: the
+				    scheme the person chose here, or else the one their device is in. */}
+				{(data?.colorScheme ? [data.colorScheme] : (["light", "dark"] as const)).map((scheme) => (
+					<meta
+						key={scheme}
+						name="theme-color"
+						content={THEME_COLOUR[scheme]}
+						media={data?.colorScheme ? undefined : `(prefers-color-scheme: ${scheme})`}
+					/>
+				))}
 				<Meta />
 				{/* Stylesheets and preloads are allowed by 'self', so they carry no CSP
 				    nonce. An empty one keeps the server and client markup identical:

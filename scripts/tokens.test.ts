@@ -6,8 +6,13 @@ import { describe, expect, it } from "vitest";
 const repository = fileURLToPath(new URL("..", import.meta.url));
 const committed = readFileSync(new URL("../app/styles/tokens.css", import.meta.url), "utf8");
 
-function generate(): string {
-	return execFileSync(process.execPath, ["scripts/tokens.ts", "--print"], {
+const committedThemeColour = readFileSync(
+	new URL("../app/styles/theme-colour.ts", import.meta.url),
+	"utf8",
+);
+
+function generate(flag = "--print"): string {
+	return execFileSync(process.execPath, ["scripts/tokens.ts", flag], {
 		cwd: repository,
 		encoding: "utf8",
 	});
@@ -19,6 +24,17 @@ describe("pnpm tokens", () => {
 
 		expect(generate()).toBe(first);
 		expect(committed).toBe(first);
+	});
+
+	it("writes the colour a browser paints its own frame in from the same roles", () => {
+		const themeColour = generate("--print-theme-colour");
+
+		expect(committedThemeColour).toBe(themeColour);
+		const sheet = /--md-sys-color-sheet: light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\);/.exec(
+			committed,
+		);
+		expect(sheet).not.toBeNull();
+		expect(themeColour).toContain(`light: "${sheet?.[1]}", dark: "${sheet?.[2]}"`);
 	});
 });
 
