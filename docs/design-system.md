@@ -214,3 +214,5 @@ Settings offers System, Light and Dark as one radio group. Light and Dark are st
 ### Locale
 
 The root loader chooses a locale from `Accept-Language` (`app/shell/locale.ts`; `en-GB` when the request names none the server can format) and `app/root.tsx` gives it to React Aria's `I18nProvider`. Dates and numbers are therefore formatted the same way on the server and in the browser. The interface text is English and `<html lang="en">` does not change.
+
+A right-to-left language is passed over for the next one in the header. React Aria takes the direction of its arrow keys from the locale, and the interface is not mirrored; when a translated, mirrored interface arrives, this rule goes and `html` gets its `dir`.

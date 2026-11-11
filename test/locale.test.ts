@@ -36,14 +36,20 @@ describe("the locale negotiated from Accept-Language", () => {
 		expect(negotiateLocale("tlh-KX;q=1.0")).toBe("en-GB");
 	});
 
+	it("passes over a right-to-left language: the interface is English and is not mirrored", () => {
+		expect(negotiateLocale("ar-EG, fr-FR;q=0.8")).toBe("fr-FR");
+		expect(negotiateLocale("he-IL")).toBe("en-GB");
+		expect(negotiateLocale("fa, ur;q=0.9")).toBe("en-GB");
+	});
+
 	it("formats a date the way the chosen locale writes it", () => {
-		const date = new Date(Date.UTC(2026, 10, 11));
+		const date = new Date(Date.UTC(2026, 10, 2));
 		const format = (header: string | null) =>
 			new Intl.DateTimeFormat(negotiateLocale(header), { timeZone: "UTC" }).format(date);
 
-		expect(format(null)).toBe("11/11/2026");
-		expect(format("en-US")).toBe("11/11/2026");
-		expect(format("de-DE")).toBe("11.11.2026");
+		expect(format(null)).toBe("02/11/2026");
+		expect(format("en-US")).toBe("11/2/2026");
+		expect(format("de-DE")).toBe("2.11.2026");
 	});
 });
 
