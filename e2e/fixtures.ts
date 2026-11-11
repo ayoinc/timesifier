@@ -41,7 +41,15 @@ export const test = base.extend<{
 	refusals: [{}, { option: true }],
 	chosenScheme: [undefined, { option: true }],
 	schemeCookie: [
-		async ({ context, baseURL, chosenScheme }, use) => {
+		async ({ context, baseURL, chosenScheme, browserName }, use, testInfo) => {
+			// A choice lives in a `__Host-` cookie, which must be `Secure`, and WebKit on
+			// Linux keeps no `Secure` cookie for http://localhost: a test of a chosen
+			// scheme other than the default, light, runs in Chromium only, as the signed-in
+			// tests do for the same reason.
+			testInfo.skip(
+				chosenScheme !== undefined && chosenScheme !== "light" && browserName === "webkit",
+				"WebKit keeps no Secure cookie on http://localhost",
+			);
 			if (chosenScheme) {
 				// By host and path, as a saved session's cookies are given back: a
 				// `__Host-` cookie named by an http address is refused.
