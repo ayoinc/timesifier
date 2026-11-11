@@ -20,8 +20,7 @@ jobs:
   checks:
     name: checks
     runs-on: ubuntu-24.04
-    # The browser tests take most of it: about 190 tests in two engines.
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,13 +35,64 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
-      # Browser tests make their own build, which includes the component gallery,
-      # and delete it when they end. The deploy job builds for itself.
+      - name: Dependency audit
+        run: pnpm audit --audit-level=moderate
+
+  # A job of its own, so that it runs beside `checks` and a slow or flaky browser
+  # run is told apart from a failed check at a glance.
+  browser-tests:
+    name: browser tests
+    runs-on: ubuntu-24.04
+    # About 190 tests in two engines.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The browser tests make their own build, which includes the component
+      # gallery, and delete it when they end.
       - name: Install the browsers the tests use
         run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm test:e2e
-      - name: Dependency audit
-        run: pnpm audit --audit-level=moderate
+
+  # Migrations reach the database before the new code is live, so a migration
+  # that removes or renames something breaks the code still running. Such a
+  # migration ships alone, after a release that no longer uses what it removes:
+  # its pull request may change `migrations/` and `app/db/schema.ts` only.
+  migration-check:
+    name: migration check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: A migration that drops or renames ships alone
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          added=$(git diff --name-only --diff-filter=A "$BASE...HEAD" -- 'migrations/*.sql')
+          [ -n "$added" ] || { echo "No new migration."; exit 0; }
+          # shellcheck disable=SC2086 # the names of migrations hold no spaces
+          destructive=$(grep -l -i -w -E 'DROP|RENAME' $added || true)
+          [ -n "$destructive" ] || { echo "No new migration drops or renames."; exit 0; }
+          others=$(git diff --name-only "$BASE...HEAD" | grep -v -E '^(migrations/|app/db/schema\.ts$)' || true)
+          [ -z "$others" ] || {
+            echo "These migrations drop or rename:"
+            echo "$destructive"
+            echo "So this pull request may change only migrations/ and app/db/schema.ts. It also changes:"
+            echo "$others"
+            exit 1
+          }
+          echo "A migration drops or renames, and the pull request changes nothing else."
 
   secrets:
     name: secret scan
@@ -65,7 +115,7 @@ jobs:
   preview:
     name: preview
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: [checks, secrets]
+    needs: [checks, browser-tests, secrets, migration-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -131,7 +181,7 @@ jobs:
   deploy:
     name: deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [checks, secrets]
+    needs: [checks, browser-tests, secrets]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

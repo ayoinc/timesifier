@@ -51,10 +51,10 @@ These need clients that run outside the browser or agreements with other vendors
 
 ## What success looks like for release 1
 
-- A new person signs up, starts a timer and sees it in the week view in under two minutes, with no instructions.
-- Report totals always equal the sum of the entries behind them.
-- A person in one organisation can never see another organisation's data.
-- Every page is usable by keyboard and screen reader (WCAG 2.2 AA).
-- The owner can export or delete all of their data without contacting anyone.
+Each measure is enforced by acceptance criteria on a card in `BOARD.md`. The card is named beside it.
 
-Each of these is enforced by acceptance criteria on the cards in `BOARD.md`.
+- A new person signs up, starts a timer and sees it in the week view in under two minutes, with no instructions. TS-013: one browser test does the sign-up, the three set-up steps (an organisation, a project, a timer) and the week view inside a limit of 120 seconds. The test proves the steps are few and quick; that they need no instructions is judged by the owner when accepting each screen.
+- Report totals always equal the sum of the entries behind them. TS-013 for the day and the week, TS-014a for reports: a property test on each.
+- A person in one organisation can never see another organisation's data. TS-007 for the data layer, TS-009 for the pages, and one criterion on every feature card after it.
+- Every page is usable by keyboard and screen reader (WCAG 2.2 AA). A criterion on every card that builds a page, and TS-023 for the whole.
+- A person can export or delete all of their data without contacting anyone. TS-021a for deletion, TS-021b for the export.

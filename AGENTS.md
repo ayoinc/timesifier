@@ -1,13 +1,10 @@
 # Timesifier
 
-A productivity and time platform on Cloudflare Workers. The documents and the board are the source of truth; the application code starts with card TS-001.
+A productivity and time platform on Cloudflare Workers. The documents and the board are the source of truth.
 
 ## How work flows
 
-1. Take the top card in **Ready** in `BOARD.md`. Each worker has one card in progress at a time; `docs/ways-of-working.md` says how cards run in parallel.
-2. Work on a branch named after the card, for example `ts-012-timer`.
-3. A card is done when every acceptance criterion is ticked with its evidence (a command and its result, a test name, or a URL) and the Definition of Done in `docs/ways-of-working.md` holds.
-4. Move the card and date it in the same pull request.
+`docs/ways-of-working.md` holds the one procedure: the roles, how a card moves, and the Definition of Done. Read "Roles" first; it says which cards an assistant does not build ahead.
 
 ## Read before you act
 
@@ -16,11 +13,12 @@ A productivity and time platform on Cloudflare Workers. The documents and the bo
 - Touching sign-in, sessions, customer data, secrets, headers, AI prompts or dependencies: `docs/security.md`
 - Unsure what a feature is for: `docs/product.md`
 - About to choose a library or pattern: `docs/decisions.md`. Settled choices stay settled; a new choice gets a new entry.
+- Writing a route, a loader or an action: the React Router skill in `.agents/skills/react-router`
 
 ## Rules no config file states
 
 - Every runtime service is a Cloudflare product.
-- Customer data is reached through the organisation-scoped data layer.
+- Customer data is reached through the organisation-scoped data layer: `organisationScope` in `app/db/`.
 - Components take colour, size and motion from design tokens.
 - Secrets live in `.dev.vars` locally and in Wrangler secrets when deployed.
 - Nothing that belongs to one deployment is committed: no domain, database id, key or address. The Worker reads it from a variable, the pipeline from a repository variable, and `docs/security.md`, "Secrets", lists each one. A value that is missing fails the request or the deploy; it never has a default.
