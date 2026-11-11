@@ -67,7 +67,7 @@ One D1 database, every tenant row carrying an organisation id, gives simple repo
 
 Runs inside the Worker and keeps identities in our own D1 database. Supports email, passkeys, two-factor, organisations and roles. Cloudflare Access is built for a company's own workforce, not public sign-up. A hosted identity service would leave the Cloudflare stack. Hand-written authentication carries the most risk.
 
-TS-008 confirmed the rest on 2026-11-11 against Better Auth's documentation for 1.7 and by running `better-auth` 1.7.20 and `@better-auth/passkey` 1.7.20, both pinned to that exact version.
+TS-008 confirmed the rest on 2026-11-11 against Better Auth's documentation for 1.7 and by running `better-auth` 1.7.19 and `@better-auth/passkey` 1.7.19, both pinned to that exact version. 1.7.20 was a day newer; it was published less than 24 hours before, which pnpm's release-age rule refuses, so the build uses 1.7.19 rather than make an exception to the rule. The tests pass on both.
 
 **The route to D1.** The documentation gives two (<https://better-auth.com/docs/concepts/database>, "Example: Cloudflare D1"): hand the `DB` binding to Better Auth, which then uses its built-in Kysely adapter and creates its own tables through a migration endpoint; or use the Drizzle or Prisma adapter and migrate with that tool. We use the Drizzle adapter (<https://better-auth.com/docs/adapters/drizzle>) over the `drizzle-orm/d1` client the application already has.
 
@@ -84,7 +84,7 @@ What was run: every auth test drives the Worker's real fetch handler in the Work
 
 **Passkeys.** The plugin's default journey: prove the address with a code, then add a passkey while signed in. Every account therefore has a verified address to fall back on. The relying party id is the host of the request, which is only ever one of our own hosts.
 
-**The `__Host-` cookie.** 1.7.20 has no option for it; the request is open upstream as <https://github.com/better-auth/better-auth/issues/10806>. What each configuration sent on 2026-11-11, read from the `Set-Cookie` header in a test:
+**The `__Host-` cookie.** 1.7.19 and 1.7.20 have no option for it; the request is open upstream as <https://github.com/better-auth/better-auth/issues/10806>. What each configuration sent on 2026-11-11, read from the `Set-Cookie` header in a test:
 
 | Configuration under `advanced`                                                             | Session cookie sent                                                                         |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |

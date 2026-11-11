@@ -94,7 +94,7 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 			database: { generateId: () => uuidv7(), validateSchema: true },
 			// The `__Host-` cookie that docs/security.md requires: `Secure`, `Path=/`
 			// and no `Domain`, so a browser accepts it from this host alone. Better
-			// Auth 1.7.20 has no option for it. `useSecureCookies: true` would put
+			// Auth 1.7 has no option for it. `useSecureCookies: true` would put
 			// `__Secure-` in front of whatever name is chosen, so it is off, the prefix
 			// carries `__Host-`, and the attributes that prefix needs are set by hand.
 			// See docs/decisions.md entry 8.

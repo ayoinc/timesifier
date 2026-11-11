@@ -75,7 +75,10 @@ describe("schema built from the committed migrations", () => {
 			expect(row, table).toMatchObject({ created_type: "integer", updated_type: "integer" });
 			expect(row?.created_at, table).toBeGreaterThanOrEqual(before);
 			expect(row?.created_at, table).toBeLessThanOrEqual(after);
-			expect(row?.updated_at, table).toBe(row?.created_at);
+			// Each column's default reads the clock itself, so on a new row the two
+			// can be a millisecond apart; updated_at is never the earlier one.
+			expect(row?.updated_at, table).toBeGreaterThanOrEqual(row?.created_at ?? Number.NaN);
+			expect(row?.updated_at, table).toBeLessThanOrEqual(after);
 		}
 	});
 
