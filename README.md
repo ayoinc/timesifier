@@ -31,7 +31,7 @@ pnpm dev          # the local address is printed; the app runs in the Workers ru
 Before opening a pull request:
 
 ```sh
-pnpm typecheck && pnpm lint && pnpm test && pnpm build
+pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm test:e2e
 ```
 
 `pnpm format` fixes formatting and import order. Local secrets go in `.dev.vars`; see `.dev.vars.example` and `docs/security.md`.

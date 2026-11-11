@@ -24,6 +24,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 16  | Seed and typeface   | Seed colour `#4F5BD5`; Roboto Flex, self-hosted                                          | Preparer, for the owner to confirm |
 | 17  | Ids and timestamps  | UUID version 7 text ids; integer timestamps in milliseconds since the Unix epoch         | Preparer                           |
 | 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
+| 19  | Motion library      | Not added yet: components animate with CSS transitions on the motion tokens (amends 10)  | Preparer                           |
 
 ## Evidence
 
@@ -188,6 +189,14 @@ Decided while building TS-010.
 | A token in every form         | Works without trusting headers. Needs a session before the first form, a hidden field in every form and a check in every action; one forgotten check is a hole.                                     |
 
 A request with neither header does not come from a browser, and forgery needs a browser that holds the person's session. Session cookies are `SameSite=Lax` (TS-008) as a second layer. The consequence: a `GET` must never change state.
+
+### 19. The Motion library is not added yet
+
+Decided while building TS-005. It amends entry 10, which named the Motion library for springs and interruptible animation.
+
+The twelve components animate with CSS transitions that read the motion tokens, including the spring, which `pnpm tokens` emits as a CSS `linear()` easing. A CSS transition can be interrupted and reversed part-way, which is what design rule 8 asks for, and it runs under the Content Security Policy as shipped. Adding a library the platform can do without would break the dependency rule in `docs/security.md`.
+
+Motion comes in with the first feature that needs what CSS cannot do: movement driven by a gesture, a spring that carries the velocity of an interrupted movement, or layout animation between two arrangements. The card that adds it says which. Route changes still use the View Transitions API, as entry 10 says.
 
 ## To verify when the code is scaffolded
 
