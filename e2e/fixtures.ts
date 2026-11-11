@@ -56,4 +56,19 @@ export async function openGallery(page: Page, path = "/design") {
 	await expect(page.locator("#react-aria-pressable-style")).toBeAttached();
 }
 
+/**
+ * Opens a page of the application shell and waits until React has taken over
+ * the page. Before that a press on a destination is an ordinary link: the
+ * browser loads the page whole, with no transition and no move of the focus.
+ * The sign is the record React keeps on each element it has hydrated; nothing a
+ * person can see changes at that moment.
+ */
+export async function openShell(page: Page, path: string) {
+	await page.goto(path);
+	await page.waitForFunction(() => {
+		const link = document.querySelector("nav a");
+		return link !== null && Object.keys(link).some((key) => key.startsWith("__reactFiber"));
+	});
+}
+
 export { expect };
