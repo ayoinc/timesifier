@@ -286,7 +286,7 @@ Moved out of this card: "an entry can be added from the keyboard alone" is on TS
 
 In priority order. Before a feature card enters Ready it gains "Routes", "Tables" and "Who may" sections like the three cards above, and the criterion that every new route joins the cross-organisation 404 test of TS-009.
 
-The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11, rearranged the same day after a check against Harvest). Cards TS-045 to TS-050 come from it; each gets routes, tables, a role table and a goldfish review when it comes up. The "Flows" section of that file names the card that builds each step.
+The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11, rearranged the same day after a check against Harvest). Cards TS-045 to TS-052 come from it; each gets routes, tables, a role table and a goldfish review when it comes up. The "Flows" section of that file names the card that builds each step.
 
 ### TS-045 · Team: this week, members and invitations
 
@@ -320,6 +320,7 @@ Depends on: TS-046, TS-038.
 - [ ] A manager's own period is decided by an admin or owner, never by the manager (test).
 - [ ] An owner or admin reopens an approved period with a reason, which returns it to the person (test).
 - [ ] Not submitted lists the people who have not submitted a closed period (test).
+- Open for the owner: whether an owner or admin can turn approval off for the organisation, as Harvest allows; until it is decided, approval is on. The evidence is in `docs/navigation.md`, "Gaps the flows show".
 
 ### TS-048 · Workspace settings: general
 
@@ -344,6 +345,32 @@ Depends on: nothing beyond what is built.
 
 - [ ] A help page reachable from the profile menu, with the questions a person asks in the first week, and a way to report a problem that reaches the owner (test that the link resolves and the report is received).
 - [ ] The page answers each flow of `docs/navigation.md`, "Flows", that is built: first sign-in, tracking time, submitting a week, approving or returning, a report and its export, inviting a person.
+
+### TS-051 · The timer in the navigation
+
+Depends on: TS-012a.
+
+From the check against Harvest in `docs/navigation.md`: Harvest's sidebar starts with a Timer button, and a running timer is stopped from the navigation on any page.
+
+- [ ] On every page of an organisation, the navigation holds the timer's control before its first link. With nothing running it is "Start timer", which opens the Day view with the timer's form; with an entry running it shows the project, the time elapsed and "Stop" (test).
+- [ ] "Stop" in the navigation stops the person's running entry through TS-012a's `stop`, and the person stays on the page they were on (browser test).
+- [ ] The navigation and the Day view show the same elapsed time to the second, and the control reads its state again as the Day view does, when the window gains focus and every 30 seconds (browser test with a controlled clock).
+- [ ] The control is worked with the keyboard alone, has an accessible name and is not announced every second; axe with WCAG 2.2 AA tags reports no violations at 390px and 1280px (browser test).
+
+### TS-052 · A week's hours typed in a grid
+
+Depends on: TS-012b; for locked periods TS-046.
+
+From the check against Harvest in `docs/navigation.md`: Harvest's Week view is a grid of projects by days, with a row added per project and hours typed into each day.
+
+Open for the owner, before the card is refined: what an hour typed into a cell becomes. A Timesifier entry has a start and an end (TS-012a), and a cell holds only a number of hours. Either the hours become one entry that starts when the person's working day starts (TS-042), or entries gain a form with a duration and no times. Harvest offers its grid only to accounts that track durations, not start and end times.
+
+- [ ] The Week view shows a row for each project with time that week, and "Add row" adds one. Hours typed into a day's cell are saved, and a cell emptied removes that project's time on that day (tests).
+- [ ] A cell that holds more than one entry, or a running one, shows its total and is changed in the Day view (test).
+- [ ] "Copy last week's rows" adds the projects of the week before with empty cells; no hours are copied (test).
+- [ ] A day in a submitted or approved period cannot be changed from the grid (test).
+- [ ] Each day's total and the week's total equal the sums of their cells (property test).
+- [ ] The grid is worked with the keyboard alone, from cell to cell, and axe with WCAG 2.2 AA tags reports no violations (browser test).
 
 ### TS-037 · The signed-in product in the landing page's direction
 
