@@ -2,6 +2,12 @@
 
 The cards that are Done, as they stood when they were finished: every criterion with its evidence. `BOARD.md` keeps one line for each. The integrator moves a card here in the pull request that takes it to Done. The newest is first.
 
+## TS-032 · Nothing of one deployment in the code
+
+Merged 2026-11-11. Pull request #23. Its production deploy is being checked by the integrator, who records the result here. The card was built on the owner's instruction and was not on the board before it merged, so it has no list of criteria here.
+
+The repository no longer holds a domain, a database id, a key or an address of the deployment at `timesifier.com`: the Worker reads its hosts and its sender from its settings and refuses the request when one is missing, and before every preview and deploy `scripts/deploy-config.ts` checks six repository variables and writes them into the Wrangler configuration. Node, pnpm, Wrangler and the runner image are pinned to exact versions, held in place by `scripts/pins.test.ts`, and `docs/security.md`, "Secrets", has one table of every secret and variable.
+
 ## TS-008 · Authentication
 
 Built in two passes. The server, then the pages: the sign-in and sign-up pages, passkeys in a browser and the guard on `/app` (pull request #17). Done 2026-11-11, when the owner made the first sign-up in production.

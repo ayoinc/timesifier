@@ -2,7 +2,7 @@
 
 How the board works, and what Ready and Done mean, is in `docs/ways-of-working.md`. The columns are listed nearest to done first. Only the integrator edits this file; a criterion is ticked only with its evidence beside it.
 
-**The path.** The owner added two cards on 2026-11-11, and they come first: TS-036, one way in, and TS-037, the signed-in pages in the landing page's direction. After them the next three cards are TS-011a, TS-012a and TS-013, in that order. No card outside this path is pulled until a person can sign in for the first time, run a timer and see it in the week view in production. Three more things are named here so that nobody has to guess: the cards already in progress below finish; TS-022a is Done before TS-012a is pulled, because that is when the first data worth recovering arrives; and TS-032 is Done before TS-030 is deployed, because anyone may make an account. The cards for teams and managers, the month and year views, leave, the team calendar and policies (TS-038 to TS-042), which the owner asked for on 2026-11-11, wait behind this path.
+**The path.** The owner added two cards on 2026-11-11, and they come first: TS-036, one way in, and TS-037, the signed-in pages in the landing page's direction. After them the next three cards are TS-011a, TS-012a and TS-013, in that order. No card outside this path is pulled until a person can sign in for the first time, run a timer and see it in the week view in production. Three more things are named here so that nobody has to guess: the cards already in progress below finish; TS-022a is Done before TS-012a is pulled, because that is when the first data worth recovering arrives; and TS-043 is Done before TS-030 is deployed, because anyone may make an account. The cards for teams and managers, the month and year views, leave, the team calendar and policies (TS-038 to TS-042), which the owner asked for on 2026-11-11, wait behind this path.
 
 ## In progress (limit 1 per builder)
 
@@ -21,7 +21,7 @@ Builder: an AI session on branch `ts-030-landing`. The owner's verdict on what w
 - [ ] The components still pass their own tests on the new tokens.
 - [ ] `/privacy` and `/terms` exist and are server rendered. The privacy page says what is stored about a person, why, that it rests in the EU, for how long, and how to have an account deleted before TS-021a is built. A test finds a link to each on `/`, `/sign-in` and `/sign-up`.
 - [ ] From TS-006: in the rail the travelling indicator no longer passes over the labels between two destinations; the skip link, while focused, no longer covers the top of the rail; the radio rings in Settings line up with the headings above them. Each has a browser test or a screenshot the owner has accepted.
-- [ ] Deployed after TS-032, and seen by the owner at `https://timesifier.com`.
+- [ ] Deployed after TS-043, and seen by the owner at `https://timesifier.com`.
 
 ### TS-031 · Apply the review of the plan
 
@@ -303,7 +303,9 @@ Depends on: TS-003. Done before TS-012a is pulled. The 5% figure and the one hou
 
 From TS-027: an unexpected error is now logged as its name and the path, and nothing else. That keeps addresses and tokens out of the log, and it also keeps out what a person needs to find the fault. This card adds the stack without its message line, and a request id, to that line.
 
-### TS-032 · A ceiling on the email the application sends
+### TS-043 · A ceiling on the email the application sends
+
+This card was TS-032 until 2026-11-11, when that number went to the card that took the deployment's settings out of the code.
 
 Depends on: nothing. Done before TS-030 is deployed: anyone may make an account, and today nothing bounds the total number of messages.
 
@@ -560,6 +562,7 @@ Depends on: nothing. Left over from TS-002.
 
 The newest first. Each card, with its criteria and their evidence, is in `docs/board-done.md`.
 
+- TS-032 · Nothing of one deployment in the code. Merged 2026-11-11, pull request #23; the integrator is checking its production deploy.
 - TS-008 · Authentication. Done 2026-11-11, pull request #17.
 - TS-009 · Organisations and roles. Done 2026-11-11, pull request #20.
 - TS-029 · Remove passkeys: the emailed code is the one way in. Done 2026-11-11, pull request #21.
