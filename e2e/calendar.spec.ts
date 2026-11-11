@@ -10,7 +10,7 @@ import {
 	problems,
 	UNDER_AN_OVERLAY,
 } from "./axe";
-import { expect, openShell, test } from "./fixtures";
+import { expect, openShell, takenOver, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 import { createProject } from "./timesheet";
 
@@ -133,7 +133,10 @@ test("zooms from the week in detail out to the week and the month, and in to the
 	await expect(page).toHaveURL(new RegExp(`${base}&scale=month&date=\\d{4}-\\d{2}-\\d{2}$`));
 	await expect(monthGrid(page)).toBeVisible();
 	await expect(zoom(page).getByRole("button", { name: "Zoom out" })).toBeDisabled();
+	// The month is read back from the address alone. Its keys work once the
+	// page is hydrated: the server's page shows the month before that.
 	await page.reload();
+	await takenOver(page);
 	await expect(monthGrid(page)).toBeVisible();
 
 	await page.keyboard.press("+");
