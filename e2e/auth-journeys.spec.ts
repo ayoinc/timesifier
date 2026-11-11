@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import type { Page } from "@playwright/test";
 
 import { destinationPath, organisationPath } from "../app/shell/destinations";
@@ -150,6 +151,42 @@ test.describe("signing out and signing in", () => {
 		await expect(page).toHaveURL(home);
 		await page.goto("/sign-in?next=//example.com/app");
 		await expect(page).toHaveURL(home);
+	});
+
+	test("a browser that has signed in before is still sent a code when strangers have used up the address's five in an hour", async ({
+		page,
+		playwright,
+		baseURL,
+	}) => {
+		const person = newPerson();
+		await signUp(page, person);
+		await signOut(page);
+
+		// Somebody who knows the address and nothing else, asking from a new
+		// client address each time. The sign-up above was the first of the five
+		// that everybody else is allowed; these are the rest.
+		const stranger = await playwright.request.newContext({ baseURL });
+		for (let n = 0; n < 4; n++) {
+			await codeSentBy(async () => {
+				const asked = await stranger.post("/api/auth/email-otp/send-verification-otp", {
+					data: { email: person.email, type: "sign-in" },
+					headers: {
+						// What a page of ours would send; the server refuses a request without it.
+						origin: baseURL ?? "",
+						"cf-connecting-ip": `198.18.${randomInt(256)}.${randomInt(1, 255)}`,
+						// The token Turnstile's test keys accept.
+						"x-captcha-response": "XXXX.DUMMY.TOKEN.XXXX",
+					},
+				});
+				expect(asked.status(), await asked.text()).toBe(200);
+			});
+		}
+		await stranger.dispose();
+
+		// A sixth request from anybody else would be sent nothing. This browser's is
+		// sent a code, and the code signs the person in.
+		await signInWithCode(page, person.email);
+		await expect(page).toHaveURL(ARRIVAL);
 	});
 });
 
