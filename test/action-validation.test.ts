@@ -1,6 +1,7 @@
 import { exports } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
 import { describe, expect, it } from "vitest";
+import { freshDatabase } from "./db/database";
 
 /**
  * One malformed request for every route that exports an `action`, keyed by the
@@ -11,7 +12,22 @@ import { describe, expect, it } from "vitest";
  * until it does. Build the request so it passes the origin check and any
  * sign-in the route needs, and is wrong only in its input.
  */
-const malformedInput: Record<string, () => Request | Promise<Request>> = {};
+const malformedInput: Record<string, () => Request | Promise<Request>> = {
+	// Better Auth validates its own endpoints; a body that is not JSON gets its 400.
+	"routes/api.auth.$": async () => {
+		// Its rate limit reads the database before it reads the body.
+		await freshDatabase();
+		return new Request("https://timesifier.com/api/auth/sign-in/email-otp", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Origin: "https://timesifier.com",
+				"CF-Connecting-IP": "203.0.113.7",
+			},
+			body: '{"email": "ada@example.com", "otp":',
+		});
+	},
+};
 
 const routesWithAction = Object.values(routes)
 	.filter((route) => route !== undefined && route.module.action !== undefined)

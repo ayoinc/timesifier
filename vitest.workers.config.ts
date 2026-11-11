@@ -8,10 +8,18 @@ export default defineConfig({
 		cloudflareTest(async () => ({
 			wrangler: { configPath: "./wrangler.jsonc" },
 			miniflare: {
-				// The committed SQL migrations, read here in Node and handed to the
-				// runtime as a test-only binding; test/db/database.ts applies them
-				// to the local D1 before each test.
-				bindings: { TEST_MIGRATIONS: await readD1Migrations("./migrations") },
+				bindings: {
+					// The committed SQL migrations, read here in Node and handed to the
+					// runtime as a test-only binding; test/db/database.ts applies them
+					// to the local D1 before each test.
+					TEST_MIGRATIONS: await readD1Migrations("./migrations"),
+					// Not a secret: a throwaway value that signs cookies in tests only.
+					BETTER_AUTH_SECRET: "tests-only-Zk3vQ8mT1xW6bN4rY9cH2jL7pD5sF0gA",
+					// Not secrets: Turnstile's published test keys, which pass every check.
+					// https://developers.cloudflare.com/turnstile/troubleshooting/testing/
+					TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+					TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+				},
 			},
 		})),
 		// Supplies the server build, so tests can drive the Worker's real fetch handler.
@@ -25,5 +33,9 @@ export default defineConfig({
 		env: { DEV: "", PROD: "1" },
 		include: ["test/**/*.test.ts", "app/**/*.test.ts"],
 		exclude: ["test/node/**"],
+		// The first request in a test file loads the whole application, Better Auth
+		// included, one module at a time. With every file loading at once that can
+		// take several seconds, so the default of five is too close.
+		testTimeout: 20_000,
 	},
 });
