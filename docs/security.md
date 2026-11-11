@@ -29,6 +29,16 @@ Timesifier holds personal data: who worked on what, and when. The owner is in th
 
 Set by the Worker in `workers/app.ts` on every response it produces. The tests in `test/browser-policy.test.ts` hold it in place.
 
+### One host in production
+
+Production answers only on `timesifier.com`. `www` is redirected to it with status 308, and any other host gets 404 (`workers/canonical-host.ts`).
+
+The reason is a Cloudflare behaviour: with `preview_urls` on, which pull-request previews need, every uploaded version of the Worker also gets its own address, `<version>-timesifier.ayoinc.workers.dev`, bound to the production database. Without the host check an old version with a fixed bug would stay reachable there for good. The smoke test after each deploy asks the new version's address for the home page and fails unless it gets 404.
+
+The Worker knows it is production from the variable `ENVIRONMENT` in `wrangler.jsonc`; a missing or unknown value counts as production. Previews set it to `preview` and answer on their own addresses. A loopback host (`localhost`, `127.0.0.1`) is always served, which is what local development and the browser tests use; Cloudflare never routes such a host to the Worker.
+
+Plain HTTP is redirected to HTTPS by the zone's "Always Use HTTPS" setting, which is on. The smoke test checks it.
+
 ### Headers
 
 Every response from the Worker carries:
@@ -37,6 +47,8 @@ Every response from the Worker carries:
 | --------------------------- | ------------------ |
 | `Strict-Transport-Security` | `max-age=63072000` |
 | `X-Content-Type-Options`    | `nosniff`          |
+
+A response that is not HTML (a redirect, a refusal, data) also carries `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, so a response opened on its own can load and run nothing.
 
 A response whose content type is HTML, including error pages, also carries:
 
@@ -48,7 +60,7 @@ A response whose content type is HTML, including error pages, also carries:
 | `Cross-Origin-Opener-Policy` | `same-origin`                                                                                                                                                                                        |
 | `Permissions-Policy`         | Every feature in the list in `workers/security-headers.ts` is denied with `=()`. Passkeys are allowed for our own origin: `publickey-credentials-get=(self)`, `publickey-credentials-create=(self)`. |
 
-Files in `public/` and the built scripts and styles are served by Workers Static Assets before the Worker runs, so the Worker cannot add headers to them. `public/_headers` gives them `X-Content-Type-Options: nosniff` and the same HSTS value.
+Files in `public/` and the built scripts and styles are served by Workers Static Assets before the Worker runs, so the Worker cannot add headers to them. `public/_headers` gives them `X-Content-Type-Options: nosniff`, the same HSTS value and the same "nothing loads" policy. That policy matters when a file is opened directly; it does not affect a page that loads the file.
 
 **HSTS has no `includeSubDomains` and no `preload`.** Other subdomains of `timesifier.com` belong to other services (see `docs/architecture.md`). `includeSubDomains` would make browsers refuse plain HTTP on every one of them, and `preload` requires it and is slow to undo. Without it the header applies only to the host that sent it.
 
@@ -82,7 +94,7 @@ Nothing else changes. The hot-reload WebSocket is same-origin and allowed by `co
 
 ### Origin check
 
-Before the framework sees a request, the Worker answers 403 to a `POST`, `PUT`, `PATCH` or `DELETE` when:
+Before the framework sees a request, the Worker answers 403 to a `POST`, `PUT`, `PATCH` or `DELETE`, and to a WebSocket handshake (a `GET` with `Upgrade: websocket`), when:
 
 - `Origin` is present and is not the origin of the request's own URL, or
 - `Sec-Fetch-Site` is present and is neither `same-origin` nor `none`.
@@ -95,6 +107,8 @@ React Router has its own check: it answers 400 to a page or data request with a 
 
 Every action begins with `parseRequest(request, schema)` from `app/lib/validate.ts`. It reads form data or JSON, checks it against a Zod 4 schema and returns the typed result. When the body cannot be read or does not match, it throws a 400 response whose body is `{ errors: { form: string[], fields: Record<string, string[]> } }`. The response holds messages and field names, never the submitted values; a custom message in a schema must not include the input either.
 
+A body larger than 64 KiB is answered 413 and is not read past the limit; an action that accepts a file passes a larger `maxBytes`. A form field named `__proto__` is an ordinary field: it cannot change the parsed object's prototype.
+
 `test/action-validation.test.ts` finds every route that exports an `action` and fails until that route has a malformed request listed there that receives 400.
 
 ### What TS-008 must add for Turnstile
@@ -105,6 +119,19 @@ Turnstile loads a script from Cloudflare and runs in a frame. On the pages that 
 - `frame-src https://challenges.cloudflare.com` (today frames fall back to `default-src 'self'`).
 
 Checked on 2026-11-11 against <https://developers.cloudflare.com/turnstile/reference/content-security-policy/>. `connect-src 'self'` is already enough for pre-clearance mode. TS-008 confirms the widget puts no inline style on our page, and adds a test for the pages that show it. The token is verified on the server, in the action, after `parseRequest`.
+
+## Known gaps and accepted risks
+
+From the review of the foundation on 2026-11-11 (card TS-026). Each is open on purpose, with what would close it.
+
+| Gap                                                                                                                                                                                                                                        | Why it is accepted for now                                                                                                                        | What closes it                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A pull request opened from a branch of this repository runs with the pipeline's Cloudflare token, and the pull request controls the Wrangler configuration, the migrations and the workflow.                                               | The owner is the only person who can push a branch. Pull requests from forks get no secrets.                                                      | Branch protection on `main` and the token in a GitHub environment limited to `main`; both need a paid GitHub plan for a private repository. Owner's decision (TS-002). |
+| Install and build run in the same job as the Wrangler steps.                                                                                                                                                                               | pnpm runs install scripts only for `esbuild` and `workerd`, listed in `pnpm-workspace.yaml`, and the token is passed to the Wrangler steps alone. | Build in a job without secrets and hand the result to a job that only runs Wrangler.                                                                                   |
+| Versions of the Worker uploaded before TS-026 still answer on their workers.dev addresses.                                                                                                                                                 | They contain no sign-in and read no data.                                                                                                         | Deleting those versions, or Cloudflare Access on version addresses.                                                                                                    |
+| Cloudflare injects its Web Analytics script, from `static.cloudflareinsights.com`, into every page (the zone's RUM setting is on). It carries the page's nonce, so the policy allows it, and it reports to `/cdn-cgi/rum` on our own host. | It is a zone-wide setting that other services on this zone may rely on.                                                                           | The owner turns it off for the zone, or excludes this host. Until then the pages do make one request to another origin.                                                |
+| The zone accepts TLS 1.0 (minimum TLS version is 1.0).                                                                                                                                                                                     | Zone-wide setting shared with other services.                                                                                                     | The owner raises the minimum to 1.2.                                                                                                                                   |
+| `pnpm audit` reports one moderate advisory: `esbuild` 0.18, brought in by `drizzle-kit`.                                                                                                                                                   | Development only; it concerns esbuild's own dev server, which is not used. The pipeline fails on high and above.                                  | An update of `drizzle-kit` that drops `@esbuild-kit`.                                                                                                                  |
 
 ## Secrets
 

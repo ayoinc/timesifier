@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Smoke test run after every deploy. Exits non-zero unless the home page at the
 # given origin answers 200 with the product name in the body.
-# Usage: scripts/smoke.sh https://timesifier.com [--www]
-#   --www also requires https://www.<host> to redirect to the origin.
+# Usage: scripts/smoke.sh https://timesifier.com [--production [version-host]]
+#   --production also requires: https://www.<host> redirects to the origin;
+#   http://<host> redirects to https; and, when a version host is given (the
+#   workers.dev address of the version just deployed), that it answers 404.
 set -euo pipefail
 
-ORIGIN="${1:?usage: smoke.sh <origin> [--www]}"
+ORIGIN="${1:?usage: smoke.sh <origin> [--production [version-host]]}"
 ORIGIN="${ORIGIN%/}"
 ATTEMPTS=6 # a new deployment can take a few seconds to reach every location
 
@@ -27,12 +29,28 @@ if ! grep --quiet "Timesifier" /tmp/smoke-body; then
 fi
 echo "ok: $ORIGIN/ answered 200"
 
-if [ "${2:-}" = "--www" ]; then
-	alias_url="https://www.${ORIGIN#https://}/smoke?check=1"
-	location="$(curl --silent --output /dev/null --write-out '%{redirect_url}' --max-time 15 "$alias_url" || true)"
-	if [ "$location" != "$ORIGIN/smoke?check=1" ]; then
-		echo "FAIL: $alias_url redirected to \"${location}\", expected $ORIGIN/smoke?check=1" >&2
+# Fails unless a request for $1 is redirected to $2.
+expect_redirect() {
+	local location
+	location="$(curl --silent --output /dev/null --write-out '%{redirect_url}' --max-time 15 "$1" || true)"
+	if [ "$location" != "$2" ]; then
+		echo "FAIL: $1 redirected to \"${location}\", expected $2" >&2
 		exit 1
 	fi
-	echo "ok: $alias_url redirects to the apex"
+	echo "ok: $1 redirects to $2"
+}
+
+if [ "${2:-}" = "--production" ]; then
+	host="${ORIGIN#https://}"
+	expect_redirect "https://www.$host/smoke?check=1" "$ORIGIN/smoke?check=1"
+	expect_redirect "http://$host/smoke?check=1" "$ORIGIN/smoke?check=1"
+
+	if [ -n "${3:-}" ]; then
+		status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 "https://$3/" || true)"
+		if [ "$status" != "404" ]; then
+			echo "FAIL: https://$3/ answered ${status:-nothing}, expected 404: a production version is reachable outside $host" >&2
+			exit 1
+		fi
+		echo "ok: https://$3/ answered 404"
+	fi
 fi

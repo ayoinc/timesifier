@@ -1,8 +1,12 @@
-import { eq } from "drizzle-orm";
+import { eq, getTableColumns, is, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import { SQLiteTable } from "drizzle-orm/sqlite-core";
 import { beforeEach, describe, expect, it } from "vitest";
-import { organisationScope } from "~/db";
+import * as publicSurface from "~/db";
+import { everyRow, organisationScope } from "~/db";
+import * as schema from "~/db/schema";
 import { memberships, organisations, users } from "~/db/schema";
+import { tenantTables } from "~/db/scope";
 import { freshDatabase } from "./database";
 
 let database: D1Database;
@@ -79,7 +83,7 @@ describe("organisation scope", () => {
 		const before = await storedMemberships(globex.id);
 		const scope = organisationScope(database, acme.id);
 
-		const updated = await scope.memberships.update({ role: "admin" });
+		const updated = await scope.memberships.update({ role: "admin" }, everyRow);
 		const aimedAtOther = await scope.memberships.update({ role: "admin" }, (m) =>
 			eq(m.userId, bola.id),
 		);
@@ -96,7 +100,7 @@ describe("organisation scope", () => {
 		const scope = organisationScope(database, acme.id);
 
 		const aimedAtOther = await scope.memberships.delete((m) => eq(m.userId, bola.id));
-		const deleted = await scope.memberships.delete();
+		const deleted = await scope.memberships.delete(everyRow);
 
 		expect(aimedAtOther).toEqual([]);
 		expect(deleted).toHaveLength(2);
@@ -133,10 +137,59 @@ describe("organisation scope", () => {
 		const scope = organisationScope(database, acme.id);
 
 		const fromRequest = JSON.parse(JSON.stringify({ organisationId: globex.id, role: "admin" }));
-		await scope.memberships.update(fromRequest);
+		await scope.memberships.update(fromRequest, everyRow);
 
 		expect(await storedMemberships(acme.id)).toHaveLength(2);
 		expect(await storedMemberships(globex.id)).toEqual(before);
+	});
+
+	it("keeps a raw SQL condition with a top-level OR inside the organisation", async () => {
+		const { acme, globex } = await seed();
+		const before = await storedMemberships(globex.id);
+		const scope = organisationScope(database, acme.id);
+		// Without parentheses round the caller's condition this reads
+		// "organisation = acme AND role = 'nobody' OR 1 = 1", which is every row.
+		const anyRow = () => sql`${memberships.role} = 'nobody' or 1 = 1`;
+
+		const selected = await scope.memberships.select(anyRow);
+		const updated = await scope.memberships.update({ role: "admin" }, anyRow);
+
+		expect(selected.map((row) => row.organisationId)).toEqual([acme.id, acme.id]);
+		expect(updated.map((row) => row.organisationId)).toEqual([acme.id, acme.id]);
+		expect(await storedMemberships(globex.id)).toEqual(before);
+
+		const deleted = await scope.memberships.delete(anyRow);
+
+		expect(deleted.map((row) => row.organisationId)).toEqual([acme.id, acme.id]);
+		expect(await storedMemberships(globex.id)).toEqual(before);
+	});
+
+	it("refuses an update or delete whose filter produces no condition", async () => {
+		const { acme } = await seed();
+		const before = await storedMemberships(acme.id);
+		const scope = organisationScope(database, acme.id);
+
+		// `() => undefined` is what a filter built from optional input returns when
+		// the input is missing.
+		await expect(scope.memberships.update({ role: "admin" }, () => undefined)).rejects.toThrow(
+			/needs a condition/,
+		);
+		await expect(scope.memberships.delete(() => undefined)).rejects.toThrow(/needs a condition/);
+		expect(await storedMemberships(acme.id)).toEqual(before);
+	});
+
+	it("covers every table that has an organisation id, and exports none of them", () => {
+		const withOrganisation = Object.values<unknown>(schema).filter(
+			(table): table is SQLiteTable =>
+				is(table, SQLiteTable) && "organisationId" in getTableColumns(table),
+		);
+		const exported: unknown[] = Object.values(publicSurface);
+
+		expect(withOrganisation.length).toBeGreaterThan(0);
+		for (const table of withOrganisation) {
+			expect(Object.values<SQLiteTable>(tenantTables)).toContain(table);
+			expect(exported).not.toContain(table);
+		}
 	});
 
 	it("starts every test from an empty database", async () => {

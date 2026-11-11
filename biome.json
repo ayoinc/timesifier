@@ -16,8 +16,31 @@
 		"enabled": true,
 		"rules": {
 			"preset": "recommended",
-			"suspicious": { "noExplicitAny": "error" }
+			"suspicious": { "noExplicitAny": "error" },
+			"style": {
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"paths": {
+							"~/db/schema": "Import from ~/db. Tables with an organisation_id are reached only through organisationScope.",
+							"~/db/scope": "Import organisationScope from ~/db."
+						},
+						"patterns": [
+							{
+								"group": ["**/db/schema", "**/db/scope"],
+								"message": "Import from ~/db. Tables with an organisation_id are reached only through organisationScope."
+							}
+						]
+					}
+				}
+			}
 		}
 	},
+	"overrides": [
+		{
+			"includes": ["app/db/**", "app/auth/**", "test/db/**", "test/node/**", "drizzle.config.ts"],
+			"linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
+		}
+	],
 	"assist": { "actions": { "source": { "organizeImports": "on" } } }
 }

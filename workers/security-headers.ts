@@ -64,10 +64,15 @@ function contentSecurityPolicy(nonce: string): string {
 	].join("; ");
 }
 
+// For a response that is not a page: nothing may load from it or frame it, so a
+// file opened on its own (an SVG, a JSON document) cannot run script.
+const NOTHING_LOADS = "default-src 'none'; frame-ancestors 'none'";
+
 /**
  * Returns the response with the browser policy attached: every response gets
- * HSTS and `nosniff`; an HTML response also gets the Content Security Policy
- * for this request's nonce and the framing, referrer and permissions headers.
+ * HSTS and `nosniff`; an HTML response gets the Content Security Policy for
+ * this request's nonce and the framing, referrer and permissions headers; any
+ * other response gets a policy under which nothing loads.
  */
 export function withSecurityHeaders(response: Response, nonce: string): Response {
 	// A response the framework returns can have immutable headers.
@@ -83,6 +88,8 @@ export function withSecurityHeaders(response: Response, nonce: string): Response
 		headers.set("X-Frame-Options", "DENY");
 		headers.set("Cross-Origin-Opener-Policy", "same-origin");
 		headers.set("Permissions-Policy", PERMISSIONS_POLICY);
+	} else {
+		headers.set("Content-Security-Policy", NOTHING_LOADS);
 	}
 
 	return secured;

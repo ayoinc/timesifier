@@ -3,7 +3,14 @@
  *
  * Tables with an `organisation_id` are deliberately absent: they are reached
  * through `organisationScope`, which limits every statement to one organisation.
+ * `biome.json` refuses an import of `~/db/schema` or `~/db/scope` anywhere else.
  */
 export { organisations, users } from "./schema";
-export { type OrganisationScope, organisationScope, type ScopedAccessor } from "./scope";
+export {
+	everyRow,
+	type Filter,
+	type OrganisationScope,
+	organisationScope,
+	type ScopedAccessor,
+} from "./scope";
 export { uuidv7 } from "./uuidv7";

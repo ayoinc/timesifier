@@ -11,7 +11,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 
 // Fonts are self-hosted: app.css imports the font files through styles/tokens.css,
-// so the document makes no third-party requests.
+// so nothing in our own markup asks another origin for anything.
 export const links: Route.LinksFunction = () => [];
 
 export function Layout({ children }: { children: React.ReactNode }) {

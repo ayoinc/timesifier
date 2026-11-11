@@ -93,4 +93,72 @@ describe("parseRequest", () => {
 		const { body } = await rejection(post(form));
 		expect(JSON.stringify(body)).not.toContain(secret);
 	});
+
+	it("answers 413 for a body that declares more than the limit, and never reads it", async () => {
+		let read = false;
+		const body = new ReadableStream<Uint8Array>(
+			{
+				pull(controller) {
+					read = true;
+					controller.close();
+				},
+			},
+			{ highWaterMark: 0 },
+		);
+		const request = new Request("https://timesifier.com/entries", {
+			method: "POST",
+			body,
+			headers: { "Content-Type": "application/json", "Content-Length": String(64 * 1024 + 1) },
+		});
+
+		const { status, body: answer } = await rejection(request);
+
+		expect(status).toBe(413);
+		expect(answer.errors.form).toEqual(["The request body is too large."]);
+		expect(read).toBe(false);
+	});
+
+	it("answers 413 for a streamed body once it passes the limit, and stops reading", async () => {
+		const chunk = new TextEncoder().encode("x".repeat(40 * 1024));
+		let chunksRead = 0;
+		const body = new ReadableStream<Uint8Array>(
+			{
+				pull(controller) {
+					chunksRead += 1;
+					controller.enqueue(chunk);
+				},
+			},
+			{ highWaterMark: 0 },
+		);
+
+		const { status } = await rejection(post(body, "application/json"));
+
+		expect(status).toBe(413);
+		// 40 KiB, then 80 KiB: the second chunk crosses 64 KiB and nothing more is asked for.
+		expect(chunksRead).toBe(2);
+	});
+
+	it("accepts a larger body when the action raises the limit", async () => {
+		const note = "n".repeat(100 * 1024);
+		const request = post(JSON.stringify({ note }), "application/json");
+
+		const input = await parseRequest(request, z.object({ note: z.string() }), {
+			maxBytes: 200 * 1024,
+		});
+
+		expect(input.note).toHaveLength(100 * 1024);
+	});
+
+	it("treats a form field called __proto__ as an ordinary field", async () => {
+		const form = new URLSearchParams([
+			["__proto__", "polluted"],
+			["name", "Design review"],
+		]);
+
+		const input = (await parseRequest(post(form), z.unknown())) as Record<string, unknown>;
+
+		expect(Object.getPrototypeOf(input)).toBe(Object.prototype);
+		expect(Object.hasOwn(input, "__proto__")).toBe(true);
+		expect(input.name).toBe("Design review");
+	});
 });
