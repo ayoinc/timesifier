@@ -1,12 +1,13 @@
 /**
- * What the server owes passkeys before there is a page: the options it hands a
- * browser, and where it keeps a passkey. The ceremony itself needs an
- * authenticator, so it is tested in a browser with the sign-in pages.
+ * What the server owes passkeys: the options it hands a browser, what it
+ * accepts back, and where it keeps a passkey. The authenticator here is
+ * software (./authenticator.ts); a browser's is tested with the sign-in pages.
  */
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as z from "zod";
 import { freshDatabase } from "../db/database";
+import { type Authenticator, createAuthenticator } from "./authenticator";
 import {
 	captureEmail,
 	countRows,
@@ -14,8 +15,10 @@ import {
 	type Mailbox,
 	post,
 	SESSION_COOKIE,
+	sessionCookie,
 	setBinding,
 	signIn,
+	whoIs,
 } from "./harness";
 
 const EMAIL = "ada@example.com";
@@ -102,6 +105,107 @@ describe("passkey options", () => {
 		expect(response.status).toBeGreaterThanOrEqual(400);
 		expect(response.status).toBeLessThan(500);
 		expect(response.headers.getSetCookie().join()).not.toContain(SESSION_COOKIE);
+	});
+});
+
+describe("the two passkey ceremonies", () => {
+	const ORIGIN = "https://timesifier.com";
+	const verified = { userVerified: true };
+	const unverified = { userVerified: false };
+
+	/** The cookie that ties a ceremony's answer to the challenge the server gave. */
+	function challengeCookie(options: Response): string {
+		const [cookie = ""] = options.headers.getSetCookie();
+		return cookie.slice(0, cookie.indexOf(";"));
+	}
+
+	/** A signed-in person adds the authenticator's passkey. */
+	async function register(session: string, authenticator: Authenticator, ceremony = verified) {
+		const options = await get("/passkey/generate-register-options", { cookie: session });
+		return post(
+			"/passkey/verify-registration",
+			{ response: authenticator.register(RegisterOptions.parse(await options.json()), ceremony) },
+			{ cookie: `${session}; ${challengeCookie(options)}` },
+		);
+	}
+
+	/** Somebody signs in with the authenticator's passkey. */
+	async function signInWith(authenticator: Authenticator, ceremony = verified) {
+		const options = await get("/passkey/generate-authenticate-options");
+		const response = await authenticator.authenticate(
+			SignInOptions.parse(await options.json()),
+			ceremony,
+		);
+		return post(
+			"/passkey/verify-authentication",
+			{ response },
+			{ cookie: challengeCookie(options) },
+		);
+	}
+
+	it("ask the authenticator to verify the person, when adding a passkey and when signing in", async () => {
+		const { cookie } = await signIn(mailbox, EMAIL);
+		const UserVerification = z.object({ userVerification: z.string() });
+
+		const adding = await get("/passkey/generate-register-options", { cookie });
+		const signingIn = await get("/passkey/generate-authenticate-options");
+
+		expect(
+			z.object({ authenticatorSelection: UserVerification }).parse(await adding.json())
+				.authenticatorSelection.userVerification,
+		).toBe("required");
+		expect(UserVerification.parse(await signingIn.json()).userVerification).toBe("required");
+	});
+
+	it("add a passkey and sign in with it when the authenticator verified the person", async () => {
+		const ada = await signIn(mailbox, EMAIL);
+		const key = await createAuthenticator(ORIGIN);
+
+		const added = await register(ada.cookie, key);
+		const signedIn = await signInWith(key);
+
+		expect([added.status, signedIn.status]).toEqual([200, 200]);
+		expect(await whoIs(sessionCookie(signedIn))).toMatchObject({ email: EMAIL });
+	});
+
+	it("refuse to add a passkey when the authenticator did not verify the person", async () => {
+		const ada = await signIn(mailbox, EMAIL);
+		const key = await createAuthenticator(ORIGIN);
+
+		const added = await register(ada.cookie, key, unverified);
+
+		expect(added.status).toBe(400);
+		expect(await countRows("passkeys")).toBe(0);
+	});
+
+	it("refuse a sign-in with a passkey when the authenticator did not verify the person", async () => {
+		const ada = await signIn(mailbox, EMAIL);
+		const key = await createAuthenticator(ORIGIN);
+		expect((await register(ada.cookie, key)).status).toBe(200);
+
+		const signedIn = await signInWith(key, unverified);
+
+		expect(signedIn.status).toBeGreaterThanOrEqual(400);
+		expect(signedIn.status).toBeLessThan(500);
+		expect(signedIn.headers.getSetCookie().join()).not.toContain(SESSION_COOKIE);
+		expect(await countRows("sessions"), "the one session made with the code").toBe(1);
+	});
+
+	it("refuse a second passkey with the id of somebody's first, which goes on signing its owner in", async () => {
+		const ada = await signIn(mailbox, EMAIL);
+		const grace = await signIn(mailbox, "grace@example.com");
+		const adasKey = await createAuthenticator(ORIGIN);
+		expect((await register(ada.cookie, adasKey)).status).toBe(200);
+		const copy = await createAuthenticator(ORIGIN, adasKey.credentialId);
+
+		const added = await register(grace.cookie, copy);
+
+		// The index refuses the row; the library has no answer of its own for that.
+		expect(added.status).toBe(500);
+		expect(await countRows("passkeys")).toBe(1);
+		const signedIn = await signInWith(adasKey);
+		expect(signedIn.status).toBe(200);
+		expect(await whoIs(sessionCookie(signedIn))).toMatchObject({ email: EMAIL });
 	});
 });
 

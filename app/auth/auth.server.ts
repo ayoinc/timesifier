@@ -169,7 +169,14 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 			}),
 			// The relying party is the host of the request, one of this environment's
 			// own, so a passkey made on a preview works on that preview and nowhere else.
-			passkey({ rpName: "Timesifier" }),
+			// The authenticator must verify the person, with a PIN or a fingerprint,
+			// both to add a passkey and to sign in with one: the plugin then asks for
+			// that and refuses an answer without it. A key that is merely held, a
+			// stolen one for instance, signs nobody in.
+			passkey({
+				rpName: "Timesifier",
+				authenticatorSelection: { userVerification: "required" },
+			}),
 			...organisationPlugins(),
 			redirectRules,
 			signInCodeRules({ DB, secret: BETTER_AUTH_SECRET }),
