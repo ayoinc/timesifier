@@ -21,6 +21,22 @@ Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the arch
 - [ ] `docs/product.md` describes the product as the owner described it on 2026-11-11, and TS-038 to TS-042 are in Backlog with their criteria.
 - [ ] `pnpm format` and `pnpm lint` exit 0.
 
+### TS-053 · Foundation for the heading features
+
+Builder: an AI session on branch `ts-053-foundation`, cut from `ts-044-navigation`. The owner asked on 2026-11-11 for every feature under the headings of `docs/navigation.md` to be built. The work runs in two waves: this card first, then four slices built side by side, each owning its own pages (Timesheet; Projects, Clients and Workspace settings; Teams, Team and Approvals; Reports and the CSV export). This card lays what the four share: the navigation by heading and role, one migration with every table they need, and the rules in `app/` that more than one of them reads. It builds no feature page.
+
+Two questions the owner settled on 2026-11-11, recorded on their cards: approval is always on for now (TS-047), and an hour typed into a cell of the week's grid becomes one entry that starts when the day's last entry ends, or at 09:00 in the person's time zone when the day has none (TS-052).
+
+- [ ] The destinations are Timesheet, Projects, Clients, Team, Approvals, Reports and Workspace settings, under the headings Track, Organize and Review or under none, each shown to the roles `docs/navigation.md` names. Clients is also hidden when the organisation turns Clients off. A heading shows only when a link under it shows (test).
+- [ ] A destination a person may not see answers 404 at its address and at every address below it, the same 404 as another organisation's (a test per role, beside `test/pages/isolation.test.ts`).
+- [ ] The navigation has a place for the timer's control before its first link, which draws nothing until TS-051 fills it (test).
+- [ ] Each destination's page has its heading and an empty state that says what will be there.
+- [ ] Members and invitations are at `team/members` and `team/invitations`, and `settings/members` redirects to the first (test). The person's own name, colour scheme, signing out and leaving the organisation are on My account, `/app/<slug>/account`, which every role opens, because a member no longer opens Workspace settings.
+- [ ] One migration creates `clients`, `projects`, `time_entries`, `periods`, `period_events`, `teams` and `team_members`, and adds `users.time_zone` and the organisation's `time_zone`, `week_starts_on` and `clients_enabled`. Every new table is in `tenantTables` (test).
+- [ ] The rules the slices share are in `app/` with their tests: who may see which destination and whose time, a manager's scope being the members of the teams they manage; one running entry for a person in an organisation; a period's bounds from the week start and the time zone; a submitted or approved period locks its entries.
+- [ ] `docs/architecture.md` and `docs/security.md` describe the new tables and who sees which destination.
+- [ ] `pnpm typecheck`, `pnpm lint` and `pnpm test` pass, the shell's browser tests pass, and `pnpm db:migrate:local` applies the migration.
+
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
 ### TS-030 · A home page, a privacy page, a terms page, and the visual direction
@@ -320,7 +336,7 @@ Depends on: TS-046, TS-038.
 - [ ] A manager's own period is decided by an admin or owner, never by the manager (test).
 - [ ] An owner or admin reopens an approved period with a reason, which returns it to the person (test).
 - [ ] Not submitted lists the people who have not submitted a closed period (test).
-- Open for the owner: whether an owner or admin can turn approval off for the organisation, as Harvest allows; until it is decided, approval is on. The evidence is in `docs/navigation.md`, "Gaps the flows show".
+- Decided by the owner on 2026-11-11: approval is always on for now. Whether an owner or admin can turn it off for the organisation, as Harvest allows, waits for a customer who asks. The evidence is in `docs/navigation.md`, "Gaps the flows show".
 
 ### TS-048 · Workspace settings: general
 
@@ -363,7 +379,7 @@ Depends on: TS-012b; for locked periods TS-046.
 
 From the check against Harvest in `docs/navigation.md`: Harvest's Week view is a grid of projects by days, with a row added per project and hours typed into each day.
 
-Open for the owner, before the card is refined: what an hour typed into a cell becomes. A Timesifier entry has a start and an end (TS-012a), and a cell holds only a number of hours. Either the hours become one entry that starts when the person's working day starts (TS-042), or entries gain a form with a duration and no times. Harvest offers its grid only to accounts that track durations, not start and end times.
+Decided by the owner on 2026-11-11: an hour typed into a cell becomes one entry, which starts when the last entry of that day ends, or at 09:00 in the person's time zone when the day has none, and lasts the hours typed. A Timesifier entry has a start and an end (TS-012a) and a cell holds only a number of hours; Harvest offers its grid only to accounts that track durations, not start and end times. The rule is `gridEntryStart` in `app/time/` (TS-053).
 
 - [ ] The Week view shows a row for each project with time that week, and "Add row" adds one. Hours typed into a day's cell are saved, and a cell emptied removes that project's time on that day (tests).
 - [ ] A cell that holds more than one entry, or a running one, shows its total and is changed in the Day view (test).
