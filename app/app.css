@@ -207,3 +207,140 @@ html,
 body {
 	@apply bg-surface text-on-surface;
 }
+
+/*
+ * Component utilities (TS-005). Each one reads tokens; none holds a value of its own.
+ */
+
+/*
+ * A Material state layer: the element's own text colour laid over its container.
+ * Put `state-layer` on the element, then `state-hover`, `state-focus` or
+ * `state-pressed` under the variant for that state. When several apply, the
+ * strongest shows. The properties are registered as numbers so the layer can
+ * fade, and do not inherit, so a layer never leaks into the elements inside it.
+ */
+@property --state-layer-opacity {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@property --state-layer-hover {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@property --state-layer-focus {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@property --state-layer-pressed {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+
+@utility state-layer {
+	--state-layer-opacity: max(
+		var(--state-layer-hover),
+		var(--state-layer-focus),
+		var(--state-layer-pressed)
+	);
+	--state-layer-color: color-mix(
+		in srgb,
+		currentColor calc(var(--state-layer-opacity) * 100%),
+		transparent
+	);
+	background-image: linear-gradient(var(--state-layer-color), var(--state-layer-color));
+}
+
+@utility state-hover {
+	--state-layer-hover: var(--md-sys-state-hover-state-layer-opacity);
+}
+
+@utility state-focus {
+	--state-layer-focus: var(--md-sys-state-focus-state-layer-opacity);
+}
+
+@utility state-pressed {
+	--state-layer-pressed: var(--md-sys-state-pressed-state-layer-opacity);
+}
+
+/* What a control animates when its state changes; a pressed shape settles on the spring. */
+@utility transition-control {
+	transition:
+		--state-layer-opacity var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-linear),
+		color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+		background-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+		border-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+		box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+		border-radius var(--md-sys-motion-spring-duration) var(--md-sys-motion-spring-easing);
+}
+
+/* Disabled: the on-surface colour at Material's disabled opacities. */
+@utility text-disabled {
+	color: color-mix(
+		in srgb,
+		var(--md-sys-color-on-surface) calc(var(--md-sys-state-disabled-content-opacity) * 100%),
+		transparent
+	);
+}
+
+@utility bg-disabled {
+	background-color: color-mix(
+		in srgb,
+		var(--md-sys-color-on-surface) calc(var(--md-sys-state-disabled-container-opacity) * 100%),
+		transparent
+	);
+}
+
+/* A disabled text field or select is fainter than a disabled button. */
+@utility bg-disabled-field {
+	background-color: color-mix(
+		in srgb,
+		var(--md-sys-color-on-surface) calc(var(--md-sys-state-disabled-field-container-opacity) * 100%),
+		transparent
+	);
+}
+
+@utility border-disabled {
+	border-color: color-mix(
+		in srgb,
+		var(--md-sys-color-on-surface) calc(var(--md-sys-state-disabled-outline-opacity) * 100%),
+		transparent
+	);
+}
+
+/* The dimmed layer behind a dialog or a sheet. */
+@utility bg-scrim-dim {
+	background-color: color-mix(
+		in srgb,
+		var(--md-sys-color-scrim) calc(var(--md-sys-state-scrim-opacity) * 100%),
+		transparent
+	);
+}
+
+/* The keyboard focus indicator, outside the element or, where space is shared, inside it. */
+@utility focus-indicator {
+	outline: var(--md-sys-state-focus-indicator-thickness) solid var(--md-sys-color-secondary);
+	outline-offset: var(--md-sys-state-focus-indicator-outer-offset);
+}
+
+/* On an inverse surface, such as a snackbar, the indicator takes the inverse colour. */
+@utility focus-indicator-inverse {
+	outline: var(--md-sys-state-focus-indicator-thickness) solid var(--md-sys-color-inverse-primary);
+	outline-offset: var(--md-sys-state-focus-indicator-outer-offset);
+}
+
+@utility focus-indicator-inner {
+	outline: var(--md-sys-state-focus-indicator-thickness) solid var(--md-sys-color-secondary);
+	outline-offset: var(--md-sys-state-focus-indicator-inner-offset);
+}
+
+/* What a tab's indicator moves by when the selection changes; React Aria animates exactly these. */
+@utility transition-indicator {
+	transition-property: translate, width;
+}
