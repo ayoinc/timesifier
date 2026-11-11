@@ -2,8 +2,8 @@ import type { Locator, Page } from "@playwright/test";
 
 import { expect, openGallery, test } from "./fixtures";
 
-// Each of the twelve components is found by its role and accessible name and
-// operated with the keyboard alone. Nothing here clicks.
+// Each component is found by its role and accessible name and operated with the
+// keyboard alone. Nothing here clicks.
 
 /** The light half of the gallery. Overlays opened from it render inside it. */
 function gallery(page: Page): Locator {
@@ -126,6 +126,32 @@ test("Switch is turned on and off with Space", async ({ page }) => {
 	await expect(toggle).not.toBeChecked();
 
 	await expect(gallery(page).getByRole("switch", { name: "Disabled off" })).toBeDisabled();
+});
+
+test("RadioGroup is entered at its chosen radio and the arrow keys move the choice", async ({
+	page,
+}) => {
+	const group = gallery(page).getByRole("radiogroup", { name: "Week starts on" });
+	const monday = group.getByRole("radio", { name: "Monday" });
+	const sunday = group.getByRole("radio", { name: "Sunday" });
+
+	await tabTo(page, monday);
+	await expect(monday).toBeChecked();
+	await page.keyboard.press("ArrowDown");
+	await expect(sunday).toBeFocused();
+	await expect(sunday).toBeChecked();
+	await expect(monday).not.toBeChecked();
+	await page.keyboard.press("ArrowUp");
+	await expect(monday).toBeChecked();
+
+	// Tab leaves the group: it is one stop, not three.
+	await page.keyboard.press("Tab");
+	await expect(group.getByRole("radio", { name: "Saturday" })).not.toBeFocused();
+	expect(await focusIsInside(group)).toBe(false);
+
+	await expect(
+		gallery(page).getByRole("radio", { name: "Disabled choice", exact: true }),
+	).toBeDisabled();
 });
 
 test("Select opens, moves by arrow key and by typing, chooses with Enter and closes with Escape", async ({

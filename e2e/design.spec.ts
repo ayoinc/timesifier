@@ -11,6 +11,7 @@ const COMPONENTS = [
 	"TextField",
 	"Checkbox",
 	"Switch",
+	"RadioGroup",
 	"Select",
 	"Menu",
 	"Dialog",
@@ -32,9 +33,7 @@ for (const [scheme, colorScheme] of [
 	["Light scheme", "light"],
 	["Dark scheme", "dark"],
 ] as const) {
-	test(`${scheme}: all twelve components are drawn in the ${colorScheme} colours`, async ({
-		page,
-	}) => {
+	test(`${scheme}: every component is drawn in the ${colorScheme} colours`, async ({ page }) => {
 		const gallery = page.getByRole("region", { name: scheme });
 		expect(await style(gallery, "color-scheme")).toBe(colorScheme);
 		for (const component of COMPONENTS) {
@@ -87,6 +86,9 @@ for (const [scheme, colorScheme] of [
 		await expect(
 			gallery.locator("label", { has: page.getByRole("switch", { name: "Pressed" }) }),
 		).toHaveAttribute("data-pressed", "true");
+		await expect(
+			gallery.locator("label", { has: page.getByRole("radio", { name: "Hover" }) }),
+		).toHaveAttribute("data-hovered", "true");
 		await expect(gallery.getByRole("textbox", { name: "Focus" })).toHaveAttribute(
 			"data-focused",
 			"true",
@@ -107,6 +109,8 @@ for (const [scheme, colorScheme] of [
 		await expect(gallery.getByRole("checkbox", { name: "Disabled and selected" })).toBeDisabled();
 		await expect(gallery.getByRole("checkbox", { name: "Disabled and selected" })).toBeChecked();
 		await expect(gallery.getByRole("switch", { name: "Disabled on" })).toBeDisabled();
+		await expect(gallery.getByRole("radio", { name: "Disabled and chosen" })).toBeDisabled();
+		await expect(gallery.getByRole("radio", { name: "Disabled and chosen" })).toBeChecked();
 		await expect(gallery.getByRole("tab", { name: "Year" })).toHaveAttribute(
 			"aria-disabled",
 			"true",
@@ -125,6 +129,7 @@ for (const [scheme, colorScheme] of [
 
 		await expect(gallery.getByRole("checkbox", { name: "Round to 15 minutes" })).toBeChecked();
 		await expect(gallery.getByRole("switch", { name: "Idle detection" })).toBeChecked();
+		await expect(gallery.getByRole("radio", { name: "Monday" })).toBeChecked();
 		await expect(gallery.getByRole("button", { name: "Borealis With a value" })).toBeVisible();
 		await expect(gallery.getByRole("tab", { name: "Week" })).toHaveAttribute(
 			"aria-selected",
