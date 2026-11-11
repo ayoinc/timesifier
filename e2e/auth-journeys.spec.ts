@@ -232,6 +232,40 @@ test.describe("signing out and signing in", () => {
 	});
 });
 
+test.describe("the home page and the session", () => {
+	test("a person who is signed in never sees the home page, by its address or the back button; signed out, they never see the application", async ({
+		page,
+	}) => {
+		const landing = page.getByRole("heading", {
+			level: 1,
+			name: "Track your hours. Trust the total.",
+		});
+		await page.goto("/");
+		await expect(landing).toBeVisible();
+
+		await signIn(page, newPerson().email);
+		const { slug } = await createOrganisation(page);
+		const home = organisationPath(slug);
+
+		// By its address, and by a link to it.
+		await page.goto("/");
+		await expect(page).toHaveURL(home);
+
+		// Back through everything this tab has shown, to the home page it began on.
+		while (await page.goBack()) {
+			expect(new URL(page.url()).pathname).not.toBe("/");
+			await expect(landing).toHaveCount(0);
+		}
+
+		await signOut(page);
+		await page.goBack();
+		await expect(page).toHaveURL(/^[^?]*\/sign-in\?next=/);
+
+		await page.goto("/");
+		await expect(landing).toBeVisible();
+	});
+});
+
 test.describe("sign out everywhere", () => {
 	test("ends the session in a second browser too", async ({ page, browser, baseURL }) => {
 		const person = newPerson();

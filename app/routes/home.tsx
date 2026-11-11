@@ -21,6 +21,7 @@ import { TimerStates } from "~/landing/TimerStates";
 import { WeekReport } from "~/landing/WeekReport";
 import { YearStrip } from "~/landing/YearStrip";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
+import { requireSignedOut } from "~/routes/auth/session.server";
 
 import type { Route } from "./+types/home";
 
@@ -38,6 +39,17 @@ export function meta({ matches }: Route.MetaArgs) {
 		description:
 			"A timer and a weekly report for people and small teams who bill or account for their time. In development: today you can sign in and set up your organisation. The database is in the EU.",
 	});
+}
+
+/** A person who is signed in is sent to the application and never sees this page. */
+export const middleware: Route.MiddlewareFunction[] = [requireSignedOut];
+
+/**
+ * Nothing to load. Its being here makes a move to this page from inside the
+ * application ask the server, and so pass the middleware above.
+ */
+export function loader() {
+	return null;
 }
 
 const SECTIONS = [

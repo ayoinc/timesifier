@@ -98,6 +98,16 @@ Everything under `/app` needs a session. The layout route `app/routes/app/layout
 - **`next` is never trusted.** After sign-in a person goes to `next` only when it is a path on our own origin at or under `/app`, or the page of one invitation; anything else, or nothing, gives `/app` (`safeNext` in `app/routes/auth/paths.ts`). The value is parsed as a browser would follow it, so an address behind `//`, a backslash or `..` is judged by where it leads. The sign-in page sends a person who already has a session to the same place.
 - **The page calls Better Auth only through `/api/auth/`**, from the browser, where the rate limit and the Turnstile check act. No message on it says whether an address has an account.
 
+### The pages for a person who is signed out
+
+The home page is for a person who is not signed in, and is never shown to one who is (card TS-055). `app/routes/home.tsx` exports a `middleware`, `requireSignedOut` in `app/routes/auth/session.server.ts`, that reads the session as the guard on `/app` does and answers a person who has one with a redirect to `/app`, which sends them on to their organisation: a 302 for the page, and the framework's whole-page redirect for a data request. The route also has a loader, so a move to it from inside the application asks the server too. The sign-in page's loader does the same, to `next`. Only signing out, or a session that has ended, shows these pages again.
+
+- **A failure is not proof of being signed out.** When the session cannot be read, the request gets the error page, not the home page.
+- **No copy of a page is kept.** Every HTML response, and every `.data` response a move between pages loads, is sent with `Cache-Control: private, no-store` unless it says otherwise itself (`workers/no-copy.ts`). Neither the browser nor anything between keeps a page seen before signing in or after signing out.
+- **The back button asks the server.** A page the browser restores whole from its back-forward cache reloads at once (`app/shell/fresh-on-return.ts`, in the root route), so the server decides again: back from the application does not reach the home page, and back after signing out does not reach the application.
+- **Tests.** `test/pages/signed-out-pages.test.ts` (redirects, the data request, signing out, a session that cannot be read, the headers) and the journey "the home page and the session" in `e2e/auth-journeys.spec.ts`, which walks back through a tab's whole history in both engines.
+- **Not covered:** the privacy notice and the terms are documents for everyone, signed in or not, and stay open to both.
+
 ### One way in
 
 `/sign-in` is the one page a person uses without a session, new or returning (card TS-036). The email-code plugin makes the account of an address the first time a code proves it, so the page asks nothing that tells the two apart, and says nothing that does.

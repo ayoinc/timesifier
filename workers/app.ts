@@ -2,6 +2,7 @@ import { createRequestHandler, RouterContextProvider } from "react-router";
 
 import { canonicalHost } from "./canonical-host";
 import { formerSignUp } from "./former-sign-up";
+import { keepNoCopy } from "./no-copy";
 import { createNonce, nonceContext } from "./nonce";
 import { rejectCrossOrigin } from "./origin-check";
 import { withSecurityHeaders } from "./security-headers";
@@ -26,6 +27,6 @@ export default {
 			rejectCrossOrigin(request) ??
 			formerSignUp(request) ??
 			(await handleWithFramework(request, nonce));
-		return withSecurityHeaders(response, nonce);
+		return withSecurityHeaders(keepNoCopy(request, response), nonce);
 	},
 } satisfies ExportedHandler<Env>;

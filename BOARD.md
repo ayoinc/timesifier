@@ -23,6 +23,16 @@ Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the arch
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-055 · A signed-in person never sees the home page
+
+Builder: an AI session on branch `ts-055-session`. The owner asked on 2026-11-11 that a signed-in session never shows the landing page, for any reason, until the person signs out. How it works is in `docs/security.md`, "The pages for a person who is signed out".
+
+- [x] A signed-in person who asks for `/` is sent to `/app`, and on to their organisation; a move to `/` from inside the application gets the same as a whole-page redirect (`test/pages/signed-out-pages.test.ts`).
+- [x] After signing out, `/` shows the home page again (same file).
+- [x] When the session cannot be read, `/` answers with the error page, not the home page (same file).
+- [x] Every page and every page's data is sent with `Cache-Control: private, no-store` (same file).
+- [x] Going back through a tab's history after signing in never shows the home page; going back after signing out never shows the application (`e2e/auth-journeys.spec.ts`, "the home page and the session", Chromium and WebKit).
+
 ### TS-053 · Foundation for the heading features
 
 Builder: an AI session on branch `ts-053-foundation`. In review: the pull request against `main`. The owner asked on 2026-11-11 for every feature under the headings of `docs/navigation.md` to be built. The work runs in two waves: this card first, then four slices built side by side, each owning its own pages (Timesheet; Projects, Clients and Workspace settings; Teams, Team and Approvals; Reports and the CSV export). This card lays what the four share: the navigation by heading and role, one migration with every table they need, and the rules in `app/` that more than one of them reads. It builds no feature page.

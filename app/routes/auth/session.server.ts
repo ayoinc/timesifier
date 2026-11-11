@@ -8,6 +8,7 @@ import { createContext, type MiddlewareFunction, redirectDocument } from "react-
 import { getSession, type SignedIn } from "~/auth/auth.server";
 
 import { required } from "~/lib/deployment";
+import { APP_PATH } from "~/shell/destinations";
 import { NEXT_PARAM, safeNext, signInPath } from "./paths";
 
 /**
@@ -30,6 +31,21 @@ export const requireSession: MiddlewareFunction<Response> = async ({ request, ur
 	const signedIn = await getSession(request);
 	if (!signedIn) throw redirectDocument(signInPath(`${url.pathname}${url.search}`));
 	context.set(signedInContext, signedIn);
+};
+
+/**
+ * The guard on the pages for a person who is not signed in: the home page and
+ * the sign-in page. A person with a session that is still valid never sees
+ * them; they are sent to `/app`, which sends them on to their organisation.
+ * Only signing out, or a session that has ended, shows them again.
+ *
+ * When the session cannot be read the request fails with the error page: a
+ * failure is not proof that the person is signed out. A route that uses this
+ * also needs a loader, so that a move to it inside the application asks the
+ * server and passes here too.
+ */
+export const requireSignedOut: MiddlewareFunction<Response> = async ({ request }) => {
+	if (await getSession(request)) throw redirectDocument(APP_PATH);
 };
 
 /**
