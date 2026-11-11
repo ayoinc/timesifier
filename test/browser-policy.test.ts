@@ -90,6 +90,15 @@ describe("browser policy headers", () => {
 		expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
 		expect(response.headers.has("Content-Security-Policy")).toBe(false);
 	});
+
+	it("redirects www to the apex with HSTS, so the alias is never served over plain HTTP again", async () => {
+		const response = await worker.fetch("https://www.timesifier.com/reports?week=46", {
+			redirect: "manual",
+		});
+		expect(response.status).toBe(308);
+		expect(response.headers.get("Location")).toBe(`${ORIGIN}/reports?week=46`);
+		expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=63072000");
+	});
 });
 
 describe("origin check on state-changing requests", () => {
