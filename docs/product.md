@@ -2,7 +2,7 @@
 
 Timesifier helps individuals and teams understand and improve how they use their time: track it, plan focus around meetings, and see where it went.
 
-Source: the Timesifier PRD written in May 2025 (GitHub `ayoinc/v0-timesifier-prd`, private). This document replaces it as the working scope. Figures marked *(2025 PRD)* have not been revalidated.
+Source: the Timesifier PRD written in May 2025 (GitHub `ayoinc/v0-timesifier-prd`, private). This document replaces it as the working scope. Figures marked _(2025 PRD)_ have not been revalidated.
 
 ## Problem
 
@@ -13,28 +13,28 @@ Source: the Timesifier PRD written in May 2025 (GitHub `ayoinc/v0-timesifier-prd
 
 ## Who it is for
 
-| Persona | Situation | Wants |
-|---|---|---|
-| Alex, knowledge worker | Balances meetings, deep work and admin | More deep-work time, fewer unproductive meetings |
-| Jordan, freelancer | Several clients, bills by the hour | Accurate billable time with little admin |
-| Taylor, executive | Calendar dominated by meetings | A lighter meeting load and time to think |
-| Morgan, small-business owner | Does every job in the business | To see which activities drive growth |
+| Persona                      | Situation                              | Wants                                            |
+| ---------------------------- | -------------------------------------- | ------------------------------------------------ |
+| Alex, knowledge worker       | Balances meetings, deep work and admin | More deep-work time, fewer unproductive meetings |
+| Jordan, freelancer           | Several clients, bills by the hour     | Accurate billable time with little admin         |
+| Taylor, executive            | Calendar dominated by meetings         | A lighter meeting load and time to think         |
+| Morgan, small-business owner | Does every job in the business         | To see which activities drive growth             |
 
-The first target is technology professionals and freelancers *(2025 PRD)*.
+The first target is technology professionals and freelancers _(2025 PRD)_.
 
 ## Release 1: the web platform
 
 Release 1 is a web application. It covers what a person or a small team needs to track and review time without installing anything.
 
-| Capability | In release 1 |
-|---|---|
-| Accounts | Sign in with a passkey or email; organisations, teams and roles |
-| Tracking | Start and stop a timer; add and edit entries by hand; projects and clients |
-| Review | Today and week views; reports by project, client and day; CSV export |
-| AI | Suggested project or category for an entry; the person accepts or rejects it |
-| Scheduling | Read-only calendar import; planned focus blocks compared with what happened |
-| Insight | A weekly summary of where time went |
-| Trust | Data export, account deletion, audit log |
+| Capability | In release 1                                                                 |
+| ---------- | ---------------------------------------------------------------------------- |
+| Accounts   | Sign in with a passkey or email; organisations, teams and roles              |
+| Tracking   | Start and stop a timer; add and edit entries by hand; projects and clients   |
+| Review     | Today and week views; reports by project, client and day; CSV export         |
+| AI         | Suggested project or category for an entry; the person accepts or rejects it |
+| Scheduling | Read-only calendar import; planned focus blocks compared with what happened  |
+| Insight    | A weekly summary of where time went                                          |
+| Trust      | Data export, account deletion, audit log                                     |
 
 ## After release 1
 

@@ -1,13 +1,24 @@
-node_modules/
-build/
-dist/
-.wrangler/
-.react-router/
-.dev.vars
-.dev.vars.*
-!.dev.vars.example
-.env
-.env.*
-!.env.example
 .DS_Store
+.env
+/node_modules/
+*.tsbuildinfo
+
+# React Router
+/.react-router/
+/build/
+
+# Cloudflare
+.mf
+.wrangler
+.dev.vars*
+worker-configuration.d.ts
+
+!.dev.vars.example
+!.env.example
+
+# Local secrets and tooling
+.env.*
 *.log
+coverage/
+playwright-report/
+test-results/

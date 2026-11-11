@@ -1,0 +1,5 @@
+# Local secrets for `pnpm dev`. Copy to `.dev.vars` (ignored by git) and
+# `chmod 600 .dev.vars`. Names only here; never commit a value.
+# See docs/security.md, "Secrets".
+#
+# No secrets are needed yet. Cards add names here as they introduce them.
