@@ -65,6 +65,18 @@ function CreateAccount() {
 	);
 }
 
+/**
+ * What a person gets by creating an account today, said wherever the page asks
+ * them to. The sections describe the product being built; this line is where it stands.
+ */
+function OpenToday() {
+	return (
+		<p className="mt-4 max-w-120 text-body-medium text-on-sheet-variant">
+			Open today: accounts and organisations. The timer and the weekly report are being built.
+		</p>
+	);
+}
+
 function Fact({ term, children }: { term: string; children: ReactNode }) {
 	return (
 		<div className="border-t border-outline-variant py-4">
@@ -102,6 +114,7 @@ export default function Home() {
 									Sign in
 								</a>
 							</p>
+							<OpenToday />
 						</div>
 						<div className="min-w-0 expanded:col-span-6 large:col-span-5">
 							<DaySheet />
@@ -244,6 +257,7 @@ export default function Home() {
 							<p className="mt-8">
 								<CreateAccount />
 							</p>
+							<OpenToday />
 						</div>
 						<Photo
 							photo={PHOTOS.departure}
