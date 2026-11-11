@@ -430,7 +430,7 @@ describe("inviting a person", () => {
 		const message = await invitationTo("grace@example.com");
 		const link = `https://timesifier.com/invitations/${invitation.id}`;
 		expect(message.from).toEqual(SENDER);
-		expect(message.subject).toBe("You are invited to join Acme on Timesifier");
+		expect(message.subject).toBe("You are invited to join an organisation on Timesifier");
 		expect(message.text.split(link)).toHaveLength(2);
 		expect(message.html.split(link)).toHaveLength(2);
 		// Nothing a mail program would fetch, and no address but ours.
@@ -480,6 +480,104 @@ describe("inviting a person", () => {
 		const message = await invitationTo("grace@example.com");
 		expect(message.html).toContain("&lt;img src=&quot;//evil.example/x&quot;&gt; &amp; Co");
 		expect(message.html).not.toContain("<img");
+	});
+
+	it("has the same subject whatever the organisation is called: the name is in the body alone", async () => {
+		const ada = await signIn(mailbox, "ada@example.com");
+		const name = "Account suspended, verify at example.test/x";
+		const organisation = await createOrganisation(ada.cookie, name);
+
+		await invite(ada.cookie, organisation.id, "grace@example.com");
+
+		const message = await invitationTo("grace@example.com");
+		expect(message.subject).toBe("You are invited to join an organisation on Timesifier");
+		expect(message.text).toContain(`“${name}”`);
+	});
+});
+
+describe("the invitations one person can send", () => {
+	const TOO_MANY = {
+		status: 429,
+		body: {
+			code: "TOO_MANY_INVITATIONS",
+			message: "You have sent 20 invitations in the last 24 hours. Try again later.",
+		},
+	};
+	const sentTo = (email: string) =>
+		mailbox.sent().filter(({ to, text }) => to === email && text.includes("/invitations/")).length;
+
+	/** Invites from a client of its own, so the limit of ten a minute per client is never what answers. */
+	let clients = 0;
+	const inviteTo = (cookie: string, organizationId: string, email: string) =>
+		post(
+			"/organization/invite-member",
+			{ organizationId, email, role: "member" },
+			{ cookie, client: `192.0.2.${(clients++ % 250) + 1}` },
+		);
+
+	it("are twenty in 24 hours across all their organisations: the 21st is refused, stores nothing and sends nothing", async () => {
+		const { ada, eve, organisation } = await acme();
+		const globex = await createOrganisation(ada.cookie, "Globex");
+		const evesOwn = await createOrganisation(eve.cookie, "Initech");
+		const statuses = [];
+		for (let n = 0; n < 20; n++) {
+			const into = n % 2 ? globex : organisation;
+			statuses.push((await inviteTo(ada.cookie, into.id, `person${n}@example.com`)).status);
+		}
+
+		const next = await inviteTo(ada.cookie, organisation.id, "one-more@example.com");
+		const inTheOther = await inviteTo(ada.cookie, globex.id, "one-more@example.com");
+		const bySomebodyElse = await inviteTo(eve.cookie, evesOwn.id, "one-more@example.com");
+
+		expect(statuses).toEqual(Array(20).fill(200));
+		expect(await answer(next)).toEqual(TOO_MANY);
+		expect(await answer(inTheOther)).toEqual(TOO_MANY);
+		expect(bySomebodyElse.status).toBe(200);
+		await vi.waitFor(() => expect(sentTo("one-more@example.com")).toBe(1));
+		expect(await value("select count(*) from invitations where inviter_id = ?", ada.user.id)).toBe(
+			20,
+		);
+	});
+
+	it("are counted over any 24 hours, and cancelling one or deleting its organisation gives nothing back", async () => {
+		vi.useFakeTimers({ toFake: ["Date"] });
+		const start = Date.now();
+		const { ada, organisation } = await acme();
+		const doomed = await createOrganisation(ada.cookie, "Doomed");
+		const first = await inviteTo(ada.cookie, organisation.id, "first@example.com");
+		const { id: firstId } = (await first.json()) as { id: string };
+		vi.setSystemTime(start + 12 * 3_600_000);
+		for (let n = 1; n < 20; n++) await inviteTo(ada.cookie, doomed.id, `person${n}@example.com`);
+
+		await post(
+			"/organization/cancel-invitation",
+			{ organizationId: organisation.id, invitationId: firstId },
+			{ cookie: ada.cookie },
+		);
+		await post("/organization/delete", { organizationId: doomed.id }, { cookie: ada.cookie });
+		const afterGivingUpAll = await inviteTo(ada.cookie, organisation.id, "again@example.com");
+		vi.setSystemTime(start + 25 * 3_600_000);
+		const oneIsADayOld = await inviteTo(ada.cookie, organisation.id, "again@example.com");
+		const theRestAreNot = await inviteTo(ada.cookie, organisation.id, "more@example.com");
+
+		expect(await value("select count(*) from invitations where status = 'pending'")).toBe(1);
+		expect(await answer(afterGivingUpAll)).toEqual(TOO_MANY);
+		expect(oneIsADayOld.status).toBe(200);
+		expect(await answer(theRestAreNot)).toEqual(TOO_MANY);
+	});
+
+	it("do not include an invitation that was refused for another reason", async () => {
+		const { ada, organisation } = await acme();
+		const refused = [];
+		for (let n = 0; n < 21; n++) {
+			// Ada is already a member of her own organisation.
+			refused.push((await inviteTo(ada.cookie, organisation.id, "ada@example.com")).status);
+		}
+
+		const invited = await inviteTo(ada.cookie, organisation.id, "grace@example.com");
+
+		expect(refused).toEqual(Array(21).fill(400));
+		expect(invited.status).toBe(200);
 	});
 
 	it("is made even when its message cannot be sent, and the failure is logged without the address", async () => {

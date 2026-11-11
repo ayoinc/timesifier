@@ -2,7 +2,14 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureEmail, get, type Mailbox, post, signIn } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { answer, createOrganisation, row, value } from "./harness";
+import {
+	answer,
+	createOrganisation,
+	row,
+	seedMembership,
+	seedOrganisation,
+	value,
+} from "./harness";
 
 let mailbox: Mailbox;
 
@@ -126,6 +133,55 @@ describe("creating an organisation", () => {
 			expect(stored?.created_at, table).toBeLessThanOrEqual(Date.now());
 			expect(stored?.updated_at, table).toBeGreaterThanOrEqual(before);
 		}
+	});
+});
+
+describe("the organisations one person can own", () => {
+	const create = (cookie: string, name: string) =>
+		post("/organization/create", { name }, { cookie });
+
+	it("are five: the sixth is refused in words a page can show, and creates nothing", async () => {
+		const ada = await signIn(mailbox, "ada@example.com");
+		const grace = await signIn(mailbox, "grace@example.com");
+		const statuses = [];
+		for (let n = 1; n <= 5; n++) statuses.push((await create(ada.cookie, `Acme ${n}`)).status);
+
+		const sixth = await create(ada.cookie, "Acme 6");
+		const somebodyElses = await create(grace.cookie, "Globex");
+
+		expect(statuses).toEqual([200, 200, 200, 200, 200]);
+		expect(await answer(sixth)).toEqual({
+			status: 403,
+			body: {
+				code: "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
+				message: "You have reached the maximum number of organizations",
+			},
+		});
+		expect(somebodyElses.status).toBe(200);
+		expect(await organisations()).toBe(6);
+	});
+
+	it("can be five again after one is deleted", async () => {
+		const ada = await signIn(mailbox, "ada@example.com");
+		const created = [];
+		for (let n = 1; n <= 5; n++) created.push(await createOrganisation(ada.cookie, `Acme ${n}`));
+
+		await post("/organization/delete", { organizationId: created[0]?.id }, { cookie: ada.cookie });
+
+		expect((await create(ada.cookie, "Another")).status).toBe(200);
+		expect((await create(ada.cookie, "One too many")).status).toBe(403);
+	});
+
+	it("do not include the organisations a person only belongs to", async () => {
+		const grace = await signIn(mailbox, "grace@example.com");
+		for (let n = 1; n <= 5; n++) {
+			const { id } = await seedOrganisation(`Somebody's ${n}`, `somebodys-${n}`);
+			await seedMembership(id, grace.user.id, n % 2 ? "member" : "admin");
+		}
+
+		const her = await create(grace.cookie, "Her own");
+
+		expect(her.status).toBe(200);
 	});
 });
 

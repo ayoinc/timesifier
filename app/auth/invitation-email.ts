@@ -30,8 +30,10 @@ type Invitation = {
  * our own host, and no image or other remote content. The link appears once in
  * the text and once in the HTML.
  *
- * The organisation's name is chosen by whoever created the organisation, so it
- * is quoted in the text and escaped in the HTML.
+ * The organisation's name is chosen by whoever created the organisation, and
+ * the message goes to somebody who never asked for it. So the subject is the
+ * same for every invitation and holds nothing anybody chose; the name appears
+ * in the body alone, quoted in the text and escaped in the HTML.
  */
 export function invitationEmail({
 	link,
@@ -47,7 +49,7 @@ export function invitationEmail({
 	const ignore = "If you were not expecting it, you can ignore this email.";
 
 	return {
-		subject: `You are invited to join ${organisationName} on Timesifier`,
+		subject: "You are invited to join an organisation on Timesifier",
 		text: `${lead(organisationName, inviterEmail)}\n\nOpen the invitation:\n${link}\n\n${terms}\n\n${ignore}\n`,
 		html: `<!doctype html><html lang="en"><body><p>${lead(escapeHtml(organisationName), escapeHtml(inviterEmail))}</p><p><a href="${escapeHtml(link)}">Open the invitation</a></p><p>${terms}</p><p>${ignore}</p></body></html>`,
 	};

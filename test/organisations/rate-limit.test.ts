@@ -23,10 +23,16 @@ async function statusesOf(count: number, attempt: (n: number) => Promise<Respons
 
 describe("the rate limit on organisations", () => {
 	it("answers the 11th organisation a client creates in a minute with 429, and creates ten", async () => {
+		// Two people at one address, because one person may own five.
 		const ada = await signIn(mailbox, "ada@example.com");
+		const grace = await signIn(mailbox, "grace@example.com");
 
 		const statuses = await statusesOf(11, (n) =>
-			post("/organization/create", { name: `Acme ${n}` }, { cookie: ada.cookie }),
+			post(
+				"/organization/create",
+				{ name: `Acme ${n}` },
+				{ cookie: n % 2 ? grace.cookie : ada.cookie },
+			),
 		);
 
 		expect(statuses).toEqual([...Array(10).fill(200), 429]);
