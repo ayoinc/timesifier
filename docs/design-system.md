@@ -94,7 +94,8 @@ Under `app/`, outside the generated `app/styles/tokens.css`:
 
 - a hex colour, such as `#fff` or `#4f5bd5`;
 - a utility with a bracketed value, such as `w-[13px]`, `bg-[#fff]`, `text-[color:red]`, `bg-primary/[0.5]` or `min-[320px]:`;
-- a bracketed declaration used as a class, such as `[mask-type:luminance]`.
+- a bracketed declaration used as a class, such as `[mask-type:luminance]`;
+- a style read from a sibling's attribute, such as `peer-data-focused:` or `peer-aria-invalid:` ("State from another element", below).
 
 Bracketed variants that only select a state, such as `data-[state=open]:`, are allowed. The check reads text, not syntax: it also reports a hex colour in a comment, and three or four hex digits after a bare `#` (write "issue 123", not `#123`).
 
@@ -140,6 +141,33 @@ Where a component departs from those files:
 | Icons           | `app/components/icons/`    | Material Symbols, Rounded, weight 400: one module per icon, each an inline SVG, so a page ships only the icons it uses. The paths are copied from the SVG sources in github.com/google/material-design-icons (commit `10ecc14`), licence Apache-2.0. `Icon.tsx` says how to add one.                                                     |
 
 State is read from the attributes React Aria sets (`data-hovered`, `data-pressed`, `data-focus-visible`, `data-selected`, `data-disabled`, `data-invalid`), with Tailwind's `data-…:` variants. Checkbox, Switch, RadioGroup and Select are built on React Aria's hooks and set the same attributes themselves; `docs/security.md` says why.
+
+### State from another element
+
+A component often styles one element from the state of another: a field's label from its input. Where the state is read from depends on where the other element is.
+
+- **The element itself or an ancestor:** React Aria's attribute, directly (`data-focused:`, `group-data-focused:`).
+- **A sibling:** through the container the two share. The container is a named group and the styled element asks whether the group holds the state: `group/field` on the container, `group-has-data-focused/field:` on the label. `app/components/field.ts` does this for a field's label and line.
+- **A sibling's own pseudo-class** is safe too: `peer-placeholder-shown:` is how a label knows its input is empty.
+- **Never a sibling's attribute:** `peer-data-…:` and `peer-aria-…:` fail `pnpm check:tokens`.
+
+The reason is a defect in WebKit 27.2, which is Safari's engine, found on 2026-11-11. When a page's stylesheet has any rule for a pseudo-element inside a form control (`::placeholder`, `::file-selector-button`; Tailwind's reset has both), WebKit does not restyle the siblings of an `input` or a `textarea` for an attribute written on it during an event. React Aria writes `data-focused` and `data-hovered` during events. The label of a text field stayed on the line a person was typing on; Chromium was right, so no test saw it. The element's own attributes, an ancestor's, `:has()` and pseudo-classes are all followed correctly.
+
+The smallest page that shows it. The text turns red on focus in Chromium and stays black in WebKit 27.2:
+
+```html
+<style>
+  ::placeholder { opacity: 1 }
+  input[data-on] ~ span { color: red }
+</style>
+<input><span>red once the input has focus</span>
+<script>
+  const input = document.querySelector("input");
+  input.addEventListener("focus", () => input.setAttribute("data-on", ""));
+</script>
+```
+
+`e2e/field-label.spec.ts` holds the fields to the right behaviour in both engines, and the component tests as a whole run in WebKit as well as Chromium (`playwright.config.ts`).
 
 ### How the components move
 
