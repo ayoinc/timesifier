@@ -125,6 +125,16 @@ export function instantAt(day: Day, minutes: number, zone: string): number {
 }
 
 /**
+ * The same instant for a time a person typed: null when the wall clock in
+ * `zone` never reads `minutes` after midnight on `day`, because a clock change
+ * skips it (TS-012b). A time the clock passes twice is the first of the two.
+ */
+export function exactInstantAt(day: Day, minutes: number, zone: string): number | null {
+	const instant = instantAt(day, minutes, zone);
+	return wallClock(instant, zone) === parseDay(day) + minutes * 60_000 ? instant : null;
+}
+
+/**
  * The first instant of `day` in `zone`: the earliest instant whose local date
  * is `day`. It is found by search rather than by reading midnight, because in
  * some zones a clock change skips midnight itself.

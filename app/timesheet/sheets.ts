@@ -1,0 +1,193 @@
+import { locksEntries, type PeriodDays, type PeriodStatus, periodAfter } from "~/periods/periods";
+import { type Day, dayOf } from "~/time/calendar";
+
+/**
+ * What the views of Timesheet add up (TS-013, TS-046, TS-052). Nothing here
+ * reads the database or the clock: the loader passes the person's entries, the
+ * zone their days are counted in and the time of the request, so a total is
+ * the same sum wherever it is worked out. An entry belongs whole to the local
+ * day it starts in, and a running entry counts up to `now`.
+ */
+
+/** An entry as the sheets read it: times in milliseconds, `endedAt` null while it runs. */
+export interface SheetEntry {
+	id: string;
+	projectId: string;
+	description: string | null;
+	startedAt: number;
+	endedAt: number | null;
+}
+
+/** How long `entry` has lasted by `now`. */
+export function durationOf(entry: Pick<SheetEntry, "startedAt" | "endedAt">, now: number): number {
+	return Math.max(0, (entry.endedAt ?? now) - entry.startedAt);
+}
+
+/** The sum of the entries' durations by `now`. */
+export function totalOf(entries: readonly SheetEntry[], now: number): number {
+	return entries.reduce((sum, entry) => sum + durationOf(entry, now), 0);
+}
+
+/** One project's time on one day of the week's grid. */
+export interface GridCell {
+	day: Day;
+	/** The sum of the entries of that project that start on that day. */
+	total: number;
+	/** How many entries make it up. A cell of more than one is changed in the Day view. */
+	entries: number;
+	/** Whether one of them is running. Such a cell is changed in the Day view too. */
+	running: boolean;
+	/** The one entry behind the cell when there is exactly one, which typing hours changes. */
+	entryId: string | null;
+}
+
+export interface GridRow {
+	projectId: string;
+	cells: GridCell[];
+	/** The project's total for the week: the sum of its cells. */
+	total: number;
+}
+
+export interface WeekSheet {
+	days: { day: Day; total: number }[];
+	/** One row per project with time in the week, then each added row, in the order given. */
+	rows: GridRow[];
+	total: number;
+}
+
+/**
+ * The week's grid: a row for each project with time on `days`, in the order
+ * of `projectOrder` (projects it does not name come last), then a row for
+ * each of `addedRows` that has no time yet. A day's total and the week's are
+ * sums of the cells.
+ */
+export function weekSheet(
+	entries: readonly SheetEntry[],
+	days: readonly Day[],
+	zone: string,
+	now: number,
+	{
+		projectOrder = [],
+		addedRows = [],
+	}: { projectOrder?: readonly string[]; addedRows?: readonly string[] } = {},
+): WeekSheet {
+	const byProject = new Map<string, Map<Day, SheetEntry[]>>();
+	for (const entry of entries) {
+		const day = dayOf(entry.startedAt, zone);
+		if (!days.includes(day)) continue;
+		let ofProject = byProject.get(entry.projectId);
+		if (!ofProject) {
+			ofProject = new Map();
+			byProject.set(entry.projectId, ofProject);
+		}
+		ofProject.set(day, [...(ofProject.get(day) ?? []), entry]);
+	}
+
+	const rank = (id: string) => {
+		const at = projectOrder.indexOf(id);
+		return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+	};
+	const projectIds = [...byProject.keys()].sort((a, b) => rank(a) - rank(b));
+	for (const id of addedRows) if (!projectIds.includes(id)) projectIds.push(id);
+
+	const rows = projectIds.map((projectId): GridRow => {
+		const ofProject = byProject.get(projectId);
+		const cells = days.map((day): GridCell => {
+			const inCell = ofProject?.get(day) ?? [];
+			return {
+				day,
+				total: totalOf(inCell, now),
+				entries: inCell.length,
+				running: inCell.some((entry) => entry.endedAt === null),
+				entryId: inCell.length === 1 ? (inCell[0]?.id ?? null) : null,
+			};
+		});
+		return { projectId, cells, total: cells.reduce((sum, cell) => sum + cell.total, 0) };
+	});
+
+	const dayTotals = days.map((day, index) => ({
+		day,
+		total: rows.reduce((sum, row) => sum + (row.cells[index]?.total ?? 0), 0),
+	}));
+	return { days: dayTotals, rows, total: dayTotals.reduce((sum, each) => sum + each.total, 0) };
+}
+
+/** Whether a cell of the grid takes typed hours: one entry or none, not running, on a day not locked. */
+export function isTypable(cell: GridCell, locked: boolean): boolean {
+	return !locked && !cell.running && cell.entries <= 1;
+}
+
+/** What the Week view's header and History say a period is. */
+export type PeriodState = "not-submitted" | "submitted" | "approved" | "returned";
+
+export const PERIOD_STATE_LABELS: Record<PeriodState, string> = {
+	"not-submitted": "Not submitted",
+	submitted: "Submitted",
+	approved: "Approved",
+	returned: "Returned",
+};
+
+/** A period never submitted, or withdrawn, is not submitted. */
+export function periodState(status: PeriodStatus | null): PeriodState {
+	return status === null || status === "withdrawn" ? "not-submitted" : status;
+}
+
+/** Whether the person may change the entries of a period in `status`. */
+export function isEditable(status: PeriodStatus | null): boolean {
+	return !locksEntries(status);
+}
+
+/** How many periods History lists at most: a year of weeks. */
+export const HISTORY_LENGTH = 53;
+
+export interface HistoryRow extends PeriodDays {
+	state: PeriodState;
+	total: number;
+	/** The reason given when it was returned, while it stands returned. */
+	comment: string | null;
+}
+
+/**
+ * Every period of the person from the earliest one with an entry or a
+ * submission up to `current`, newest first, at most `HISTORY_LENGTH` of them,
+ * each with its state and its total.
+ */
+export function historyRows(
+	current: PeriodDays,
+	periods: readonly (PeriodDays & { status: PeriodStatus; comment: string | null })[],
+	entries: readonly SheetEntry[],
+	zone: string,
+	now: number,
+): HistoryRow[] {
+	const earliestEntry = entries.reduce<Day | null>((first, entry) => {
+		const day = dayOf(entry.startedAt, zone);
+		return first === null || day < first ? day : first;
+	}, null);
+	const earliestPeriod = periods.reduce<Day | null>(
+		(first, period) => (first === null || period.startsOn < first ? period.startsOn : first),
+		null,
+	);
+	const earliest = [earliestEntry, earliestPeriod, current.startsOn]
+		.filter((day): day is Day => day !== null)
+		.sort()[0] as Day;
+
+	const rows: HistoryRow[] = [];
+	for (
+		let period = current;
+		period.endsOn >= earliest && rows.length < HISTORY_LENGTH;
+		period = periodAfter(period, -1)
+	) {
+		const row = periods.find((each) => each.startsOn === period.startsOn) ?? null;
+		const inPeriod = entries.filter((entry) => {
+			const day = dayOf(entry.startedAt, zone);
+			return period.startsOn <= day && day <= period.endsOn;
+		});
+		rows.push({
+			...period,
+			state: periodState(row?.status ?? null),
+			total: totalOf(inPeriod, now),
+			comment: row?.status === "returned" ? row.comment : null,
+		});
+	}
+	return rows;
+}

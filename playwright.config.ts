@@ -23,7 +23,11 @@ const IN_WEBKIT_TOO =
 	/[\\/](?:accessibility|components|design|field-label|reduced-motion|landing|documents|public-links|identity)\.spec\.ts$/;
 // Signs one person up and saves their session; every Chromium test starts with it.
 const SETUP = /auth\.setup\.ts/;
-
+// These write to the local database with `wrangler d1 execute` while the server
+// runs. A write from outside can hold the database's lock while the server
+// writes for another test, which then fails with a 500. They run after every
+// other Chromium test, one at a time.
+const SEEDS_THE_DATABASE = /[\\/](?:people|reports)\.spec\.ts$/;
 // What the server under test is given. None of it is a secret: the first signs
 // cookies for this run only, and the second is Cloudflare's published Turnstile
 // test secret, which passes every check.
@@ -72,8 +76,15 @@ export default defineConfig({
 			// A test of signing in starts without one: `SIGNED_OUT` in e2e/auth.ts.
 			// The session cookie is `Secure`; Chromium keeps one on http://localhost.
 			name: "chromium",
-			testIgnore: IOS_ONLY,
+			testIgnore: [IOS_ONLY, SEEDS_THE_DATABASE],
 			dependencies: ["setup"],
+			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
+		},
+		{
+			name: "chromium-seeded",
+			testMatch: SEEDS_THE_DATABASE,
+			dependencies: ["chromium"],
+			workers: 1,
 			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
 		},
 		{
@@ -101,7 +112,9 @@ export default defineConfig({
 		env: SERVER_ENV,
 		reuseExistingServer: false,
 		timeout: 180_000,
-		stdout: "ignore",
+		// In the pipeline the server's own lines go to the job's log, so a 500 seen
+		// by a test can be read beside it; locally they would drown the results.
+		stdout: process.env.CI ? "pipe" : "ignore",
 		stderr: "pipe",
 	},
 });

@@ -19,7 +19,7 @@ import {
 	TIME_WITH_TURNS,
 } from "./auth";
 import { SIGNED_IN_AS_MEMBER, SIGNED_OUT } from "./auth-state";
-import { expect, openShell, test } from "./fixtures";
+import { destinationLinks, expect, openShell, test } from "./fixtures";
 import {
 	createOrganisation,
 	expectRefusal,
@@ -82,7 +82,7 @@ test.describe("a person who has just signed in for the first time", () => {
 				await expect(page.getByText("You are its owner.")).toBeVisible();
 
 				// Every destination, for its owner, each at its address in this organisation.
-				const links = page.getByRole("navigation", { name: "Main" }).getByRole("link");
+				const links = destinationLinks(page);
 				await expect(links).toHaveText(destinations.map(({ label }) => label));
 				for (const { id, label } of destinations) {
 					await expect(links.filter({ hasText: label })).toHaveAttribute(
@@ -235,11 +235,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		// Bob, a member, is shown Timesheet, Projects and Reports. Team and
 		// Workspace settings are not his to open: their addresses are the 404 page.
 		await openShell(other, organisationPath(slug));
-		await expect(other.getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveText([
-			"Timesheet",
-			"Projects",
-			"Reports",
-		]);
+		await expect(destinationLinks(other)).toHaveText(["Timesheet", "Projects", "Reports"]);
 		for (const address of [members, invitations, settings]) {
 			expect((await other.goto(address))?.status(), address).toBe(404);
 			await expect(other.getByText(NOT_FOUND)).toBeVisible();

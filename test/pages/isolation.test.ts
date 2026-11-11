@@ -101,6 +101,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/projects",
 			"routes/app/settings",
 			"routes/app/team",
+			"routes/app/timesheet",
 		]);
 	});
 });
@@ -153,6 +154,7 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/clients": { intent: "create", name: "Taken over" },
 		"routes/app/team": { intent: "create", name: "Taken over" },
 		"routes/app/approvals": { intent: "approve-all", startsOn: "2026-01-05" },
+		"routes/app/timesheet": { intent: "stop" },
 	};
 
 	it.each(withAction)(

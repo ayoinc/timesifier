@@ -15,6 +15,7 @@ import {
 	ORGANISATION_PARAM,
 	visibleDestinations,
 } from "~/shell/destinations";
+import { navigationTimer } from "~/timesheet/navigation.server";
 
 import type { Route } from "./+types/organisation";
 
@@ -75,6 +76,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		destinations: visibleDestinations(viewerOf(membership)),
 		/** The periods waiting for this person's decision, for the Approvals link (TS-047). */
 		pendingApprovals: await pendingApprovalsOf(membership),
+		timer: await navigationTimer(membership),
 	};
 }
 

@@ -174,7 +174,9 @@ test.describe("with the device set to dark", () => {
 		await openShell(page, account());
 
 		const light = schemes(page).getByRole("radio", { name: "Light" });
-		for (let presses = 0; presses < 12; presses++) {
+		// Before it: the skip link, the band, the timer's control, every destination
+		// and the time-zone field on My account.
+		for (let presses = 0; presses < 24; presses++) {
 			if (await light.evaluate((element) => element === document.activeElement)) break;
 			await page.keyboard.press("Tab");
 		}

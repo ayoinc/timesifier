@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, redirect, replace, useFetcher, useRouteLoaderData } from "react-router";
 import * as z from "zod";
 
@@ -7,6 +7,7 @@ import { PERSON_NAME_MAX, PersonName } from "~/auth/person-name";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Radio, RadioGroup } from "~/components/Radio";
+import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { parseRequest } from "~/lib/validate";
 import { leaveOrganisation, listOrganisations } from "~/organisations/api.server";
@@ -25,6 +26,8 @@ import {
 import { APP_PATH, NEW_ORGANISATION_PATH } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
+import { isTimeZone, TimeZone } from "~/time/zones";
+import { ownZoneOf, setTimeZone } from "~/time/zones.server";
 
 import type { Route } from "./+types/account";
 import { FormSheet } from "./FormSheet";
@@ -43,12 +46,17 @@ export function meta() {
 
 /** The person, and whether there is another organisation to switch to. The checks on the layouts have already run. */
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { role, user } = context.get(membershipContext);
-	const organisations = await listOrganisations(request);
+	const membership = context.get(membershipContext);
+	const { role, user, organisation } = membership;
+	const [organisations, ownZone] = await Promise.all([
+		listOrganisations(request),
+		ownZoneOf(membership),
+	]);
 	return {
 		role,
 		hasOthers: organisations.ok && organisations.data.length > 1,
 		person: { name: user.name?.trim() || null, email: user.email },
+		timeZone: { own: ownZone, organisation: organisation.timeZone },
 	};
 }
 
@@ -61,6 +69,12 @@ const form = z.union([
 		// A person's name is trimmed here and then held to the one rule for it.
 		z.object({ intent: z.literal("name"), name: z.string().trim().pipe(PersonName) }),
 		z.object({ intent: z.literal("leave") }),
+		// The zone the person chose (TS-012a). An unknown name answers 400.
+		z.object({ intent: z.literal("time-zone"), timeZone: TimeZone }),
+		// The zone the browser reported, stored only while the person has none. A
+		// name this server does not know is answered, not thrown, so the page it
+		// was sent from is not replaced by an error.
+		z.object({ intent: z.literal("time-zone-detected"), timeZone: z.string().max(64) }),
 	]),
 	colorSchemeForm,
 ]);
@@ -91,6 +105,19 @@ export async function action({ request, url, context }: Route.ActionArgs) {
 				? done(`Your name is now ${input.name}.`)
 				: declined(SOMETHING_WENT_WRONG, 500);
 
+		case "time-zone": {
+			const { user } = context.get(membershipContext);
+			await setTimeZone(user.id, input.timeZone);
+			return done(`Your time zone is now ${input.timeZone}.`);
+		}
+
+		case "time-zone-detected": {
+			if (!isTimeZone(input.timeZone)) return declined("Not a known time zone.");
+			const { user } = context.get(membershipContext);
+			await setTimeZone(user.id, input.timeZone, { onlyIfUnset: true });
+			return done("");
+		}
+
 		case "leave": {
 			const { organisation } = context.get(membershipContext);
 			const left = await leaveOrganisation(request, organisation.id);
@@ -107,10 +134,10 @@ const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
 ];
 
 /** The sheets of this page. One is open at a time. */
-type Task = "name" | "leave";
+type Task = "name" | "time-zone" | "leave";
 
 export default function Account({ loaderData }: Route.ComponentProps) {
-	const { person, role, hasOthers } = loaderData;
+	const { person, role, hasOthers, timeZone } = loaderData;
 	const organisation = useOrganisation();
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -146,6 +173,25 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 						/>
 					</LedgerRows>
 				</Ledger>
+
+				<div className="mt-8">
+					<Ledger heading="Your time zone">
+						<LedgerRows>
+							<LedgerRow
+								title={
+									timeZone.own ??
+									`${timeZone.organisation}, your organisation's, until you choose one`
+								}
+								detail="Your days, weeks and the times of your entries are counted in it."
+								action={
+									<Button variant="text" onPress={() => setTask("time-zone")}>
+										Change time zone
+									</Button>
+								}
+							/>
+						</LedgerRows>
+					</Ledger>
+				</div>
 
 				<Appearance />
 				<SignOut email={person.email} />
@@ -216,6 +262,17 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
+				title="Your time zone"
+				intent="time-zone"
+				submitLabel="Save"
+				isOpen={task === "time-zone"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<TimeZoneChoice defaultValue={timeZone.own ?? timeZone.organisation} />
+			</FormSheet>
+
+			<FormSheet
 				title={`Leave ${organisation.name}?`}
 				intent="leave"
 				submitLabel="Leave"
@@ -262,5 +319,29 @@ function Appearance() {
 				</noscript>
 			</fetcher.Form>
 		</section>
+	);
+}
+
+/**
+ * The zones a person chooses from: the browser's list, which is the one `Intl`
+ * holds, and UTC. Drawn only inside a sheet, which opens in the browser, so the
+ * server never renders a list the browser's might differ from.
+ */
+function TimeZoneChoice({ defaultValue }: { defaultValue: string }) {
+	const options = useMemo(
+		() =>
+			["UTC", ...Intl.supportedValuesOf("timeZone").filter((zone) => zone !== "UTC")].map(
+				(zone) => ({ id: zone, label: zone.replaceAll("_", " ") }),
+			),
+		[],
+	);
+	return (
+		<Select
+			label="Time zone"
+			name="timeZone"
+			options={options}
+			defaultValue={defaultValue}
+			isRequired
+		/>
 	);
 }
