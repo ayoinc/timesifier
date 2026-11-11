@@ -59,6 +59,17 @@ describe("the workflows", () => {
 		expect(images[0]).toMatch(/^ubuntu-\d+\.\d+$/);
 	});
 
+	it("run a job in a container only from an image pinned by digest, and Playwright's at the version in package.json", () => {
+		const images = workflows.flatMap(({ text }) =>
+			[...text.matchAll(/^\s*image: (.+)$/gm)].map(([, image]) => image),
+		);
+
+		for (const image of images)
+			expect(image).toMatch(/:v?\d+\.\d+\.\d+[\w-]*@sha256:[0-9a-f]{64}$/);
+		const playwright = images.find((image) => image.startsWith("mcr.microsoft.com/playwright:"));
+		expect(playwright).toContain(`:v${manifest.devDependencies["@playwright/test"]}-`);
+	});
+
 	it("take Node's version from .node-version and name none themselves", () => {
 		for (const { file, text } of workflows) {
 			expect(text, file).not.toMatch(/node-version:/);

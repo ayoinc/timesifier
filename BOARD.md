@@ -286,6 +286,92 @@ Moved out of this card: "an entry can be added from the keyboard alone" is on TS
 
 In priority order. Before a feature card enters Ready it gains "Routes", "Tables" and "Who may" sections like the three cards above, and the criterion that every new route joins the cross-organisation 404 test of TS-009.
 
+The navigation these cards build towards, by role, is in `docs/navigation.md` (adopted 2026-11-11, rearranged the same day after a check against Harvest). Cards TS-045 to TS-052 come from it; each gets routes, tables, a role table and a goldfish review when it comes up. The "Flows" section of that file names the card that builds each step.
+
+### TS-045 · Team: this week, members and invitations
+
+Depends on: TS-013, TS-046; expected hours TS-042; for managers TS-038 and TS-047.
+
+Replaces the Dashboard of the first version of `docs/navigation.md`: Harvest has no home page, and puts the team's week in Team ("Team overview") and missing submissions in Approvals.
+
+- [ ] Team > This week lists, for one week with arrows to earlier ones, each person the viewer may see: hours logged against their expected hours from TS-042, whether a timer is running, and the period's submission status (test).
+- [ ] A manager sees the members of the teams they manage, an admin or owner everyone; a member sees no Team link and gets 404 at its address (a test per role).
+- [ ] Opening a person shows their Week view, read-only; nothing on it can change their entries (test).
+- [ ] Members and Invitations move from Settings to tabs of Team, with the same rules and tests as TS-009; the old addresses redirect (test).
+
+### TS-046 · Timesheet periods and submission
+
+Depends on: TS-012b, TS-013.
+
+- [ ] An organisation has a timesheet period (a week by default); a person's entries for a period can be submitted once, after which they cannot be edited unless the submission is withdrawn before a decision or the period is returned (tests).
+- [ ] The Week view has "Submit week" at its foot, with a confirmation, and its header shows Not submitted, Submitted, Approved or Returned (test).
+- [ ] A person withdraws a submission that has not been decided, and can edit again; the withdrawal is recorded (test).
+- [ ] The Today destination is renamed Timesheet, with Day and Week views and a History tab; History lists each past period with its status (draft, submitted, approved, returned) (test).
+- [ ] A returned period shows the reason and can be corrected and submitted again (test).
+- Open for the owner: the default period, and whether a submission requires a full set of expected hours.
+
+### TS-047 · Approvals
+
+Depends on: TS-046, TS-038.
+
+- [ ] A manager sees submitted periods of their team's members; an admin or owner sees everyone's; a member sees no Approvals link and gets 404 at its address (a test per role).
+- [ ] Approvals shows one period at a time with Previous and Next, in tabs Pending, Not submitted and Decided; the link shows the number pending (test).
+- [ ] Approve one, or all pending on the page, or return with a comment of at most 500 characters; each decision is recorded with who and when (tests).
+- [ ] A manager's own period is decided by an admin or owner, never by the manager (test).
+- [ ] An owner or admin reopens an approved period with a reason, which returns it to the person (test).
+- [ ] Not submitted lists the people who have not submitted a closed period (test).
+- Open for the owner: whether an owner or admin can turn approval off for the organisation, as Harvest allows; until it is decided, approval is on. The evidence is in `docs/navigation.md`, "Gaps the flows show".
+
+### TS-048 · Workspace settings: general
+
+Depends on: TS-012a; the Clients switch TS-011b.
+
+- [ ] An admin or owner sets the organisation's default time zone and the day its week starts; members see the values and cannot change them (a test per role).
+- [ ] The week view and reports use the week start (test).
+- [ ] An admin or owner turns Clients off or on for the organisation; off hides the Clients link and the client field everywhere and deletes nothing (test).
+
+### TS-049 · Notifications and reminders
+
+Depends on: TS-046, TS-047.
+
+- [ ] A notification is created for: a reminder to submit, an approval request, a returned period, an approval outcome; each opens its record (tests).
+- [ ] A manager, admin or owner sends a reminder from Approvals, Not submitted, to one person or all listed (test).
+- [ ] The header shows the number unread; opening one marks it read (test).
+- [ ] A person turns each kind of email reminder on or off in My account (test).
+
+### TS-050 · Help and support
+
+Depends on: nothing beyond what is built.
+
+- [ ] A help page reachable from the profile menu, with the questions a person asks in the first week, and a way to report a problem that reaches the owner (test that the link resolves and the report is received).
+- [ ] The page answers each flow of `docs/navigation.md`, "Flows", that is built: first sign-in, tracking time, submitting a week, approving or returning, a report and its export, inviting a person.
+
+### TS-051 · The timer in the navigation
+
+Depends on: TS-012a.
+
+From the check against Harvest in `docs/navigation.md`: Harvest's sidebar starts with a Timer button, and a running timer is stopped from the navigation on any page.
+
+- [ ] On every page of an organisation, the navigation holds the timer's control before its first link. With nothing running it is "Start timer", which opens the Day view with the timer's form; with an entry running it shows the project, the time elapsed and "Stop" (test).
+- [ ] "Stop" in the navigation stops the person's running entry through TS-012a's `stop`, and the person stays on the page they were on (browser test).
+- [ ] The navigation and the Day view show the same elapsed time to the second, and the control reads its state again as the Day view does, when the window gains focus and every 30 seconds (browser test with a controlled clock).
+- [ ] The control is worked with the keyboard alone, has an accessible name and is not announced every second; axe with WCAG 2.2 AA tags reports no violations at 390px and 1280px (browser test).
+
+### TS-052 · A week's hours typed in a grid
+
+Depends on: TS-012b; for locked periods TS-046.
+
+From the check against Harvest in `docs/navigation.md`: Harvest's Week view is a grid of projects by days, with a row added per project and hours typed into each day.
+
+Open for the owner, before the card is refined: what an hour typed into a cell becomes. A Timesifier entry has a start and an end (TS-012a), and a cell holds only a number of hours. Either the hours become one entry that starts when the person's working day starts (TS-042), or entries gain a form with a duration and no times. Harvest offers its grid only to accounts that track durations, not start and end times.
+
+- [ ] The Week view shows a row for each project with time that week, and "Add row" adds one. Hours typed into a day's cell are saved, and a cell emptied removes that project's time on that day (tests).
+- [ ] A cell that holds more than one entry, or a running one, shows its total and is changed in the Day view (test).
+- [ ] "Copy last week's rows" adds the projects of the week before with empty cells; no hours are copied (test).
+- [ ] A day in a submitted or approved period cannot be changed from the grid (test).
+- [ ] Each day's total and the week's total equal the sums of their cells (property test).
+- [ ] The grid is worked with the keyboard alone, from cell to cell, and axe with WCAG 2.2 AA tags reports no violations (browser test).
+
 ### TS-037 · The signed-in product in the landing page's direction
 
 Depends on: TS-030 and TS-036. Asked for by the owner on 2026-11-11. It enters Ready when TS-036 is pulled. It builds no timer and no feature card: Today, Reports and Projects stay empty until their own cards.
