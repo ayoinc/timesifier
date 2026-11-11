@@ -59,15 +59,43 @@ Each rule can be checked in review or by a test.
 
 ## Tokens
 
-Filled in by TS-004.
+`pnpm tokens` runs `scripts/tokens.ts`, which writes every token to `app/styles/tokens.css` as a CSS custom property. That file is generated and committed; a test fails when it is out of date. `app/app.css` points one Tailwind theme variable at each token and clears Tailwind's own colours, radii, shadows and easings, so those utilities exist only where a token backs them.
 
-| Token group  | Source | Names |
-| ------------ | ------ | ----- |
-| Seed colour  |        |       |
-| Colour roles |        |       |
-| Type scale   |        |       |
-| Shape        |        |       |
-| Motion       |        |       |
+| Token group  | Source                                                                                                                                                          | Names                                                                                                                                                                                                                                                                 | Tailwind                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Seed colour  | `SEED_COLOUR` in `scripts/tokens.ts`: `#4F5BD5`. The only colour written by hand.                                                                               | None: it is an input, not a token.                                                                                                                                                                                                                                    | None                                                                              |
+| Colour roles | `@material/material-color-utilities`: tonal spot scheme, standard contrast, 2025 specification. Each role is emitted once as `light-dark(light, dark)`.         | `--md-sys-color-<role>`: `primary`, `on-primary`, `primary-container`, `surface`, `surface-container-high`, `on-surface-variant`, `outline`, `error`, `inverse-surface` and the rest of the Material roles                                                            | `bg-primary`, `text-on-surface`, `border-outline-variant`                         |
+| Typeface     | `TYPEFACE` in `scripts/tokens.ts`: Roboto Flex, served from our own origin by `@fontsource-variable/roboto-flex`, then a system fallback stack.                 | `--md-ref-typeface-brand`, `--md-ref-typeface-plain`                                                                                                                                                                                                                  | `font-brand`, `font-sans` (the page default)                                      |
+| Type scale   | Material 3 type scale: display, headline, title, body and label, each in large, medium and small. Sizes in `rem`.                                               | `--md-sys-typescale-<role>-size`, `-line-height`, `-weight`, `-tracking`, `-font`, for example `--md-sys-typescale-body-large-size`                                                                                                                                   | `text-body-large` sets size, line height, weight and tracking together            |
+| Shape        | Material 3 corner scale, with the Expressive steps.                                                                                                             | `--md-sys-shape-corner-<step>`: `none`, `extra-small`, `small`, `medium`, `large`, `large-increased`, `extra-large`, `extra-large-increased`, `extra-extra-large`, `full`                                                                                             | `rounded-medium`, `rounded-t-extra-large`                                         |
+| Spacing      | A 4px grid. Material publishes no spacing tokens, so there is one unit and every space is a multiple of it.                                                     | `--md-sys-spacing-unit`                                                                                                                                                                                                                                               | `p-4`, `gap-2`, `w-12`: the number counts units                                   |
+| Elevation    | Material 3 levels 0 to 5: a key shadow at 30% and an ambient shadow at 15% of the shadow colour role.                                                           | `--md-sys-elevation-level0` to `--md-sys-elevation-level5`                                                                                                                                                                                                            | `shadow-level2`                                                                   |
+| Motion       | Material 3 durations and easings, plus one spring: Material 3 Expressive "default spatial" (stiffness 380, damping ratio 0.8), `SPRING` in `scripts/tokens.ts`. | `--md-sys-motion-duration-<step>` (`short1` to `extra-long4`), `--md-sys-motion-easing-<curve>` (`emphasized`, `standard`, `legacy`, each also `-accelerate` and `-decelerate`, and `linear`), `--md-sys-motion-spring-stiffness`, `-damping`, `-duration`, `-easing` | `duration-short4`, `ease-emphasized`; the spring is `ease-spring duration-spring` |
+
+### Colour schemes
+
+`:root` declares `color-scheme: light dark`, so each role follows the device setting. `data-color-scheme="light"` or `data-color-scheme="dark"` on the `html` element forces one scheme. Because every role already carries both values, components need no `dark:` variants.
+
+### The spring
+
+The spring is defined once, by its stiffness and damping ratio. `pnpm tokens` derives two forms from those numbers:
+
+- `--md-sys-motion-spring-stiffness` and `--md-sys-motion-spring-damping`, the values the Motion library takes (mass 1);
+- `--md-sys-motion-spring-easing`, a CSS `linear()` curve sampled from the same spring, with `--md-sys-motion-spring-duration`, the time it takes to settle within 0.1% of its target.
+
+### Changing a token
+
+To change the seed colour, edit the one `SEED_COLOUR` line in `scripts/tokens.ts`, run `pnpm tokens`, then `pnpm test`, and commit the script and `app/styles/tokens.css` together. The contrast test checks every text role against its background in both schemes; if a pair falls below 4.5:1, raise the scheme's contrast level in `scripts/tokens.ts` and leave the test alone. The type scale, corner scale, spacing unit, elevation, durations, easings and the spring change the same way. To change the typeface, install its Fontsource package and edit `TYPEFACE`.
+
+### What `pnpm check:tokens` rejects
+
+Under `app/`, outside the generated `app/styles/tokens.css`:
+
+- a hex colour, such as `#fff` or `#4f5bd5`;
+- a utility with a bracketed value, such as `w-[13px]`, `bg-[#fff]`, `text-[color:red]`, `bg-primary/[0.5]` or `min-[320px]:`;
+- a bracketed declaration used as a class, such as `[mask-type:luminance]`.
+
+Bracketed variants that only select a state, such as `data-[state=open]:`, are allowed. The check reads text, not syntax: it also reports a hex colour in a comment, and three or four hex digits after a bare `#` (write "issue 123", not `#123`).
 
 ## Components
 
