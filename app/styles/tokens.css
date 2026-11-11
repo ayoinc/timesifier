@@ -3,7 +3,25 @@
 
 :root {
 	color-scheme: light dark;
+}
 
+/* Forces one scheme, on the whole page or on one part of it, whatever the device prefers. */
+[data-color-scheme="light"] {
+	color-scheme: light;
+}
+
+[data-color-scheme="dark"] {
+	color-scheme: dark;
+}
+
+/*
+ * The colour roles are declared on the page and again on every element that forces
+ * a scheme. A build for older browsers rewrites light-dark() into variables that
+ * are settled on the element that declares them, so a role declared only on the
+ * page would keep the page's scheme inside a part that forces the other one.
+ */
+:root,
+[data-color-scheme] {
 	/* Colour roles, light and dark, from the seed #4F5BD5 */
 	--md-sys-color-background: light-dark(#fbf8fe, #0e0e12);
 	--md-sys-color-on-background: light-dark(#31323b, #e6e4f0);
@@ -58,7 +76,9 @@
 	--md-sys-color-surface-tint: light-dark(#575b8c, #c1c3ee);
 	--md-sys-color-shadow: light-dark(#000000, #000000);
 	--md-sys-color-scrim: light-dark(#000000, #000000);
+}
 
+:root {
 	/* Type scale */
 	--md-ref-typeface-brand: "Roboto Flex Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 	--md-ref-typeface-plain: "Roboto Flex Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -192,13 +212,18 @@
 	--md-sys-motion-spring-damping: 31.19;
 	--md-sys-motion-spring-duration: 440ms;
 	--md-sys-motion-spring-easing: linear(0, 0.017, 0.062, 0.125, 0.199, 0.28, 0.363, 0.444, 0.521, 0.594, 0.66, 0.719, 0.772, 0.818, 0.858, 0.891, 0.919, 0.943, 0.961, 0.977, 0.988, 0.997, 1.004, 1.009, 1.012, 1.014, 1.015, 1.015, 1.015, 1.014, 1.013, 1.012, 1.011, 1.009, 1.008, 1.007, 1.006, 1.005, 1.004, 1.003, 1.003, 1.002, 1.002, 1.001, 1);
-}
 
-/* Forces one scheme whatever the device prefers. */
-html[data-color-scheme="light"] {
-	color-scheme: light;
-}
-
-html[data-color-scheme="dark"] {
-	color-scheme: dark;
+	/* State */
+	--md-sys-state-hover-state-layer-opacity: 0.08;
+	--md-sys-state-focus-state-layer-opacity: 0.1;
+	--md-sys-state-pressed-state-layer-opacity: 0.1;
+	--md-sys-state-dragged-state-layer-opacity: 0.16;
+	--md-sys-state-disabled-content-opacity: 0.38;
+	--md-sys-state-disabled-container-opacity: 0.1;
+	--md-sys-state-disabled-outline-opacity: 0.12;
+	--md-sys-state-disabled-field-container-opacity: 0.04;
+	--md-sys-state-scrim-opacity: 0.32;
+	--md-sys-state-focus-indicator-thickness: 0.1875rem;
+	--md-sys-state-focus-indicator-outer-offset: 0.125rem;
+	--md-sys-state-focus-indicator-inner-offset: -0.1875rem;
 }

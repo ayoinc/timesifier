@@ -117,7 +117,7 @@ Files in `public/` and the built scripts and styles are served by Workers Static
 ```
 default-src 'self';
 script-src 'self' 'nonce-<random>';
-style-src 'self';
+style-src 'self' 'sha256-<usePress>' 'sha256-<usePreventScroll>';
 img-src 'self' data:;
 font-src 'self';
 connect-src 'self';
@@ -129,16 +129,37 @@ object-src 'none'
 
 - The nonce is 128 random bits from Web Crypto, new for every request. The Worker creates it, passes it to `app/entry.server.tsx` through the router context, and writes the header. `ServerRouter` and React put it on every inline script they emit.
 - There is no `unsafe-inline`, no `unsafe-eval` and no `strict-dynamic`. Scripts are our own files, allowed by `'self'`; only the inline scripts need the nonce.
-- **`style-src 'self'` means no `style` attribute and no `<style>` element in rendered markup.** The browser ignores them, so the page looks wrong without failing. React's `style` prop becomes a `style` attribute in the server-rendered HTML, so it is blocked on first paint. Style with classes and design tokens. A value that must be computed at run time is set from script after hydration through the CSSOM (`element.style.setProperty(…)`), which the policy allows. Check what a library renders on the server before adding it.
+- **`style-src` allows our own stylesheets and two `<style>` elements by hash, nothing else.** A `style` attribute, and any other `<style>` element, is ignored by the browser, so the page looks wrong without failing. React's `style` prop becomes a `style` attribute in the server-rendered HTML, so it is blocked on first paint. Style with classes and design tokens. A value that must be computed at run time is set from script after hydration through the CSSOM (`element.style.setProperty(…)`), which the policy allows. Check what a library renders on the server before adding it.
 - Add a new source only with the card that needs it, and record it here.
+
+### The two hashes
+
+React Aria (TS-005) inserts two `<style>` elements from script. Each has a fixed text, so each is allowed by the SHA-256 hash of that text. A hash allows one exact text: it lets in no other inline style, and no `style` attribute.
+
+| Hash                                                  | Inserted by                                                    | Text                                                                               | What it does                                                                                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `sha256-38RhXrc7EdReTKsOm23ZPOCUgniTUUcjky8QOOrQx6o=` | `usePress`, once, when the first pressable element mounts      | `@layer { [data-react-aria-pressable] { touch-action: pan-x pan-y pinch-zoom; } }` | Stops the browser waiting for a double tap before it reports a press.                                                          |
+| `sha256-gYiS/BvZvRcK27JIXTuwhZ3hs2+VJ1X+2gUlE+farlg=` | `usePreventScroll`, on iOS only, while a modal overlay is open | `@layer { * { overscroll-behavior: contain; } }`                                   | Keeps the page from scrolling behind an open dialog, sheet, select or menu. Other browsers get `overflow: hidden` on the page. |
+
+The table shows each text on one line; the hashed text has the line breaks the library writes.
+
+- The list is `REACT_ARIA_STYLE_HASHES` in `workers/security-headers.ts`.
+- **Re-derive it on every React Aria upgrade.** `test/node/react-aria-styles.test.ts` reads the installed `react-aria`, `react-aria-components` and `react-stately`, finds every module that creates a `<style>` element, takes each text and hashes it. It fails when the library inserts a text the policy does not allow, when the policy allows a text the library no longer inserts, or when a new module starts creating `<style>` elements, and its message gives the hash to use. Update the list, `test/browser-policy.test.ts` and this table together.
+- The browser tests are the second check: every one fails on a `securitypolicyviolation` event, in Chromium and, for the overlays, in WebKit on the iOS path (`e2e/fixtures.ts`, `e2e/overlays-ios.spec.ts`).
+
+### What components do to live under the policy
+
+- **No `style` attribute reaches the server-rendered HTML.** React Aria's Checkbox, Switch and Select components hide a native input or select with a `style` attribute. Ours are built on React Aria's hooks instead and hide that element with a class (`app/components/Checkbox.tsx`, `Switch.tsx`, `Select.tsx`). The reasoning and the measurements are in `docs/decisions.md`, entry 6.
+- **Overlays are positioned from script.** A menu, a select list, a tooltip, a dialog and a sheet render only in the browser, after hydration, and React sets their position through the CSSOM. They are never in the server's HTML.
+- **Before using another React Aria component, render it with `renderToString` and look for `style=`.** The date and time components carry `style` attributes and will need the hooks.
 
 ### Relaxed under `pnpm dev`
 
 Only when `import.meta.env.DEV` is true:
 
-- `style-src` gains `'unsafe-inline'`. The Vite dev server injects stylesheets as `<style>` elements so it can hot-reload them.
+- `style-src` is `'self' 'unsafe-inline'`, without the two hashes. The Vite dev server injects stylesheets as `<style>` elements so it can hot-reload them, and a browser ignores `'unsafe-inline'` in a directive that also carries a hash.
 
-Nothing else changes. The hot-reload WebSocket is same-origin and allowed by `connect-src 'self'`. Tests run with `DEV` false and check the policy that ships.
+Nothing else changes. The hot-reload WebSocket is same-origin and allowed by `connect-src 'self'`. Tests run with `DEV` false and check the policy that ships; the browser tests run against a production build for the same reason.
 
 ### Origin check
 

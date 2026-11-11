@@ -50,7 +50,7 @@ A criterion is ticked only with its evidence beside it: the command and its resu
 A card is Done when all of these hold:
 
 - every acceptance criterion is ticked with evidence;
-- `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm build` pass;
+- `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` and `pnpm test:e2e` pass;
 - the checks in `docs/security.md` that apply to the change are met;
 - new behaviour has a test that would fail without the change;
 - documents that the change makes wrong are corrected in the same pull request;

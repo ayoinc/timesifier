@@ -131,4 +131,6 @@ Read from the lockfile on 2026-11-11. The lockfile is the source of truth; updat
 | Material Color Utilities | 0.4.0      |
 | Roboto Flex (Fontsource) | 5.3.0      |
 | Better Auth              | 1.7.19     |
+| React Aria Components    | 1.22.1     |
+| Playwright               | 1.65.0     |
 | `compatibility_date`     | 2026-11-09 |

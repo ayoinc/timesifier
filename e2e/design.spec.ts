@@ -1,0 +1,134 @@
+import type { Locator } from "@playwright/test";
+
+import { expect, openGallery, test } from "./fixtures";
+
+// The gallery shows every component in every state, in the light scheme and the
+// dark scheme. That it answers 404 in a normal build is test/design-route.test.ts.
+
+const COMPONENTS = [
+	"Button",
+	"IconButton",
+	"TextField",
+	"Checkbox",
+	"Switch",
+	"Select",
+	"Menu",
+	"Dialog",
+	"Sheet",
+	"Tabs",
+	"Snackbar",
+	"Tooltip",
+];
+
+async function style(element: Locator, property: string): Promise<string> {
+	return element.evaluate((node, name) => getComputedStyle(node).getPropertyValue(name), property);
+}
+
+test.beforeEach(async ({ page }) => {
+	await openGallery(page);
+});
+
+for (const [scheme, colorScheme] of [
+	["Light scheme", "light"],
+	["Dark scheme", "dark"],
+] as const) {
+	test(`${scheme}: all twelve components are drawn in the ${colorScheme} colours`, async ({
+		page,
+	}) => {
+		const gallery = page.getByRole("region", { name: scheme });
+		expect(await style(gallery, "color-scheme")).toBe(colorScheme);
+		for (const component of COMPONENTS) {
+			await expect(gallery.getByRole("heading", { name: component, exact: true })).toBeVisible();
+		}
+
+		// The two halves resolve the same colour role to different colours.
+		const other = page.getByRole("region", {
+			name: scheme === "Light scheme" ? "Dark scheme" : "Light scheme",
+		});
+		expect(await style(gallery, "background-color")).not.toBe(
+			await style(other, "background-color"),
+		);
+		const save = gallery.getByRole("button", { name: "Save" }).first();
+		expect(await style(save, "background-color")).not.toBe(
+			await style(other.getByRole("button", { name: "Save" }).first(), "background-color"),
+		);
+	});
+
+	test(`${scheme}: hover, focus and pressed are held in place and look different from rest`, async ({
+		page,
+	}) => {
+		const gallery = page.getByRole("region", { name: scheme });
+		const rest = gallery.getByRole("button", { name: "Save" }).first();
+		const hover = gallery.getByRole("button", { name: "Hover" }).first();
+		const focus = gallery.getByRole("button", { name: "Focus" }).first();
+		const pressed = gallery.getByRole("button", { name: "Pressed" }).first();
+
+		// The attributes are the ones React Aria sets for the real state.
+		await expect(hover).toHaveAttribute("data-hovered", "true");
+		await expect(focus).toHaveAttribute("data-focus-visible", "true");
+		await expect(pressed).toHaveAttribute("data-pressed", "true");
+
+		// Let the state layers and the pressed shape finish arriving.
+		await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+		const restColour = await style(rest, "background-color");
+		expect(await style(hover, "background-color")).not.toBe(restColour);
+		expect(await style(pressed, "background-color")).not.toBe(restColour);
+		expect(await style(pressed, "border-top-left-radius")).not.toBe(
+			await style(rest, "border-top-left-radius"),
+		);
+		expect(await style(rest, "outline-style")).toBe("none");
+		expect(await style(focus, "outline-style")).toBe("solid");
+
+		// The same holds for a control built on hooks, and for one inside a collection.
+		await expect(gallery.getByText("Hover", { exact: true }).nth(0)).toBeVisible();
+		await expect(
+			gallery.locator("label", { has: page.getByRole("checkbox", { name: "Hover" }) }),
+		).toHaveAttribute("data-hovered", "true");
+		await expect(
+			gallery.locator("label", { has: page.getByRole("switch", { name: "Pressed" }) }),
+		).toHaveAttribute("data-pressed", "true");
+		await expect(gallery.getByRole("textbox", { name: "Focus" })).toHaveAttribute(
+			"data-focused",
+			"true",
+		);
+		const tabs = gallery.getByRole("tablist", { name: "Tab states" });
+		await expect(tabs.getByRole("tab", { name: "Hover" })).toHaveAttribute("data-hovered", "true");
+		expect(await style(tabs.getByRole("tab", { name: "Focus" }), "outline-style")).toBe("solid");
+	});
+
+	test(`${scheme}: disabled, invalid and selected states are shown`, async ({ page }) => {
+		const gallery = page.getByRole("region", { name: scheme });
+
+		// One for each variant of Button and of IconButton, and the Select.
+		const disabled = gallery.getByRole("button", { name: /disabled$/i });
+		await expect(disabled).toHaveCount(9);
+		for (const button of await disabled.all()) await expect(button).toBeDisabled();
+		await expect(gallery.getByRole("textbox", { name: "Disabled" })).toBeDisabled();
+		await expect(gallery.getByRole("checkbox", { name: "Disabled and selected" })).toBeDisabled();
+		await expect(gallery.getByRole("checkbox", { name: "Disabled and selected" })).toBeChecked();
+		await expect(gallery.getByRole("switch", { name: "Disabled on" })).toBeDisabled();
+		await expect(gallery.getByRole("tab", { name: "Year" })).toHaveAttribute(
+			"aria-disabled",
+			"true",
+		);
+
+		await expect(gallery.getByRole("textbox", { name: "Hourly rate" })).toHaveAttribute(
+			"aria-invalid",
+			"true",
+		);
+		await expect(gallery.getByText("Enter a number, such as 85.")).toBeVisible();
+		await expect(gallery.getByRole("checkbox", { name: "Accept the terms" })).toHaveAttribute(
+			"aria-invalid",
+			"true",
+		);
+		await expect(gallery.getByText("Choose a project.")).toBeVisible();
+
+		await expect(gallery.getByRole("checkbox", { name: "Round to 15 minutes" })).toBeChecked();
+		await expect(gallery.getByRole("switch", { name: "Idle detection" })).toBeChecked();
+		await expect(gallery.getByRole("button", { name: "Borealis With a value" })).toBeVisible();
+		await expect(gallery.getByRole("tab", { name: "Week" })).toHaveAttribute(
+			"aria-selected",
+			"true",
+		);
+	});
+}

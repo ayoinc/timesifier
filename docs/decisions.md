@@ -24,6 +24,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 16  | Seed and typeface   | Seed colour `#4F5BD5`; Roboto Flex, self-hosted                                          | Preparer, for the owner to confirm |
 | 17  | Ids and timestamps  | UUID version 7 text ids; integer timestamps in milliseconds since the Unix epoch         | Preparer                           |
 | 18  | Input and origin    | Zod 4 validates every action's input; the Worker rejects cross-origin state changes      | Preparer                           |
+| 19  | Motion library      | Not added yet: components animate with CSS transitions on the motion tokens (amends 10)  | Preparer                           |
 
 ## Evidence
 
@@ -57,7 +58,24 @@ From Benji Taylor's essay _Family Values_ (benji.org/family-values, 8 Jul 2024):
 
 ### 6. React Aria Components
 
-It ships accessible Calendar, RangeCalendar, DatePicker, DateRangePicker and TimeField, which a time and scheduling product needs. Base UI and Radix supply general primitives without calendar or date-time components. _The Base UI and Radix component lists were taken from memory, not checked this month; TS-005 confirms before building._
+Confirmed for TS-005 on 11 Nov 2026, against each library's current documentation and by rendering each library's components to HTML with the installed versions. The choice stands.
+
+| Point                                                                       | React Aria Components 1.22.1 (9 Oct 2026)                                                                                                                                                                                                                 | Base UI 1.9.0 (9 Oct 2026)                                                                                                                            | Radix `radix-ui` 1.8.1 (12 Oct 2026)                                                                                                                        |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The twelve components of TS-005                                             | All twelve. `Sheet` is new in 1.22.0. Toast is still exported as `UNSTABLE_Toast`.                                                                                                                                                                        | All twelve, with `Drawer` as the sheet and `Field` with `Input` as the text field.                                                                    | No button, text field or sheet; the rest are present.                                                                                                       |
+| Calendar, DatePicker, DateRangePicker, TimeField                            | All four, and RangeCalendar.                                                                                                                                                                                                                              | None. The tracking issue is open (mui/base-ui issue 1709).                                                                                            | None.                                                                                                                                                       |
+| React 19 and server rendering                                               | Peer range includes React 19; ids come from `useId`.                                                                                                                                                                                                      | Peer range includes React 19.                                                                                                                         | Peer range includes React 19; documented as server-renderable.                                                                                              |
+| What the documentation says about Content Security Policy                   | A nonce in `<meta property="csp-nonce">`, which the library puts on the `<style>` elements it inserts. No word on `style` attributes.                                                                                                                     | A `CSPProvider` that puts a nonce on its inline `<style>` and `<script>` elements, or disables the `<style>` elements. No word on `style` attributes. | No guide. A `nonce` prop on ScrollArea and on the Select viewport. A discussion (3130), closed without a fix, notes that most primitives use inline styles. |
+| `style` attributes in server-rendered HTML (measured with `renderToString`) | Checkbox, Switch and Select: the visually hidden native input or select. Calendar, DatePicker, DateRangePicker and TimeField: hidden helpers and each date segment. None on Button, TextField, Tabs, or any closed Menu, Dialog, Sheet, Tooltip or Toast. | Checkbox, Switch and Select: the visually hidden native input.                                                                                        | Checkbox, Switch, Select, Tabs and Toast.                                                                                                                   |
+| A way to render those elements ourselves                                    | Yes: the documented hooks in `react-aria` and `react-stately` (`useCheckbox`, `useSwitch`, `useSelect` with `useHiddenSelect`) return the props and leave the markup to us.                                                                               | No.                                                                                                                                                   | No.                                                                                                                                                         |
+
+Sources: react-aria.adobe.com (`llms.txt` for the component list, `frameworks`, `styling`, `Sheet`, `Toast`, `releases/v1-22-0`); base-ui.com (`llms.txt`, `react/utils/csp-provider`); radix-ui.com/primitives (`docs/components/select`, `scroll-area`, `docs/guides/server-side-rendering`); the npm registry record of each package for versions, dates and peer ranges.
+
+Every library breaks `style-src 'self'` as shipped, and only React Aria offers a supported way round it, so it is also the only one that can meet the policy. What it took:
+
+- **Checkbox, Switch and Select are built on React Aria's hooks**, with the native input or select hidden by a class. `react-aria` and `react-stately` are direct dependencies at the exact versions React Aria Components resolves. The other nine use the components as they come.
+- **React Aria inserts two `<style>` elements from script** (`usePress`, and on iOS `usePreventScroll`). Each is a fixed text, so the policy allows each by its SHA-256 hash; a test derives the hashes from the installed library. See `docs/security.md`, "Content Security Policy".
+- **The date and time components will need the same treatment** when their cards come: each date segment carries a `style` attribute (`caret-color`), and the calendar and the date fields render visually hidden helpers. `useDateField`, `useDateSegment` and `useCalendar` are the hooks to build on. Check with `renderToString` before using one.
 
 ### 7. D1 first
 
@@ -171,6 +189,14 @@ Decided while building TS-010.
 | A token in every form         | Works without trusting headers. Needs a session before the first form, a hidden field in every form and a check in every action; one forgotten check is a hole.                                     |
 
 A request with neither header does not come from a browser, and forgery needs a browser that holds the person's session. Session cookies are `SameSite=Lax` (TS-008) as a second layer. The consequence: a `GET` must never change state.
+
+### 19. The Motion library is not added yet
+
+Decided while building TS-005. It amends entry 10, which named the Motion library for springs and interruptible animation.
+
+The twelve components animate with CSS transitions that read the motion tokens, including the spring, which `pnpm tokens` emits as a CSS `linear()` easing. A CSS transition can be interrupted and reversed part-way, which is what design rule 8 asks for, and it runs under the Content Security Policy as shipped. Adding a library the platform can do without would break the dependency rule in `docs/security.md`.
+
+Motion comes in with the first feature that needs what CSS cannot do: movement driven by a gesture, a spring that carries the velocity of an interrupted movement, or layout animation between two arrangements. The card that adds it says which. Route changes still use the View Transitions API, as entry 10 says.
 
 ## To verify when the code is scaffolded
 

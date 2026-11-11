@@ -4,16 +4,15 @@ How the board works, and what Ready and Done mean, is in `docs/ways-of-working.m
 
 ## In progress (limit 1 per worker)
 
-### TS-005 · Component foundation
+### TS-006 · Application shell
 
-Depends on: TS-004.
+Depends on: TS-005.
 
-- [ ] The headless library choice is confirmed against the current documentation of React Aria Components, Base UI and Radix, and `docs/decisions.md` entry 6 is updated with what was found.
-- [ ] Button, IconButton, TextField, Checkbox, Switch, Select, Menu, Dialog, Sheet, Tabs, Snackbar and Tooltip exist and are styled only with tokens.
-- [ ] Each component has a test that operates it by keyboard and asserts its role and accessible name.
-- [ ] The `/design` route shows every component in every state in light and dark, and returns 404 in a production build.
-- [ ] An automated accessibility scan of `/design` reports no violations.
-- [ ] With reduced motion requested, a test finds no animation of position or scale in any component.
+- [ ] Below 600px the shell shows a navigation bar; from 600px it shows a navigation rail with the same destinations.
+- [ ] Moving between destinations animates in the direction of travel using view transitions; with reduced motion requested there is no movement.
+- [ ] The page has a skip link and landmarks, and after navigation focus is on the main heading (test).
+- [ ] The colour scheme follows the system, can be overridden, and the override survives a reload.
+- [ ] Lighthouse reports an accessibility score of 100 for the shell.
 
 ### TS-008 · Authentication
 
@@ -44,16 +43,6 @@ Blocked on one criterion; the rest is merged.
 _Empty._
 
 ## Backlog
-
-### TS-006 · Application shell
-
-Depends on: TS-005.
-
-- [ ] Below 600px the shell shows a navigation bar; from 600px it shows a navigation rail with the same destinations.
-- [ ] Moving between destinations animates in the direction of travel using view transitions; with reduced motion requested there is no movement.
-- [ ] The page has a skip link and landmarks, and after navigation focus is on the main heading (test).
-- [ ] The colour scheme follows the system, can be overridden, and the override survives a reload.
-- [ ] Lighthouse reports an accessibility score of 100 for the shell.
 
 ### TS-009 · Organisations, teams and roles
 
@@ -196,6 +185,19 @@ Depends on: TS-006.
 - [ ] Each public page has a title, a description and a social preview image, and is server rendered (the text is present in `curl` output).
 
 ## Done
+
+### TS-005 · Component foundation
+
+Done 2026-11-11. Pull request #13.
+
+- [x] The headless library choice is confirmed against the current documentation of React Aria Components, Base UI and Radix, and `docs/decisions.md` entry 6 is updated with what was found. _Entry 6 now holds the comparison with sources. Measured on the installed versions (React Aria Components 1.22.1, Base UI 1.9.0, Radix 1.8.1): all three write `style` attributes into server HTML for Checkbox, Switch and Select, which the Content Security Policy ignores. Only React Aria documents hooks that let us render those elements ourselves, and only it has the date and time components later cards need. React Aria stays._
+- [x] Button, IconButton, TextField, Checkbox, Switch, Select, Menu, Dialog, Sheet, Tabs, Snackbar and Tooltip exist and are styled only with tokens. _Twelve files in `app/components/`. `pnpm lint`: "No raw colours or arbitrary values under app." The HTML of `/design` in a production build contains no `style` attribute and no `<style>` element._
+- [x] Each component has a test that operates it by keyboard and asserts its role and accessible name. _`e2e/components.spec.ts`, 13 tests in a real browser against a production build, for example "Dialog takes the focus, keeps it inside, and returns it to the button on Escape". The Tooltip test also uses the pointer once, for hover._
+- [x] The `/design` route shows every component in every state in light and dark, and returns 404 in a production build. _`e2e/design.spec.ts`, 6 tests: twelve headings in each scheme; hover, focus and pressed held in place; disabled, invalid and selected shown. An overlay shows its open state when its button is pressed, or by `/design?open=dialog&scheme=dark`. `test/design-route.test.ts`: "answers 404 for /design in a normal build"._
+- [x] An automated accessibility scan of `/design` reports no violations. _`e2e/accessibility.spec.ts`, 16 tests with axe: the page closed and with each overlay open, in both schemes, against WCAG 2.0, 2.1 and 2.2 at A and AA, no rule disabled. The scan found one real defect, fixed: a hovered field's label measured 4.33:1 in the light scheme._
+- [x] With reduced motion requested, a test finds no animation of position or scale in any component. _`e2e/reduced-motion.spec.ts`: "no component animates position or scale". With the Sheet's reduced-motion classes removed it fails naming the transition; a second test with motion allowed requires ten named movements to be seen, so the watcher is known to work._
+
+Beyond the criteria: every browser test fails on a Content Security Policy violation or a console error, and none occurred, in Chromium and in WebKit on React Aria's iOS path. The policy gained two SHA-256 hashes for the two fixed `<style>` elements React Aria inserts from script; a test fails when the library's text and the hashes disagree. The Motion library was not needed and is not installed: decision 19.
 
 ### TS-026 · Close the findings of the foundation security review
 

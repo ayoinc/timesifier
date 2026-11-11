@@ -35,6 +35,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+      # Browser tests make their own build, which includes the component gallery,
+      # and delete it when they end. The deploy job builds for itself.
+      - name: Install the browsers the tests use
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - run: pnpm test:e2e
       - name: Dependency audit
         run: pnpm audit --audit-level=high
 
