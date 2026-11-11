@@ -12,12 +12,24 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import condensedFont from "./fonts/sofia-sans-condensed-latin-wght-normal.woff2?url";
+import plainFont from "./fonts/sofia-sans-latin-wght-normal.woff2?url";
 import { readColorScheme } from "./shell/color-scheme.server";
 import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
 
 // Fonts are self-hosted: app.css imports the font files through styles/tokens.css,
-// so nothing in our own markup asks another origin for anything.
-export const links: Route.LinksFunction = () => [];
+// so nothing in our own markup asks another origin for anything. The two files
+// every page in English uses are asked for at once, with the stylesheet: the
+// first words are drawn in their own typeface and do not change shape a moment
+// later. A font is always fetched without credentials, hence `crossOrigin`.
+export const links: Route.LinksFunction = () =>
+	[condensedFont, plainFont].map((href) => ({
+		rel: "preload",
+		as: "font",
+		type: "font/woff2",
+		href,
+		crossOrigin: "anonymous",
+	}));
 
 /**
  * What the server works out from the request for every page: the colour scheme
