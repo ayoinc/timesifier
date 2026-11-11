@@ -385,6 +385,7 @@ Each row's "when it is missing" is tested: the pipeline's in `scripts/deploy-con
 
 - Keep secret values out of code, logs, commit messages, pull requests and chat.
 - Production data changes go through migrations in the pipeline.
+- The privacy notice (`app/routes/privacy.tsx`) says what is stored, which cookies are set, who handles the data and for how long. A change to any of those changes the notice in the same pull request; `test/documents.test.ts` fails when a cookie's name is not on it.
 - DNS changes on `timesifier.com` are limited to the Worker's custom domains and the application's one email subdomain. The zone carries live email for other services; see `docs/architecture.md`.
 - A new dependency needs a reason in the pull request: what it does, who maintains it, why the platform or an existing dependency cannot do it.
 - Report a suspected vulnerability to the owner privately before opening an issue.
