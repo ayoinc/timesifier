@@ -92,10 +92,12 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY }: Bindings) 
 			// the client sent; `X-Forwarded-For`, the default, can be forged.
 			ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
 			database: { generateId: () => uuidv7(), validateSchema: true },
-			// Together these give the `__Host-` cookie that docs/security.md requires:
-			// `Secure`, `Path=/` and no `Domain`, so the browser accepts it from this
-			// host alone. Better Auth has no option for it and would otherwise prefix
-			// the name with `__Secure-`; see docs/decisions.md entry 8.
+			// The `__Host-` cookie that docs/security.md requires: `Secure`, `Path=/`
+			// and no `Domain`, so a browser accepts it from this host alone. Better
+			// Auth 1.7.20 has no option for it. `useSecureCookies: true` would put
+			// `__Secure-` in front of whatever name is chosen, so it is off, the prefix
+			// carries `__Host-`, and the attributes that prefix needs are set by hand.
+			// See docs/decisions.md entry 8.
 			useSecureCookies: false,
 			cookiePrefix: "__Host-timesifier",
 			defaultCookieAttributes: { secure: true, httpOnly: true, sameSite: "lax", path: "/" },
