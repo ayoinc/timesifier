@@ -14,6 +14,11 @@ const ORIGIN = `http://localhost:${PORT}`;
 
 // React Aria locks page scrolling differently on iOS; these tests run in WebKit only.
 const IOS_ONLY = /overlays-ios\.spec\.ts/;
+// The component tests run in Chromium and again in WebKit: the two have styled
+// the same page differently (docs/design-system.md, "State from another
+// element"). These are the tests that need no session; see the project below.
+const IN_WEBKIT_TOO =
+	/[\\/](?:accessibility|components|design|field-label|reduced-motion)\.spec\.ts$/;
 // Signs one person up and saves their session; every Chromium test starts with it.
 const SETUP = /auth\.setup\.ts/;
 
@@ -81,6 +86,15 @@ export default defineConfig({
 			name: "ios-webkit",
 			testMatch: IOS_ONLY,
 			use: { ...devices["iPhone 15"] },
+		},
+		{
+			// Safari's engine at a desktop's size, for the component tests: every
+			// component by keyboard, the gallery, its accessibility scans, reduced
+			// motion and the fields' labels. They need no session, which WebKit could
+			// not keep here (see the project before this one).
+			name: "webkit",
+			testMatch: IN_WEBKIT_TOO,
+			use: { ...devices["Desktop Safari"] },
 		},
 	],
 	webServer: {

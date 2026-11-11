@@ -1,6 +1,7 @@
 // Fails when a file under app/ carries a raw colour or a one-off Tailwind value
-// instead of a design token. Run with `pnpm check:tokens`; an optional argument
-// names another directory to scan.
+// instead of a design token, or styles an element from a sibling's attribute,
+// which one browser gets wrong. Run with `pnpm check:tokens`; an optional
+// argument names another directory to scan.
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +43,13 @@ const ARBITRARY_BREAKPOINT = /(?<![\w\\-])@?(?:min|max)-\[[^\]\s]+\]:/g;
 // selector ([data-x="y"]) and array indexing (rows[0]) do not match.
 const ARBITRARY_PROPERTY = /(?<=^|[\s"'`:!])\[(?:--)?[a-z][\w-]*:[^\]\s]+\](?=$|[\s"'`!])/g;
 
+// State read from a sibling's attribute: peer-data-focused:, peer-not-aria-invalid/field:.
+// WebKit does not restyle a text input's siblings for an attribute written during
+// an event, which is when React Aria writes its own. docs/design-system.md,
+// "State from another element".
+const SIBLING_ATTRIBUTE_STATE = /(?<![\w\\-])peer-(?:not-)?(?:data|aria)-[\w-]+(?:\/[\w-]+)?:/g;
+const SIBLING_RULE = "sibling attribute state";
+
 type Finding = { file: string; line: number; column: number; rule: string; match: string };
 
 function filesUnder(directory: string): string[] {
@@ -77,6 +85,7 @@ function check(file: string): Finding[] {
 		for (const match of text.matchAll(ARBITRARY_MODIFIER)) report("arbitrary value", match);
 		for (const match of text.matchAll(ARBITRARY_BREAKPOINT)) report("arbitrary value", match);
 		for (const match of text.matchAll(ARBITRARY_PROPERTY)) report("arbitrary property", match);
+		for (const match of text.matchAll(SIBLING_ATTRIBUTE_STATE)) report(SIBLING_RULE, match);
 	}
 	return findings.sort((a, b) => a.line - b.line || a.column - b.column);
 }
@@ -88,10 +97,15 @@ for (const { file, line, column, rule, match } of findings) {
 	console.log(`${relative(process.cwd(), file)}:${line}:${column}  ${rule}  ${match}`);
 }
 
-if (findings.length > 0) {
-	console.error(
-		`\n${findings.length} raw value(s) found. Use a design token: see docs/design-system.md.`,
-	);
-	process.exit(1);
+const siblings = findings.filter((finding) => finding.rule === SIBLING_RULE).length;
+const raw = findings.length - siblings;
+if (raw > 0) {
+	console.error(`\n${raw} raw value(s) found. Use a design token: see docs/design-system.md.`);
 }
+if (siblings > 0) {
+	console.error(
+		`\n${siblings} style(s) read a sibling's attribute. Read it through the container: see docs/design-system.md, "State from another element".`,
+	);
+}
+if (findings.length > 0) process.exit(1);
 console.log(`No raw colours or arbitrary values under ${relative(process.cwd(), root) || "."}.`);

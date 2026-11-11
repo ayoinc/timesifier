@@ -70,7 +70,7 @@ export function TextField({ label, description, errorMessage, ...props }: TextFi
 						<Label
 							className={cx(
 								fieldLabel(field),
-								"end-4 peer-placeholder-shown:peer-not-data-focused:top-4 peer-placeholder-shown:peer-not-data-focused:text-body-large",
+								"end-4 peer-placeholder-shown:group-not-has-data-focused/field:top-4 peer-placeholder-shown:group-not-has-data-focused/field:text-body-large",
 							)}
 						>
 							{label}

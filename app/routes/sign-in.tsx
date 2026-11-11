@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { Button } from "~/components/Button";
 import { TextField } from "~/components/TextField";
@@ -7,6 +7,7 @@ import { POLICY_ADDITION_HEADER, TURNSTILE_ADDITION } from "../../workers/securi
 import type { Route } from "./+types/sign-in";
 import {
 	AuthPage,
+	changeStep,
 	type Notice,
 	NoticeLine,
 	problem,
@@ -58,8 +59,8 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 	const [step, setStep] = useState<Step>("passkey");
 	const [email, setEmail] = useState("");
 
-	// A change of step is a transition, so it moves (./auth/AuthPage.tsx).
-	const go = (to: Step) => startTransition(() => setStep(to));
+	// How a change of step moves, and when it does not: ./auth/AuthPage.tsx.
+	const go = (to: Step) => changeStep(() => setStep(to));
 	const signedIn = () => leaveFor(next);
 
 	return (

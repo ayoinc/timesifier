@@ -142,7 +142,7 @@ export function Select({ options, onChange, description, errorMessage, ...props 
 						"end-12",
 						!hasValue &&
 							!state.isOpen &&
-							"peer-not-data-focused:top-4 peer-not-data-focused:text-body-large",
+							"group-not-has-data-focused/field:top-4 group-not-has-data-focused/field:text-body-large",
 					)}
 				>
 					{props.label}

@@ -77,12 +77,13 @@ export function CodeStep({
 		<>
 			<StepHeading>Check your email</StepHeading>
 			{/* The server answers the same whether or not a message went out, so this
-			    says where to look and never that the code has arrived. */}
+			    says where to look and never that the code has arrived. "The" and not
+			    "a": the length is a number that may begin with a vowel sound. */}
 			<StepLead>
-				Look for a {SIGN_IN_CODE_LENGTH}-digit code in the inbox of{" "}
+				Look for the {SIGN_IN_CODE_LENGTH}-digit code in the inbox of{" "}
 				<strong className="text-on-surface">{email}</strong>. It can take a minute to arrive and may
-				be in your spam folder. If nothing comes, send a new code. A code works for{" "}
-				{CODE_LIFETIME_SECONDS / 60} minutes.
+				be in your spam folder. Type it here: a code works only in the browser that asked for it,
+				and for {CODE_LIFETIME_SECONDS / 60} minutes. If nothing comes, send a new code.
 			</StepLead>
 
 			<form onSubmit={submit} className="flex flex-col gap-4">

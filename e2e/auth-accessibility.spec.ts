@@ -154,11 +154,45 @@ for (const viewport of [
 	}
 }
 
+declare global {
+	interface Window {
+		__viewTransitionsStarted?: number;
+		__stepTransitions?: string[];
+	}
+}
+
+/**
+ * Counts the view transitions the page starts, from before its first script
+ * runs. Call before the page is opened.
+ */
+async function countViewTransitions(page: Page) {
+	await page.addInitScript(() => {
+		const start = document.startViewTransition.bind(document);
+		window.__viewTransitionsStarted = 0;
+		document.startViewTransition = ((...parameters: Parameters<typeof start>) => {
+			window.__viewTransitionsStarted = (window.__viewTransitionsStarted ?? 0) + 1;
+			return start(...parameters);
+		}) as typeof document.startViewTransition;
+	});
+}
+
+/** How many view transitions the page has started since it loaded. */
+function viewTransitionsStarted(page: Page): Promise<number | undefined> {
+	return page.evaluate(() => window.__viewTransitionsStarted);
+}
+
+/** The height of the page: the window's, or more when the page has outgrown the window. */
+function pageHeight(page: Page): Promise<number> {
+	return page.evaluate(() => document.documentElement.scrollHeight);
+}
+
 /**
  * Every change of view the sign-up page makes, forward and back, as far as its
  * last step. It stays on the page: what the watcher has seen is the page's own.
+ * Returns the height of the page at each step it stopped on.
  */
-async function walkEveryStep(page: Page) {
+async function walkEveryStep(page: Page): Promise<number[]> {
+	const heights: number[] = [];
 	const person = newPerson();
 	await addAuthenticator(page);
 	await openAuthPage(page, "/sign-up");
@@ -166,10 +200,12 @@ async function walkEveryStep(page: Page) {
 	await page.getByLabel("Email").fill(person.email);
 	await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
 	await expect(page.getByRole("heading", { level: 1, name: "Check your email" })).toBeVisible();
+	heights.push(await pageHeight(page));
 
 	// Back a step and forward again.
 	await page.getByRole("button", { name: "Use a different email" }).click();
 	await expect(page.getByRole("heading", { level: 1, name: "Create your account" })).toBeVisible();
+	heights.push(await pageHeight(page));
 	const code = await codeSentBy(() => page.getByRole("button", { name: "Continue" }).click());
 	await page.getByLabel("Code").fill(code);
 	await page.getByRole("button", { name: "Create account" }).click();
@@ -178,26 +214,56 @@ async function walkEveryStep(page: Page) {
 	await expect(
 		page.getByRole("heading", { level: 1, name: "Your account is ready" }),
 	).toBeVisible();
+	heights.push(await pageHeight(page));
 	await page.getByRole("button", { name: "Create a passkey" }).click();
 	await expect(
 		page.getByRole("heading", { level: 1, name: "Your passkey is ready" }),
 	).toBeVisible();
+	heights.push(await pageHeight(page));
+	return heights;
 }
+
+// Shorter than the sign-up page's tallest step and taller than its shortest, so
+// the page outgrows the window at one step and fits it again at another.
+const SHORT = { width: 1280, height: 560 };
 
 test.describe("with reduced motion requested", () => {
 	test.use({ reducedMotion: "reduce" });
 
 	test("no step of the sign-up page moves or changes size", async ({ page }) => {
 		await watchForMovement(page);
+		await countViewTransitions(page);
 		await walkEveryStep(page);
 		expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(
 			true,
 		);
 		expect(await movement(page)).toEqual([]);
+		expect(await viewTransitionsStarted(page)).toBe(0);
 	});
 
+	test.describe("in a window shorter than the page's tallest step", () => {
+		test.use({ viewport: SHORT });
+
+		test("no step of the sign-up page moves or changes size", async ({ page }) => {
+			await watchForMovement(page);
+			await countViewTransitions(page);
+			const heights = await walkEveryStep(page);
+
+			// The case this test is for: the page was taller than the window, and was not.
+			expect(Math.max(...heights)).toBeGreaterThan(SHORT.height);
+			expect(Math.min(...heights)).toBe(SHORT.height);
+			expect(await movement(page)).toEqual([]);
+			expect(await viewTransitionsStarted(page)).toBe(0);
+		});
+	});
+
+	// A change of step is not a view transition here (app/routes/auth/AuthPage.tsx,
+	// `changeStep`). The watcher alone would not hold that: React sizes a
+	// transition's overlay from script only when the two steps measure the same,
+	// which depends on how an address wraps in the sentence around it.
 	test("the steps of the sign-in page change without moving", async ({ page }) => {
 		await watchForMovement(page);
+		await countViewTransitions(page);
 		await openAuthPage(page, "/sign-in");
 		await page.getByRole("button", { name: "Use an email code instead" }).click();
 		await expect(page.getByLabel("Email")).toBeFocused();
@@ -205,6 +271,29 @@ test.describe("with reduced motion requested", () => {
 		await expect(page.getByRole("button", { name: "Sign in with a passkey" })).toBeVisible();
 
 		expect(await movement(page)).toEqual([]);
+		expect(await viewTransitionsStarted(page)).toBe(0);
+	});
+
+	// What takes the transition's place (rule 9: a fade or nothing).
+	test("a step that arrives fades in, and the step the page loaded with does not", async ({
+		page,
+	}) => {
+		// Every CSS transition that starts on a step, by the property it changes.
+		await page.addInitScript(() => {
+			const started: string[] = [];
+			window.__stepTransitions = started;
+			document.addEventListener("transitionrun", (event) => {
+				if (event.target instanceof Element && event.target.localName === "main") {
+					started.push(event.propertyName);
+				}
+			});
+		});
+		await openAuthPage(page, "/sign-in");
+		expect(await page.evaluate(() => window.__stepTransitions)).toEqual([]);
+
+		await page.getByRole("button", { name: "Use an email code instead" }).click();
+		await expect(page.getByLabel("Email")).toBeFocused();
+		await expect.poll(() => page.evaluate(() => window.__stepTransitions)).toEqual(["opacity"]);
 	});
 });
 
@@ -214,8 +303,11 @@ test.describe("with motion allowed", () => {
 	// The same steps and the same watcher. This is what shows the test above can fail.
 	test("the watcher sees the steps of the sign-up page move", async ({ page }) => {
 		await watchForMovement(page);
+		await countViewTransitions(page);
 		await walkEveryStep(page);
 
+		// One for each change of step: the count above can be other than nothing.
+		expect(await viewTransitionsStarted(page)).toBe(5);
 		const seen = await movement(page);
 		for (const moved of [
 			/^animation of translate on <html>/, // a step arrives from the side it lies on

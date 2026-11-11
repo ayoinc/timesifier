@@ -1,5 +1,13 @@
-import { type ReactNode, useLayoutEffect, useRef, ViewTransition } from "react";
+import {
+	type ReactNode,
+	startTransition,
+	useLayoutEffect,
+	useRef,
+	useState,
+	ViewTransition,
+} from "react";
 
+import { cx } from "~/components/cx";
 import { CheckIcon } from "~/components/icons/CheckIcon";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 
@@ -16,19 +24,50 @@ export interface AuthPageProps {
 }
 
 /**
+ * Changes the step of a page, by running `change`.
+ *
+ * With motion allowed the change is a transition, which is what makes React
+ * start a view transition and move the step (`AuthPage`). With reduced motion
+ * requested it is an ordinary update and there is no view transition: the step
+ * is in its place at once and fades in (design rule 9).
+ *
+ * A view transition whose parts only fade is not enough here. When the new
+ * step's `<main>` measures the same as the old one's, React leaves the rest of
+ * the page out of the transition, and to do so it starts an animation from
+ * script that holds the `width` and `height` of `::view-transition` at nothing
+ * (react-dom 19.3.1, `commitAfterMutationEffectsOnFiber`). A style sheet cannot
+ * stop an animation that script starts, and whether two steps measure the same
+ * depends on how their text wraps: on the address the person typed.
+ */
+export function changeStep(change: () => void) {
+	if (matchMedia("(prefers-reduced-motion: reduce)").matches) change();
+	else startTransition(change);
+}
+
+/** With reduced motion requested, a step that arrives fades in where it stands. */
+const ARRIVAL =
+	"motion-reduce:transition-opacity motion-reduce:duration-short4 motion-reduce:ease-standard " +
+	"motion-reduce:starting:opacity-0";
+
+/**
  * The frame of a page outside the shell: the product's name, which stays put,
  * and one step at a time below it.
  *
  * A change of step moves like a change of destination in the shell, with the
  * same transition and the same tokens (docs/design-system.md, "Shell"): forward
- * one way, back the other, and a fade alone with reduced motion requested. When
- * the step has changed, the keyboard focus goes to its first field, or to its
- * heading when it has none, so the next key press lands in the new step. The
- * step a page loads with is left alone, like any page the browser loads whole.
+ * one way, back the other. With reduced motion requested it is not a transition
+ * (`changeStep`): the step is there at once and fades in. When the step has
+ * changed, the keyboard focus goes to its first field, or to its heading when
+ * it has none, so the next key press lands in the new step. The step a page
+ * loads with is left alone, like any page the browser loads whole.
  */
 export function AuthPage({ step, children }: AuthPageProps) {
 	const travel = useTravel(step);
 	const main = useRef<HTMLElement>(null);
+
+	// The step the page loaded with is there already; every later one arrives.
+	const [arrived, setArrived] = useState(false);
+	if (travel && !arrived) setArrived(true);
 
 	const shown = useRef(step);
 	useLayoutEffect(() => {
@@ -50,9 +89,10 @@ export function AuthPage({ step, children }: AuthPageProps) {
 				</a>
 			</header>
 
-			{/* Only a change of step starts a transition, as in the shell. */}
+			{/* Only a change of step starts a transition, as in the shell. Each step has
+			    its own `<main>`: the fade starts from the first style of a new element. */}
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-				<main ref={main} className="flex flex-col gap-6">
+				<main key={step} ref={main} className={cx("flex flex-col gap-6", arrived && ARRIVAL)}>
 					{children}
 				</main>
 			</ViewTransition>
