@@ -17,7 +17,6 @@ export interface PhotoSource {
 export const PHOTOS = {
 	departure: { name: "departure", widths: [600, 1200, 1800], width: 1800, height: 1200 },
 	workshop: { name: "workshop", widths: [480, 800, 1200], width: 1200, height: 1500 },
-	desk: { name: "desk", widths: [600, 1200], width: 1200, height: 800 },
 	platform: { name: "platform", widths: [600, 1200], width: 1200, height: 800 },
 } as const satisfies Record<string, PhotoSource>;
 

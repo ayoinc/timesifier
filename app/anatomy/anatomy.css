@@ -1,0 +1,14 @@
+/*
+ * How an anatomy figure is drawn (docs/design-direction.md, "Anatomy figures").
+ * A line keeps its weight whatever size the figure is shown at, as a ruled line
+ * on the page does: 1px inside a part and on a leader, 1.5px round a part.
+ */
+.anatomy :is(path, circle, rect, line) {
+	vector-effect: non-scaling-stroke;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+.anatomy-outline {
+	stroke-width: 1.5px;
+}
