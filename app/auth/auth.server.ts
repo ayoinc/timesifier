@@ -19,6 +19,7 @@
 import { env, waitUntil } from "cloudflare:workers";
 import { passkey } from "@better-auth/passkey";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import type { Session, User } from "better-auth/types";
@@ -128,6 +129,9 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 				"/email-otp/send-verification-otp": ASKING_LIMIT,
 				"/sign-in/email-otp": SIGN_IN_LIMIT,
 				"/passkey/verify-authentication": SIGN_IN_LIMIT,
+				// Anyone may ask for the options, and each answer stores a challenge
+				// for five minutes. The sign-in page asks once each time it loads.
+				"/passkey/generate-authenticate-options": { window: 60, max: 30 },
 				...ORGANISATION_RATE_LIMITS,
 			},
 		},
@@ -176,6 +180,28 @@ function createAuth({ DB, BETTER_AUTH_SECRET, TURNSTILE_SECRET_KEY, ENVIRONMENT 
 			passkey({
 				rpName: "Timesifier",
 				authenticatorSelection: { userVerification: "required" },
+				registration: {
+					// The plugin stores a new passkey without looking for its credential
+					// id. An id some passkey already has never comes from an authenticator,
+					// only from a request made up to stand in another passkey's way, so
+					// it is the caller's mistake and is told so. The unique index on
+					// `passkeys.credential_id` remains for two such requests at once.
+					async afterVerification({ ctx, verification }) {
+						const credentialID = verification.registrationInfo?.credential.id;
+						const taken =
+							credentialID &&
+							(await ctx.context.adapter.findOne({
+								model: "passkey",
+								where: [{ field: "credentialID", value: credentialID }],
+							}));
+						if (taken) {
+							throw new APIError("BAD_REQUEST", {
+								code: "PASSKEY_ALREADY_REGISTERED",
+								message: "This passkey is already registered",
+							});
+						}
+					},
+				},
 			}),
 			...organisationPlugins(),
 			redirectRules,

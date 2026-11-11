@@ -191,17 +191,22 @@ describe("the two passkey ceremonies", () => {
 		expect(await countRows("sessions"), "the one session made with the code").toBe(1);
 	});
 
-	it("refuse a second passkey with the id of somebody's first, which goes on signing its owner in", async () => {
+	it("refuse a second passkey with the id of somebody's first as the caller's mistake, and the first goes on signing its owner in", async () => {
 		const ada = await signIn(mailbox, EMAIL);
 		const grace = await signIn(mailbox, "grace@example.com");
 		const adasKey = await createAuthenticator(ORIGIN);
 		expect((await register(ada.cookie, adasKey)).status).toBe(200);
 		const copy = await createAuthenticator(ORIGIN, adasKey.credentialId);
+		const errors = vi.spyOn(console, "error");
 
 		const added = await register(grace.cookie, copy);
 
-		// The index refuses the row; the library has no answer of its own for that.
-		expect(added.status).toBe(500);
+		expect(added.status).toBe(400);
+		expect(await added.json()).toEqual({
+			code: "PASSKEY_ALREADY_REGISTERED",
+			message: "This passkey is already registered",
+		});
+		expect(errors).not.toHaveBeenCalled();
 		expect(await countRows("passkeys")).toBe(1);
 		const signedIn = await signInWith(adasKey);
 		expect(signedIn.status).toBe(200);

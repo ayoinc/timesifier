@@ -233,7 +233,6 @@ const ENDPOINTS: Record<string, Endpoint> = {
 		},
 	},
 	"/organization/list": anyone("query", nothing),
-	"/organization/list-user-invitations": anyone("query", nothing),
 
 	"/organization/get-invitation": recipient("query", z.strictObject({ id: Id }), "standing"),
 	"/organization/accept-invitation": recipient(

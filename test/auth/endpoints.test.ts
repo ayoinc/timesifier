@@ -35,7 +35,7 @@ beforeEach(async () => {
 });
 
 describe("the endpoints under /api/auth", () => {
-	it("are these 27 and no other", () => {
+	it("are these 26 and no other", () => {
 		expect([...offered].sort()).toEqual([
 			"GET /get-session",
 			"GET /organization/get-full-organization",
@@ -43,7 +43,6 @@ describe("the endpoints under /api/auth", () => {
 			"GET /organization/list",
 			"GET /organization/list-invitations",
 			"GET /organization/list-members",
-			"GET /organization/list-user-invitations",
 			"GET /passkey/generate-authenticate-options",
 			"GET /passkey/generate-register-options",
 			"GET /passkey/list-user-passkeys",

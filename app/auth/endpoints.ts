@@ -32,10 +32,9 @@ export const OFFERED_ENDPOINTS: Record<string, true> = {
 	"GET /passkey/list-user-passkeys": true,
 	"POST /passkey/delete-passkey": true,
 
-	// Organisations: the sixteen that the gate in organisations.server.ts admits.
+	// Organisations: the fifteen that the gate in organisations.server.ts admits.
 	"POST /organization/create": true,
 	"GET /organization/list": true,
-	"GET /organization/list-user-invitations": true,
 	"GET /organization/get-invitation": true,
 	"POST /organization/accept-invitation": true,
 	"POST /organization/reject-invitation": true,

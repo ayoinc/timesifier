@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { freshDatabase } from "../db/database";
-import { captureEmail, post, requestCode } from "./harness";
+import { captureEmail, get, post, requestCode } from "./harness";
 
 const EMAIL = "ada@example.com";
 
@@ -48,6 +48,15 @@ describe("the sign-in rate limit", () => {
 
 		expect(statuses).toEqual([200, 200, 200, 429]);
 		expect((await requestCode(EMAIL, { client: "203.0.113.8" })).status).toBe(200);
+	});
+
+	it("asking for passkey sign-in options: the 31st request in a minute from one client is answered 429, the first thirty are served", async () => {
+		const ask = (client: string) => get("/passkey/generate-authenticate-options", { client });
+
+		const statuses = await statusesOf(31, () => ask("203.0.113.7"));
+
+		expect(statuses).toEqual([...Array(30).fill(200), 429]);
+		expect((await ask("203.0.113.8")).status).toBe(200);
 	});
 
 	it("counts each client on its own", async () => {

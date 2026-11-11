@@ -646,14 +646,13 @@ describe("an invitation and the organisations around it", () => {
 		expect(await statusOf(invitation.id)).toBe("pending");
 	});
 
-	it("is listed for its recipient, and for nobody else", async () => {
-		const { ada, grace, eve, organisation } = await acme();
-		const invitation = await invite(ada.cookie, organisation.id, "grace@example.com");
+	it("is not offered as a list: no page shows a person their invitations, so nothing answers", async () => {
+		const { ada, grace, organisation } = await acme();
+		await invite(ada.cookie, organisation.id, "grace@example.com");
 
 		const graces = await get("/organization/list-user-invitations", { cookie: grace.cookie });
-		const eves = await get("/organization/list-user-invitations", { cookie: eve.cookie });
 
-		expect(await graces.json()).toEqual([expect.objectContaining({ id: invitation.id })]);
-		expect(await eves.json()).toEqual([]);
+		expect(graces.status).toBe(404);
+		expect(await graces.text()).toBe("Not Found");
 	});
 });
