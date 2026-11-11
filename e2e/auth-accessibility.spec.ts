@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
+	ARRIVAL,
 	addAuthenticator,
 	codeSentBy,
 	newPerson,
@@ -12,8 +13,9 @@ import {
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems, UNDER_AN_OVERLAY } from "./axe";
-import { expect, openShell, test } from "./fixtures";
+import { expect, test } from "./fixtures";
 import { movement, watchForMovement } from "./motion";
+import { openSettings } from "./organisation";
 
 // Every view of the sign-up page, the sign-in page and the account part of
 // Settings: no WCAG 2.2 A or AA violation and every text's contrast measured, at
@@ -130,10 +132,10 @@ for (const viewport of [
 				await addAuthenticator(page);
 				await signUp(page, newPerson());
 				await page.getByRole("button", { name: "Not now" }).click();
-				await expect(page).toHaveURL("/app");
+				await expect(page).toHaveURL(ARRIVAL);
 
 				// With no passkey, then with one and the message that says so.
-				await openShell(page, "/app/settings");
+				await openSettings(page);
 				await expectNoProblems(page, "Settings");
 				await page.getByRole("button", { name: "Add a passkey" }).click();
 				await expect(page.getByRole("status").filter({ hasText: "Passkey added" })).toBeVisible();

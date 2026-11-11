@@ -4,7 +4,9 @@ import { join } from "node:path";
 import type { BrowserContext, CDPSession, Page } from "@playwright/test";
 
 import { SIGN_IN_CODE_LENGTH } from "../app/auth/code";
+import { APP_PATH, NEW_ORGANISATION_PATH } from "../app/shell/destinations";
 import { expect, openShell } from "./fixtures";
+import { openOutsideOrganisation, openSettings } from "./organisation";
 
 // What the browser tests of sign-up, sign-in and sign-out share.
 
@@ -84,25 +86,38 @@ export function wrongCode(code: string): string {
 }
 
 /**
- * Does what makes the server send a sign-in code, and returns the code from
- * the message it wrote.
+ * Does what makes the server send one message, and returns what `find` reads
+ * in the text of the message it wrote: a sign-in code, an invitation's link.
+ * Every test that causes a message goes through here, one at a time.
  */
-export async function codeSentBy(send: () => Promise<unknown>): Promise<string> {
+export async function foundInMessageSentBy(
+	send: () => Promise<unknown>,
+	find: RegExp,
+	what: string,
+): Promise<string> {
 	await takeLock();
 	try {
 		const before = new Set(await messages());
 		await send();
-		let code: string | undefined;
+		let found: string | undefined;
 		await expect(async () => {
 			const added = (await messages()).filter((file) => !before.has(file));
-			expect(added, "messages written since the code was asked for").toHaveLength(1);
-			code = (await readFile(added[0] ?? "", "utf8")).match(CODE)?.[0];
-			expect(code, "the code in the message").toBeDefined();
+			expect(added, "messages written since the message was asked for").toHaveLength(1);
+			found = (await readFile(added[0] ?? "", "utf8")).match(find)?.[0];
+			expect(found, `${what} in the message`).toBeDefined();
 		}).toPass({ timeout: 15_000 });
-		return code ?? "";
+		return found ?? "";
 	} finally {
 		await rm(LOCK, { recursive: true, force: true });
 	}
+}
+
+/**
+ * Does what makes the server send a sign-in code, and returns the code from
+ * the message it wrote.
+ */
+export function codeSentBy(send: () => Promise<unknown>): Promise<string> {
+	return foundInMessageSentBy(send, CODE, "the code");
 }
 
 /** A passkey authenticator that exists only in this page's browser, and answers every prompt itself. */
@@ -180,9 +195,25 @@ export async function signInWithCode(page: Page, email: string, path = "/sign-in
 	await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
-/** Signs out from Settings and arrives at the sign-in page. */
+/**
+ * Where a person who belongs to no organisation arrives after signing in: `/app`
+ * sends them to the page that creates their first.
+ */
+export const ARRIVAL = NEW_ORGANISATION_PATH;
+
+/**
+ * Signs out and arrives at the sign-in page. A person with an organisation
+ * signs out from its Settings; a person with none, from the page that would
+ * create one, which is where `/app` sends them. "Sign out everywhere" is in
+ * Settings alone, so a person with no organisation gets one first.
+ */
 export async function signOut(page: Page, button: "Sign out" | "Sign out everywhere" = "Sign out") {
-	await openShell(page, "/app/settings");
+	await page.goto(APP_PATH);
+	if (button === "Sign out" && new URL(page.url()).pathname === NEW_ORGANISATION_PATH) {
+		await openOutsideOrganisation(page, NEW_ORGANISATION_PATH);
+	} else {
+		await openSettings(page);
+	}
 	await page.getByRole("button", { name: button, exact: true }).click();
 	await expect(page).toHaveURL("/sign-in");
 }

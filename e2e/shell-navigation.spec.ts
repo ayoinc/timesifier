@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { type Destination, destinations } from "../app/shell/destinations";
 import { expect, openShell, test } from "./fixtures";
+import { homePath } from "./organisation";
 
 // The shell's navigation, landmarks and focus (TS-006, criteria 1 and 3). Every
 // path and label comes from the one list of destinations.
@@ -74,7 +75,7 @@ async function expectDestinations(page: Page, current: Destination) {
 	await expect(links).toHaveText(destinations.map((destination) => destination.label));
 	for (const destination of destinations) {
 		const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
-		await expect(link).toHaveAttribute("href", destination.path);
+		await expect(link).toHaveAttribute("href", homePath(destination.id));
 		if (destination === current) await expect(link).toHaveAttribute("aria-current", "page");
 		else await expect(link).not.toHaveAttribute("aria-current");
 	}
@@ -100,7 +101,7 @@ test.describe("in a window 390px wide", () => {
 	test.use({ viewport: COMPACT });
 
 	test("the navigation is a bar along the bottom with the four destinations", async ({ page }) => {
-		await openShell(page, first.path);
+		await openShell(page, homePath(first.id));
 
 		await expectBar(page);
 		await expectDestinations(page, first);
@@ -114,7 +115,7 @@ test.describe("in a window 1280px wide", () => {
 	test("the navigation is a rail down the side with the same four destinations", async ({
 		page,
 	}) => {
-		await openShell(page, first.path);
+		await openShell(page, homePath(first.id));
 
 		await expectRail(page);
 		await expectDestinations(page, first);
@@ -126,7 +127,7 @@ test("the bar becomes the rail at 600px, and back, without the page loading agai
 	page,
 }) => {
 	await page.setViewportSize({ width: 599, height: 800 });
-	await openShell(page, last.path);
+	await openShell(page, homePath(last.id));
 	await page.evaluate(() => {
 		document.documentElement.dataset.loadedOnce = "yes";
 	});
@@ -151,7 +152,7 @@ test.describe("without script", () => {
 	test("the server sends one navigation that is right at both widths, and its links work", async ({
 		page,
 	}) => {
-		await page.goto(first.path);
+		await page.goto(homePath(first.id));
 		await expectBar(page);
 		await expectDestinations(page, first);
 
@@ -159,7 +160,7 @@ test.describe("without script", () => {
 		await expectRail(page);
 
 		await navigation(page).getByRole("link", { name: last.label, exact: true }).click();
-		await expect(page).toHaveURL(last.path);
+		await expect(page).toHaveURL(homePath(last.id));
 		await expect(page.getByRole("heading", { level: 1, name: last.label })).toBeVisible();
 	});
 });
@@ -168,7 +169,7 @@ test("arriving from the home page by its link puts the focus on the heading", as
 	await openShell(page, "/", "main");
 	await page.getByRole("link", { name: "Open Timesifier" }).click();
 
-	await expect(page).toHaveURL(first.path);
+	await expect(page).toHaveURL(homePath(first.id));
 	await expect(page.getByRole("heading", { level: 1, name: first.label })).toBeFocused();
 	await expectDestinations(page, first);
 });
@@ -180,7 +181,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 		test("the first Tab reaches a skip link, and Enter moves the focus into the main region", async ({
 			page,
 		}) => {
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 			// A full page load leaves the focus where the browser puts it.
 			expect(await focused(page)).toMatch(/^body: /);
 
@@ -191,13 +192,13 @@ for (const viewport of [COMPACT, MEDIUM]) {
 
 			await page.keyboard.press("Enter");
 			await expect(page.getByRole("main")).toBeFocused();
-			await expect(page).toHaveURL(first.path);
+			await expect(page).toHaveURL(homePath(first.id));
 		});
 
 		test("the page has one navigation landmark with a name and one main landmark", async ({
 			page,
 		}) => {
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 
 			await expect(page.getByRole("navigation")).toHaveCount(1);
 			await expect(navigation(page)).toBeVisible();
@@ -210,7 +211,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 		test("after a move to each destination the focus is on its heading and the title has changed", async ({
 			page,
 		}) => {
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 			await expect(page).toHaveTitle(title(first));
 
 			// Every other destination, then back to the first.
@@ -218,7 +219,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				const before = await page.title();
 				await navigation(page).getByRole("link", { name: destination.label, exact: true }).click();
 
-				await expect(page).toHaveURL(destination.path);
+				await expect(page).toHaveURL(homePath(destination.id));
 				await expect(
 					page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 				).toBeFocused();
@@ -230,7 +231,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 		});
 
 		test("every destination is reached with Tab and Enter alone", async ({ page }) => {
-			await openShell(page, first.path);
+			await openShell(page, homePath(first.id));
 
 			for (const destination of [...others, first]) {
 				const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
@@ -244,7 +245,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				await expect(link.locator("span").first()).toHaveCSS("outline-style", "solid");
 
 				await page.keyboard.press("Enter");
-				await expect(page).toHaveURL(destination.path);
+				await expect(page).toHaveURL(homePath(destination.id));
 				await expect(
 					page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 				).toBeFocused();

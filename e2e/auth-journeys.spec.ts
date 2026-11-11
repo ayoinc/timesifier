@@ -1,6 +1,9 @@
 import type { Page } from "@playwright/test";
 
+import { destinationPath, organisationPath } from "../app/shell/destinations";
+
 import {
+	ARRIVAL,
 	addAuthenticator,
 	newPerson,
 	openAuthPage,
@@ -12,12 +15,17 @@ import {
 } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { expect, openShell, test } from "./fixtures";
+import { createOrganisation, openSettings } from "./organisation";
 
 // The journeys of card TS-008, each walked in a browser against the production
 // build: sign up with an email code, make a passkey, sign out, sign in with the
 // passkey, sign in with a code, end every session, remove a passkey. Passkeys
 // are made and used by a virtual authenticator in Chromium; the codes are read
 // from the messages the local EMAIL binding writes (./auth.ts).
+//
+// A person who has just signed up belongs to no organisation, so `/app` sends
+// them to the page that creates one (`ARRIVAL`). Settings is in an
+// organisation: a journey that needs it creates one first (./organisation.ts).
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
@@ -25,6 +33,11 @@ test.describe.configure({ timeout: TIME_WITH_TURNS });
 test.beforeEach(async ({ context, baseURL }) => {
 	await ownAddress(context, baseURL);
 });
+
+/** The sign-in page as the guard sends a person to it from `path`. */
+function signInPath(path: string): string {
+	return `/sign-in?next=${encodeURIComponent(path)}`;
+}
 
 /** Who the server says this browser is signed in as: their address and name, or `null`. */
 async function whoIs(page: Page): Promise<{ email: string; name: string } | null> {
@@ -55,10 +68,12 @@ test.describe("signing up", () => {
 		expect(await authenticator.passkeys(), "passkeys on the authenticator").toBe(1);
 
 		await page.getByRole("button", { name: "Open Timesifier" }).click();
-		await expect(page).toHaveURL("/app");
-		await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+		await expect(page).toHaveURL(ARRIVAL);
+		await expect(
+			page.getByRole("heading", { level: 1, name: "Create your organisation" }),
+		).toBeVisible();
 
-		await openShell(page, "/app/settings");
+		await openSettings(page);
 		await expect(page.getByRole("listitem").filter({ hasText: "Added" })).toHaveCount(1);
 		await expect(page.getByText(person.email)).toBeVisible();
 	});
@@ -68,9 +83,9 @@ test.describe("signing up", () => {
 	}) => {
 		await signUp(page, newPerson());
 		await page.getByRole("button", { name: "Not now" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
 
-		await openShell(page, "/app/settings");
+		await openSettings(page);
 		await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
 	});
 
@@ -92,7 +107,7 @@ test.describe("signing out and signing in", () => {
 		await signUp(page, person);
 		await page.getByRole("button", { name: "Create a passkey" }).click();
 		await page.getByRole("button", { name: "Open Timesifier" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
 
 		await signOut(page);
 		expect(await whoIs(page)).toBeNull();
@@ -101,7 +116,7 @@ test.describe("signing out and signing in", () => {
 		await openAuthPage(page, "/sign-in");
 		await expect(page.getByLabel("Email")).toHaveCount(0);
 		await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
 		expect((await whoIs(page))?.email).toBe(person.email);
 	});
 
@@ -109,14 +124,16 @@ test.describe("signing out and signing in", () => {
 		const person = newPerson();
 		await signUp(page, person);
 		await page.getByRole("button", { name: "Not now" }).click();
+		const { slug } = await createOrganisation(page);
 		await signOut(page);
 
 		// Without a session, a page under /app sends the person to sign in and remembers itself.
-		await page.goto("/app/reports?week=46");
-		await expect(page).toHaveURL("/sign-in?next=%2Fapp%2Freports%3Fweek%3D46");
+		const reports = `${destinationPath(slug, "reports")}?week=46`;
+		await page.goto(reports);
+		await expect(page).toHaveURL(signInPath(reports));
 
 		await signInWithCode(page, person.email, page.url());
-		await expect(page).toHaveURL("/app/reports?week=46");
+		await expect(page).toHaveURL(reports);
 		await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
 		expect((await whoIs(page))?.email).toBe(person.email);
 	});
@@ -133,7 +150,7 @@ test.describe("signing out and signing in", () => {
 		// choosing the passkey in the field's autofill would.
 		await openAuthPage(page, "/sign-in");
 		await page.getByRole("button", { name: "Use an email code instead" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
 		expect((await whoIs(page))?.email).toBe(person.email);
 	});
 
@@ -160,17 +177,25 @@ test.describe("signing out and signing in", () => {
 	test("a person who is signed in is sent on from both pages", async ({ page }) => {
 		await signUp(page, newPerson());
 		await page.getByRole("button", { name: "Not now" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
 
+		// With no organisation, /app sends them to create one.
 		await page.goto("/sign-in");
-		await expect(page).toHaveURL("/app");
-		await page.goto("/sign-up?next=/app/projects");
-		await expect(page).toHaveURL("/app/projects");
+		await expect(page).toHaveURL(ARRIVAL);
+
+		// With one, /app sends them to it.
+		const { slug } = await createOrganisation(page);
+		const home = organisationPath(slug);
+		await page.goto("/sign-in");
+		await expect(page).toHaveURL(home);
+		const projects = destinationPath(slug, "projects");
+		await page.goto(`/sign-up?next=${projects}`);
+		await expect(page).toHaveURL(projects);
 		// Only a page of our own under /app is ever gone to.
 		await page.goto("/sign-in?next=https://example.com/app");
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(home);
 		await page.goto("/sign-in?next=//example.com/app");
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(home);
 	});
 });
 
@@ -179,15 +204,17 @@ test.describe("sign out everywhere", () => {
 		const person = newPerson();
 		await signUp(page, person);
 		await page.getByRole("button", { name: "Not now" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
+		const { slug } = await createOrganisation(page);
+		const home = organisationPath(slug);
 
 		// The same person in another browser, signed in with a code of their own.
 		const elsewhere = await browser.newContext({ storageState: SIGNED_OUT, baseURL });
 		await ownAddress(elsewhere, baseURL);
 		const other = await elsewhere.newPage();
 		await signInWithCode(other, person.email);
-		await expect(other).toHaveURL("/app");
-		await openShell(other, "/app");
+		await expect(other).toHaveURL(home);
+		await openShell(other, home);
 
 		await signOut(page, "Sign out everywhere");
 		expect(await whoIs(page)).toBeNull();
@@ -195,9 +222,9 @@ test.describe("sign out everywhere", () => {
 		// The other browser still shows the shell. Its next move asks the server,
 		// which no longer knows the session.
 		await other.getByRole("link", { name: "Reports" }).click();
-		await expect(other).toHaveURL("/sign-in?next=%2Fapp%2Freports");
-		await other.goto("/app/settings");
-		await expect(other).toHaveURL("/sign-in?next=%2Fapp%2Fsettings");
+		await expect(other).toHaveURL(signInPath(destinationPath(slug, "reports")));
+		await other.goto(destinationPath(slug, "settings"));
+		await expect(other).toHaveURL(signInPath(destinationPath(slug, "settings")));
 		await elsewhere.close();
 	});
 });
@@ -208,9 +235,9 @@ test.describe("passkeys in Settings", () => {
 		const authenticator = await addAuthenticator(page);
 		await signUp(page, person);
 		await page.getByRole("button", { name: "Not now" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
 
-		await openShell(page, "/app/settings");
+		await openSettings(page);
 		const passkeys = page.getByRole("listitem").filter({ hasText: "Added" });
 		await expect(passkeys).toHaveCount(0);
 
@@ -247,8 +274,9 @@ test.describe("a removed passkey", () => {
 		await signUp(page, person);
 		await page.getByRole("button", { name: "Create a passkey" }).click();
 		await page.getByRole("button", { name: "Open Timesifier" }).click();
+		await expect(page).toHaveURL(ARRIVAL);
 
-		await openShell(page, "/app/settings");
+		await openSettings(page);
 		await page.getByRole("button", { name: /^Remove the passkey added/ }).click();
 		await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
 		await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
@@ -281,13 +309,15 @@ test.describe("what the pages ask of the server", () => {
 		await signUp(page, person);
 		await page.getByRole("button", { name: "Create a passkey" }).click();
 		await page.getByRole("button", { name: "Open Timesifier" }).click();
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(ARRIVAL);
+		// "Sign out everywhere" is in Settings, and Settings is in an organisation.
+		const { slug } = await createOrganisation(page);
 		await signOut(page, "Sign out everywhere");
 
 		await openAuthPage(page, "/sign-in");
 		await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-		await expect(page).toHaveURL("/app");
-		await openShell(page, "/app/settings");
+		await expect(page).toHaveURL(organisationPath(slug));
+		await openSettings(page);
 		await page.getByRole("button", { name: /^Remove the passkey added/ }).click();
 		await page.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
 		await expect(page.getByText("You have no passkeys yet.")).toBeVisible();
@@ -296,10 +326,12 @@ test.describe("what the pages ask of the server", () => {
 		// The device still holds the passkey the server has forgotten; nobody chooses it.
 		await authenticator.setPresent(false);
 		await signInWithCode(page, person.email);
-		await expect(page).toHaveURL("/app");
+		await expect(page).toHaveURL(organisationPath(slug));
 
 		// Settings reads the list of passkeys on the server, from its loader:
-		// GET /api/auth/passkey/list-user-passkeys never leaves the Worker.
+		// GET /api/auth/passkey/list-user-passkeys never leaves the Worker. The
+		// pages of an organisation ask the server the same way, from their loaders
+		// and actions: creating the organisation above called nothing from the browser.
 		expect([...called].sort()).toEqual([
 			"GET /api/auth/passkey/generate-authenticate-options",
 			"GET /api/auth/passkey/generate-register-options",

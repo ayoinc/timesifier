@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 import { destination } from "../app/shell/destinations";
 import { expect, openShell, test } from "./fixtures";
+import { homePath } from "./organisation";
 
 // The colour scheme (TS-006, criterion 4): it follows the device, a person can
 // override it in Settings, and the override is a cookie the server renders from.
@@ -40,7 +41,7 @@ test.describe("with the device set to dark", () => {
 	test.use({ colorScheme: "dark" });
 
 	test("the page follows the device until a scheme is chosen", async ({ page }) => {
-		await openShell(page, settings.path);
+		await openShell(page, homePath(settings.id));
 
 		expect(await shown(page)).toBe("dark");
 		await expect(page.locator("html")).not.toHaveAttribute("data-color-scheme");
@@ -56,7 +57,7 @@ test.describe("with the device set to dark", () => {
 		page,
 		context,
 	}) => {
-		await openShell(page, settings.path);
+		await openShell(page, homePath(settings.id));
 		await page.evaluate(() => {
 			document.documentElement.dataset.loadedOnce = "yes";
 		});
@@ -66,7 +67,7 @@ test.describe("with the device set to dark", () => {
 		expect(await shown(page)).toBe("light");
 		// The change arrived in the page that was open: the mark is still there.
 		await expect(page.locator("html")).toHaveAttribute("data-loaded-once", "yes");
-		await expect(page).toHaveURL(settings.path);
+		await expect(page).toHaveURL(homePath(settings.id));
 
 		// The cookie: its name and every attribute. No Domain, and not HttpOnly.
 		expect(cookie).toBe(
@@ -81,16 +82,16 @@ test.describe("with the device set to dark", () => {
 
 		// …and a new page in the same browser, on another destination.
 		const another = await context.newPage();
-		await another.goto(today.path);
+		await another.goto(homePath(today.id));
 		expect(await shown(another)).toBe("light");
 
 		// The server rendered it: the scheme is in the HTML before any script runs.
-		const html = await (await context.request.get(today.path)).text();
+		const html = await (await context.request.get(homePath(today.id))).text();
 		expect(html).toContain('<html lang="en" data-color-scheme="light">');
 	});
 
 	test("choosing Dark holds the page dark when the device turns light", async ({ page }) => {
-		await openShell(page, settings.path);
+		await openShell(page, homePath(settings.id));
 
 		const cookie = await choose(page, "Dark");
 		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
@@ -104,7 +105,7 @@ test.describe("with the device set to dark", () => {
 		page,
 		context,
 	}) => {
-		await openShell(page, settings.path);
+		await openShell(page, homePath(settings.id));
 		await choose(page, "Light");
 		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
 		expect(await schemeCookies(context)).toHaveLength(1);
@@ -122,7 +123,7 @@ test.describe("with the device set to dark", () => {
 	});
 
 	test("the choice is made with the keyboard alone", async ({ page }) => {
-		await openShell(page, settings.path);
+		await openShell(page, homePath(settings.id));
 
 		const system = schemes(page).getByRole("radio", { name: "System" });
 		for (let presses = 0; presses < 12; presses++) {
@@ -143,7 +144,7 @@ test.describe("without script, with the device set to dark", () => {
 	test.use({ colorScheme: "dark", javaScriptEnabled: false });
 
 	test("the form still changes the scheme", async ({ page }) => {
-		await page.goto(settings.path);
+		await page.goto(homePath(settings.id));
 		expect(await shown(page)).toBe("dark");
 
 		await schemes(page).getByText("Light", { exact: true }).click();
@@ -155,7 +156,7 @@ test.describe("without script, with the device set to dark", () => {
 		expect(await answer.headerValue("set-cookie")).toBe(
 			"__Host-color-scheme=light; Max-Age=31536000; Path=/; Secure; SameSite=Lax",
 		);
-		await expect(page).toHaveURL(settings.path);
+		await expect(page).toHaveURL(homePath(settings.id));
 		await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
 		expect(await shown(page)).toBe("light");
 		await expect(schemes(page).getByRole("radio", { name: "Light" })).toBeChecked();
@@ -169,6 +170,6 @@ test.describe("without script, with the device set to dark", () => {
 });
 
 test("with script there is no Save button: a choice is saved as it is made", async ({ page }) => {
-	await openShell(page, settings.path);
+	await openShell(page, homePath(settings.id));
 	await expect(page.getByRole("button", { name: "Save" })).toHaveCount(0);
 });
