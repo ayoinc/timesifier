@@ -14,8 +14,7 @@
 import { createAccessControl } from "better-auth/plugins/access";
 import * as z from "zod";
 
-export const ROLES = ["owner", "admin", "member"] as const;
-export const Role = z.enum(ROLES);
+export const Role = z.enum(["owner", "admin", "member"]);
 export type Role = z.infer<typeof Role>;
 
 /** The roles an invitation can give. Ownership is given by an owner to a member, never by invitation. */

@@ -65,13 +65,16 @@ async function slugFor(name: string): Promise<string> {
 }
 
 const Id = z.string().min(1).max(64);
-/** Shown in pages and in the subject of an email, so it holds no line break or other control character. */
+/**
+ * Shown in pages and in the subject of an email, so it holds no line break, no
+ * other control character and none that reverses the direction of text.
+ */
 const Name = z
 	.string()
 	.trim()
 	.min(1)
 	.max(80)
-	.regex(/^\P{Cc}+$/u);
+	.regex(/^[^\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]+$/u);
 const organisation = { organizationId: Id };
 const nothing = z.strictObject({});
 

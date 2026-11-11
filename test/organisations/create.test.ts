@@ -16,6 +16,7 @@ afterEach(() => {
 });
 
 const organisations = () => value("select count(*) from organisations");
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 describe("creating an organisation", () => {
 	it("makes the signed-in person its only member, with the role owner", async () => {
@@ -82,6 +83,8 @@ describe("creating an organisation", () => {
 		["a name of spaces", { name: "   " }],
 		["a name of 81 characters", { name: "a".repeat(81) }],
 		["a name with a line break", { name: "Acme\nBcc: eve@example.com" }],
+		["a name with a line separator", { name: "Acme\u2028Corp" }],
+		["a name that reverses its own text", { name: "Acme \u202Epuorg" }],
 		["a name that is not text", { name: 7 }],
 		["a slug of the caller's choosing", { name: "Acme", slug: "settings" }],
 		["another person as the creator", { name: "Acme", userId: "someone-else" }],
@@ -102,6 +105,27 @@ describe("creating an organisation", () => {
 		const created = await createOrganisation(ada.cookie, "  Acme Corp  ");
 
 		expect(created.name).toBe("Acme Corp");
+	});
+
+	it("stores rows that follow the house rules: UUIDv7 ids and times in milliseconds", async () => {
+		const before = Date.now();
+		const ada = await signIn(mailbox, "ada@example.com");
+		const { id } = await createOrganisation(ada.cookie, "Acme Corp");
+		await post(
+			"/organization/invite-member",
+			{ organizationId: id, email: "grace@example.com", role: "member" },
+			{ cookie: ada.cookie },
+		);
+
+		for (const table of ["organisations", "memberships", "invitations"]) {
+			const stored = await row<{ id: string; created_at: number; updated_at: number }>(
+				`select id, created_at, updated_at from ${table}`,
+			);
+			expect(stored?.id, table).toMatch(UUID_V7);
+			expect(stored?.created_at, table).toBeGreaterThanOrEqual(before);
+			expect(stored?.created_at, table).toBeLessThanOrEqual(Date.now());
+			expect(stored?.updated_at, table).toBeGreaterThanOrEqual(before);
+		}
 	});
 });
 

@@ -149,7 +149,8 @@ const attempts = {
 				{ cookie: actor.cookie },
 			),
 		done: async ({ organisation }) =>
-			(await value("select name from organisations where id = ?", organisation.id)) === "Globex",
+			(await value<string>("select name from organisations where id = ?", organisation.id)) ===
+			"Globex",
 	},
 	delete: {
 		to: "delete the organisation",
@@ -178,7 +179,8 @@ const attempts = {
 				{ cookie: actor.cookie },
 			),
 		done: async ({ invitationId }) =>
-			(await value("select status from invitations where id = ?", invitationId)) === "canceled",
+			(await value<string>("select status from invitations where id = ?", invitationId)) ===
+			"canceled",
 	},
 	listInvitations: {
 		to: "list the pending invitations, whose ids are their links",
@@ -407,10 +409,12 @@ describe("a role", () => {
 		async (as, sees) => {
 			const stage = await stageFor(as);
 
-			const response = await attempts.listInvitations.request(stage);
+			const listed = await attempts.listInvitations.request(stage);
+			const withTheOrganisation = await attempts.see.request(stage);
 
-			expect(response.status).toBe(sees ? 200 : 403);
-			expect(await attempts.listInvitations.done(stage, response)).toBe(sees);
+			expect(listed.status).toBe(sees ? 200 : 403);
+			expect(await attempts.listInvitations.done(stage, listed)).toBe(sees);
+			expect((await withTheOrganisation.text()).includes(stage.invitationId)).toBe(sees);
 		},
 	);
 
