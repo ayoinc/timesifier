@@ -231,11 +231,10 @@ test.describe("without script", () => {
 	});
 });
 
-test("a signed-in person who follows Sign in on the home page arrives in their organisation", async ({
+test("a signed-in person who opens the home page arrives in their organisation, never on the home page", async ({
 	page,
 }) => {
 	await page.goto("/");
-	await page.getByRole("banner").getByRole("link", { name: "Sign in" }).click();
 
 	await expect(page).toHaveURL(homePath(first.id));
 	await expect(page.getByRole("heading", { level: 1, name: first.label })).toBeVisible();
