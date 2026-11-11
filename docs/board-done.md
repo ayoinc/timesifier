@@ -2,6 +2,30 @@
 
 The cards that are Done, as they stood when they were finished: every criterion with its evidence. `BOARD.md` keeps one line for each. The integrator moves a card here in the pull request that takes it to Done. The newest is first.
 
+## TS-055 · A signed-in person never sees the home page
+
+Done 2026-11-11. Pull request #31, deployed and checked in production: `/` signed in goes to the organisation, and the back button does not return to it.
+
+- [x] A signed-in person who asks for `/` is sent to `/app`, and on to their organisation; a move to `/` from inside the application gets the same as a whole-page redirect (`test/pages/signed-out-pages.test.ts`).
+- [x] After signing out, `/` shows the home page again (same file).
+- [x] When the session cannot be read, `/` answers with the error page, not the home page (same file).
+- [x] Every page and every page's data is sent with `Cache-Control: private, no-store` (same file; checked in production with `curl`).
+- [x] Going back through a tab's history after signing in never shows the home page; going back after signing out never shows the application (`e2e/auth-journeys.spec.ts`, "the home page and the session").
+
+## TS-053 · Foundation for the heading features
+
+Done 2026-11-11. Pull request #29, deployed. The four slices built on it are pull requests #30, #32, #33 and #34.
+
+- [x] The destinations by heading and role, Clients hidden when switched off, a heading only with a link under it (`test/pages/destinations.test.ts`).
+- [x] A destination a person may not see answers the same 404 as another organisation's (`test/pages/destinations.test.ts`, `test/pages/isolation.test.ts`).
+- [x] The timer's place in the navigation (`app/shell/NavigationTimer.tsx`, filled by TS-051).
+- [x] Each destination had its heading and an empty state until its slice replaced it.
+- [x] Members and invitations under Team, `settings/members` redirecting; My account at `/app/<slug>/account` (`test/pages/destinations.test.ts`).
+- [x] Migration `0006_heading_features` with every table in `tenantTables` (`test/db/heading-tables.test.ts`).
+- [x] The shared rules in `app/` with their tests (`app/organisations/access.ts`, `app/time/*`, `app/periods/*`, `app/teams/*`).
+- [x] `docs/architecture.md` and `docs/security.md` describe the tables and who sees which destination.
+- [x] typecheck, lint, tests and the shell's browser tests passed in the pipeline.
+
 ## TS-032 · Nothing of one deployment in the code
 
 Merged 2026-11-11. Pull request #23. Its production deploy is being checked by the integrator, who records the result here. The card was built on the owner's instruction and was not on the board before it merged, so it has no list of criteria here.
