@@ -22,8 +22,12 @@ const shell = route(
 	}),
 );
 
+// The two pages a person uses without a session. Their addresses are also in
+// routes/auth/paths.ts, which the guard and the pages read.
 export default [
 	index("routes/home.tsx"),
+	route("sign-in", "routes/sign-in.tsx"),
+	route("sign-up", "routes/sign-up.tsx"),
 	shell,
 	route("api/auth/*", "routes/api.auth.$.ts"),
 	...(designRoute ? [route("design", "routes/design.tsx")] : []),
