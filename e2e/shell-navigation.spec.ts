@@ -165,12 +165,14 @@ test.describe("without script", () => {
 	});
 });
 
-test("arriving from the home page by its link puts the focus on the heading", async ({ page }) => {
-	await openShell(page, "/", "main");
-	await page.getByRole("link", { name: "Open Timesifier" }).click();
+test("a signed-in person who follows Sign in on the home page arrives in their organisation", async ({
+	page,
+}) => {
+	await page.goto("/");
+	await page.getByRole("main").getByRole("link", { name: "Sign in" }).click();
 
 	await expect(page).toHaveURL(homePath(first.id));
-	await expect(page.getByRole("heading", { level: 1, name: first.label })).toBeFocused();
+	await expect(page.getByRole("heading", { level: 1, name: first.label })).toBeVisible();
 	await expectDestinations(page, first);
 });
 

@@ -16,9 +16,11 @@ const ORIGIN = `http://localhost:${PORT}`;
 const IOS_ONLY = /overlays-ios\.spec\.ts/;
 // The component tests run in Chromium and again in WebKit: the two have styled
 // the same page differently (docs/design-system.md, "State from another
-// element"). These are the tests that need no session; see the project below.
+// element"). So do the tests of the public pages, which are plain HTML and CSS
+// that anybody may arrive on, in any browser. These are the tests that need no
+// session; see the project below.
 const IN_WEBKIT_TOO =
-	/[\\/](?:accessibility|components|design|field-label|reduced-motion)\.spec\.ts$/;
+	/[\\/](?:accessibility|components|design|field-label|reduced-motion|landing|documents|public-links|identity)\.spec\.ts$/;
 // Signs one person up and saves their session; every Chromium test starts with it.
 const SETUP = /auth\.setup\.ts/;
 
