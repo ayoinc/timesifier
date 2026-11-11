@@ -311,3 +311,27 @@ export async function getSession(request: Request): Promise<SignedIn | null> {
 		throw new Error(`The session could not be read (${errorName(error)})`);
 	}
 }
+
+/**
+ * Changes the signed-in person's name, and nothing else of theirs. Answers
+ * whether it was changed.
+ *
+ * This is Better Auth's own `updateUser`, called here on the server with the
+ * request's cookie and given a name alone. The endpoint behind it takes other
+ * fields of a person as well, which is why browsers are not offered it and a
+ * route's action calls this instead.
+ */
+export async function changeName(request: Request, name: string): Promise<boolean> {
+	// Answers `null` for a host that is not ours, as for a request without a session.
+	if (!(await getSession(request))) return false;
+	const headers = new Headers({
+		Cookie: request.headers.get("Cookie") ?? "",
+		Host: new URL(request.url).host,
+	});
+	try {
+		const { status } = await auth().api.updateUser({ body: { name }, headers });
+		return status;
+	} catch {
+		return false;
+	}
+}
