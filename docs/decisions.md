@@ -312,7 +312,7 @@ The columns and indexes of `projects` and `time_entries` are on cards TS-011a an
 
 Decided by the owner on 2026-11-11, before TS-012a starts.
 
-- **Where the zone comes from.** `users.time_zone` holds an IANA name such as `Europe/London`. It is set from the browser when the account is made, and the person can change it in Settings. A name is accepted only if it is `UTC` or `Intl.supportedValuesOf("timeZone")` holds it. Until one is stored, times are shown in UTC.
+- **Where the zone comes from.** `users.time_zone` holds an IANA name such as `Europe/London`. It is set from the browser the first time the person opens a signed-in page, which for a new account is the page that follows the code, and the person can change it in Settings. A name is accepted only if it is `UTC` or `Intl.supportedValuesOf("timeZone")` holds it. Until one is stored, times are shown in UTC.
 - **Which day an entry belongs to.** The whole entry belongs to the local day it starts in, in the zone of the person looking. An entry from 23:30 to 00:30 counts as one hour on the first day. That keeps "every total equals the sum of the entries shown" true without splitting an entry.
 - **Nothing about a day is stored.** Entries hold UTC instants (entry 17). The Worker works out the bounds of a day or a week in the person's zone and passes them to SQL as UTC integers. The rule for midnight can therefore change later without touching stored data.
 - **Reports and exports.** A report's range of days is bounded in the viewer's zone. Times in a CSV export are in UTC, in ISO 8601 with `Z`.

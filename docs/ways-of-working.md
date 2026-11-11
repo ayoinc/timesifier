@@ -94,6 +94,8 @@ Done means merged, deployed and the smoke test green, with all of these true:
 
 This is the one procedure. Each step says who does it.
 
+**The goldfish review comes before step 1.** A card that changes what a person sees, or how the system is built, has a written brief. Before building starts, the brief is read by independent reviewers who know nothing else about the project. Each reads it through one lens: is it more than was asked, can it be built without deciding any design, what breaks, can a newcomer follow it. The integrator answers their findings in the brief, and only then is the card pulled. The owner still looks at the result before the card is Done, as the Definition of Done says.
+
 1. **Integrator:** move the top Ready card to In progress and write the builder and the branch on it. Check its "Owns" and "Interfaces" lines against the other cards in progress. If the card needs a migration, give it its number.
 2. **Builder:** create a branch named after the card, for example `ts-012a-timer`, in its own git worktree.
 3. **Builder:** if the card adds or changes a screen, follow `docs/design-system.md`, "From idea to shipped screen", before writing code.
