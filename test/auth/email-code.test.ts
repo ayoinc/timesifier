@@ -430,6 +430,8 @@ describe("what is not offered", () => {
 		["a name that reverses the direction of text", { name: "Ada \u202Eecalevol" }],
 		["a name that is not text", { name: { first: "Ada" } }],
 		["an empty name", { name: "" }],
+		["a name of spaces alone", { name: "   " }],
+		["a name with a space at its end", { name: "Ada " }],
 	])("takes %s from nobody, not even for a new account", async (_name, extra) => {
 		const browser = { cookie: codeCookie(await requestCode(EMAIL)) };
 		const otp = await mailbox.codeFor(EMAIL);

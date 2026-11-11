@@ -22,23 +22,12 @@ import type { BetterAuthPlugin } from "better-auth/types";
 import * as z from "zod";
 import { valid } from "./input.server";
 import { isKeyedHash, keyedHash } from "./keyed-hash.server";
+import { PersonName } from "./person-name";
 import { type Cap, takeOne } from "./quota.server";
 import { CODE_LIFETIME_SECONDS } from "./sign-in-code-email";
 
 const ASK_PATH = "/email-otp/send-verification-otp";
 const USE_PATH = "/sign-in/email-otp";
-
-/**
- * The name a person gives when they sign up, which the plugin stores when the
- * code creates their account: one line of text, of the length the sign-up
- * page allows, with no control character and none that reverses the direction
- * of text, because pages show it to other members of an organisation.
- */
-const PersonName = z
-	.string()
-	.min(1)
-	.max(100)
-	.regex(/^[^\p{Cc}\p{Zl}\p{Zp}\u202A-\u202E\u2066-\u2069]+$/u);
 
 /**
  * What each request may carry: these keys and no other, and the one kind of

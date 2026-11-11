@@ -1,5 +1,6 @@
 import { startTransition, useState } from "react";
 
+import { PERSON_NAME_MAX } from "~/auth/person-name";
 import { Button } from "~/components/Button";
 import { TextField } from "~/components/TextField";
 
@@ -45,8 +46,6 @@ export function loader({ request, url }: Route.LoaderArgs) {
 const STEPS = ["details", "code", "passkey", "done"] as const;
 type Step = (typeof STEPS)[number];
 
-const NAME_MAX = 100;
-
 export default function SignUp({ loaderData }: Route.ComponentProps) {
 	const { next, turnstileSiteKey } = loaderData;
 	const [step, setStep] = useState<Step>("details");
@@ -73,7 +72,7 @@ export default function SignUp({ loaderData }: Route.ComponentProps) {
 							value={name}
 							onChange={setName}
 							autoComplete="name"
-							maxLength={NAME_MAX}
+							maxLength={PERSON_NAME_MAX}
 							isRequired
 						/>
 						<TextField
