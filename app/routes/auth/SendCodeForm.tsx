@@ -13,12 +13,8 @@ export interface SendCodeFormProps {
 	siteKey: string;
 	/** The fields: the email address, and whatever else the page asks for. */
 	children: ReactNode;
-	/** What the page offers beside "Continue", as a text button. */
-	secondary?: ReactNode;
 	/** A code is on its way to the address. Called for any address, with an account or without. */
 	onSent: () => void;
-	/** Something the page has to say that did not come from this form. */
-	notice?: Notice | null;
 }
 
 /**
@@ -27,14 +23,7 @@ export interface SendCodeFormProps {
  * early, and goes no further when the check fails; the server would refuse the
  * request anyway.
  */
-export function SendCodeForm({
-	email,
-	siteKey,
-	children,
-	secondary,
-	onSent,
-	notice: fromPage = null,
-}: SendCodeFormProps) {
+export function SendCodeForm({ email, siteKey, children, onSent }: SendCodeFormProps) {
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const check = useRef<RobotCheckHandle>(null);
 	const once = useOneAtATime();
@@ -58,10 +47,9 @@ export function SendCodeForm({
 		<form method="dialog" onSubmit={submit} className="flex flex-col gap-4">
 			{children}
 			<RobotCheck ref={check} siteKey={siteKey} />
-			<NoticeLine notice={notice ?? fromPage} />
-			<div className="flex flex-wrap items-center gap-2">
+			<NoticeLine notice={notice} />
+			<div>
 				<Button type="submit">Continue</Button>
-				{secondary}
 			</div>
 		</form>
 	);

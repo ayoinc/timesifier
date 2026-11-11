@@ -1,13 +1,11 @@
 // What the pages ask of Better Auth, from the browser. Every call goes to the
 // mounted handler at /api/auth, the only place the rate limit and the Turnstile
 // check act (docs/security.md, "Authentication"). Better Auth's own client makes
-// the calls: it is the same version as the server, and its passkey plugin runs
-// the WebAuthn ceremony in the shape the server verifies.
+// the calls: it is the same version as the server.
 //
 // Each function answers with what happened, never with the server's wording: the
 // pages choose the words a person reads.
 
-import { passkeyClient } from "@better-auth/passkey/client";
 import { createAuthClient } from "better-auth/client";
 import { emailOTPClient } from "better-auth/client/plugins";
 
@@ -23,10 +21,6 @@ export type Problem =
 	| "expired-code"
 	/** Three wrong codes: the code no longer works. */
 	| "spent-code"
-	/** The person closed the browser's passkey prompt, or it found no passkey. */
-	| "cancelled"
-	/** This authenticator already holds a passkey for the account. */
-	| "already-added"
 	| "failed";
 
 export type Outcome = { ok: true } | { ok: false; problem: Problem };
@@ -43,7 +37,7 @@ function onFirstUse<Made>(make: () => Made): () => Made {
 }
 
 /** Made in the browser, when a person first acts: nothing here runs while the server renders. */
-const auth = onFirstUse(() => createAuthClient({ plugins: [emailOTPClient(), passkeyClient()] }));
+const auth = onFirstUse(() => createAuthClient({ plugins: [emailOTPClient()] }));
 
 type Failure = { status: number; code?: string | undefined };
 
@@ -96,67 +90,6 @@ export function signInWithCode(email: string, code: string, name?: string): Prom
 		const { error } = await auth().signIn.emailOtp({ email, otp: code, ...(name ? { name } : {}) });
 		return outcome(error, CODE_PROBLEMS);
 	});
-}
-
-/** The codes the browser's side of a passkey ceremony fails with; the server's are not among them. */
-function fromTheBrowser(code: string | undefined): boolean {
-	return code === "AUTH_CANCELLED" || (code?.startsWith("ERROR_") ?? false);
-}
-
-/** An error's code. Better Auth's types leave it out of the errors that have none. */
-function codeOf(error: object): string | undefined {
-	return "code" in error && typeof error.code === "string" ? error.code : undefined;
-}
-
-/** Whether this browser can create and use passkeys at all. */
-export function passkeysSupported(): boolean {
-	return typeof window.PublicKeyCredential === "function";
-}
-
-/**
- * Signs in with a passkey. With `autofill`, the browser offers the person's
- * passkeys in the autofill of the email field and this resolves when one is
- * chosen; without, the browser shows its passkey prompt now, which also ends a
- * pending autofill request.
- *
- * Answers `null` when the request was ended by a later one or the browser has
- * no autofill for passkeys: nothing happened that a person should be told.
- */
-export async function signInWithPasskey({ autofill = false } = {}): Promise<Outcome | null> {
-	try {
-		// Asked first, so a browser without it costs the server no request.
-		if (autofill && !(await window.PublicKeyCredential?.isConditionalMediationAvailable?.())) {
-			return null;
-		}
-		const { error } = await auth().signIn.passkey({ autoFill: autofill });
-		if (!error) return DONE;
-		const code = codeOf(error);
-		if (fromTheBrowser(code)) {
-			const silent = autofill || code === "ERROR_CEREMONY_ABORTED";
-			return silent ? null : { ok: false, problem: "cancelled" };
-		}
-		return outcome(error);
-	} catch {
-		return autofill ? null : { ok: false, problem: "failed" };
-	}
-}
-
-/** Creates a passkey for the signed-in person on this device or one nearby. */
-export function addPasskey(): Promise<Outcome> {
-	return attempt(async () => {
-		const { error } = await auth().passkey.addPasskey();
-		if (!error) return DONE;
-		const code = codeOf(error);
-		if (code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") {
-			return { ok: false, problem: "already-added" };
-		}
-		return fromTheBrowser(code) ? { ok: false, problem: "cancelled" } : outcome(error);
-	});
-}
-
-/** Forgets a passkey on the server. It stays on the person's device until they delete it there. */
-export function removePasskey(id: string): Promise<Outcome> {
-	return attempt(async () => outcome((await auth().passkey.deletePasskey({ id })).error));
 }
 
 /** Ends this session. */

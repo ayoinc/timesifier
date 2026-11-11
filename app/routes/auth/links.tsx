@@ -27,9 +27,9 @@ export function OtherPage({
 }
 
 /**
- * Shown only where script does not run. A passkey is made and used by script,
- * and Turnstile's check is script, so without it neither page can do its work;
- * this says so instead of leaving buttons that do nothing.
+ * Shown only where script does not run. Turnstile's check is script and the
+ * forms are sent by script, so without it neither page can do its work; this
+ * says so instead of leaving buttons that do nothing.
  */
 export function NeedsScript({ children }: { children: ReactNode }) {
 	return (
