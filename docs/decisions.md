@@ -65,7 +65,44 @@ One D1 database, every tenant row carrying an organisation id, gives simple repo
 
 ### 8. Better Auth
 
-Runs inside the Worker and keeps identities in our own D1 database. Community guides reach D1 through Drizzle or Kysely; TS-008 confirms the supported route against Better Auth's own documentation. Supports email, passkeys, two-factor, organisations and roles. Cloudflare Access is built for a company's own workforce, not public sign-up. A hosted identity service would leave the Cloudflare stack. Hand-written authentication carries the most risk.
+Runs inside the Worker and keeps identities in our own D1 database. Supports email, passkeys, two-factor, organisations and roles. Cloudflare Access is built for a company's own workforce, not public sign-up. A hosted identity service would leave the Cloudflare stack. Hand-written authentication carries the most risk.
+
+TS-008 confirmed the rest on 2026-11-11 against Better Auth's documentation for 1.7 and by running `better-auth` 1.7.20 and `@better-auth/passkey` 1.7.20, both pinned to that exact version.
+
+**The route to D1.** The documentation gives two (<https://better-auth.com/docs/concepts/database>, "Example: Cloudflare D1"): hand the `DB` binding to Better Auth, which then uses its built-in Kysely adapter and creates its own tables through a migration endpoint; or use the Drizzle or Prisma adapter and migrate with that tool. We use the Drizzle adapter (<https://better-auth.com/docs/adapters/drizzle>) over the `drizzle-orm/d1` client the application already has.
+
+| Option                               | Evidence                                                                                                                                                                                                                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drizzle adapter, hand-written tables | One schema file and one migration tool for the whole database. The tables keep the house style: plural snake_case names, UUIDv7 ids (`advanced.database.generateId`), millisecond timestamps. Better Auth compares its models with the tables on start-up and every request waits for that check. |
+| The `DB` binding, built-in adapter   | Fewer lines. Better Auth would create a second set of tables with its own names and id style, outside `migrations/`, through an endpoint that must then be protected or removed. `getMigrations` "does not work with Prisma or Drizzle", so the two routes cannot be mixed.                       |
+
+What was run: every auth test drives the Worker's real fetch handler in the Workers runtime against a local D1 built from `migrations/`. `better-auth/minimal` is imported so the unused Kysely adapter stays out of the bundle, and each plugin from its own path (`better-auth/plugins/email-otp`), because the `better-auth/plugins` barrel loads every plugin.
+
+**One instance per isolate.** The documentation builds the instance once at module scope from `env` imported from `cloudflare:workers`. Ours is built on first use and kept, which is the same thing with one difference: it is rebuilt if a binding it was built from is replaced, so a test can change the Turnstile key.
+
+**Email code, not magic link.** The documentation describes both and recommends neither. A magic link is verified by a `GET` that signs the person in, and decision 18 says a `GET` never changes state. A six-digit code is typed into the page that asked for it, so it also works when the mail is read on another device. Codes are stored hashed, last five minutes and allow three attempts.
+
+**Passkeys.** The plugin's default journey: prove the address with a code, then add a passkey while signed in. Every account therefore has a verified address to fall back on. The relying party id is the host of the request, which is only ever one of our own hosts.
+
+**The `__Host-` cookie.** 1.7.20 has no option for it; the request is open upstream as <https://github.com/better-auth/better-auth/issues/10806>. What each configuration sent on 2026-11-11, read from the `Set-Cookie` header in a test:
+
+| Configuration under `advanced`                                                             | Session cookie sent                                                                         |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Nothing                                                                                    | `better-auth.session_token`, with no `Secure` at all                                        |
+| `useSecureCookies: true` and a cookie named `__Host-timesifier.session_token`              | `__Secure-__Host-timesifier.session_token`: the prefix is added in front of any name        |
+| `useSecureCookies: false`, `cookiePrefix: "__Host-timesifier"`, and the attributes by hand | `__Host-timesifier.session_token=…; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax` |
+
+The last row is what ships, and Better Auth reads that cookie back. The first row shows why nothing is left to the defaults: with the address taken from each request, Better Auth cannot know at start-up that it is served over HTTPS, and nothing sets production mode inside a Worker. With the prefix alone, the HTTP layer underneath Better Auth already adds `Secure` and `Path=/` to a name that starts with `__Host-`; the attributes are also set by hand so the cookie does not depend on that. Every cookie Better Auth sets takes the same prefix, including the passkey challenge. When upstream adds an option, moving to it will rename the cookie and sign everyone out once.
+
+On `http://localhost` under `pnpm dev`, Chromium 158 kept the cookie and the next request had the session. WebKit (Safari 27.2) did not: sign-in answered 200 and the next request had no session. Firefox was not tried. Local sign-in and the browser tests therefore use Chromium.
+
+**The rate limit.** Better Auth's own limiter with `storage: "database"`, so the count is one row in D1 shared by every isolate. It is off outside production mode unless `enabled: true` is set, so it is set. The client is the address in `CF-Connecting-IP`. Sending a code, signing in with a code and signing in with a passkey each allow 10 requests; the 11th is answered 429.
+
+The window is neither a calendar minute nor a sliding count. The counter starts again only when 60 seconds have passed since the last request that was let through. Ten attempts 30 seconds apart are therefore followed by a 429, which is stricter than "ten a minute" for a slow, steady client. A refused request does not push the wait further out. `test/auth/rate-limit.test.ts` shows each of these.
+
+Cloudflare's Rate Limiting binding was not used: its documentation says "Rate limits are approximate and apply separately in each Cloudflare location" (<https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/>), which cannot promise that the 11th request is refused.
+
+**Turnstile.** The captcha plugin checks the token in the `x-captcha-response` header on the request that sends a code. With email codes there is no separate sign-up request, so that request is the door to sign-up; it is also the one that costs money and reaches a stranger's inbox.
 
 ### 9 to 13. Tooling
 
@@ -140,6 +177,4 @@ A request with neither header does not come from a browser, and forgery needs a 
 These facts move fast. TS-001 records the exact versions in `docs/architecture.md`.
 
 - Current versions of React Router, the Cloudflare Vite plugin, Wrangler, Better Auth, Drizzle, React Aria Components, Tailwind and Motion.
-- Better Auth's supported way to use D1.
 - D1's options for keeping data in the EU.
-- Whether rate limiting is done with a Workers binding or a zone rule.
