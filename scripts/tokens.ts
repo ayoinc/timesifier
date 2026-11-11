@@ -7,50 +7,83 @@ import { material } from "./material-color.ts";
 // Sources. Change a value here, run `pnpm tokens`, commit the result.
 // ---------------------------------------------------------------------------------
 
-/** The one colour every colour role in both schemes is derived from. */
-const SEED_COLOUR = "#4F5BD5";
+/**
+ * The one colour every colour role in both schemes is derived from: the yellow of
+ * a printed departure sheet (docs/design-direction.md).
+ */
+const SEED_COLOUR = "#FFD400";
 
-/** The typeface, and the self-hosted package its font files come from. */
-const TYPEFACE = {
-	family: "Roboto Flex Variable",
-	stylesheet: "@fontsource-variable/roboto-flex/index.css",
+/**
+ * Roles this product places itself. Each takes one Material role in the light
+ * scheme and another in the dark scheme, so it is still derived from the seed alone.
+ * [role, Material role in the light scheme, Material role in the dark scheme]
+ *
+ * `primary` is what an action is drawn in. Material's own primary for a yellow
+ * seed is an olive in the light scheme and a cream in the dark one; here it is
+ * the ink of the sheet by day and the yellow of the lit board by night.
+ * The sheet is the yellow page by day and the board by night.
+ */
+const PLACED_ROLES = [
+	["primary", "on-primary-fixed", "primary-container"],
+	["on-primary", "primary-container", "on-primary-fixed"],
+	["sheet", "primary-container", "surface-container-lowest"],
+	["on-sheet", "on-primary-fixed", "primary-container"],
+	["on-sheet-variant", "on-primary-fixed-variant", "on-surface-variant"],
+] as const;
+
+/**
+ * The typefaces: one family in two widths, as a timetable is set. The condensed
+ * width is for display text and columns of times, the normal width for reading.
+ * The font files are in app/fonts/ and app/styles/fonts.css declares them.
+ */
+const TYPEFACES = {
+	brand: "Sofia Sans Condensed Variable",
+	plain: "Sofia Sans Variable",
 };
-const FALLBACK_FONTS =
-	'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+const FONT_STYLESHEET = "./fonts.css";
+const FALLBACK_FONTS = 'system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
 
 /** Material 3 Expressive "default spatial" spring, with a mass of 1. */
 const SPRING = { stiffness: 380, dampingRatio: 0.8 };
 
-/** Material 3 type scale: [role, size px, line height px, weight, tracking px, typeface]. */
+/**
+ * The type scale: Material 3's roles, [role, size px, line height px, weight, tracking px, typeface].
+ * Display and headline are the condensed width, heavy and set tight; title, body and
+ * label keep Material's sizes and line heights, with the tracking this typeface needs.
+ */
 const TYPE_SCALE = [
-	["display-large", 57, 64, 400, -0.25, "brand"],
-	["display-medium", 45, 52, 400, 0, "brand"],
-	["display-small", 36, 44, 400, 0, "brand"],
-	["headline-large", 32, 40, 400, 0, "brand"],
-	["headline-medium", 28, 36, 400, 0, "brand"],
-	["headline-small", 24, 32, 400, 0, "brand"],
-	["title-large", 22, 28, 400, 0, "brand"],
-	["title-medium", 16, 24, 500, 0.15, "plain"],
-	["title-small", 14, 20, 500, 0.1, "plain"],
-	["body-large", 16, 24, 400, 0.5, "plain"],
-	["body-medium", 14, 20, 400, 0.25, "plain"],
-	["body-small", 12, 16, 400, 0.4, "plain"],
-	["label-large", 14, 20, 500, 0.1, "plain"],
-	["label-medium", 12, 16, 500, 0.5, "plain"],
-	["label-small", 11, 16, 500, 0.5, "plain"],
+	["display-large", 88, 84, 800, -0.5, "brand"],
+	["display-medium", 64, 64, 800, -0.25, "brand"],
+	["display-small", 44, 46, 800, 0, "brand"],
+	["headline-large", 36, 40, 700, 0, "brand"],
+	["headline-medium", 28, 32, 700, 0, "brand"],
+	["headline-small", 24, 30, 700, 0, "brand"],
+	["title-large", 22, 28, 700, 0, "brand"],
+	["title-medium", 16, 24, 600, 0.1, "plain"],
+	["title-small", 14, 20, 600, 0.1, "plain"],
+	["body-large", 16, 24, 400, 0.1, "plain"],
+	["body-medium", 14, 20, 400, 0.15, "plain"],
+	["body-small", 12, 16, 400, 0.2, "plain"],
+	["label-large", 14, 20, 600, 0.1, "plain"],
+	["label-medium", 12, 16, 600, 0.3, "plain"],
+	["label-small", 11, 16, 600, 0.3, "plain"],
 ] as const;
 
-/** Material 3 corner scale in px, including the Expressive additions. */
+/**
+ * The corner scale in px. Material 3's step names with tighter values: a printed
+ * sheet and the plates of a sign have small corners, and only what must read as
+ * round (a switch, an active indicator) uses `full`.
+ */
 const CORNERS = [
 	["none", 0],
-	["extra-small", 4],
-	["small", 8],
-	["medium", 12],
-	["large", 16],
-	["large-increased", 20],
-	["extra-large", 28],
-	["extra-large-increased", 32],
-	["extra-extra-large", 48],
+	["extra-small", 2],
+	["small", 4],
+	["medium", 6],
+	["large", 8],
+	["large-increased", 10],
+	["extra-large", 12],
+	["extra-large-increased", 16],
+	["extra-extra-large", 24],
 ] as const;
 
 /** Every space and size is a multiple of this unit. */
@@ -131,13 +164,14 @@ const FOCUS_INDICATOR = [
 // ---------------------------------------------------------------------------------
 
 function colourRoles(): string[] {
-	const { Hct, MaterialDynamicColors, SchemeTonalSpot, argbFromHex, hexFromArgb } = material;
+	const { Hct, MaterialDynamicColors, SchemeFidelity, argbFromHex, hexFromArgb } = material;
 	const seed = Hct.fromInt(argbFromHex(SEED_COLOUR));
-	// Tonal spot at standard contrast, in the 2025 (Expressive) colour specification.
-	const light = new SchemeTonalSpot(seed, false, 0, "2025", "phone");
-	const dark = new SchemeTonalSpot(seed, true, 0, "2025", "phone");
+	// Fidelity keeps the seed itself as the primary container, in both schemes;
+	// standard contrast, in the 2025 (Expressive) colour specification.
+	const light = new SchemeFidelity(seed, false, 0, "2025", "phone");
+	const dark = new SchemeFidelity(seed, true, 0, "2025", "phone");
 
-	const roles = new Map<string, InstanceType<typeof material.DynamicColor>>();
+	const material3 = new Map<string, { light: string; dark: string }>();
 	for (const role of [
 		...new MaterialDynamicColors().allColors,
 		MaterialDynamicColors.surfaceVariant,
@@ -145,12 +179,21 @@ function colourRoles(): string[] {
 		MaterialDynamicColors.shadow,
 		MaterialDynamicColors.scrim,
 	]) {
-		roles.set(role.name.replaceAll("_", "-"), role);
+		material3.set(role.name.replaceAll("_", "-"), {
+			light: hexFromArgb(role.getArgb(light)),
+			dark: hexFromArgb(role.getArgb(dark)),
+		});
+	}
+	const roles = new Map(material3);
+	for (const [name, inLight, inDark] of PLACED_ROLES) {
+		const day = material3.get(inLight);
+		const night = material3.get(inDark);
+		if (!day || !night) throw new Error(`No Material role for the placed role ${name}`);
+		roles.set(name, { light: day.light, dark: night.dark });
 	}
 
 	return [...roles].map(
-		([name, role]) =>
-			`--md-sys-color-${name}: light-dark(${hexFromArgb(role.getArgb(light))}, ${hexFromArgb(role.getArgb(dark))});`,
+		([name, { light, dark }]) => `--md-sys-color-${name}: light-dark(${light}, ${dark});`,
 	);
 }
 
@@ -163,8 +206,9 @@ function rem(px: number): string {
 }
 
 function typeScale(): string[] {
-	const stack = `"${TYPEFACE.family}", ${FALLBACK_FONTS}`;
-	const lines = [`--md-ref-typeface-brand: ${stack};`, `--md-ref-typeface-plain: ${stack};`];
+	const lines = Object.entries(TYPEFACES).map(
+		([name, family]) => `--md-ref-typeface-${name}: "${family}", ${FALLBACK_FONTS};`,
+	);
 	for (const [role, size, lineHeight, weight, tracking, typeface] of TYPE_SCALE) {
 		const name = `--md-sys-typescale-${role}`;
 		lines.push(
@@ -284,7 +328,7 @@ function render(): string {
 	const body = groups.map(([title, lines]) => block(title, lines)).join("\n\n");
 
 	return `/* Generated by \`pnpm tokens\` from scripts/tokens.ts. Do not edit this file: change the script and run the command again. */
-@import "${TYPEFACE.stylesheet}";
+@import "${FONT_STYLESHEET}";
 
 :root {
 	color-scheme: light dark;

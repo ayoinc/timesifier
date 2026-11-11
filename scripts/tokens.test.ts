@@ -50,7 +50,8 @@ function textPairs(): [text: string, background: string][] {
 			pairs.push([text, `${accent}-fixed`], [text, `${accent}-fixed-dim`]);
 		}
 	}
-	for (const text of ["on-surface", "on-surface-variant"]) {
+	// `primary` is also the colour of a text button, a link and a field in focus.
+	for (const text of ["on-surface", "on-surface-variant", "primary"]) {
 		for (const background of [
 			"surface",
 			"surface-dim",
@@ -68,6 +69,10 @@ function textPairs(): [text: string, background: string][] {
 		["on-background", "background"],
 		["inverse-on-surface", "inverse-surface"],
 		["inverse-primary", "inverse-surface"],
+		// The sheet, and a button on it, which swaps the two.
+		["on-sheet", "sheet"],
+		["on-sheet-variant", "sheet"],
+		["sheet", "on-sheet"],
 	);
 	return pairs;
 }

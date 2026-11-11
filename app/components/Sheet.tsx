@@ -10,8 +10,8 @@ import {
 import { cx } from "./cx";
 import { SCRIM_MOTION, SHEET_MOTION } from "./motion";
 
-// Material 3 modal bottom sheet: a surface-container-low panel with 28px top
-// corners at elevation 1, at most 640px wide, over a 32% scrim. It has no drag
+// Material 3 modal bottom sheet: a surface-container-low panel with `extra-large`
+// top corners at elevation 1, at most 640px wide, over a 32% scrim. It has no drag
 // handle because it is not dragged: it closes by Escape, by pressing outside, or
 // by one of its own buttons.
 

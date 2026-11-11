@@ -29,6 +29,7 @@ Every entry below was decided on 2026-11-11. Entries marked _Jev_ were ruled by 
 | 21  | Route transitions   | React's `<ViewTransition>`, not React Router's `viewTransition` props (refines 10)                                                 | Preparer                           |
 | 22  | Sign-in code        | Works only in the browser that asked for it                                                                                        | Card TS-027, after its review      |
 | 23  | Passkeys            | None: the emailed code is the one way to sign up and sign in (amends 8 and 22)                                                     | Owner                              |
+| 24  | Visual direction    | Seed `#FFD400`, fidelity scheme; Sofia Sans in two widths, self-hosted (replaces 16)                                               | Preparer, for the owner to confirm |
 | 27  | Lock-out by code    | Codes counted apart for browsers that have signed in as the address; their code is theirs alone (narrows the gap of 23, amends 22) | Owner                              |
 
 ## Evidence
@@ -140,6 +141,8 @@ Cloudflare's Rate Limiting binding was not used: its documentation says "Rate li
 Biome formats and lints with one tool and one config. The board lives in the repository so that the card, its acceptance criteria and the change that satisfies them are reviewed together.
 
 ### 16. Seed colour and typeface
+
+_Replaced by entry 23._
 
 Chosen by the preparer while building TS-004, for the owner to confirm.
 
@@ -289,6 +292,20 @@ What was built. When a code signs a person in, the browser is given a cookie, `_
 - While a known browser's code waits, for five minutes at most, the same person asking from a new browser is sent nothing and is not told.
 
 Signing out everywhere does not clear the proof: it signs nobody in, the person who has signed out is the one who needs it next, and a request from one browser cannot reach a cookie in another.
+
+### 24. The visual direction: a departure sheet
+
+Replaces entry 16. The owner's verdict on the first release of the interface was that it worked but did not look like a designed product. `docs/design-direction.md` is the answer: who the product is for, the feeling, and what the design refuses to do. It changes values, not the system: the tokens still come from one seed through `scripts/tokens.ts`, and the contrast test still passes with no adjustment.
+
+- **Seed colour `#FFD400`, fidelity scheme.** The tonal spot scheme mutes any seed to a pastel; the fidelity scheme keeps the seed itself as `primary-container` in both schemes, which is what a yellow sheet needs. Material's own `primary` for a yellow seed is an olive by day and a cream by night, so `PLACED_ROLES` in `scripts/tokens.ts` places `primary` and `on-primary` on other Material roles of the same scheme (ink and yellow), and adds three roles for the sheet. Every placed role is still derived from the seed, and the contrast test covers each.
+- **Sofia Sans and Sofia Sans Condensed** (Lettersoup, SIL Open Font License 1.1), variable, weight axis, Latin and Latin Extended. One family in two widths, as a timetable is set. The files are copied from the Fontsource packages (5.3.0) into `app/fonts/`, so the two packages are not dependencies; `@fontsource-variable/roboto-flex` is removed.
+- **Corners of 2 to 24px** on Material's step names.
+
+| Option                                  | Evidence                                                                                                                                                        |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Yellow sheet, condensed grotesque       | Specific to keeping time: the reference is a timetable. Yellow with near-black type measures above 11:1. No other time tracker on Mobbin on 2026-11-11 used it. |
+| Keep indigo and Roboto Flex, add a page | The least work. It is the look of a default Material application, which is the look the owner rejected.                                                         |
+| Warm neutral with a serif               | Reads as a writing or note-taking product, and is the most common look of the new landing pages of 2026.                                                        |
 
 ## To verify when the code is scaffolded
 
