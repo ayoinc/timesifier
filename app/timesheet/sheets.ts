@@ -16,6 +16,8 @@ export interface SheetEntry {
 	description: string | null;
 	startedAt: number;
 	endedAt: number | null;
+	/** Whether the entry is overtime rather than regular time (TS-095). */
+	overtime: boolean;
 }
 
 /** How long `entry` has lasted by `now`. */

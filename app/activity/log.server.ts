@@ -4,12 +4,13 @@ import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
 import { type ActivitySummary, type ActivityValue, type OrganisationScope, users } from "~/db";
+import { NON_WORKING_RULE_LABELS, OVERTIME_RULE_LABELS, SHORT_NOTICE_LABELS } from "~/leave/rules";
 import { activityScopeOf, type TimeScope } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import type { Membership } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
 import { addDays, bounds, Day, dayOf, daysFrom } from "~/time/calendar";
-import { formatDayWithYear, formatRange, formatTime } from "~/time/format";
+import { formatDayWithYear, formatDuration, formatRange, formatTime } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
 
 import { ActivityAction, ActivitySource, SubjectType } from "./actions";
@@ -229,6 +230,7 @@ const NOUNS: Record<string, string> = {
 	api_token: "an API token",
 	webhook: "a webhook",
 	import: "an import",
+	timesheet_rules: "the timesheet rules",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */
@@ -272,6 +274,18 @@ const FIELD_LABELS: Record<string, string> = {
 	frequency: "Frequency",
 	paymentTermsDays: "Payment terms (days)",
 	tags: "Tags",
+	overtime: "Overtime",
+	weekend: "Weekend and non-working days",
+	overtimeDayCap: "Overtime cap a day",
+	overtimeWeekCap: "Overtime cap a week",
+	shortNotice: "Short notice",
+};
+
+/** The values of the timesheet rules, in words (TS-095). */
+const RULE_VALUES: Record<string, Record<string, string>> = {
+	overtime: OVERTIME_RULE_LABELS,
+	weekend: NON_WORKING_RULE_LABELS,
+	shortNotice: SHORT_NOTICE_LABELS,
 };
 
 /** The names a page shows for the ids its records hold. */
@@ -343,6 +357,8 @@ function valueText(key: string, value: ActivityValue | undefined, names: Names, 
 			.map((id) => names.things.get(id) ?? "a deleted tag")
 			.join(", ");
 	}
+	if (typeof value === "string" && RULE_VALUES[key]?.[value]) return RULE_VALUES[key][value];
+	if (key.endsWith("Cap") && typeof value === "number") return formatDuration(value * 60);
 	if (key.endsWith("Id") && typeof value === "string") {
 		return names.things.get(value) ?? names.people.get(value) ?? "a deleted one";
 	}
@@ -386,6 +402,7 @@ function whatOf(r: RecordRow, names: Names): string {
 		(typeof r.summary.before?.name === "string" ? r.summary.before.name : undefined);
 	if (action === "time_entry.started") return "Started the timer";
 	if (action === "time_entry.stopped") return "Stopped the timer";
+	if (action === "time_entry.split") return "Split a time entry at the day's expected hours";
 	if (prefix === "membership" && r.ownerId) {
 		return `${verb} ${names.people.get(r.ownerId) ?? "a former member"}`;
 	}

@@ -26,13 +26,17 @@ import {
 } from "~/leave/leave.server";
 import {
 	LONGEST_NOTICE_DAYS,
+	LONGEST_OVERTIME_CAP_MINUTES,
+	NON_WORKING_RULE_LABELS,
+	NON_WORKING_RULES,
+	NonWorkingRule,
+	OVERTIME_RULE_LABELS,
+	OVERTIME_RULES,
+	OvertimeRule,
 	SHORT_NOTICE_LABELS,
 	SHORT_NOTICE_RULES,
 	ShortNoticeRule,
 	type TimesheetRules,
-	WORK_RULE_LABELS,
-	WORK_RULES,
-	WorkRule,
 } from "~/leave/rules";
 import { setTimesheetRules, timesheetRulesOf } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
@@ -53,6 +57,7 @@ import { organisationMoney } from "~/projects/money.server";
 import { APP_PATH, destination } from "~/shell/destinations";
 import { PageHeading, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
+import { formatDuration } from "~/time/format";
 import { TimeZone } from "~/time/zones";
 import { TypedHours } from "~/timesheet/durations";
 import { WEEKDAYS, weekdayName, zoneLabel } from "~/workspace/general";
@@ -148,6 +153,30 @@ const AllowanceDays = z
 		}
 		return days * 2;
 	});
+/**
+ * An overtime cap as typed (TS-095): hours as `2`, `1.5` or `1:30`, at most a
+ * week; empty, or none, is no cap. The result is whole minutes, or null.
+ */
+const CapHours = z
+	.string()
+	.trim()
+	.max(8)
+	.transform((text, context) => {
+		if (text === "") return null;
+		const clock = /^(\d{1,3}):([0-5]\d)$/.exec(text);
+		const decimal = /^(\d{1,3})(?:[.,](\d{1,2}))?$/.exec(text);
+		let minutes: number | null = null;
+		if (clock) minutes = Number(clock[1]) * 60 + Number(clock[2]);
+		else if (decimal) minutes = Math.round(Number(`${decimal[1]}.${decimal[2] ?? "0"}`) * 60);
+		if (minutes === null || minutes > LONGEST_OVERTIME_CAP_MINUTES) {
+			context.addIssue({
+				code: "custom",
+				message: `Type hours as 2 or 1:30, at most ${LONGEST_OVERTIME_CAP_MINUTES / 60}.`,
+			});
+			return z.NEVER;
+		}
+		return minutes === 0 ? null : minutes;
+	});
 /** Days of notice a kind asks for, whole; empty is none. */
 const NoticeDays = z
 	.string()
@@ -198,8 +227,10 @@ const form = z.discriminatedUnion("intent", [
 	}),
 	z.object({
 		intent: z.literal("timesheet-rules"),
-		overtime: WorkRule,
-		weekend: WorkRule,
+		overtime: OvertimeRule,
+		weekend: NonWorkingRule,
+		overtimeDayCap: CapHours,
+		overtimeWeekCap: CapHours,
 		shortNotice: ShortNoticeRule,
 	}),
 	z.object({ intent: z.literal("add-holiday"), day: Day, name: LeaveName }),
@@ -234,7 +265,7 @@ const form = z.discriminatedUnion("intent", [
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
 	const membership = context.get(membershipContext);
-	const { organisation, role } = membership;
+	const { organisation, role, user } = membership;
 	switch (input.intent) {
 		case "rename": {
 			const renamed = await renameOrganisation(request, organisation.id, input.name);
@@ -323,9 +354,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 		case "timesheet-rules": {
 			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
-			await setTimesheetRules(organisation.id, {
+			await setTimesheetRules(organisation.id, user.id, {
 				overtime: input.overtime,
 				weekend: input.weekend,
+				overtimeDayCap: input.overtimeDayCap,
+				overtimeWeekCap: input.overtimeWeekCap,
 				shortNotice: input.shortNotice,
 			});
 			return done("The timesheet rules are saved.");
@@ -561,11 +594,17 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 	);
 }
 
+/** A cap in minutes as the rules section shows it: "2:00", or "No cap". */
+const capText = (minutes: number | null) =>
+	minutes === null ? "No cap" : formatDuration(minutes * 60);
+
 /**
- * The timesheet rules (TS-090): whether overtime and work on days nobody is
- * expected to work are free, need pre-approval or are not allowed, and
+ * The timesheet rules (TS-090, TS-095): whether time past a day's expected
+ * hours is overtime that is not allowed, allowed, or allowed only with
+ * pre-approval, with an optional cap a day and a week; whether time on a day
+ * the working week does not work counts as overtime or is not allowed; and
  * whether leave asked for at short notice is allowed with a reason. One sheet
- * changes all three.
+ * changes them all.
  */
 function RulesSection({
 	rules,
@@ -576,22 +615,26 @@ function RulesSection({
 }) {
 	const [isOpen, setOpen] = useState(false);
 	const close = () => setOpen(false);
+	const caps =
+		rules.overtime === "none"
+			? ""
+			: ` Cap: ${capText(rules.overtimeDayCap)} a day, ${capText(rules.overtimeWeekCap)} a week.`;
 
 	return (
 		<Section
 			id="timesheet-rules"
 			heading="Timesheet rules"
-			lead="What people may track beyond their working week, and how leave asked for at short notice is treated. They apply to everyone in the organisation."
+			lead="Expected hours are a ceiling: what people may track beyond them, and how leave asked for at short notice is treated. They apply to everyone in the organisation."
 			className="max-w-200"
 		>
 			<Ledger heading="Rules">
 				<LedgerRows label="Timesheet rules">
 					<LedgerRow
-						title={WORK_RULE_LABELS[rules.overtime]}
-						detail="Overtime. Time past a working day's expected hours."
+						title={OVERTIME_RULE_LABELS[rules.overtime]}
+						detail={`Overtime. Time past a day's expected hours, recorded as overtime.${caps}`}
 					/>
 					<LedgerRow
-						title={WORK_RULE_LABELS[rules.weekend]}
+						title={NON_WORKING_RULE_LABELS[rules.weekend]}
 						detail="Weekend and non-working days. Time on a day the working week has no hours for."
 					/>
 					<LedgerRow
@@ -615,25 +658,49 @@ function RulesSection({
 				onDone={onDone}
 			>
 				<p>
-					Unless overtime is allowed freely, every working day is limited to its expected hours plus
-					any overtime approved for it.
+					A day takes its expected hours: the working week, less leave and public holidays. Time
+					past them is entered as overtime, where overtime is allowed.
 				</p>
 				<RadioGroup label="Overtime" name="overtime" defaultValue={rules.overtime} isRequired>
-					{WORK_RULES.map((rule) => (
+					{OVERTIME_RULES.map((rule) => (
 						<Radio key={rule} value={rule}>
-							{WORK_RULE_LABELS[rule]}
+							{OVERTIME_RULE_LABELS[rule]}
 						</Radio>
 					))}
 				</RadioGroup>
+				<div className="grid grid-cols-2 gap-4">
+					<TextField
+						label="Overtime cap a day"
+						name="overtimeDayCap"
+						description="Hours, as 2 or 1:30. Empty is no cap."
+						defaultValue={
+							rules.overtimeDayCap === null ? "" : formatDuration(rules.overtimeDayCap * 60)
+						}
+						inputMode="decimal"
+						autoComplete="off"
+						maxLength={6}
+					/>
+					<TextField
+						label="Overtime cap a week"
+						name="overtimeWeekCap"
+						description="Hours, as 10 or 7:30. Empty is no cap."
+						defaultValue={
+							rules.overtimeWeekCap === null ? "" : formatDuration(rules.overtimeWeekCap * 60)
+						}
+						inputMode="decimal"
+						autoComplete="off"
+						maxLength={6}
+					/>
+				</div>
 				<RadioGroup
 					label="Weekend and non-working days"
 					name="weekend"
 					defaultValue={rules.weekend}
 					isRequired
 				>
-					{WORK_RULES.map((rule) => (
+					{NON_WORKING_RULES.map((rule) => (
 						<Radio key={rule} value={rule}>
-							{WORK_RULE_LABELS[rule]}
+							{NON_WORKING_RULE_LABELS[rule]}
 						</Radio>
 					))}
 				</RadioGroup>

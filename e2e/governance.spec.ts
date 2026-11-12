@@ -161,7 +161,7 @@ test("the Activity log holds the lock date's change, narrows to its kind, and do
 	await page.getByRole("button", { name: "Every kind Kind" }).click();
 	await page
 		.getByRole("listbox", { name: "Kind" })
-		.getByRole("option", { name: "Lock date and deadline" })
+		.getByRole("option", { name: "Workspace settings" })
 		.click();
 	await expect(page).toHaveURL(/[?&]kind=organisation\b/);
 	await expect(records).toContainText("Changed the lock date");

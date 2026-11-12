@@ -99,13 +99,25 @@ export const organisations = sqliteTable("organisations", {
 		.notNull()
 		.default(true),
 	/**
-	 * Time beyond a working day's expected hours (TS-090): `free`, allowed
-	 * freely; `approval`, only with approved overtime; `none`, not allowed.
-	 * `app/leave/rules.ts` reads it.
+	 * TS-090's rule for time beyond a working day's expected hours, superseded
+	 * by `overtimePolicy` (TS-095) and no longer read. A later migration, which
+	 * ships alone, takes it away.
 	 */
 	overtimeRule: text("overtime_rule").notNull().default("free"),
-	/** Time on a day the working week does not work (TS-090): `free`, `approval` or `none`. */
+	/** TS-090's rule for time on a day not worked, superseded by `nonWorkingDays` (TS-095) and no longer read. */
 	weekendRule: text("weekend_rule").notNull().default("free"),
+	/**
+	 * Time beyond a day's expected hours (TS-095): `none`, not allowed;
+	 * `allowed`; `approval`, only as far as approved overtime covers the day.
+	 * Every organisation began at `none`. `app/leave/rules.ts` reads it.
+	 */
+	overtimePolicy: text("overtime_policy").notNull().default("none"),
+	/** Time on a day the working week does not work (TS-095): `overtime`, counted as overtime, or `none`, not allowed. */
+	nonWorkingDays: text("non_working_days").notNull().default("overtime"),
+	/** The most overtime a person records on a day, in minutes; null for no cap (TS-095). */
+	overtimeDayCapMinutes: integer("overtime_day_cap_minutes"),
+	/** The most overtime a person records in one of the organisation's weeks, in minutes; null for no cap (TS-095). */
+	overtimeWeekCapMinutes: integer("overtime_week_cap_minutes"),
 	/** Leave asked for at shorter notice than its kind's (TS-090): `with-reason`, allowed with a reason, or `refused`. */
 	shortNotice: text("short_notice").notNull().default("with-reason"),
 	createdAt: createdAt(),
@@ -315,6 +327,12 @@ export const timeEntries = sqliteTable(
 		billable: integer("billable", { mode: "boolean" }).notNull().default(false),
 		/** The CSV import that created the entry (B19), so reverting it removes exactly its entries. */
 		importId: text("import_id"),
+		/**
+		 * Whether the time is overtime: past the day's expected hours, as the
+		 * organisation's rule allows (TS-095). Added in place, defaulted, so an
+		 * entry made before it is regular time.
+		 */
+		overtime: integer("overtime", { mode: "boolean" }).notNull().default(false),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},

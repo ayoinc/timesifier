@@ -24,7 +24,7 @@ const AUCKLAND = "Pacific/Auckland";
 let ids = 0;
 function entry(startedAt: number, endedAt: number | null, projectId = "p1"): SheetEntry {
 	ids += 1;
-	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt };
+	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt, overtime: false };
 }
 
 /** A small seeded generator, so a failing case can be run again. */

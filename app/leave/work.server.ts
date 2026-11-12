@@ -101,13 +101,13 @@ export async function requestWork(
 ): Promise<{ ok: true; status: LeaveStatus; alone: boolean } | { ok: false; problem: NotAsked }> {
 	const label = WORK_KIND_LABELS[request.kind];
 	if (!mayAskFor(rules, request.kind)) {
-		const rule = request.kind === "overtime" ? rules.overtime : rules.weekend;
+		const open = request.kind === "overtime" || rules.weekend !== "none";
 		return {
 			ok: false,
 			problem: {
 				field: "kind",
 				message:
-					rule === "free"
+					rules.overtime === "allowed" && open
 						? `${label} needs no approval here.`
 						: `${label} is not allowed in this organisation.`,
 			},

@@ -62,6 +62,7 @@ components:
         ended_at: { type: [string, "null"], format: date-time }
         running: { type: boolean }
         hours: { type: number }
+        overtime: { type: boolean, description: Overtime rather than regular time (TS-095). }
         billable: { type: boolean }
         description: { type: [string, "null"], description: Only with descriptions:read. }
         import_id: { type: [string, "null"] }
@@ -79,6 +80,7 @@ components:
         started_at: { type: string, format: date-time }
         hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
         description: { type: [string, "null"], maxLength: 2000 }
+        overtime: { type: boolean, description: Overtime rather than regular time; held to the organisation's rules. }
     TimeEntryChange:
       type: object
       additionalProperties: false
@@ -89,6 +91,7 @@ components:
         ended_at: { type: string, format: date-time }
         hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
         description: { type: [string, "null"], maxLength: 2000 }
+        overtime: { type: boolean, description: Overtime rather than regular time; held to the organisation's rules. }
     Page:
       type: object
       properties:

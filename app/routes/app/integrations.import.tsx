@@ -324,7 +324,7 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 															{row.notes ? ` · ${row.notes}` : ""}
 														</span>
 													}
-													value={formatDuration(row.minutes * 60)}
+													value={`${formatDuration(row.minutes * 60)}${row.overtime ? " overtime" : ""}`}
 												/>
 											))}
 										</LedgerRows>
