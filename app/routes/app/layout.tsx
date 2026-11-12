@@ -1,4 +1,11 @@
-import { Activity, type ReactNode, useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
+import {
+	Activity,
+	type ReactNode,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	ViewTransition,
+} from "react";
 import {
 	Outlet,
 	useLocation,
