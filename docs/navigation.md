@@ -326,6 +326,8 @@ Built: Timesheet, Projects (with a project's own page and the default rates), Ta
 
 Integrations is built (TS-076, TS-081, TS-087): API tokens, webhooks, and the CSV import and export below it; Clients and Projects link to their import for owners and admins. Calendar feeds (TS-089) are a page below My account, `account/calendar`, for every role, linked from My account and from Integrations.
 
+Invoices and Estimates replaced their empty states with TS-073, TS-074, TS-077 and TS-078 (TS-088 adds the Xero CSV). Invoices holds a row of link tabs, each an address of its own: Invoices, Uninvoiced, Recurring, Retainers and Reports (Invoiced, Payments received and Receivables by age). New invoice, Invoice settings and the Xero download are reached from the Invoices page; one invoice, one estimate and one recurring template open from their lists. Every page below Invoices or Estimates is shown to owners, admins and Finance alone, as the destination is. An estimate's public link, `/estimate/<id>/<token>`, is outside the shell: the client reads it without signing in.
+
 ## Sources
 
 Read on 2026-11-11. "rea" is `capture_browser_scenario` of the rea MCP server, run in Chrome with no account; it captured each page's accessibility tree and a screenshot, saved as `cmux-assets/browser/timesifier/harvest-*.png` in the session directory. The help centre sits behind a bot check that a headless browser does not pass, so its articles were opened by rea in a visible browser, and their text read through the help centre's public JSON for the same articles, also loaded by rea.

@@ -102,6 +102,63 @@ Depends on: TS-064, TS-067, TS-068, TS-069, TS-071. Asked for by the owner; the 
 - [x] Review > Dashboards shows owners, admins, Finance and team managers panels for a range: utilisation, billable utilisation, hours by project and the budgets nearest their limit, each over the people the viewer may see (`timeScopeOf`; `test/pages/report-views.test.ts`, "Dashboards", per role; a member gets 404).
 - [ ] Panels with money, revenue, cost, profit, uninvoiced and receivables, are shown only to those who see rates; a manager never sees them. Revenue, cost and profit are done and shown only to owners, admins and Finance (`test/pages/report-views.test.ts`). Not ticked: the uninvoiced and receivables panels are omitted until Bill (PR #46) merges; they will read `receivablesOf` and `uninvoicedTotalsOf` from `app/invoices`.
 - [x] Each panel's figure equals the report it links to (`test/pages/report-views.test.ts`: total, utilisation and profit against their views).
+### TS-073 · B10 · Invoices from tracked time and expenses (draft and issue)
+
+Depends on: TS-064, TS-067, TS-070, TS-011b, TS-046.
+
+Builder: an AI session on branch `ts-b2b-bill` (PR #46).
+
+- [x] Owners, admins and Finance only (`mayInvoice`; role table). Choose a client, a date range and its projects. The preview lists uninvoiced billable entries and billable expenses. Entries in periods that are not approved are flagged, not hidden (test). (`mayInvoice`; `test/billing/invoices.test.ts` "owners, admins and Finance can; a manager and a member get 404"; `test/billing/sources.test.ts` "flags entries in periods that are not approved, and hides none of them")
+- [x] Hours are grouped by project, task or person, or one line per entry. For every grouping, the invoice subtotal equals the sum of the included entries' billable amounts (property test across groupings). (`test/billing/sources.test.ts` "property: for every grouping the subtotal is the sum of the entries' billable amounts")
+- [x] A fixed-fee project adds one line for its fee or a chosen part of it (test). (`test/billing/sources.test.ts` "a fixed-fee project adds one line for its fee, or the part of it chosen")
+- [x] Saving creates a draft with the next number in the organisation's sequence. Numbers are unique per organisation and never reused, even after a draft is deleted (test, including two drafts saved at once). (`test/billing/invoices.test.ts` "never repeats under concurrent saves, and a deleted draft's number is not given again": eight saved at once; the number is read inside the batch that raises the sequence)
+- [x] Included entries and expenses are marked as invoiced on this invoice. Deleting the draft or one of its lines returns them to uninvoiced (test). An invoiced entry cannot be edited or deleted by anyone until it is released (test). (`test/billing/invoices.test.ts` "is locked while on an invoice and let go by deleting the line, the draft or voiding"; the trigger `time_entries_invoiced_unchanged` in `0009_billing`)
+- [x] Lines can be edited and free lines added. Free lines change the total but never the invoiced state of any entry (test). (`test/billing/sources.test.ts` "change the total but never what is invoiced")
+- [x] An Uninvoiced view lists, per client and project, uninvoiced hours, expenses and amount for a range (test that it equals the billable total minus what is invoiced). (`test/billing/sources.test.ts` "property: it is the billable total less what has been invoiced")
+- [x] An invoice has exactly one currency, the projects' currency. Mixing projects in different currencies is refused (test). (`test/billing/sources.test.ts` "refuses projects, or expenses, in more than one currency")
+
+### TS-074 · B11 · Sending, tax, payments and receivables
+
+Depends on: TS-064, TS-073, TS-043 (the email ceiling).
+
+Built with TS-073 on `ts-b2b-bill` (PR #46).
+
+- [x] Organisation invoice settings: legal name, address, tax registration number, default payment terms (on receipt, Net 15/30/45/60, custom days), default notes, and up to two taxes (simple or compound). Per invoice: PO number, discount %, and per-line choice of taxes (tests with UK VAT 20% and a compound case). (`/invoices/settings`; `test/billing/documents.test.ts` "keeps the organisation's details…", "holds at most two taxes at once", "UK VAT at 20%…", "a compound tax is charged on the line plus its simple tax…")
+- [x] Totals are computed in integer minor units with one documented rounding rule (round half up per tax line). Subtotal − discount + tax = total for random invoices (property test). (`app/money`; `test/billing/invoices.test.ts` "property: stored totals are app/money's, subtotal − discount + tax = total"; `test/money/money.test.ts`)
+- [ ] Issuing turns draft into open and fixes the number, the issue date and the due date. An open invoice's lines cannot change; it can only be voided, which releases its entries, or credited (test). Built and tested except the credit note: issuing, the lines fixed by trigger, voiding that releases (`test/billing/invoices.test.ts` "an issued invoice's lines do not change", "is locked while on an invoice…"); a credit note is not built.
+- [x] A PDF of the invoice is produced on the Worker, and its numbers equal the screen's (test comparing extracted text). (`app/invoices/pdf.ts`; `test/billing/documents.test.ts` "prints the numbers the page shows", GBP and de-DE EUR; `test/billing/invoices.test.ts` "the PDF")
+- [x] Send by email to the client's billing contacts, with the PDF and a template subject and body holding the invoice variables. Every send is logged on the invoice's history (test against the email adapter). (`test/billing/documents.test.ts` "goes to each billing contact with the PDF, and is logged on the invoice's history")
+- [x] Record a payment (date, amount, note); partial payments leave a balance; the payment can be deleted; part or all can be written off. Status is open, partly paid, paid or written off, from the payments (property test: balance = total − payments − write-offs ≥ 0). (`test/billing/invoices.test.ts` "payments and status"; `test/billing/receivables.test.ts` "property: balance = total − payments − write-offs ≥ 0…" and "the database refuses a payment beyond the balance, whoever writes it")
+- [x] Reports: Invoiced, Payments received, and Receivables by age (current, 1–30, 31–60, 61–90, 90+ days overdue in the organisation's time zone), with CSV, for those who see rates (test). (`/invoices/reports?report=invoiced|payments|receivables` and `/invoices/reports/export`; `test/billing/receivables.test.ts` "buckets what is owed as current, 1–30, 31–60, 61–90 and 90+ days overdue on the organisation's day", Pacific/Auckland and London)
+- [x] Optional late reminder per organisation: N days after due, then every M days, stopped by payment (test with a fake clock). (the hourly Cron Trigger and `scheduled` in `workers/app.ts`; `test/billing/schedule.test.ts`, called through the handler at a fixed `scheduledTime`: sent once, none for a paid invoice, nothing more on a second run)
+
+### TS-077 · B12 · Estimates
+
+Depends on: TS-064, TS-074.
+
+Built with TS-073 on `ts-b2b-bill` (PR #46).
+
+- [x] An owner, admin or Finance creates an estimate: client, number, issue date, subject, lines, tax, discount, notes, currency. The arithmetic is shared with TS-074 (test). (`test/billing/estimates.test.ts` "prices it with the invoice's arithmetic")
+- [x] Send it by email with a secret link. The client accepts or declines on the link without signing in, and the status and time are recorded once. A second click changes nothing. An owner, admin or Finance can record the decision or revert it (test). (`/estimate/<id>/<token>`; `test/billing/estimates.test.ts` "is proved by its token alone…", "records the client's answer once; a second click changes nothing", "record a decision for the client and take it back"; `e2e/billing.spec.ts`)
+- [x] An accepted estimate becomes a draft invoice with the same lines (test). Turning an estimate into a project is out of scope, as in Harvest. (`test/billing/estimates.test.ts` "becomes a draft invoice with the same lines, once")
+
+### TS-078 · B13 · Recurring invoices and retainers
+
+Depends on: TS-064, TS-074.
+
+Built with TS-073 on `ts-b2b-bill` (PR #46).
+
+- [x] A recurring template (client, lines or "this client's uninvoiced time", frequency monthly, quarterly or yearly, first issue date, end) creates a draft, or an issued and sent invoice, on each date. The 31st becomes the month's last day (test with a fake clock). (`/invoices/recurring`; `test/billing/schedule.test.ts` "makes the due recurring invoice with the next number and moves the template to the month's end", 31 October to 30 November)
+- [x] A retainer per client, or per client and project: a funds invoice adds to it when paid, and a time invoice may draw from it up to its balance. The balance never goes below 0 (property test). (`/invoices/retainers`; `test/billing/retainers.test.ts`, including "property: never below 0 under random deposits, draws and payment deletions"; a funds invoice adds what was paid, not what was written off)
+
+### TS-088 · Xero CSV export of invoices
+
+Depends on: TS-064, TS-074. Asked for by the owner; before TS-083's connection.
+
+Built with TS-073 on `ts-b2b-bill` (PR #46).
+
+- [x] An owner, admin or Finance downloads issued invoices for a range as a CSV in Xero's sales-invoice import format: contact, number, dates, lines, tax, currency (test against a fixture Xero accepts). (`/invoices/xero`; `test/billing/xero.test.ts` against `test/billing/fixtures/`. The 27 columns are those of Xero's documented sales-invoice template; what Xero's template leaves uncertain is written in `app/invoices/xero.ts`. No file has been imported into a real Xero organisation yet.)
+- [x] Totals in the file equal the invoices' to the penny, one currency per invoice (test). (`test/billing/xero.test.ts` "formats invoices exactly as the fixture": line amounts at the stored unit prices, one currency per invoice)
 
 ### TS-063 · The profile menu
 
@@ -826,32 +883,6 @@ Depends on: TS-064, TS-020, TS-046. It extends TS-020, which keeps the security 
 - [x] Entry text (descriptions) is never copied into a record, as TS-020 says. Edits record that the description changed, not what it said (test). `test/activity/activity.test.ts`, "records a changed description, note or comment as a marker, never its text", "never stores free text, even from a summary built by hand". The lock date's reason is the one stated exception, an administrator's statement about the organisation (`docs/security.md`, "Locks").
 - [x] Records are kept 730 days, as `docs/security.md` says, then deleted by TS-033's daily job; no record can be changed (test). The daily job is the Worker's `scheduled` handler at 03:17 UTC (`workers/scheduled.ts`), which TS-033 extends with its other tables (`test/pages/lock-date.test.ts`, "deletes activity records older than two years once a day, and no record can be changed"; `test/activity/activity.test.ts`, "retention").
 
-### TS-073 · B10 · Invoices from tracked time and expenses (draft and issue)
-
-Depends on: TS-064, TS-067, TS-070, TS-011b, TS-046.
-
-- [ ] Owners, admins and Finance only (`mayInvoice`; role table). Choose a client, a date range and its projects. The preview lists uninvoiced billable entries and billable expenses. Entries in periods that are not approved are flagged, not hidden (test).
-- [ ] Hours are grouped by project, task or person, or one line per entry. For every grouping, the invoice subtotal equals the sum of the included entries' billable amounts (property test across groupings).
-- [ ] A fixed-fee project adds one line for its fee or a chosen part of it (test).
-- [ ] Saving creates a draft with the next number in the organisation's sequence. Numbers are unique per organisation and never reused, even after a draft is deleted (test, including two drafts saved at once).
-- [ ] Included entries and expenses are marked as invoiced on this invoice. Deleting the draft or one of its lines returns them to uninvoiced (test). An invoiced entry cannot be edited or deleted by anyone until it is released (test).
-- [ ] Lines can be edited and free lines added. Free lines change the total but never the invoiced state of any entry (test).
-- [ ] An Uninvoiced view lists, per client and project, uninvoiced hours, expenses and amount for a range (test that it equals the billable total minus what is invoiced).
-- [ ] An invoice has exactly one currency, the projects' currency. Mixing projects in different currencies is refused (test).
-
-### TS-074 · B11 · Sending, tax, payments and receivables
-
-Depends on: TS-064, TS-073, TS-043 (the email ceiling).
-
-- [ ] Organisation invoice settings: legal name, address, tax registration number, default payment terms (on receipt, Net 15/30/45/60, custom days), default notes, and up to two taxes (simple or compound). Per invoice: PO number, discount %, and per-line choice of taxes (tests with UK VAT 20% and a compound case).
-- [ ] Totals are computed in integer minor units with one documented rounding rule (round half up per tax line). Subtotal − discount + tax = total for random invoices (property test).
-- [ ] Issuing turns draft into open and fixes the number, the issue date and the due date. An open invoice's lines cannot change; it can only be voided, which releases its entries, or credited (test).
-- [ ] A PDF of the invoice is produced on the Worker, and its numbers equal the screen's (test comparing extracted text).
-- [ ] Send by email to the client's billing contacts, with the PDF and a template subject and body holding the invoice variables. Every send is logged on the invoice's history (test against the email adapter).
-- [ ] Record a payment (date, amount, note); partial payments leave a balance; the payment can be deleted; part or all can be written off. Status is open, partly paid, paid or written off, from the payments (property test: balance = total − payments − write-offs ≥ 0).
-- [ ] Reports: Invoiced, Payments received, and Receivables by age (current, 1–30, 31–60, 61–90, 90+ days overdue in the organisation's time zone), with CSV, for those who see rates (test).
-- [ ] Optional late reminder per organisation: N days after due, then every M days, stopped by payment (test with a fake clock).
-
 ### TS-075 · B16 · Finance role: its column in every role test, and its pages
 
 Depends on: TS-064, TS-073. The role itself exists from TS-064 (owner's decision); this card proves it everywhere.
@@ -870,21 +901,6 @@ Depends on: TS-064, TS-066, TS-014b. After invoicing, by the owner's decision.
 - [x] Rows already present (same person, date, project, task, hours and notes) are skipped (`test/integrations/import.test.ts`).
 - [x] Clients and projects import from a CSV, linked from their own pages for owners and admins (`test/integrations/import.test.ts`).
 - [ ] TS-014b, amended: an owner or admin can export all of the organisation's time (done: Integrations › Export all time, `test/integrations/import.test.ts`), and with TS-073 all invoices as one ZIP of PDFs (not done: it needs TS-073's invoice PDFs, built on another branch).
-
-### TS-077 · B12 · Estimates
-
-Depends on: TS-064, TS-074.
-
-- [ ] An owner, admin or Finance creates an estimate: client, number, issue date, subject, lines, tax, discount, notes, currency. The arithmetic is shared with TS-074 (test).
-- [ ] Send it by email with a secret link. The client accepts or declines on the link without signing in, and the status and time are recorded once. A second click changes nothing. An owner, admin or Finance can record the decision or revert it (test).
-- [ ] An accepted estimate becomes a draft invoice with the same lines (test). Turning an estimate into a project is out of scope, as in Harvest.
-
-### TS-078 · B13 · Recurring invoices and retainers
-
-Depends on: TS-064, TS-074.
-
-- [ ] A recurring template (client, lines or "this client's uninvoiced time", frequency monthly, quarterly or yearly, first issue date, end) creates a draft, or an issued and sent invoice, on each date. The 31st becomes the month's last day (test with a fake clock).
-- [ ] A retainer per client, or per client and project: a funds invoice adds to it when paid, and a time invoice may draw from it up to its balance. The balance never goes below 0 (property test).
 
 ### TS-079 · B15 · Contractors
 
@@ -927,13 +943,6 @@ Depends on: TS-064, TS-081, TS-072. Asked for by the owner.
 - [x] Each delivery is signed `t=…,v1=…` with HMAC-SHA-256 under a secret derived from `BETTER_AUTH_SECRET`, the webhook's id and its version, shown once and never stored; rotating raises the version and the old secret stops working (`test/integrations/webhooks.test.ts`).
 - [x] A failed delivery is retried with backoff; after repeated failures the webhook is switched off and its owner told; its last status and failures are shown (test with a fake clock: `test/integrations/webhooks.test.ts`; the cron trigger runs the dispatcher every minute).
 - [x] A delivery holds what the reader's role would see through the API, and no entry description unless the scope allows it (`test/integrations/webhooks.test.ts`).
-
-### TS-088 · Xero CSV export of invoices
-
-Depends on: TS-064, TS-074. Asked for by the owner; before TS-083's connection.
-
-- [ ] An owner, admin or Finance downloads issued invoices for a range as a CSV in Xero's sales-invoice import format: contact, number, dates, lines, tax, currency (test against a fixture Xero accepts).
-- [ ] Totals in the file equal the invoices' to the penny, one currency per invoice (test).
 
 ### TS-089 · Calendar feed
 

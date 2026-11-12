@@ -1,0 +1,4 @@
+*ContactName,EmailAddress,POAddressLine1,POAddressLine2,POAddressLine3,POAddressLine4,POCity,PORegion,POPostalCode,POCountry,*InvoiceNumber,Reference,*InvoiceDate,*DueDate,InventoryItemCode,*Description,*Quantity,*UnitAmount,Discount,*AccountCode,*TaxType,TrackingName1,TrackingOption1,TrackingName2,TrackingOption2,Currency,BrandingTheme
+"Initech, Ltd",accounts@initech.example,,,,,,,,,1,PO-7,02/11/2026,02/12/2026,,Design work,7.5,120.00,,200,20% (VAT on Income),,,,,GBP,
+"Initech, Ltd",accounts@initech.example,,,,,,,,,1,PO-7,02/11/2026,02/12/2026,,Hosting,1,50.00,,200,No VAT,,,,,GBP,
+"Initech, Ltd",accounts@initech.example,,,,,,,,,2,,20/11/2026,04/12/2026,,Support,1,180.00,,200,20% (VAT on Income),,,,,GBP,

@@ -9,6 +9,7 @@ import {
 	allRoutes,
 	isMoved,
 	isNotFound,
+	namesARecord,
 	routesAtOrUnder,
 	STAND_IN_ORGANISATION,
 } from "../routes";
@@ -39,13 +40,14 @@ function inNobodys(address: string): string {
 }
 
 /**
- * What a member gets at the route's address. A receipt's address names an
- * expense, and Ada has none called "x": her own organisation answers 404 too,
- * and the test of a receipt she has is test/pages/expenses.test.ts.
+ * What a member gets at the route's address. A route that names a record
+ * `addressFor` makes none for, such as a receipt or an invoice, names one Ada
+ * has none called "x": her own organisation answers 404 too, and each such
+ * route has a test of its own with a real record.
  */
 function memberStatus(route: (typeof allRoutes)[number]): number {
 	if (isMoved(route)) return 301;
-	return isNotFound(route) || route.id === "routes/app/expenses.receipt" ? 404 : 200;
+	return isNotFound(route) || namesARecord(route) ? 404 : 200;
 }
 
 /**
@@ -89,7 +91,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the Contractors report and its export, the export of the Activity log, an entry's history, My account, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the Contractors report and its export, the export of the Activity log, an entry's history, the pages of Invoices and Estimates, My account, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -103,6 +105,20 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/tasks",
 				"/app/acme/invoices",
 				"/app/acme/estimates",
+				// Invoices and Estimates (TS-073, TS-074, TS-077, TS-078, TS-088); `x` stands in for a record.
+				"/app/acme/estimates/x",
+				"/app/acme/estimates/x/pdf",
+				"/app/acme/invoices/new",
+				"/app/acme/invoices/recurring",
+				"/app/acme/invoices/recurring/x",
+				"/app/acme/invoices/reports",
+				"/app/acme/invoices/reports/export",
+				"/app/acme/invoices/retainers",
+				"/app/acme/invoices/settings",
+				"/app/acme/invoices/uninvoiced",
+				"/app/acme/invoices/x",
+				"/app/acme/invoices/x/pdf",
+				"/app/acme/invoices/xero",
 				"/app/acme/dashboards",
 				"/app/acme/activity",
 				"/app/acme/activity/export",
@@ -142,10 +158,18 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/approvals",
 			"routes/app/calendar-feeds",
 			"routes/app/clients",
+			"routes/app/estimates",
+			"routes/app/estimates.$estimate",
 			"routes/app/expenses",
 			"routes/app/integrations",
 			"routes/app/integrations.import",
 			"routes/app/invitations",
+			"routes/app/invoices.$invoice",
+			"routes/app/invoices.new",
+			"routes/app/invoices.recurring",
+			"routes/app/invoices.recurring.$recurring",
+			"routes/app/invoices.retainers",
+			"routes/app/invoices.settings",
 			"routes/app/members",
 			"routes/app/project",
 			"routes/app/projects",
@@ -240,6 +264,44 @@ describe("a member of one organisation asking for another organisation's address
 			startsOn: "2026-12-21",
 			endsOn: "2026-12-23",
 		},
+		"routes/app/invoices.new": { client: "c-theirs" },
+		"routes/app/invoices.$invoice": { intent: "delete" },
+		"routes/app/invoices.settings": {
+			intent: "details",
+			legalName: "Taken over",
+			address: "",
+			taxNumber: "",
+			paymentTermsDays: "30",
+			defaultNotes: "",
+			lateReminderAfterDays: "",
+			lateReminderEveryDays: "",
+		},
+		"routes/app/estimates": {
+			intent: "create",
+			clientId: "c-theirs",
+			currency: "GBP",
+			issuedOn: "2026-11-12",
+			subject: "",
+		},
+		"routes/app/estimates.$estimate": { intent: "delete" },
+		"routes/app/invoices.recurring": {
+			intent: "create",
+			clientId: "c-theirs",
+			currency: "GBP",
+			startsOn: "2026-12-01",
+			frequency: "monthly",
+			endsOn: "",
+			paymentTermsDays: "30",
+			subject: "",
+			notes: "",
+		},
+		"routes/app/invoices.recurring.$recurring": { intent: "stop" },
+		"routes/app/invoices.retainers": {
+			intent: "open",
+			clientId: "c-theirs",
+			projectId: "all",
+			currency: "GBP",
+		},
 	};
 
 	it.each(withAction)(
@@ -264,6 +326,10 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from clients")).toBe(0);
 			expect(await value("select count(*) from teams")).toBe(0);
 			expect(await value("select count(*) from leave_requests")).toBe(0);
+			for (const table of ["invoices", "estimates", "recurring_invoices", "retainers", "taxes"]) {
+				expect(await value(`select count(*) from ${table}`), table).toBe(0);
+			}
+			expect(await value("select count(*) from invoice_settings")).toBe(0);
 			expect(await value("select count(*) from api_tokens")).toBe(0);
 			expect(await value("select count(*) from calendar_feeds")).toBe(0);
 			expect(await value("select count(*) from expense_categories")).toBe(0);

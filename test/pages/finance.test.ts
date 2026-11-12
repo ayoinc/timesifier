@@ -2,8 +2,11 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { record } from "~/activity/activity.server";
 import { organisationScope } from "~/db";
+import { createEstimate } from "~/estimates/estimates.server";
 import { recordExpense } from "~/expenses/expenses.server";
 import { startImport } from "~/import/import.server";
+import { createDraft } from "~/invoices/invoices.server";
+import { createRecurring } from "~/invoices/recurring.server";
 import {
 	type Access,
 	activityScopeOf,
@@ -94,6 +97,12 @@ interface World {
 	importJob: string;
 	/** A saved report of the column's own, Mine. */
 	saved: string;
+	/** A draft invoice to Initech, of one line. */
+	invoice: string;
+	/** An estimate to Initech. */
+	estimate: string;
+	/** A monthly recurring invoice to Initech. */
+	recurring: string;
 }
 
 let mailbox: Mailbox;
@@ -168,7 +177,75 @@ async function world(column: Column): Promise<World> {
 		{ type: "time_entry", id: entry, ownerId: grace.userId },
 		{ after: { projectId: project } },
 	);
+	// Initech's work: a project of its own with a rate and a billable entry
+	// of Ada's, uninvoiced, and a draft, an estimate and a recurring invoice.
+	const scope = organisationScope(env.DB, acme.id);
+	const [billed] = await scope.projects.insert({
+		name: "Portal",
+		nameKey: "portal",
+		clientId: client.id,
+	});
+	if (!billed) throw new Error("seed failed");
+	await scope.rates.insert({
+		kind: "billable",
+		projectId: billed.id,
+		userId: null,
+		taskId: null,
+		amountMinor: 10_000,
+		currency: "GBP",
+		effectiveFrom: "2026-01-01",
+	});
+	await scope.timeEntries.insert({
+		userId: ada.user.id,
+		projectId: billed.id,
+		description: "Build",
+		billable: true,
+		startedAt: new Date("2026-10-14T09:00:00Z"),
+		endedAt: new Date("2026-10-14T10:00:00Z"),
+	});
+	const invoice = await createDraft(scope, ada.user.id, {
+		clientId: client.id,
+		currency: "GBP",
+		issuedOn: "2026-10-31",
+		lines: [
+			{
+				kind: "manual",
+				description: "Extra",
+				projectId: null,
+				quantityMilli: 1000,
+				unitPriceMinor: 5000,
+				amountMinor: 5000,
+				timeEntryIds: [],
+				expenseIds: [],
+			},
+		],
+	});
+	const estimate = await createEstimate(scope, ada.user.id, {
+		clientId: client.id,
+		currency: "GBP",
+		issuedOn: "2026-10-31",
+		poNumber: null,
+		subject: null,
+		notes: null,
+		discountBasisPoints: 0,
+	});
+	const recurring = await createRecurring(scope, ada.user.id, {
+		clientId: client.id,
+		frequency: "monthly",
+		startsOn: "2030-01-01",
+		endsOn: null,
+		sendAutomatically: false,
+		includeUninvoicedTime: false,
+		currency: "GBP",
+		paymentTermsDays: 30,
+		subject: null,
+		notes: null,
+	});
+	if (!invoice.ok || !estimate?.ok || !recurring?.ok) throw new Error("seed failed");
 	return {
+		invoice: invoice.id,
+		estimate: estimate.id,
+		recurring: recurring.id,
 		acme,
 		ada,
 		who,
@@ -375,8 +452,118 @@ const ROLE_TABLE: Record<string, Row> = {
 			post: by<Post>("done", "done", "done", 403, 403),
 		},
 	},
+	// Invoices and Estimates (TS-073 to TS-078, TS-088): owners', admins' and
+	// Finance's alone (`mayInvoice`), every page and form below them.
 	"routes/app/invoices": { page: by(200, 200, 200, 404, 404) },
-	"routes/app/estimates": { page: by(200, 200, 200, 404, 404) },
+	"routes/app/invoices.new": {
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: (w) => ({ client: w.client }),
+			doneStatus: 202,
+			made: async () => (await count("select count(*) from invoices")) === 2,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/invoices.uninvoiced": { page: by(200, 200, 200, 404, 404) },
+	"routes/app/invoices.reports": { page: by(200, 200, 200, 404, 404) },
+	"routes/app/invoices.reports.export": { page: by(200, 200, 200, 404, 404) },
+	"routes/app/invoices.xero": { page: by(200, 200, 200, 404, 404) },
+	"routes/app/invoices.recurring": {
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: (w) => ({
+				intent: "create",
+				clientId: w.client,
+				currency: "GBP",
+				startsOn: "2030-02-01",
+				frequency: "quarterly",
+				endsOn: "",
+				paymentTermsDays: "30",
+				subject: "",
+				notes: "",
+			}),
+			doneStatus: 202,
+			made: async () =>
+				(await count("select count(*) from recurring_invoices where frequency = 'quarterly'")) ===
+				1,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/invoices.recurring.$recurring": {
+		address: (w) => `/app/acme/invoices/recurring/${w.recurring}`,
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: () => ({ intent: "stop" }),
+			made: async (w) =>
+				(await count(
+					"select count(*) from recurring_invoices where id = ? and stopped_at is not null",
+					w.recurring,
+				)) === 1,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/invoices.retainers": {
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: (w) => ({ intent: "open", clientId: w.client, projectId: "all", currency: "GBP" }),
+			made: async () => (await count("select count(*) from retainers")) === 1,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/invoices.settings": {
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: () => ({ intent: "add-tax", name: "VAT", rate: "20" }),
+			made: async () => (await count("select count(*) from taxes where name = 'VAT'")) === 1,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/invoices.$invoice": {
+		address: (w) => `/app/acme/invoices/${w.invoice}`,
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: () => ({ intent: "delete" }),
+			doneStatus: 202,
+			made: async (w) =>
+				(await count("select count(*) from invoices where id = ?", w.invoice)) === 0,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/invoices.$invoice.pdf": {
+		address: (w) => `/app/acme/invoices/${w.invoice}/pdf`,
+		page: by(200, 200, 200, 404, 404),
+	},
+	"routes/app/estimates": {
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: (w) => ({
+				intent: "create",
+				clientId: w.client,
+				currency: "GBP",
+				issuedOn: "2026-11-02",
+				subject: "Phase two",
+			}),
+			doneStatus: 202,
+			made: async () =>
+				(await count("select count(*) from estimates where subject = 'Phase two'")) === 1,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/estimates.$estimate": {
+		address: (w) => `/app/acme/estimates/${w.estimate}`,
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: () => ({ intent: "delete" }),
+			doneStatus: 202,
+			made: async (w) =>
+				(await count("select count(*) from estimates where id = ?", w.estimate)) === 0,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	"routes/app/estimates.$estimate.pdf": {
+		address: (w) => `/app/acme/estimates/${w.estimate}/pdf`,
+		page: by(200, 200, 200, 404, 404),
+	},
 	"routes/app/approvals": {
 		page: by(200, 200, 404, 200, 404),
 		form: {

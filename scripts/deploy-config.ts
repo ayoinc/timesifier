@@ -103,6 +103,9 @@ const Config = z.looseObject({
 	vars: z.record(z.string(), z.string()),
 	d1_databases: z.array(Database),
 	send_email: z.array(z.looseObject({ name: z.string() })),
+	// The Cron Triggers of workers/scheduled.ts. Production only:
+	// previews never run cron triggers, and `previews` holds none.
+	triggers: z.looseObject({ crons: z.array(z.string()).min(1) }),
 	previews: z.looseObject({
 		vars: z.record(z.string(), z.string()),
 		d1_databases: z.array(Database),

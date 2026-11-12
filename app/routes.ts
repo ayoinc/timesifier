@@ -13,6 +13,7 @@ import {
 	FEED_PATH,
 	IMPORT_SEGMENT,
 } from "./integrations/paths";
+import { BILLING_SEGMENTS, ESTIMATE_LINK_SEGMENT } from "./invoices/paths";
 import { DEFAULT_RATES_SEGMENT, PROJECT_PARAM } from "./projects/projects";
 import { REPORT_EXPORT_SEGMENT } from "./reports/paths";
 import { LEAVE_EXPORT_SEGMENT, REPORT_VIEW_ROUTES } from "./reports/views";
@@ -65,6 +66,20 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(`${destination("projects").segment}/:${PROJECT_PARAM}`, "routes/app/project.tsx"),
 	...REPORT_VIEW_ROUTES.map(({ path, file }) => route(path, file)),
 	route(LEAVE_EXPORT_SEGMENT, "routes/app/reports.leave.export.ts"),
+	// Invoices and Estimates (TS-073 to TS-078, TS-088): pages below the destinations.
+	route(BILLING_SEGMENTS.newInvoice, "routes/app/invoices.new.tsx"),
+	route(BILLING_SEGMENTS.uninvoiced, "routes/app/invoices.uninvoiced.tsx"),
+	route(BILLING_SEGMENTS.reports, "routes/app/invoices.reports.tsx"),
+	route(BILLING_SEGMENTS.reportsExport, "routes/app/invoices.reports.export.ts"),
+	route(BILLING_SEGMENTS.xero, "routes/app/invoices.xero.ts"),
+	route(BILLING_SEGMENTS.recurring, "routes/app/invoices.recurring.tsx"),
+	route(BILLING_SEGMENTS.recurringOne, "routes/app/invoices.recurring.$recurring.tsx"),
+	route(BILLING_SEGMENTS.retainers, "routes/app/invoices.retainers.tsx"),
+	route(BILLING_SEGMENTS.settings, "routes/app/invoices.settings.tsx"),
+	route(BILLING_SEGMENTS.invoice, "routes/app/invoices.$invoice.tsx"),
+	route(BILLING_SEGMENTS.invoicePdf, "routes/app/invoices.$invoice.pdf.ts"),
+	route(BILLING_SEGMENTS.estimate, "routes/app/estimates.$estimate.tsx"),
+	route(BILLING_SEGMENTS.estimatePdf, "routes/app/estimates.$estimate.pdf.ts"),
 	route(ACCOUNT_SEGMENT, "routes/app/account.tsx"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	...Object.keys(MOVED).map((segment) =>
@@ -92,6 +107,8 @@ export default [
 	route("privacy", "routes/privacy.tsx"),
 	route("terms", "routes/terms.tsx"),
 	app,
+	// An estimate's link, opened by the client without signing in (TS-077).
+	route(`${ESTIMATE_LINK_SEGMENT}/:id/:token`, "routes/estimate.$id.$token.tsx"),
 	route("invitations/:id", "routes/invitations.$id.tsx"),
 	route("api/auth/*", "routes/api.auth.$.ts"),
 	// The public API (TS-081) and calendar feeds (TS-089): a token, not a
