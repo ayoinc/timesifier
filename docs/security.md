@@ -46,6 +46,8 @@ Better Auth runs inside the Worker (`app/auth/auth.server.ts`) and answers every
 
 How long these rows live: a code's row counts for five minutes and a cap's row for the hour or the 24 hours it counts in, and Better Auth deletes rows of `verifications` after they expire. A session lasts seven days and is extended while it is used; an expired `sessions` row stays until card TS-033 adds a daily job that deletes it.
 
+These are the tables of signing in. Every table of the application, these included, is listed in `app/db/personal-data.ts` under the row of the privacy notice that says what it holds, and `test/claims.test.ts` fails when a table of `app/db/schema.ts` is in none. Nothing is deleted for its age except the rows this section names and the activity log's, which the daily job deletes after 730 days (`ACTIVITY_RETENTION_DAYS`, `workers/scheduled.ts`). Everything else of an organisation stays until it is deleted in the product or the organisation is.
+
 A code is eight digits, works once, and stops working after three wrong attempts or five minutes. It is stored as an HMAC-SHA-256 under `BETTER_AUTH_SECRET` (`app/auth/keyed-hash.server.ts`), never as the code and never as a plain hash: there are few enough codes to try them all against a plain hash, so only the key makes a copy of the database useless on its own. The session cookie holds the token and a signature made with `BETTER_AUTH_SECRET`; the session itself is read from the database on every request, never from a copy in a cookie, so an ended session is refused at once.
 
 ### The cookie

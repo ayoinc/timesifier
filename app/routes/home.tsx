@@ -35,9 +35,9 @@ export function meta({ matches }: Route.MetaArgs) {
 	return pageMeta({
 		origin: rootOrigin(matches),
 		path: "/",
-		title: "Timesifier: a timer and a weekly report, being built",
+		title: "Timesifier: track your hours, trust the total",
 		description:
-			"A timer and a weekly report for people and small teams who bill or account for their time. In development: today you can sign in and set up your organisation. The database is in the EU.",
+			"A timer, timesheets and reports for people and small teams who bill or account for their time, with approvals, leave, expenses and invoices. The database is in the EU.",
 	});
 }
 
@@ -81,14 +81,13 @@ function GetStarted() {
 }
 
 /**
- * Where the product stands today, said wherever the page asks a person in. The
- * sections describe the product being built; this line is what the action opens.
+ * What opening the action leads to, said wherever the page asks a person in.
  */
 function OpenToday() {
 	return (
 		<p className="mt-4 max-w-120 text-body-medium text-on-sheet-variant">
-			Open today: sign in with your email address and set up your organisation. The timer and the
-			weekly report are being built.
+			Free today. Sign in with your email address, set up your organisation and a first project, and
+			start the timer.
 		</p>
 	);
 }
@@ -115,9 +114,8 @@ function Accuracy() {
 				Numbers you can show.
 			</h2>
 			<p className={LEAD}>
-				An entry will keep its start and its end, and a total will be the entries under it added
-				together, to the second while the timer runs. When a client or a manager asks what{" "}
-				{day.weekday} was, the answer will be on the page.
+				An entry keeps its start and its end, and a total is the entries under it added together.
+				When a client or a manager asks what {day.weekday} was, the answer is on the page.
 			</p>
 			<div className="mt-10">
 				<DayAnatomy />
@@ -143,9 +141,9 @@ export default function Home() {
 								Track your hours. Trust the total.
 							</h1>
 							<p className="mt-6 max-w-120 text-body-large text-on-sheet-variant">
-								Timesifier is being built: a timer and a weekly report for people who bill or answer
-								for their time. You will start it when you start work, and by Friday the week will
-								be added up, by project and by day.
+								Timesifier is a timer and a weekly report for people who bill or answer for their
+								time. You start it when you start work, and by Friday the week is added up, by
+								project and by day. Timesheets, leave, expenses and invoices sit beside it.
 							</p>
 							<p className="mt-8">
 								<GetStarted />
@@ -164,12 +162,12 @@ export default function Home() {
 					<div className="grid gap-10 expanded:grid-cols-12 expanded:items-center expanded:gap-8">
 						<div className="min-w-0 expanded:col-span-6 expanded:col-start-7">
 							<h2 id="track-heading" className={HEADING}>
-								One press will start the clock.
+								One press starts the clock.
 							</h2>
 							<p className={LEAD}>
-								You will say what you are working on, choose the project and start. When you stop,
-								the entry will be on the day with its start and its end. If you forgot to start it,
-								you will add the entry by hand.
+								You say what you are working on, choose the project and start. When you stop, the
+								entry is on the day with its start and its end. If you forgot to start it, you add
+								the entry by hand.
 							</p>
 							<div className="mt-10">
 								<TimerStates />
@@ -191,9 +189,8 @@ export default function Home() {
 							See where the week went.
 						</h2>
 						<p className={LEAD}>
-							Every entry will land in the week, under its project and its day. In the example
-							below, read across for a project, down for a day; the longest bar is where the week
-							went.
+							Every entry lands in the week, under its project and its day. In the example below,
+							read across for a project, down for a day; the longest bar is where the week went.
 						</p>
 						<div className="mt-10">
 							<WeekReport />
@@ -219,8 +216,9 @@ export default function Home() {
 							</h2>
 							<dl className="mt-8 border-b border-outline-variant">
 								<Fact term="Stored in the European Union">
-									Your account and your organisation are kept in a database that runs and stores its
-									data only inside the EU. Your time entries will be kept there too.
+									Your account and your organisation’s work, its time, leave, expenses and invoices,
+									are kept in a database that runs and stores its data only inside the EU. Receipts
+									are kept in storage restricted to the EU.
 								</Fact>
 								<Fact term="Run near the database">
 									Your request reaches the Cloudflare data centre nearest to you, wherever you are,
@@ -230,8 +228,8 @@ export default function Home() {
 								</Fact>
 								<Fact term="Closed to other organisations">
 									A record belongs to one organisation, and nobody outside it can read it or learn
-									that it exists. Inside it, owners and admins will be able to see every member’s
-									time; members will see their own.
+									that it exists. Inside it, owners, admins and Finance see everyone’s time; a
+									manager sees their own and their teams’; everyone else sees their own.
 								</Fact>
 								<Fact term="No password to lose">
 									Timesifier never asks for one. You sign in with a code sent to your email address.
@@ -264,7 +262,7 @@ export default function Home() {
 								id="start-heading"
 								className="text-display-small text-balance large:text-display-medium"
 							>
-								The hour is passing either way. Soon you can put it on the record.
+								The hour is passing either way. Put it on the record.
 							</h2>
 							<p className="mt-8">
 								<GetStarted />

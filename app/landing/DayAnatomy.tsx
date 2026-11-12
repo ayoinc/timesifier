@@ -619,8 +619,7 @@ export function DayAnatomy() {
 				<p className="mt-3 max-w-160 text-body-medium text-on-surface-variant">
 					The morning drawn here is worked in the rhythm of the Pomodoro Technique, Francesco
 					Cirillo’s method: {RHYTHM.stretch} minutes of work, a short break, and a longer break
-					after every fourth stretch. The rhythm is the person’s. The timer will record what they
-					did.
+					after every fourth stretch. The rhythm is the person’s. The timer records what they did.
 				</p>
 			</div>
 			<div className="anatomy-drawing min-w-0 large:col-span-8">
@@ -628,7 +627,7 @@ export function DayAnatomy() {
 				<Drawing size="compact" className="max-w-136 expanded:hidden" {...drawing} />
 			</div>
 			<figcaption className="min-w-0 large:col-span-4">
-				<p className="pb-3 text-label-large">How it will work</p>
+				<p className="pb-3 text-label-large">How it works</p>
 				<ol
 					id={steps}
 					className="grid gap-x-8 border-t border-outline-variant medium:grid-cols-2 expanded:grid-cols-3 large:grid-cols-1"

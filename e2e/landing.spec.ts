@@ -14,7 +14,7 @@ const COMPACT = { width: 390, height: 844 };
 const WIDE = { width: 1280, height: 800 };
 
 const primaryAction = (page: Page) =>
-	page.getByRole("main").getByRole("link", { name: "Get started" }).first();
+	page.getByRole("main").getByRole("link", { name: "Start tracking" }).first();
 /** The way back in for someone who has been before: one quiet link in the band at the top. */
 const signIn = (page: Page) => page.getByRole("banner").getByRole("link", { name: "Sign in" });
 /** The picture of the product: the figure that holds no photograph. */
@@ -144,7 +144,7 @@ test("there is one way in: the primary action at the top and at the end, and Sig
 }) => {
 	await page.goto("/");
 
-	const actions = page.getByRole("main").getByRole("link", { name: "Get started" });
+	const actions = page.getByRole("main").getByRole("link", { name: "Start tracking" });
 	await expect(actions).toHaveCount(2);
 	const addresses = new Set([
 		...(await actions.evaluateAll((links) => links.map((link) => link.getAttribute("href")))),

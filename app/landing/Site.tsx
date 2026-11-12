@@ -25,11 +25,10 @@ export const MAIN_ID = "main";
 
 /**
  * The words of the one primary action on the public pages. It opens the sign-in
- * page, where today a person signs in and sets up their organisation, so it
- * promises no more than that. It becomes "Start tracking" on the day the timer
- * ships (docs/design-direction.md, "One way in").
+ * page, from which a person sets up their organisation and starts the timer
+ * (docs/design-direction.md, "One way in").
  */
-export const PRIMARY_ACTION = "Get started";
+export const PRIMARY_ACTION = "Start tracking";
 
 /** The picture a shared link is shown with: the mark and the headline on the sheet, 1200 by 630. */
 export const SOCIAL_IMAGE = {
@@ -211,8 +210,7 @@ export function SiteFooter({ current, photos = [] }: SiteFooterProps) {
 					<Wordmark />
 				</p>
 				<p className="mt-2 max-w-80 text-on-surface-variant">
-					A time tracker for people and small teams who bill or account for their hours. In
-					development.
+					A time tracker for people and small teams who bill or account for their hours.
 				</p>
 			</div>
 			<nav aria-label="Notices" className="medium:col-span-3">

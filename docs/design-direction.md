@@ -105,7 +105,7 @@ The owner's instruction: the mindset of Benji Taylor's essay ["Family Values"](h
 
 | Screen              | The one primary action                                           | What stays out until it is needed                                     |
 | ------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Public pages        | "Get started", at the top and at the end, to the sign-in page    | A second call to action, a pricing table, a newsletter field          |
+| Public pages        | "Start tracking", at the top and at the end, to the sign-in page | A second call to action, a pricing table, a newsletter field          |
 | Sign in             | Continue: the address, then the code sent to it                  | A name on the way in; any other way to sign in; a page for new people |
 | Today and the timer | Start, which becomes Stop: one control                           | Manual entry and editing, until asked for                             |
 | Projects            | New project                                                      | Archiving, budgets and filters, until a project has them              |
@@ -151,7 +151,7 @@ Between public pages there is no cross-document view transition. It was built an
 
 The public pages have one primary action and it opens `/sign-in`, which serves a person who is new and a person coming back alike. There is no "create an account", on any page or in any email, and no address that makes one: `/sign-up` is answered with the way to `/sign-in`. The band at the top carries one quiet "Sign in" to the same address.
 
-The action reads **"Get started"** (`PRIMARY_ACTION` in `app/landing/Site.tsx`). The owner's other wording, "Start tracking", promises what the next page cannot yet do; **it becomes "Start tracking" on the day the timer card (TS-012) ships.** Under each action one line says what is open today.
+The action reads **"Start tracking"** (`PRIMARY_ACTION` in `app/landing/Site.tsx`). It read "Get started" until the timer was built, because until then it promised more than the next page could do; it became "Start tracking" with TS-101, the timer having shipped with TS-012. Under each action one line says what opening it leads to.
 
 **The sign-in page** (card TS-036) is the next page of the same product: the public pages' band, with nothing at its right because this page is the way in, their column and their foot. It has two views and each has one filled action.
 
@@ -178,12 +178,13 @@ The owner, on seeing both schemes on 2026-11-11: "the light mode is way better, 
 
 The owner: "we need to validate all what we are writing so it's not slop". On 11 November 2026 an independent reviewer checked all 93 claims on the three public pages against the code, the configuration, production and Cloudflare's documentation. 39 were not plainly true. What became of each is in the pull request of TS-030; the rules that came out of it are these.
 
-1. **Tense.** Nothing is in the present tense that is not built. The timer, entries, the week and the report are "being built" and "will". The terms say so in one sentence and the home page does not contradict them.
+1. **Tense.** What is built is said in the present tense, and only what is not built takes "will". Each sentence is held to the code that does it: the timer, timesheets and approvals, leave, expenses and invoices are built, so the home page, the terms and the notice say what they do now. A sentence about a feature that is not built names it as not built yet, or is left out. An audit of every sentence on the public pages, the sign-in page and the emails' footers, made on 12 November 2026 for TS-101, is in its pull request.
 2. **Every drawing of example data says "Example"** (`EXAMPLE_NOTE`), and a test finds any time on the page that stands in a drawing without it.
 3. **Where data lives is said exactly.** The database "runs and stores its data only inside the EU": a D1 jurisdiction, fixed when a database is created (the commands in `README.md`; [Cloudflare, D1 data location](https://developers.cloudflare.com/d1/configuration/data-location/): "Jurisdictions are used to create D1 databases that only run and store data within a region"). The same sentence is never left alone: a request reaches the data centre nearest the visitor, which may be outside the EU, and is passed to Frankfurt, where the Worker runs near the database ([Workers placement](https://developers.cloudflare.com/workers/configuration/placement/): "Placement Hints run your Worker in the data center with the lowest latency to your specified cloud region"; `placement` in `wrangler.jsonc`, `docs/decisions.md` 34); the files a page loads come from the nearest data centre (the same page: "Static assets are always served from the location nearest to the incoming request"); and Cloudflare's request logs, its record of each email, Turnstile and Web Analytics carry no EU restriction ([data localisation compatibility](https://developers.cloudflare.com/data-localization/compatibility/)). `test/claims.test.ts` fails if a page says the first without the second, if a database is ever created without the jurisdiction, or if a page says requests are handled in Frankfurt while `wrangler.jsonc` places the Worker elsewhere.
-4. **Who can see what is said exactly.** "Closed to everyone outside your organisation", which `test/organisations/membership.test.ts` proves, and never "private": inside an organisation owners and admins will see every member's time.
+4. **Who can see what is said exactly.** "Closed to everyone outside your organisation", which `test/organisations/membership.test.ts` proves, and never "private". Inside an organisation the roles see what `app/organisations/access.ts` lets them: owners, admins and Finance everyone's time; a manager their own and their teams'; everyone else their own. The privacy notice's "Who sees what" names each role, and `test/claims.test.ts` holds those sentences to the functions they describe.
 5. **The cookies in the notice are the cookies in the code.** `test/claims.test.ts` takes their names from the application and fails on a cookie the notice omits or invents, and on a wrong count.
 6. **No new factual claim goes on a public page without its evidence** in the same pull request: a test, or a quoted source here or in `docs/security.md`.
+7. **What is stored is the schema.** The privacy notice's "What is stored" is drawn from `app/db/personal-data.ts`, which puts every table of `app/db/schema.ts` under one of its rows; how long each is kept is what the code does (the foreign keys, and the daily job in `workers/scheduled.ts` that deletes activity records after `ACTIVITY_RETENTION_DAYS`), and where nothing deletes a thing the notice says it is kept until it is deleted. Receipts are in R2 with the `eu` jurisdiction ([Cloudflare, R2 data location](https://developers.cloudflare.com/r2/reference/data-location/): "Jurisdictional Restrictions guarantee objects in a bucket are stored within a specific jurisdiction"). Every email the product sends is named with whom it goes to. `test/claims.test.ts` fails on a table in no row, a retention or a number the page states that the code does not, an email sender the notice does not name, and a role it misstates.
 
 Still open, and the owner's to close, because the repository cannot supply them: the legal name and address of whoever runs Timesifier (the notice says in so many words that it is incomplete without them, and `CONTROLLER` in `app/routes/privacy.tsx` is where they go); the legal basis for each use of data and the basis on which data reaches a United States company; and proof that `privacy@timesifier.com` is read.
 
@@ -215,8 +216,8 @@ A drawing that must live outside the application, in a document, is generated by
 **Where the product could use one**, for the owner's own cards:
 
 1. **Today, when it is empty.** The anatomy of an entry: a start, an end, a project, and the length between them, in place of an empty-state illustration.
-2. **Members, beside the roles.** What an owner, an admin and a member can each see and change, drawn as who holds which key.
-3. **Deleting an organisation.** What goes with it (memberships, invitations, and later entries) and what does not (each person's account), drawn before the person types the name.
+2. **Members, beside the roles.** What an owner, an admin, Finance, a manager and a member can each see and change, drawn as who holds which key.
+3. **Deleting an organisation.** What goes with it (everything in it: memberships, invitations, time, expenses and their receipts, invoices, the activity log) and what does not (each person's account), drawn before the person types the name.
 
 ## References
 
@@ -339,7 +340,7 @@ All but the last are in the component gallery (`/design`) with their tests. What
 
 ## Email
 
-A message from Timesifier is the same product as the page that sent the person to their inbox. Both messages the application sends, the sign-in code and the invitation, are built by one frame, `compose` in `app/auth/email-frame.ts`; a new message uses it, so it cannot drift. What a mail program can render decides the rest.
+A message from Timesifier is the same product as the page that sent the person to their inbox. Every message the application sends, the sign-in code, the invitation, an invoice, a reminder, an estimate, a budget alert and the notice that a webhook was switched off, is built by one frame, `compose` in `app/auth/email-frame.ts`; a new message uses it, so it cannot drift. The privacy notice names each, with whom it goes to. What a mail program can render decides the rest.
 
 - **The band.** An 8px amber rule at the top, then the product's name in the condensed heavy face, ink on paper, with a 2px ink rule under it: the home page's top band, settled. The name is type, not the mark: the mark would have to be an image, which a mail program either blocks or uses to tell its host that the message was opened (`docs/security.md`, "Email").
 - **One column** of paper, at most 560px, 20px at the sides. Tables only where mail programs need them for layout.
@@ -349,7 +350,7 @@ A message from Timesifier is the same product as the page that sent the person t
 - **At most one action**, drawn as the product's filled button: ink, square-cornered, its words saying what it does. The sign-in code has none, and no link of any kind.
 - **The footer**, under a 1px rule: why the person got the message, and what to do if they did not ask for it.
 - **Colours** are literal values, because a mail program knows no custom properties. They are written from the light scheme's roles by `pnpm tokens` into `app/styles/email-colours.ts`, the one file of raw colours `pnpm check:tokens` lets through besides the tokens, and a test holds them equal. Every cell that sets a colour of type also sets the ground it stands on, so a mail program that forces a dark scheme inverts the pair together and loses nothing.
-- **Nothing is fetched**: no image, font, style sheet or tracking. The only address in a message is the invitation's one link. The plain-text part says everything the HTML part says, in the same order. `test/auth/email-frame.test.ts` holds all of this.
+- **Nothing is fetched**: no image, font, style sheet or tracking. The only address in a message is its one action's link, and the sign-in code has none. The plain-text part says everything the HTML part says, in the same order. `test/auth/email-frame.test.ts` holds all of this.
 
 Screenshots of both messages at 390px and 600px, light and forced dark: `email-code-*.png` and `email-invitation-*.png` in the session's browser assets.
 

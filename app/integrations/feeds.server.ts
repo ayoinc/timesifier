@@ -29,9 +29,9 @@ const FEED_PREFIX = "cal_";
 
 const FEED_SHAPE = /^cal_[A-Za-z0-9_-]{43}$/;
 
-/** How far back a feed reaches: a year of leave, ninety days of entries. */
-const LEAVE_DAYS_BACK = 366;
-const ENTRY_DAYS_BACK = 90;
+/** How far back a feed reaches: a year of leave, ninety days of entries. The privacy notice says both. */
+export const LEAVE_DAYS_BACK = 366;
+export const ENTRY_DAYS_BACK = 90;
 
 function hashOf(token: string) {
 	return keyedHash(String(env.BETTER_AUTH_SECRET), "calendar-feed", token);
