@@ -61,12 +61,12 @@ async function seedPeople() {
 
 /** Acme's timesheet rules, as Workspace settings would set them. */
 async function setRules(rules: {
-	overtime?: "free" | "approval" | "none";
-	weekend?: "free" | "approval" | "none";
+	overtime?: "none" | "allowed" | "approval";
+	weekend?: "overtime" | "none";
 	shortNotice?: "with-reason" | "refused";
 }) {
 	await env.DB.prepare(
-		"update organisations set overtime_rule = coalesce(?, overtime_rule), weekend_rule = coalesce(?, weekend_rule), short_notice = coalesce(?, short_notice) where id = ?",
+		"update organisations set overtime_policy = coalesce(?, overtime_policy), non_working_days = coalesce(?, non_working_days), short_notice = coalesce(?, short_notice) where id = ?",
 	)
 		.bind(rules.overtime ?? null, rules.weekend ?? null, rules.shortNotice ?? null, acme.id)
 		.run();
@@ -251,22 +251,29 @@ describe("requests for overtime and weekend work", () => {
 		const { grace } = await seedPeople();
 		const monday = onOrAfter(addDays(today(), 21), 1);
 		const saturday = onOrAfter(addDays(today(), 21), 6);
+		// Overtime is not allowed by default (TS-095).
+		const none = await requestWork(grace, "overtime", monday, monday);
+		expect(none.status).toBe(400);
+		expect(none.said).toContain("Overtime is not allowed in this organisation.");
+		await setRules({ overtime: "allowed" });
 		const free = await requestWork(grace, "overtime", monday, monday);
 		expect(free.status).toBe(400);
 		expect(free.said).toContain("Overtime needs no approval here.");
-		await setRules({ weekend: "none" });
-		const none = await requestWork(grace, "weekend", saturday, saturday);
-		expect(none.status).toBe(400);
-		expect(none.said).toContain("Weekend work is not allowed in this organisation.");
+		const weekendFree = await requestWork(grace, "weekend", saturday, saturday);
+		expect(weekendFree.said).toContain("Weekend work needs no approval here.");
+		await setRules({ overtime: "approval", weekend: "none" });
+		const noWeekends = await requestWork(grace, "weekend", saturday, saturday);
+		expect(noWeekends.status).toBe(400);
+		expect(noWeekends.said).toContain("Weekend work is not allowed in this organisation.");
 		expect(await value("select count(*) from work_requests")).toBe(0);
 		const text = await textAt(TIME_OFF, grace);
-		expect(text).not.toContain("Request overtime");
+		expect(text).toContain("Request overtime");
 		expect(text).not.toContain("Request weekend work");
 	});
 
 	it("with pre-approval, a member's waits for their manager, who approves it; never their own", async () => {
 		const { grace, mona } = await seedPeople();
-		await setRules({ overtime: "approval", weekend: "approval" });
+		await setRules({ overtime: "approval", weekend: "overtime" });
 		let text = await textAt(TIME_OFF, grace);
 		expect(text).toContain("Request overtime");
 		expect(text).toContain("Request weekend work");
@@ -323,7 +330,7 @@ describe("requests for overtime and weekend work", () => {
 
 	it("weekend work is for days off; a manager of another team may not refuse it, the person's may", async () => {
 		const { grace, mona, nils } = await seedPeople();
-		await setRules({ weekend: "approval" });
+		await setRules({ overtime: "approval" });
 		const monday = onOrAfter(addDays(today(), 21), 1);
 		const weekday = await requestWork(grace, "weekend", monday, monday);
 		expect(weekday.status).toBe(400);

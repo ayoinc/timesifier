@@ -365,8 +365,10 @@ describe("a member of one organisation asking for another organisation's address
 			id: "routes/app/settings",
 			fields: {
 				intent: "timesheet-rules",
-				overtime: "none",
+				overtime: "allowed",
 				weekend: "none",
+				overtimeDayCap: "",
+				overtimeWeekCap: "",
 				shortNotice: "refused",
 			},
 		},
@@ -388,8 +390,8 @@ describe("a member of one organisation asking for another organisation's address
 				expect(await said(theirs, THEIRS)).toBe(await said(nobodys, NOBODYS));
 			}
 			expect(await value("select count(*) from work_requests")).toBe(0);
-			expect(await value("select overtime_rule from organisations where slug = ?", THEIRS)).toBe(
-				"free",
+			expect(await value("select overtime_policy from organisations where slug = ?", THEIRS)).toBe(
+				"none",
 			);
 		},
 	);

@@ -211,6 +211,49 @@ describe("importing Harvest's export of all time", () => {
 		);
 	});
 
+	it("holds each row to its day's limits: past them, overtime only where allowed, else skipped with the reason (TS-095)", async () => {
+		const csv = [
+			"Date,Project,Task,Notes,Hours,First Name,Last Name",
+			// Monday 5 October: 7:30 fits; the next row is past it.
+			"2026-10-05,Website,Design,Morning,7.5,Ada,Lovelace",
+			"2026-10-05,Website,Design,Evening,1,Ada,Lovelace",
+			// Saturday 10 October: a day the week does not work, all of it overtime.
+			"2026-10-10,Website,Design,Weekend,2,Ada,Lovelace",
+		].join("\n");
+		const skipped = await upload(csv);
+		const page = textOf(await (await open(skipped.location, ada)).text());
+		expect(page).toContain("1 to import, 2 to skip.");
+		expect(page).toContain("This day has 0:00 left.");
+		expect(page).toContain(
+			"Saturday is not a working day, and this organisation does not allow overtime.",
+		);
+
+		await env.DB.prepare(
+			"update organisations set overtime_policy = 'allowed', overtime_day_cap_minutes = 90 where id = ?",
+		)
+			.bind(acme.id)
+			.run();
+		const allowed = await upload(csv);
+		const shown = textOf(await (await open(allowed.location, ada)).text());
+		expect(shown).toContain("2 to import, 1 to skip.");
+		expect(shown).toContain("1:00 overtime");
+		expect(shown).toContain("This day has 1:30 of overtime left.");
+		const id = importIdOf(allowed.location);
+		await submit(`${IMPORT}?kind=time`, { intent: "import", importId: id }, ada);
+		expect(
+			await value<number>(
+				"select count(*) from time_entries where import_id = ? and overtime = 1",
+				id,
+			),
+		).toBe(1);
+		expect(
+			await value<number>(
+				"select count(*) from time_entries where import_id = ? and overtime = 0",
+				id,
+			),
+		).toBe(1);
+	});
+
 	it("matches people by email where the file has one", async () => {
 		const csv =
 			"Date,Project,Hours,Email,First name,Last name\r\n2026-10-05,Apollo,1,MAX@example.com,Someone,Else\r\n";

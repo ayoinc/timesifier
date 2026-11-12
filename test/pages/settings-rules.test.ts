@@ -12,8 +12,9 @@ import {
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 
-// Workspace settings, /app/<slug>/settings, for TS-090: the timesheet rules
-// (overtime, weekend and non-working days, short-notice leave), which owners
+// Workspace settings, /app/<slug>/settings, for TS-090 and TS-095: the
+// timesheet rules (overtime and its caps, weekend and non-working days,
+// short-notice leave), which owners
 // and admins set for everyone, and the days of notice each kind of leave asks
 // for. Every form is posted the way the page posts it.
 
@@ -49,8 +50,31 @@ async function outcome(response: Response) {
 }
 
 const rules = () =>
-	row("select overtime_rule, weekend_rule, short_notice from organisations where id = ?", acme.id);
-const DEFAULT_RULES = { overtime_rule: "free", weekend_rule: "free", short_notice: "with-reason" };
+	row(
+		"select overtime_policy, non_working_days, overtime_day_cap_minutes, overtime_week_cap_minutes, short_notice from organisations where id = ?",
+		acme.id,
+	);
+const DEFAULT_RULES = {
+	overtime_policy: "none",
+	non_working_days: "overtime",
+	overtime_day_cap_minutes: null,
+	overtime_week_cap_minutes: null,
+	short_notice: "with-reason",
+};
+/** The rules as the sheet sends them, every field given. */
+const SENT = {
+	intent: "timesheet-rules",
+	overtime: "none",
+	weekend: "overtime",
+	overtimeDayCap: "",
+	overtimeWeekCap: "",
+	shortNotice: "with-reason",
+};
+const changesRecorded = () =>
+	value<number>(
+		"select count(*) from activity_records where action = 'timesheet_rules.changed' and organisation_id = ?",
+		acme.id,
+	);
 
 const kindOf = (key: string) =>
 	value<string>("select id from leave_kinds where organisation_id = ? and key = ?", acme.id, key);
@@ -61,91 +85,141 @@ const noticeOf = (key: string) =>
 		key,
 	);
 
-describe("the timesheet rules (TS-090)", () => {
-	it("are shown to an owner and an admin, everything allowed to start with", async () => {
+describe("the timesheet rules (TS-090, TS-095)", () => {
+	it("are shown to an owner and an admin: overtime not allowed and time on other days counted as overtime to start with", async () => {
 		const grace = await memberOfAcme("admin", "grace@example.com");
 		for (const who of [ada, grace]) {
 			const text = textOf(await pageBody(await open(SETTINGS, who)));
 			expect(text).toContain("Timesheet rules");
-			expect(text).toContain("Allowed freely Overtime.");
-			expect(text).toContain("Allowed freely Weekend and non-working days.");
+			expect(text).toContain(
+				"Not allowed Overtime. Time past a day's expected hours, recorded as overtime.",
+			);
+			expect(text).toContain("Counts as overtime Weekend and non-working days.");
 			expect(text).toContain("Allowed with a reason Short-notice leave requests.");
 			expect(text).toContain("Change timesheet rules");
 		}
 		expect(await rules()).toEqual(DEFAULT_RULES);
 	});
 
-	it.each(["owner", "admin"] as const)("an %s saves all three", async (role) => {
-		const who = role === "owner" ? ada : await memberOfAcme("admin", "grace@example.com");
-		const answer = await outcome(
-			await submit(
-				SETTINGS,
-				{
-					intent: "timesheet-rules",
-					overtime: "approval",
+	it.each(["owner", "admin"] as const)(
+		"an %s saves them all, caps included, each change recorded",
+		async (role) => {
+			const who = role === "owner" ? ada : await memberOfAcme("admin", "grace@example.com");
+			const answer = await outcome(
+				await submit(
+					SETTINGS,
+					{
+						...SENT,
+						overtime: "allowed",
+						weekend: "none",
+						overtimeDayCap: "2",
+						overtimeWeekCap: "7:30",
+						shortNotice: "refused",
+					},
+					who,
+					{ byScript: true },
+				),
+			);
+			expect(answer.status).toBe(200);
+			expect(answer.said).toContain("The timesheet rules are saved.");
+			expect(await rules()).toEqual({
+				overtime_policy: "allowed",
+				non_working_days: "none",
+				overtime_day_cap_minutes: 120,
+				overtime_week_cap_minutes: 450,
+				short_notice: "refused",
+			});
+			const text = textOf(await pageBody(await open(SETTINGS, who)));
+			expect(text).toContain(
+				"Allowed Overtime. Time past a day's expected hours, recorded as overtime. Cap: 2:00 a day, 7:30 a week.",
+			);
+			expect(text).toContain("Not allowed Weekend and non-working days.");
+			expect(text).toContain("Not allowed Short-notice leave requests.");
+			expect(await changesRecorded()).toBe(1);
+			const summary = JSON.parse(
+				(await value<string>(
+					"select summary from activity_records where action = 'timesheet_rules.changed' and organisation_id = ?",
+					acme.id,
+				)) ?? "{}",
+			);
+			expect(summary).toEqual({
+				before: {
+					overtime: "none",
+					weekend: "overtime",
+					overtimeDayCap: null,
+					overtimeWeekCap: null,
+					shortNotice: "with-reason",
+				},
+				after: {
+					overtime: "allowed",
 					weekend: "none",
+					overtimeDayCap: 120,
+					overtimeWeekCap: 450,
 					shortNotice: "refused",
 				},
-				who,
-				{ byScript: true },
-			),
-		);
-		expect(answer.status).toBe(200);
-		expect(answer.said).toContain("The timesheet rules are saved.");
-		expect(await rules()).toEqual({
-			overtime_rule: "approval",
-			weekend_rule: "none",
-			short_notice: "refused",
-		});
-		const text = textOf(await pageBody(await open(SETTINGS, who)));
-		expect(text).toContain("Only with pre-approval Overtime.");
-		expect(text).toContain("Not allowed Weekend and non-working days.");
-		expect(text).toContain("Not allowed Short-notice leave requests.");
+			});
+			const log = textOf(await pageBody(await open("/app/acme/activity", ada)));
+			expect(log).toContain("Changed the timesheet rules");
+			expect(log).toContain("Overtime: Not allowed → Allowed");
+			expect(log).toContain("Overtime cap a day: 2:00");
 
-		await submit(
-			SETTINGS,
-			{ intent: "timesheet-rules", overtime: "free", weekend: "free", shortNotice: "with-reason" },
-			who,
-			{ byScript: true },
-		);
-		expect(await rules()).toEqual(DEFAULT_RULES);
-	});
+			// Pre-approval; the caps taken away by leaving them empty.
+			await submit(SETTINGS, { ...SENT, overtime: "approval" }, who, { byScript: true });
+			expect(await rules()).toEqual({ ...DEFAULT_RULES, overtime_policy: "approval" });
+			expect(textOf(await pageBody(await open(SETTINGS, who)))).toContain(
+				"Only with pre-approval Overtime. Time past a day's expected hours, recorded as overtime. Cap: No cap a day, No cap a week.",
+			);
+			await submit(SETTINGS, SENT, who, { byScript: true });
+			expect(await rules()).toEqual(DEFAULT_RULES);
+			expect(await changesRecorded()).toBe(3);
+			// Saving what is already there records nothing.
+			await submit(SETTINGS, SENT, who, { byScript: true });
+			expect(await changesRecorded()).toBe(3);
+		},
+	);
 
 	it.each([
-		["an overtime rule that is not one", { overtime: "sometimes" }],
-		["a weekend rule that is not one", { weekend: "approved" }],
+		["an overtime rule that is not one", { overtime: "free" }],
+		["TS-090's weekend rule", { weekend: "approval" }],
 		["a short-notice rule that is not one", { shortNotice: "none" }],
 		["no weekend rule", { weekend: undefined }],
+		["a cap that is not hours", { overtimeDayCap: "lots" }],
+		["a cap past a week", { overtimeWeekCap: "169" }],
+		["a negative cap", { overtimeDayCap: "-1" }],
 	])("refuses %s with 400, and changes nothing", async (_, change) => {
-		const fields: Record<string, string | undefined> = {
-			intent: "timesheet-rules",
-			overtime: "none",
-			weekend: "none",
-			shortNotice: "refused",
-			...change,
-		};
+		const fields: Record<string, string | undefined> = { ...SENT, overtime: "allowed", ...change };
 		const sent = Object.fromEntries(
 			Object.entries(fields).filter((entry): entry is [string, string] => entry[1] !== undefined),
 		);
 		expect((await submit(SETTINGS, sent, ada, { byScript: true })).status).toBe(400);
 		expect(await rules()).toEqual(DEFAULT_RULES);
+		expect(await changesRecorded()).toBe(0);
 	});
 
-	it("a member and a manager cannot change them, and the page stays 404", async () => {
+	it.each(["member", "finance"] as const)(
+		"a %s cannot change them, and the page stays 404",
+		async (role) => {
+			const who = await memberOfAcme(role, "linus@example.com");
+			expect((await open(SETTINGS, who)).status).toBe(404);
+			const response = await submit(SETTINGS, { ...SENT, overtime: "allowed" }, who, {
+				byScript: true,
+			});
+			expect(response.status).toBe(404);
+			expect(await rules()).toEqual(DEFAULT_RULES);
+		},
+	);
+
+	it("a manager cannot change them, and the page stays 404", async () => {
 		const linus = await memberOfAcme("member", "linus@example.com");
 		const mary = await memberOfAcme("member", "mary@example.com");
 		await seedTeam(acme.id, "Design", { members: [linus.user.id], managers: [mary.user.id] });
-		for (const who of [linus, mary]) {
-			expect((await open(SETTINGS, who)).status).toBe(404);
-			const response = await submit(
-				SETTINGS,
-				{ intent: "timesheet-rules", overtime: "none", weekend: "none", shortNotice: "refused" },
-				who,
-				{ byScript: true },
-			);
-			expect(response.status).toBe(404);
-		}
+		expect((await open(SETTINGS, mary)).status).toBe(404);
+		const response = await submit(SETTINGS, { ...SENT, overtime: "allowed" }, mary, {
+			byScript: true,
+		});
+		expect(response.status).toBe(404);
 		expect(await rules()).toEqual(DEFAULT_RULES);
+		expect(await changesRecorded()).toBe(0);
 	});
 });
 
