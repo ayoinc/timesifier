@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
-import { recordStatement } from "~/activity/activity.server";
+import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
 import type { Day } from "~/time/calendar";
 
@@ -55,6 +55,7 @@ export const RETAINER_EXISTS =
 /** Opens a retainer for a client, or for one of its projects, in the currency it is paid in. */
 export async function openRetainer(
 	scope: OrganisationScope,
+	actor: string,
 	clientId: string,
 	projectId: string | null,
 	currency: string,
@@ -77,8 +78,18 @@ export async function openRetainer(
 		and(eq(r.clientId, clientId), projectId ? eq(r.projectId, projectId) : isNull(r.projectId)),
 	);
 	if (held.length > 0) return { ok: false, problem: RETAINER_EXISTS };
-	const [row] = await scope.retainers.insert({ clientId, projectId, currency });
-	return row ? { ok: true, id: row.id } : { ok: false, problem: RETAINER_EXISTS };
+	const id = uuidv7();
+	await scope.batch([
+		scope.retainers.statements.insert({ id, clientId, projectId, currency }),
+		recordStatement(
+			scope,
+			actor,
+			"retainer.created",
+			{ type: "retainer", id },
+			changes(null, { clientId, projectId, currency }, ["clientId", "projectId", "currency"]),
+		),
+	]);
+	return { ok: true, id };
 }
 
 /** Makes a draft funds invoice for `amountMinor`, which adds to the retainer once it is paid. */

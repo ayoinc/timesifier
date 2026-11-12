@@ -263,7 +263,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 			if (typed !== null) {
 				if (!EMAIL_ADDRESS.test(typed))
 					return declined("Enter an email address, such as accounts@example.com.");
-				await addContact(scope, invoice.clientId, { name: null, email: typed });
+				await addContact(scope, actor, invoice.clientId, { name: null, email: typed });
 				to.push(typed);
 			}
 			const contacts = (await contactsOf(scope, invoice.clientId)).map((c) => c.email);

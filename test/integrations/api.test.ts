@@ -314,13 +314,21 @@ describe("the same role rules as the pages", () => {
 		const entry = await json(made);
 		expect(entry.hours).toBe(1.5);
 		expect(entry.spent_date).toBe("2026-11-03");
-		const recorded = await row<{ source: string; actor_id: string; action: string }>(
-			"select source, actor_id, action from activity_records where subject_id = ?",
+		const recorded = await row<{
+			source: string;
+			actor_id: string;
+			owner_id: string;
+			subject_type: string;
+			action: string;
+		}>(
+			"select source, actor_id, owner_id, subject_type, action from activity_records where subject_id = ?",
 			entry.id,
 		);
 		expect(recorded).toEqual({
 			source: "api",
 			actor_id: max.user.id,
+			owner_id: max.user.id,
+			subject_type: "time_entry",
 			action: "time_entry.created",
 		});
 

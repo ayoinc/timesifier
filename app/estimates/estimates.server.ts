@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import * as z from "zod";
 
-import { recordStatement } from "~/activity/activity.server";
+import { recordStatement, recordStatementWhen } from "~/activity/activity.server";
 import { isKeyedHash, keyedHash } from "~/auth/keyed-hash.server";
 import { type OrganisationScope, type TenantRow, uuidv7 } from "~/db";
 import {
@@ -179,7 +179,7 @@ export async function addEstimateLine(
 			"estimate.updated",
 			{ type: "estimate", id },
 			{
-				after: { lineAdded: line.description },
+				after: { line: "added" },
 			},
 		),
 	]);
@@ -237,9 +237,12 @@ export async function deleteEstimate(
 	return { ok: true, number: estimate.number };
 }
 
-/** Marks an estimate sent, when it is a draft; a sent one stays sent with its first time. */
-export async function markEstimateSent(scope: OrganisationScope, id: string, now: Date) {
-	await scope.estimates.update({ status: "sent", sentAt: now }, (e) =>
+/**
+ * The statement that marks an estimate sent, when it is a draft; a sent one
+ * stays sent with its first time. It goes in the batch that records the send.
+ */
+export function estimateSentStatement(scope: OrganisationScope, id: string, now: Date) {
+	return scope.estimates.statements.update({ status: "sent", sentAt: now }, (e) =>
 		and(eq(e.id, id), eq(e.status, "draft")),
 	);
 }
@@ -258,20 +261,23 @@ export async function decideByClient(
 	decision: Decision,
 	now: Date,
 ): Promise<{ recorded: boolean; status: string; decidedAt: Date | null } | null> {
-	const changed = await scope.estimates.update({ status: decision, decidedAt: now }, (e) =>
-		and(eq(e.id, id), eq(e.status, "sent")),
-	);
+	// The record is written first, only while the estimate is still undecided,
+	// so two answers at once record one decision.
+	const [, changed] = await scope.batch([
+		recordStatementWhen(
+			scope,
+			scope.estimates.exists((e) => and(eq(e.id, id), eq(e.status, "sent"))),
+			null,
+			decision === "accepted" ? "estimate.accepted" : "estimate.declined",
+			{ type: "estimate", id },
+			{ after: { by: "client" } },
+			"system",
+		),
+		scope.estimates.statements.update({ status: decision, decidedAt: now }, (e) =>
+			and(eq(e.id, id), eq(e.status, "sent")),
+		),
+	]);
 	if (changed.length > 0) {
-		await scope.batch([
-			recordStatement(
-				scope,
-				null,
-				decision === "accepted" ? "estimate.accepted" : "estimate.declined",
-				{ type: "estimate", id },
-				{ after: { by: "client" } },
-				"system",
-			),
-		]);
 		return { recorded: true, status: decision, decidedAt: now };
 	}
 	const estimate = await findEstimate(scope, id);
@@ -290,14 +296,15 @@ export async function recordDecision(
 	const found = await openEstimate(scope, id);
 	if (!found?.ok) return found;
 	await scope.batch([
-		scope.estimates.statements.update({ status: decision, decidedAt: now }, (e) =>
-			and(eq(e.id, id), inArray(e.status, ["draft", "sent"])),
-		),
-		recordStatement(
+		recordStatementWhen(
 			scope,
+			scope.estimates.exists((e) => and(eq(e.id, id), inArray(e.status, ["draft", "sent"]))),
 			actor,
 			decision === "accepted" ? "estimate.accepted" : "estimate.declined",
 			{ type: "estimate", id },
+		),
+		scope.estimates.statements.update({ status: decision, decidedAt: now }, (e) =>
+			and(eq(e.id, id), inArray(e.status, ["draft", "sent"])),
 		),
 	]);
 	return { ok: true, id };
@@ -318,11 +325,9 @@ export async function revertDecision(
 		return { ok: false, problem: "That estimate has not been decided." };
 	}
 	await scope.batch([
-		scope.estimates.statements.update({ status: "sent", decidedAt: null }, (e) =>
-			and(eq(e.id, id), inArray(e.status, ["accepted", "declined"])),
-		),
-		recordStatement(
+		recordStatementWhen(
 			scope,
+			scope.estimates.exists((e) => and(eq(e.id, id), inArray(e.status, ["accepted", "declined"]))),
 			actor,
 			"estimate.updated",
 			{ type: "estimate", id },
@@ -330,6 +335,9 @@ export async function revertDecision(
 				before: { status: estimate.status },
 				after: { status: "sent" },
 			},
+		),
+		scope.estimates.statements.update({ status: "sent", decidedAt: null }, (e) =>
+			and(eq(e.id, id), inArray(e.status, ["accepted", "declined"])),
 		),
 	]);
 	return { ok: true, id };
@@ -371,9 +379,6 @@ export async function invoiceEstimate(
 		lineTaxes: lines.map((line) => [line.taxId, line.secondTaxId]),
 	});
 	if (!created.ok) return created;
-	await scope.estimates.update({ invoiceId: created.id }, (e) =>
-		and(eq(e.id, id), isNull(e.invoiceId)),
-	);
 	return { ok: true, id: created.id };
 }
 

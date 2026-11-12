@@ -130,7 +130,7 @@ export async function logRecords(log: LogRequest, limit: number, after?: LogCurs
 				query.project === undefined
 					? undefined
 					: or(
-							and(eq(r.subjectType, "project"), eq(r.subjectId, query.project)),
+							and(inArray(r.subjectType, ["project", "budget"]), eq(r.subjectId, query.project)),
 							sql`json_extract(${r.summary}, '$.before.projectId') = ${query.project}`,
 							sql`json_extract(${r.summary}, '$.after.projectId') = ${query.project}`,
 						),
@@ -215,8 +215,11 @@ const NOUNS: Record<string, string> = {
 	team: "team",
 	task: "task",
 	rate: "a rate",
-	budget: "a budget",
+	budget: "the budget of project",
 	expense: "an expense",
+	expense_category: "expense category",
+	retainer: "a retainer",
+	recurring_invoice: "a recurring invoice",
 	invoice: "invoice",
 	estimate: "estimate",
 	payment: "a payment",
@@ -256,6 +259,19 @@ const FIELD_LABELS: Record<string, string> = {
 	deadlineTime: "Deadline time",
 	autoLockDays: "Auto-lock after (days)",
 	autoSubmitAtLock: "Auto-submit",
+	amountMinor: "Amount",
+	currency: "Currency",
+	effectiveFrom: "From",
+	unitName: "Unit",
+	unitPriceMinor: "Unit price",
+	userId: "Person",
+	budgetKind: "Budget",
+	budgetAmount: "Budget amount",
+	billingContact: "Billing contact",
+	line: "Line",
+	frequency: "Frequency",
+	paymentTermsDays: "Payment terms (days)",
+	tags: "Tags",
 };
 
 /** The names a page shows for the ids its records hold. */
@@ -274,12 +290,15 @@ async function namesOf(scope: OrganisationScope, records: readonly RecordRow[]):
 		ids.add(r.subjectId);
 		for (const side of [r.summary.before, r.summary.after]) {
 			for (const [key, value] of Object.entries(side ?? {})) {
-				if (key.endsWith("Id") && typeof value === "string") ids.add(value);
+				if (key === "userId" && typeof value === "string") people.add(value);
+				else if (key === "tags" && typeof value === "string") {
+					for (const tag of value.split(",")) if (tag !== "") ids.add(tag);
+				} else if (key.endsWith("Id") && typeof value === "string") ids.add(value);
 			}
 		}
 	}
 	const list = [...ids];
-	const [accounts, projects, clients, teams, kinds] = await Promise.all([
+	const [accounts, projects, clients, teams, kinds, categories, tags] = await Promise.all([
 		people.size === 0
 			? []
 			: drizzle(env.DB)
@@ -290,11 +309,16 @@ async function namesOf(scope: OrganisationScope, records: readonly RecordRow[]):
 		list.length === 0 ? [] : scope.clients.select((c) => inArray(c.id, list)),
 		list.length === 0 ? [] : scope.teams.select((t) => inArray(t.id, list)),
 		list.length === 0 ? [] : scope.leaveKinds.select((k) => inArray(k.id, list)),
+		list.length === 0 ? [] : scope.expenseCategories.select((c) => inArray(c.id, list)),
+		list.length === 0 ? [] : scope.tags.select((t) => inArray(t.id, list)),
 	]);
 	return {
 		people: new Map(accounts.map((a) => [a.id, nameOrEmail(a)])),
 		things: new Map(
-			[...projects, ...clients, ...teams, ...kinds].map((thing) => [thing.id, thing.name]),
+			[...projects, ...clients, ...teams, ...kinds, ...categories, ...tags].map((thing) => [
+				thing.id,
+				thing.name,
+			]),
 		),
 	};
 }
@@ -312,6 +336,13 @@ function valueText(key: string, value: ActivityValue | undefined, names: Names, 
 	if (value === undefined || value === null || value === "") return "none";
 	if (typeof value === "boolean") return value ? "Yes" : "No";
 	if (key.endsWith("At") && typeof value === "number") return when(value, zone);
+	// An expense's tags: comma-joined ids, read as the tags' names.
+	if (key === "tags" && typeof value === "string") {
+		return value
+			.split(",")
+			.map((id) => names.things.get(id) ?? "a deleted tag")
+			.join(", ");
+	}
 	if (key.endsWith("Id") && typeof value === "string") {
 		return names.things.get(value) ?? names.people.get(value) ?? "a deleted one";
 	}

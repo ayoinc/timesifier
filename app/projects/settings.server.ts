@@ -123,6 +123,10 @@ export async function changeBudget(
 					}),
 				)
 			: [];
+	// No budget before and none now: nothing to change, nothing to record.
+	if (project.budgetKind === "none" && input.kind === "none") {
+		return { ok: true, name: project.name };
+	}
 	await scope.batch([
 		scope.projects.statements.update(changed, (p) => eq(p.id, projectId)),
 		scope.budgetLines.statements.delete((l) => eq(l.projectId, projectId)),
@@ -135,7 +139,7 @@ export async function changeBudget(
 				: input.kind === "none"
 					? "budget.deleted"
 					: "budget.updated",
-			{ type: "project", id: projectId },
+			{ type: "budget", id: projectId },
 			changes(project, changed, [
 				"budgetKind",
 				"budgetAmount",

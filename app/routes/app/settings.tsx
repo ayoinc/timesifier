@@ -338,6 +338,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
 			const kept = await keepCategory(
 				organisationScope(env.DB, organisation.id),
+				membership.user.id,
 				input,
 				(await termsOf(organisation.id)).currency,
 				dayOf(Date.now(), organisation.timeZone),

@@ -88,7 +88,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 	}
 	if (!isAdministrator(membership.role)) return declined(NOT_ALLOWED, 403);
 	if (input.endsOn < input.startsOn) return declined("The last day is before the first.");
-	const set = await setProjectDates(scope, input.projectId, {
+	const set = await setProjectDates(scope, membership.user.id, input.projectId, {
 		startsOn: input.startsOn,
 		endsOn: input.endsOn,
 	});

@@ -11,10 +11,10 @@ import {
 	ESTIMATE_LABELS,
 	EstimateStatus,
 	estimateLinesOf,
+	estimateSentStatement,
 	estimateToken,
 	findEstimate,
 	invoiceEstimate,
-	markEstimateSent,
 	printedEstimate,
 	projectFromEstimate,
 	recordDecision,
@@ -168,7 +168,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 				() => "Line removed.",
 			);
 		case "add-contact": {
-			const added = await addContact(scope, estimate.clientId, {
+			const added = await addContact(scope, actor, estimate.clientId, {
 				name: input.name,
 				email: input.email,
 			});
@@ -210,9 +210,10 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 					link: new URL(estimateLinkPath(id, token), request.url).href,
 				},
 				printed,
+				"web",
+				[estimateSentStatement(scope, id, new Date(now))],
 			);
 			if (!sent.ok) return refuse(sent.problem, {}, 429);
-			await markEstimateSent(scope, id, new Date(now));
 			return {
 				ok: true as const,
 				said: `Estimate ${estimate.number} is sent to ${chosen.length === 1 ? chosen[0] : `${chosen.length} people`}.`,

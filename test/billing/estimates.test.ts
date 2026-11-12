@@ -6,11 +6,11 @@ import {
 	createEstimate,
 	decideByClient,
 	estimateLinesOf,
+	estimateSentStatement,
 	estimateToken,
 	findEstimate,
 	invoiceEstimate,
 	isEstimateToken,
-	markEstimateSent,
 	recordDecision,
 	revertDecision,
 } from "~/estimates/estimates.server";
@@ -213,7 +213,7 @@ describe("the client's link", () => {
 		expect((await stored(id)).status).toBe("draft");
 		expect(await decisions(id)).toBe(0);
 
-		await markEstimateSent(scope, id, NOW);
+		await scope.batch([estimateSentStatement(scope, id, NOW)]);
 		expect((await stored(id)).status).toBe("sent");
 		const first = await submit(link, { decision: "accepted" }, undefined, { byScript: true });
 		expect(first.status).toBe(200);
@@ -234,7 +234,7 @@ describe("the client's link", () => {
 
 		// The same, straight to the function, for a decline.
 		const declined = await estimate();
-		await markEstimateSent(scope, declined, NOW);
+		await scope.batch([estimateSentStatement(scope, declined, NOW)]);
 		expect(await decideByClient(scope, declined, "declined", NOW)).toEqual({
 			recorded: true,
 			status: "declined",

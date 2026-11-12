@@ -1,7 +1,12 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 
-import { recordStatement } from "~/activity/activity.server";
-import type { OrganisationScope } from "~/db";
+import {
+	changes,
+	REDACTED,
+	recordStatement,
+	recordStatementWhen,
+} from "~/activity/activity.server";
+import { type OrganisationScope, uuidv7 } from "~/db";
 import { lineAmount } from "~/money/money";
 import type { Day } from "~/time/calendar";
 import { sendInvoice } from "./deliver.server";
@@ -72,25 +77,72 @@ export async function createRecurring(
 	if (input.endsOn !== null && input.endsOn < input.startsOn) {
 		return { ok: false, problem: "The last date cannot be before the first." };
 	}
-	const [row] = await scope.recurringInvoices.insert({ ...input, nextIssueOn: input.startsOn });
-	if (!row) return { ok: false, problem: "That could not be saved." };
+	const id = uuidv7();
 	await scope.batch([
+		scope.recurringInvoices.statements.insert({ id, ...input, nextIssueOn: input.startsOn }),
 		recordStatement(
 			scope,
 			actor,
-			"invoice.created",
-			{ type: "invoice", id: row.id },
-			{
-				after: { recurring: input.frequency },
-			},
+			"recurring_invoice.created",
+			{ type: "recurring_invoice", id },
+			{ after: { frequency: input.frequency, startsOn: input.startsOn } },
 		),
 	]);
-	return { ok: true, id: row.id };
+	return { ok: true, id };
+}
+
+/** What a person changes on a running recurring invoice. */
+export type RecurringChange = Omit<RecurringInput, "clientId" | "currency" | "startsOn"> & {
+	nextIssueOn: Day;
+};
+
+/** The schedule and terms a recurring invoice's change compares; `notes` is recorded only as changed. */
+const CHANGED_FIELDS = [
+	"frequency",
+	"nextIssueOn",
+	"endsOn",
+	"sendAutomatically",
+	"includeUninvoicedTime",
+	"paymentTermsDays",
+	"notes",
+] as const;
+
+/** Changes a running recurring invoice; false when it has stopped (or is not this organisation's). */
+export async function changeRecurring(
+	scope: OrganisationScope,
+	actor: string,
+	recurringId: string,
+	change: RecurringChange,
+	now: Date,
+): Promise<boolean> {
+	const [held] = await scope.recurringInvoices.select(
+		(r) => and(eq(r.id, recurringId), isNull(r.stoppedAt)),
+		{ limit: 1 },
+	);
+	if (!held) return false;
+	const summary = changes(held, change, CHANGED_FIELDS);
+	// The subject is the client's words: recorded as changed, never copied.
+	if (held.subject !== change.subject) summary.after = { ...summary.after, subject: REDACTED };
+	const [, changed] = await scope.batch([
+		recordStatementWhen(
+			scope,
+			scope.recurringInvoices.exists((r) => and(eq(r.id, recurringId), isNull(r.stoppedAt))),
+			actor,
+			"recurring_invoice.updated",
+			{ type: "recurring_invoice", id: recurringId },
+			summary,
+		),
+		scope.recurringInvoices.statements.update({ ...change, updatedAt: now }, (r) =>
+			and(eq(r.id, recurringId), isNull(r.stoppedAt)),
+		),
+	]);
+	return changed.length > 0;
 }
 
 /** Adds a line to a recurring invoice. */
 export async function addRecurringLine(
 	scope: OrganisationScope,
+	actor: string,
 	recurringId: string,
 	line: LineInput,
 ): Promise<Result> {
@@ -98,39 +150,74 @@ export async function addRecurringLine(
 	if (!found) return null;
 	if (found.recurring.stoppedAt)
 		return { ok: false, problem: "That recurring invoice has stopped." };
-	await scope.recurringInvoiceLines.insert({
-		recurringInvoiceId: recurringId,
-		position: (found.lines.at(-1)?.position ?? -1) + 1,
-		description: line.description,
-		quantityMilli: line.quantityMilli,
-		unitPriceMinor: line.unitPriceMinor,
-		taxId: line.taxId,
-		secondTaxId: line.taxId ? line.secondTaxId : null,
-	});
+	await scope.batch([
+		scope.recurringInvoiceLines.statements.insert({
+			recurringInvoiceId: recurringId,
+			position: (found.lines.at(-1)?.position ?? -1) + 1,
+			description: line.description,
+			quantityMilli: line.quantityMilli,
+			unitPriceMinor: line.unitPriceMinor,
+			taxId: line.taxId,
+			secondTaxId: line.taxId ? line.secondTaxId : null,
+		}),
+		recordStatement(
+			scope,
+			actor,
+			"recurring_invoice.updated",
+			{ type: "recurring_invoice", id: recurringId },
+			{ after: { line: "added" } },
+		),
+	]);
 	return { ok: true, id: recurringId };
 }
 
 /** Removes a line of a recurring invoice; the invoices already made keep theirs. */
 export async function removeRecurringLine(
 	scope: OrganisationScope,
+	actor: string,
 	recurringId: string,
 	lineId: string,
 ): Promise<Result> {
-	const removed = await scope.recurringInvoiceLines.delete((l) =>
-		and(eq(l.id, lineId), eq(l.recurringInvoiceId, recurringId)),
+	const [line] = await scope.recurringInvoiceLines.select(
+		(l) => and(eq(l.id, lineId), eq(l.recurringInvoiceId, recurringId)),
+		{ limit: 1 },
 	);
-	return removed.length > 0 ? { ok: true, id: recurringId } : null;
+	if (!line) return null;
+	await scope.batch([
+		scope.recurringInvoiceLines.statements.delete((l) =>
+			and(eq(l.id, lineId), eq(l.recurringInvoiceId, recurringId)),
+		),
+		recordStatement(
+			scope,
+			actor,
+			"recurring_invoice.updated",
+			{ type: "recurring_invoice", id: recurringId },
+			{ before: { line: "removed" } },
+		),
+	]);
+	return { ok: true, id: recurringId };
 }
 
 /** Stops a recurring invoice: no more are made from it. */
 export async function stopRecurring(
 	scope: OrganisationScope,
+	actor: string,
 	recurringId: string,
 	now: Date,
 ): Promise<Result> {
-	const stopped = await scope.recurringInvoices.update({ stoppedAt: now }, (r) =>
-		and(eq(r.id, recurringId), isNull(r.stoppedAt)),
-	);
+	const [, stopped] = await scope.batch([
+		// Recorded first, while it still runs: two stops at once record one.
+		recordStatementWhen(
+			scope,
+			scope.recurringInvoices.exists((r) => and(eq(r.id, recurringId), isNull(r.stoppedAt))),
+			actor,
+			"recurring_invoice.stopped",
+			{ type: "recurring_invoice", id: recurringId },
+		),
+		scope.recurringInvoices.statements.update({ stoppedAt: now }, (r) =>
+			and(eq(r.id, recurringId), isNull(r.stoppedAt)),
+		),
+	]);
 	return stopped.length > 0 ? { ok: true, id: recurringId } : null;
 }
 

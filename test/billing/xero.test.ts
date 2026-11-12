@@ -71,7 +71,10 @@ beforeEach(async () => {
 	const [client] = await scope.clients.insert({ name: "Initech, Ltd", nameKey: "initech, ltd" });
 	if (!client) throw new Error("seed failed");
 	clientId = client.id;
-	await addContact(scope, clientId, { name: "Bill", email: "accounts@initech.example" });
+	await addContact(scope, owner.user.id, clientId, {
+		name: "Bill",
+		email: "accounts@initech.example",
+	});
 	const added = await addTax(scope, {
 		name: "20% (VAT on Income)",
 		rateBasisPoints: 2000,

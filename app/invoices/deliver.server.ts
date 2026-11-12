@@ -69,8 +69,8 @@ export async function sendInvoice(
 		},
 		view.printed,
 		source,
+		reminder ? [] : [scope.invoices.statements.update({ sentAt: now }, (i) => eq(i.id, invoiceId))],
 	);
 	if (!sent.ok) return sent;
-	if (!reminder) await scope.invoices.update({ sentAt: now }, (i) => eq(i.id, invoiceId));
 	return { ok: true, number: view.invoice.number };
 }
