@@ -511,8 +511,13 @@ test.describe("the Week view", () => {
 		await tabTo(page, weeks.getByRole("link", { name: "Previous week" }));
 		await page.keyboard.press("Enter");
 		await expect(page).toHaveURL(/view=week&start=\d{4}-\d{2}-\d{2}$/);
-		await weeks.getByRole("link", { name: "Next week" }).click();
-		await weeks.getByRole("link", { name: "Next week" }).click();
+		// Each step waits for its page: a press made while the last step's view
+		// transition plays lands on the transition's picture and is lost.
+		for (const _ of [1, 2]) {
+			const before = page.url();
+			await weeks.getByRole("link", { name: "Next week" }).click();
+			await expect(page).not.toHaveURL(before);
+		}
 		await weeks.getByRole("link", { name: "Back to this week" }).click();
 		await expect(page).toHaveURL(/view=week$/);
 	});

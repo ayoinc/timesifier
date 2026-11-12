@@ -190,8 +190,13 @@ test("the month shows each day's total, today marked and the month's total; Prev
 	await expect(page).toHaveURL(/scale=month&date=\d{4}-\d{2}-01$/);
 	await expect(page.getByText(/^Month total/)).toBeVisible();
 	await expect(page.getByText(/^Month total/)).toContainText("0:00");
-	await months.getByRole("link", { name: "Previous month" }).click();
-	await months.getByRole("link", { name: "Previous month" }).click();
+	// Each step waits for its page: a press made while the last step's view
+	// transition plays lands on the transition's picture and is lost.
+	for (const _ of [1, 2]) {
+		const before = page.url();
+		await months.getByRole("link", { name: "Previous month" }).click();
+		await expect(page).not.toHaveURL(before);
+	}
 	await months.getByRole("link", { name: "Back to this month" }).click();
 	await expect(page).toHaveURL(
 		new RegExp(`${organisationPath(slug)}\\?view=calendar&scale=month$`),
