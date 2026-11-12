@@ -139,9 +139,18 @@ describe("the limits of the days in the Timesheet's views", () => {
 			"Founders' Day is a public holiday: no time can be tracked on it.",
 		);
 		expect(ruleOn(week, HOLIDAY).leftMinutes).toBe(0);
-		// Overtime and weekend work are allowed freely until the organisation says otherwise.
-		expect(ruleOn(week, "2026-11-11")).toMatchObject({ limitMinutes: null, closedReason: null });
-		expect(ruleOn(week, "2026-11-14")).toMatchObject({ limitMinutes: null, closedReason: null });
+		// A working day takes its expected hours, a day not worked none: its time is
+		// overtime, which no organisation allows until it says so (TS-095).
+		expect(ruleOn(week, "2026-11-11")).toMatchObject({
+			limitMinutes: 450,
+			closedReason: null,
+			overtimeOpen: false,
+		});
+		expect(ruleOn(week, "2026-11-14")).toMatchObject({
+			limitMinutes: 0,
+			closedReason: null,
+			overtimeOpen: false,
+		});
 
 		// The Day view and the week calendar read the same days.
 		const day = await rulesAt(dayAt("2026-11-10"), ada);
@@ -240,7 +249,7 @@ describe("the limits of the days in the Timesheet's views", () => {
 				for (const [, day] of leaveOn) {
 					const rule = ruleOn(rules, day);
 					expect(rule.limitMinutes, `${who.user.email} on ${day} at ${path}`).toBe(
-						day === own ? HALF_DAY : null,
+						day === own ? HALF_DAY : 450,
 					);
 				}
 				// The holiday is the organisation's: everyone's.
