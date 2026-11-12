@@ -1,19 +1,21 @@
-import type { Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import type { Locator, Page } from "@playwright/test";
 
 import { calendarFeedsPath, importPath } from "../app/integrations/paths";
+import { retainersPath } from "../app/invoices/paths";
 import { destinationPath } from "../app/shell/destinations";
 import { newPerson, ownAddress, signIn } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
-import { expect, test } from "./fixtures";
+import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 
 // Integrations in a browser (TS-076, TS-081, TS-087, TS-089): API tokens,
-// webhooks, a CSV import with its preview and revert, and calendar feeds. No
-// WCAG 2.2 A or AA violation on each page and each open sheet, at both window
-// sizes and in both schemes; each task done with the keyboard alone. Each test
-// signs in a new person who makes an organisation of their own; everything is
-// made through the pages.
+// webhooks, a CSV import with its preview and revert, calendar feeds, and the
+// ZIP of every invoice's PDF. No WCAG 2.2 A or AA violation on each page and
+// each open sheet, at both window sizes and in both schemes; each task done
+// with the keyboard alone. Each test signs in a new person who makes an
+// organisation of their own; everything is made through the pages.
 
 test.use({ storageState: SIGNED_OUT });
 
@@ -177,6 +179,51 @@ for (const viewport of [
 				expect((await page.request.get(new URL(address).pathname)).status()).toBe(404);
 				await expectNoProblems(page, "Calendar feeds");
 			});
+
+			test("every invoice as a PDF in one ZIP, downloaded with the keyboard", async ({ page }) => {
+				test.slow();
+				const { slug } = await ownNewOrganisation(page);
+				const client = "Babbage Engines Ltd";
+
+				// A client and a draft invoice for a retainer's funds, made through the pages.
+				await openShell(page, destinationPath(slug, "clients"));
+				await page.getByRole("button", { name: "Create client" }).click();
+				const sheet = page.getByRole("dialog", { name: "Create a client" });
+				await sheet.getByLabel("Client name").fill(client);
+				await sheet.getByRole("button", { name: "Create the client" }).click();
+				await expect(sheet).toBeHidden();
+				await openShell(page, retainersPath(slug));
+				const opening = page.getByRole("region", { name: "New retainer" });
+				await choose(page, opening, "Client", client);
+				await opening.getByRole("button", { name: "Open retainer" }).click();
+				await expect(opening.getByRole("status")).toHaveText(
+					"Retainer opened. Invoice funds into it to start.",
+				);
+				await page.getByLabel(/^Amount/).fill("500");
+				await page.getByRole("button", { name: `Invoice funds into ${client}` }).click();
+				const heading = page.getByRole("heading", { level: 1, name: /^Invoice / });
+				await expect(heading).toBeVisible();
+				const number = ((await heading.textContent()) ?? "").replace(/^Invoice /, "");
+
+				// The export, beside the export of all time, reached with Tab and taken with Enter.
+				await page.goto(destinationPath(slug, "integrations"));
+				await expectNoProblems(page, "Integrations");
+				const downloading = page.waitForEvent("download");
+				await pressWithKeyboard(page, "link", "Export all invoices as PDFs");
+				const download = await downloading;
+				expect(download.suggestedFilename()).toBe(`${slug}-all-invoices.zip`);
+				const bytes = readFileSync(await download.path());
+				expect(bytes.subarray(0, 2).toString("latin1")).toBe("PK");
+				const name = `invoice-${number.replace(/[^A-Za-z0-9-]/g, "-")}.pdf`;
+				expect(bytes.toString("latin1")).toContain(name);
+			});
 		});
 	}
+}
+
+/** Chooses `option` in the Select labelled `label` within `within`. */
+async function choose(page: Page, within: Locator, label: string, option: string) {
+	await within.getByRole("button", { name: new RegExp(label) }).click();
+	await page.getByRole("listbox", { name: label }).getByRole("option", { name: option }).click();
+	await expect(within.getByRole("button", { name: new RegExp(label) })).toContainText(option);
 }

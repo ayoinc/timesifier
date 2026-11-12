@@ -15,6 +15,9 @@ export const IMPORT_SEGMENT = `${destination("integrations").segment}/import`;
 /** What follows the organisation in the address of the export of all time, below Integrations. */
 export const EXPORT_SEGMENT = `${destination("integrations").segment}/export`;
 
+/** What follows the organisation in the address of the ZIP of every invoice's PDF, below Integrations. */
+export const INVOICES_EXPORT_SEGMENT = `${destination("integrations").segment}/invoices-export`;
+
 /** What follows the organisation in the address of a person's calendar feeds, below My account. */
 export const CALENDAR_FEEDS_SEGMENT = `${ACCOUNT_SEGMENT}/calendar`;
 
@@ -31,6 +34,11 @@ export function importPath(slug: string, kind: ImportKind = "time", importId?: s
 /** The download of every entry of the organisation, in the import's columns. */
 export function exportPath(slug: string): string {
 	return `${destinationPath(slug, "integrations")}/export`;
+}
+
+/** The download of every invoice of the organisation, each as its PDF, in one ZIP. */
+export function invoicesExportPath(slug: string): string {
+	return `${destinationPath(slug, "integrations")}/invoices-export`;
 }
 
 /** The page where a person makes and revokes their calendar feeds. */

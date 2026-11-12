@@ -10,7 +10,13 @@ import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { listTokens, makeToken, revokeToken } from "~/integrations/api-tokens.server";
-import { API_PATH, calendarFeedsPath, exportPath, importPath } from "~/integrations/paths";
+import {
+	API_PATH,
+	calendarFeedsPath,
+	exportPath,
+	importPath,
+	invoicesExportPath,
+} from "~/integrations/paths";
 import { SecretFormSheet, type SecretOutcome } from "~/integrations/SecretFormSheet";
 import {
 	API_SCOPES,
@@ -337,7 +343,7 @@ export default function Integrations({ loaderData }: Route.ComponentProps) {
 			<Section
 				id="import-export"
 				heading="Import and export"
-				lead="Bring time in from Harvest or a spreadsheet, and take all of it out."
+				lead="Bring time in from Harvest or a spreadsheet, and take all of it and every invoice out."
 			>
 				<ul className="flex max-w-200 flex-col gap-3 text-body-large">
 					<li>
@@ -363,6 +369,14 @@ export default function Integrations({ loaderData }: Route.ComponentProps) {
 							Export all time as a CSV
 						</a>{" "}
 						<span className="text-on-surface-variant">In the columns the import reads.</span>
+					</li>
+					<li>
+						<a className={ACTION_LINK} href={invoicesExportPath(organisation.slug)} download>
+							Export all invoices as PDFs
+						</a>{" "}
+						<span className="text-on-surface-variant">
+							One ZIP, a PDF for each invoice, drafts too, named by number.
+						</span>
 					</li>
 					<li>
 						<Link className={ACTION_LINK} to={calendarFeedsPath(organisation.slug)}>

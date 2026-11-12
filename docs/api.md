@@ -198,4 +198,4 @@ Each person makes a feed on **My account › Calendar feeds**: their approved ti
 
 ## Import and export
 
-**Integrations › Import time** reads a CSV in Harvest's columns (`Date, Client, Project, Task, Notes, Hours, First name, Last name`, or an `Email`), and Harvest's own export of all time as it is. **Export all time** writes the same columns with `Email`, so it imports again.
+**Integrations › Import time** reads a CSV in Harvest's columns (`Date, Client, Project, Task, Notes, Hours, First name, Last name`, or an `Email`), and Harvest's own export of all time as it is. **Export all time** writes the same columns with `Email`, so it imports again. **Export all invoices as PDFs** downloads one ZIP with every invoice, drafts and void ones included, each the PDF its own page downloads, named by number (`invoice-42.pdf`).
