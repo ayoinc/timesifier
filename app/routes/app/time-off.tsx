@@ -71,7 +71,7 @@ import { NOT_ALLOWED } from "~/organisations/problems";
 import { canSee, destination, destinationPath } from "~/shell/destinations";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
-import { formatDayWithYear, formatDuration } from "~/time/format";
+import { formatDayWithYear, formatDuration, formatRange } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
 import { TypedHours } from "~/timesheet/durations";
 
@@ -102,16 +102,6 @@ export function meta() {
 
 /** The query that opens the Requests tab. */
 const SHOW_PARAM = "show";
-
-/** A request for work's days in words: "14 to 18 December 2026". */
-function workDaysLabel(work: { startsOn: Day; endsOn: Day }): string {
-	return spanLabel({
-		startsOn: work.startsOn,
-		endsOn: work.endsOn,
-		startsHalf: false,
-		endsHalf: false,
-	});
-}
 
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
@@ -170,7 +160,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				person: w.person.name,
 				kind: w.kind,
 				label: WORK_KIND_LABELS[w.kind],
-				days: workDaysLabel(w),
+				days: formatRange(w.startsOn, w.endsOn),
 				hours: formatDuration(w.minutesPerDay * 60),
 				reason: w.reason,
 				cancellable: w.cancellable,
@@ -224,7 +214,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				id: w.id,
 				kind: w.kind,
 				label: WORK_KIND_LABELS[w.kind],
-				days: workDaysLabel(w),
+				days: formatRange(w.startsOn, w.endsOn),
 				hours: formatDuration(w.minutesPerDay * 60),
 				status: w.status,
 				statusLabel: LEAVE_STATUS_LABELS[w.status],

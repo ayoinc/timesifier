@@ -111,7 +111,7 @@ describe("overtime and weekend work on Approvals", () => {
 		expect(text).toContain("Time off waiting");
 		expect(text).toContain("Overtime and weekend work 2");
 		expect(text).toContain(
-			"grace@example.com · Overtime 14 to 15 December 2099 · 1:30 a day “Release week”",
+			"grace@example.com · Overtime 14–15 December 2099 · 1:30 a day “Release week”",
 		);
 		expect(text).toContain("linus@example.com · Weekend work 19 December 2099 · 4:00 a day");
 		expect(text).not.toContain("ada@example.com · Overtime");
@@ -213,7 +213,7 @@ describe("notice on Approvals", () => {
 		const html = await pageBody(await open(APPROVALS, ada));
 		const text = textOf(html);
 		expect(text).toContain(
-			"grace@example.com · Annual leave 14 to 18 December 2099 · 5 days Short notice (3 days): “Family wedding”",
+			"grace@example.com · Annual leave 14–18 December 2099 · 5 days Short notice (3 days): “Family wedding”",
 		);
 		expect(text).toContain(
 			"linus@example.com · Annual leave 21 December 2099 · 1 day 20 days' notice",

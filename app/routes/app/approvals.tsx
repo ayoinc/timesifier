@@ -52,7 +52,7 @@ import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
 import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
-import { formatDayAndTime, formatDuration } from "~/time/format";
+import { formatDayAndTime, formatDuration, formatRange } from "~/time/format";
 
 import type { Route } from "./+types/approvals";
 import { FormSheet } from "./FormSheet";
@@ -226,12 +226,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			id: w.id,
 			person: w.person.name,
 			kind: WORK_KIND_LABELS[w.kind],
-			days: spanLabel({
-				startsOn: w.startsOn,
-				endsOn: w.endsOn,
-				startsHalf: false,
-				endsHalf: false,
-			}),
+			days: formatRange(w.startsOn, w.endsOn),
 			perDay: `${formatDuration(w.minutesPerDay * 60)} a day`,
 			reason: w.reason,
 		})),
