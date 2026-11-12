@@ -745,7 +745,7 @@ Depends on: TS-064, TS-066, TS-067, TS-049.
 
 Depends on: TS-064, TS-011a, TS-046, TS-047.
 
-Builder: an AI session on branch `ts-b2b-expenses`, migration `0009_expense_category_prices` (a unit price from a date). Receipts need the R2 buckets `timesifier-receipts` and `timesifier-receipts-preview`, created with `--jurisdiction eu`, before it deploys.
+Builder: an AI session on branch `ts-b2b-expenses`, migration `0012_expense_category_prices` (a unit price from a date). Receipts need the R2 buckets `timesifier-receipts` and `timesifier-receipts-preview`, created with `--jurisdiction eu`, before it deploys.
 
 - [x] An owner or admin keeps expense categories (name, optional unit price and unit); archive and restore. Changing a unit price applies to expenses dated from the change (test). (`test/pages/expenses.test.ts`, "expense categories in Workspace settings")
 - [x] A person records an expense: date, project, category, amount or quantity, note, billable (defaulting from the project), "reimburse me". Amounts are stored in minor units of the project's currency (test). (`test/pages/expenses.test.ts`, "recording an expense"; `test/expenses/expenses.test.ts`)

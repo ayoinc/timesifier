@@ -30,6 +30,8 @@ import {
 	termsOf,
 } from "~/expenses/expenses.server";
 import { receiptPath } from "~/expenses/paths";
+import { overLabel } from "~/leave/rules";
+import { daysOver } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
 import type { LockReason } from "~/locks/locks";
 import { formatMoney, totalsByCurrency } from "~/money/money";
@@ -47,8 +49,9 @@ import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading"
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { dayLabel, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { Day } from "~/time/calendar";
+import { formatDay } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
-import { Submission } from "~/timesheet/Submission";
+import { PeriodHeader } from "~/timesheet/Submission";
 import { periodState } from "~/timesheet/sheets";
 import { type PeriodSubmission, periodOf } from "~/timesheet/timesheet.server";
 
@@ -201,16 +204,20 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	};
 }
 
-/** Where `userId`'s week stands, for its one submission at the foot of the page. */
+/**
+ * Where `userId`'s week stands, for its one submission at the foot of the
+ * page; a day over its limit holds the week back here as on the Timesheet (TS-090).
+ */
 async function submissionOf(
 	scope: OrganisationScope,
 	userId: string,
 	period: PeriodDays,
 	{ today, zone }: { today: Day; zone: string },
 ): Promise<PeriodSubmission> {
-	const [row, running] = await Promise.all([
+	const [row, running, over] = await Promise.all([
 		periodOf(scope, userId, period.startsOn),
 		scope.timeEntries.select((e) => and(eq(e.userId, userId), isNull(e.endedAt)), { limit: 1 }),
+		daysOver(scope, userId, period.startsOn, period.endsOn, zone, Date.now()),
 	]);
 	const status = row?.status ?? null;
 	const { from, to } = periodBounds(period, zone);
@@ -224,6 +231,7 @@ async function submissionOf(
 			return from <= at && at < to;
 		}),
 		started: period.startsOn <= today,
+		over,
 	};
 }
 
@@ -306,10 +314,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (submitted.ok) {
 				return done("Week submitted. Its time and expenses are locked until it is decided.");
 			}
+			const over = (("over" in submitted && submitted.over) || [])
+				.map((d) => `${formatDay(d.day, "short")} ${overLabel(d.overMinutes).toLowerCase()}`)
+				.join(", ");
 			const problem: Record<NotMoved, string> = {
 				"not-yet": "A week can be submitted once it has begun.",
 				running: "Stop the timer before you submit the week.",
 				"not-from-here": "This week is already submitted or approved.",
+				over: `Correct the days over their limit before you submit the week: ${over}.`,
 			};
 			return declined(problem[submitted.reason], 409);
 		}
@@ -476,8 +488,12 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 			</Section>
 
 			{form && (
-				<div className="max-w-200">
-					<Submission submission={form.submission} onSaid={setSaid} variant="outlined" />
+				<div className="mt-10 max-w-200 border-t-2 border-on-surface pt-6">
+					<PeriodHeader
+						title={`Time and expenses, week of ${week.label}`}
+						submission={form.submission}
+						onSaid={setSaid}
+					/>
 				</div>
 			)}
 
