@@ -1,13 +1,12 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { useState } from "react";
-import { Link } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
-import { cx } from "~/components/cx";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { LinkTabs } from "~/components/LinkTabs";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { type OrganisationScope, organisationScope } from "~/db";
@@ -447,21 +446,22 @@ export default function TimeOff({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>
-				Leave you ask for, and the days off everyone has. Days of leave count working days only.
-			</PageLead>
+			<PageLead>Leave you ask for, and the days off everyone has.</PageLead>
 			{decides && (
-				<ul
-					aria-label="Time off pages"
-					className="mt-6 flex max-w-200 border-outline-variant border-b"
-				>
-					<TabLink to={here} current={show === "mine"}>
-						Your time off
-					</TabLink>
-					<TabLink to={`${here}?${SHOW_PARAM}=requests`} current={show === "requests"}>
-						{waiting > 0 ? `Requests (${waiting})` : "Requests"}
-					</TabLink>
-				</ul>
+				<div className="mt-6 max-w-200">
+					<LinkTabs
+						label="Time off pages"
+						current={show}
+						tabs={[
+							{ id: "mine", to: here, label: "Your time off" },
+							{
+								id: "requests",
+								to: `${here}?${SHOW_PARAM}=requests`,
+								label: waiting > 0 ? `Requests (${waiting})` : "Requests",
+							},
+						]}
+					/>
+				</div>
 			)}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
@@ -582,29 +582,6 @@ export default function TimeOff({ loaderData }: Route.ComponentProps) {
 				/>
 			</FormSheet>
 		</>
-	);
-}
-
-function TabLink({ to, current, children }: { to: string; current: boolean; children: string }) {
-	return (
-		<li className="flex-1">
-			<Link
-				to={to}
-				aria-current={current ? "page" : undefined}
-				className={cx(
-					"relative flex h-12 items-center justify-center px-2 text-center text-title-small outline-none hover:text-on-surface focus-visible:focus-indicator-inner",
-					current ? "text-primary" : "text-on-surface-variant",
-				)}
-			>
-				{children}
-				{current && (
-					<span
-						aria-hidden="true"
-						className="absolute inset-x-2 bottom-0 h-0.75 rounded-t-full bg-primary"
-					/>
-				)}
-			</Link>
-		</li>
 	);
 }
 
@@ -823,12 +800,7 @@ function Mine({
 								<LedgerRow
 									key={h.id}
 									title={<span className="wrap-anywhere">{h.name}</span>}
-									detail={spanLabel({
-										startsOn: h.day,
-										endsOn: h.day,
-										startsHalf: false,
-										endsHalf: false,
-									})}
+									detail={formatDayWithYear(h.day)}
 								/>
 							))}
 						</LedgerRows>
