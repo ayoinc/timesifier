@@ -35,7 +35,9 @@ import {
 	leaveDecidablePeople,
 	requestsToDecide,
 } from "~/leave/leave.server";
+import { noticeLabel, WORK_KIND_LABELS } from "~/leave/rules";
 import { spanLabel } from "~/leave/words";
+import { decideWork, workToDecide } from "~/leave/work.server";
 import { parseRequest } from "~/lib/validate";
 import { mayReopenPeriods } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
@@ -50,7 +52,7 @@ import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
 import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
-import { formatDayAndTime } from "~/time/format";
+import { formatDayAndTime, formatDuration, formatRange } from "~/time/format";
 
 import type { Route } from "./+types/approvals";
 import { FormSheet } from "./FormSheet";
@@ -67,6 +69,10 @@ import { useOrganisation } from "./useOrganisation";
 // person or by project, `?group=`, with the time logged in the period and its
 // total (TS-058; app/approvals/choices.ts). The tabs it had before are a
 // status now, and their addresses (`?tab=`) are sent to it.
+//
+// Time off waiting lists the requests for leave the viewer decides, each with
+// the notice it gave, and beside them the requests for overtime and weekend
+// work, decided the same way (TS-090; app/leave/work.server.ts).
 
 const { label } = destination("approvals");
 
@@ -108,7 +114,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const now = Date.now();
 	const viewed = await viewedPeriod(membership, url, -1, now);
 	const leavePeople = await leaveDecidablePeople(scope, organisation, access);
-	const [approvals, time, leave, leaveRequests] = await Promise.all([
+	const todayOf = (person: { timeZone: string }) => dayOf(now, person.timeZone);
+	const [approvals, time, leave, leaveRequests, work] = await Promise.all([
 		approvalsFor(scope, people, viewed.period, viewed.today),
 		timeByProject(scope, people, viewed.period, now),
 		leaveContext(
@@ -117,7 +124,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			viewed.period.startsOn,
 			viewed.period.endsOn,
 		),
-		requestsToDecide(scope, access, leavePeople, (person) => dayOf(now, person.timeZone)),
+		requestsToDecide(scope, access, leavePeople, todayOf),
+		workToDecide(scope, access, leavePeople, todayOf),
 	]);
 	// A person whose whole period was leave, public holidays and days not worked
 	// had nothing to submit (TS-061).
@@ -208,6 +216,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			days: spanLabel(r),
 			takes: halfDaysLabel(r.halfDays),
 			note: r.note,
+			/** The notice it gave: "Short notice (3 days)" or "14 days' notice" (TS-090). */
+			notice: noticeLabel(r),
+			shortNotice: r.shortNotice,
+			noticeReason: r.noticeReason,
+		})),
+		/** The requests for overtime and weekend work waiting for this person's decision (TS-090). */
+		workWaiting: work.pending.map((w) => ({
+			id: w.id,
+			person: w.person.name,
+			kind: WORK_KIND_LABELS[w.kind],
+			days: formatRange(w.startsOn, w.endsOn),
+			perDay: `${formatDuration(w.minutesPerDay * 60)} a day`,
+			reason: w.reason,
 		})),
 		rows,
 		projects:
@@ -231,7 +252,7 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("return"), periodId: Id, comment: z.string() }),
 	z.object({ intent: z.literal("reopen"), periodId: Id, comment: z.string() }),
 	z.object({
-		intent: z.enum(["approve-leave", "refuse-leave"]),
+		intent: z.enum(["approve-leave", "refuse-leave", "approve-work", "refuse-work"]),
 		requestId: Id,
 		comment: z.string().trim().max(LEAVE_TEXT_MAX_LENGTH).optional(),
 	}),
@@ -272,6 +293,18 @@ export async function action({ request, context }: Route.ActionArgs) {
 			});
 			if (result === "done") {
 				return done(input.intent === "approve-leave" ? "Leave approved." : "Leave refused.");
+			}
+			const [problem, status] = LEAVE_DECIDED[result];
+			return declined(problem, status);
+		}
+		case "approve-work":
+		case "refuse-work": {
+			const result = await decideWork(scope, access, input.requestId, {
+				action: input.intent === "approve-work" ? "approved" : "refused",
+				comment: input.comment || null,
+			});
+			if (result === "done") {
+				return done(input.intent === "approve-work" ? "Request approved." : "Request refused.");
 			}
 			const [problem, status] = LEAVE_DECIDED[result];
 			return declined(problem, status);
@@ -328,10 +361,29 @@ const NOTHING: Record<(typeof STATUSES)[number], string> = {
 
 export default function Approvals({ loaderData }: Route.ComponentProps) {
 	const organisation = useOrganisation();
-	const { query, keep, week, rows, projects, total, counts, canReopen, elsewhere, leaveWaiting } =
-		loaderData;
+	const {
+		query,
+		keep,
+		week,
+		rows,
+		projects,
+		total,
+		counts,
+		canReopen,
+		elsewhere,
+		leaveWaiting,
+		workWaiting,
+	} = loaderData;
 	const [task, setTask] = useState<
-		"approve" | "all" | "return" | "reopen" | "approve-leave" | "refuse-leave" | null
+		| "approve"
+		| "all"
+		| "return"
+		| "reopen"
+		| "approve-leave"
+		| "refuse-leave"
+		| "approve-work"
+		| "refuse-work"
+		| null
 	>(null);
 	const [target, setTarget] = useState<Target | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -475,62 +527,114 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 				)}
 			</div>
 
-			{leaveWaiting.length > 0 && (
+			{(leaveWaiting.length > 0 || workWaiting.length > 0) && (
 				<Section
 					id="time-off-waiting"
 					heading="Time off waiting"
-					lead="Requests for leave waiting for your decision, whatever week they fall in."
+					lead="Requests for leave, overtime and weekend work waiting for your decision, whatever week they fall in."
 					className="max-w-200"
 				>
-					<Ledger heading="Time off" note={`${leaveWaiting.length}`}>
-						<LedgerRows label="Time off waiting for you">
-							{leaveWaiting.map((r) => {
-								const on = { id: r.id, name: `${r.person}'s ${r.kind.toLowerCase()}` };
-								return (
-									<LedgerRow
-										key={r.id}
-										title={
-											<span className="wrap-anywhere">
-												{r.person} <span className="text-on-surface-variant">· {r.kind}</span>
-											</span>
-										}
-										detail={
-											<>
-												{r.days} · {r.takes}
-												{r.note && <span className="block wrap-anywhere">“{r.note}”</span>}
-											</>
-										}
-										action={
-											<span className="flex gap-1">
-												<Button
-													variant="text"
-													aria-label={`Approve ${on.name}`}
-													onPress={() => open("approve-leave", on)}
-												>
-													Approve
-												</Button>
-												<Button
-													variant="text"
-													aria-label={`Refuse ${on.name}`}
-													onPress={() => open("refuse-leave", on)}
-												>
-													Refuse
-												</Button>
-											</span>
-										}
-									/>
-								);
-							})}
-						</LedgerRows>
-					</Ledger>
+					{leaveWaiting.length > 0 && (
+						<Ledger heading="Time off" note={`${leaveWaiting.length}`}>
+							<LedgerRows label="Time off waiting for you">
+								{leaveWaiting.map((r) => {
+									const on = { id: r.id, name: `${r.person}'s ${r.kind.toLowerCase()}` };
+									return (
+										<LedgerRow
+											key={r.id}
+											title={
+												<span className="wrap-anywhere">
+													{r.person} <span className="text-on-surface-variant">· {r.kind}</span>
+												</span>
+											}
+											detail={
+												<>
+													{r.days} · {r.takes}
+													<span
+														className={`block wrap-anywhere${r.shortNotice ? " text-tertiary" : ""}`}
+													>
+														{r.noticeReason ? `${r.notice}: “${r.noticeReason}”` : r.notice}
+													</span>
+													{r.note && <span className="block wrap-anywhere">“{r.note}”</span>}
+												</>
+											}
+											action={
+												<span className="flex gap-1">
+													<Button
+														variant="text"
+														aria-label={`Approve ${on.name}`}
+														onPress={() => open("approve-leave", on)}
+													>
+														Approve
+													</Button>
+													<Button
+														variant="text"
+														aria-label={`Refuse ${on.name}`}
+														onPress={() => open("refuse-leave", on)}
+													>
+														Refuse
+													</Button>
+												</span>
+											}
+										/>
+									);
+								})}
+							</LedgerRows>
+						</Ledger>
+					)}
+					{workWaiting.length > 0 && (
+						<div className="mt-6 first:mt-0">
+							<Ledger heading="Overtime and weekend work" note={`${workWaiting.length}`}>
+								<LedgerRows label="Overtime and weekend work waiting for you">
+									{workWaiting.map((w) => {
+										const on = { id: w.id, name: `${w.person}'s ${w.kind.toLowerCase()}` };
+										return (
+											<LedgerRow
+												key={w.id}
+												title={
+													<span className="wrap-anywhere">
+														{w.person} <span className="text-on-surface-variant">· {w.kind}</span>
+													</span>
+												}
+												detail={
+													<>
+														{w.days} · {w.perDay}
+														{w.reason && <span className="block wrap-anywhere">“{w.reason}”</span>}
+													</>
+												}
+												action={
+													<span className="flex gap-1">
+														<Button
+															variant="text"
+															aria-label={`Approve ${on.name}`}
+															onPress={() => open("approve-work", on)}
+														>
+															Approve
+														</Button>
+														<Button
+															variant="text"
+															aria-label={`Refuse ${on.name}`}
+															onPress={() => open("refuse-work", on)}
+														>
+															Refuse
+														</Button>
+													</span>
+												}
+											/>
+										);
+									})}
+								</LedgerRows>
+							</Ledger>
+						</div>
+					)}
 				</Section>
 			)}
 
 			<FormSheet
 				title={`Approve ${target?.name ?? "this request"}?`}
-				intent="approve-leave"
+				intent={task === "approve-work" ? "approve-work" : "approve-leave"}
 				submitLabel="Approve"
-				isOpen={task === "approve-leave"}
+				isOpen={task === "approve-leave" || task === "approve-work"}
 				onClose={close}
 				onDone={setSaid}
 			>
@@ -545,9 +649,9 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 
 			<FormSheet
 				title={`Refuse ${target?.name ?? "this request"}?`}
-				intent="refuse-leave"
+				intent={task === "refuse-work" ? "refuse-work" : "refuse-leave"}
 				submitLabel="Refuse"
-				isOpen={task === "refuse-leave"}
+				isOpen={task === "refuse-leave" || task === "refuse-work"}
 				onClose={close}
 				onDone={setSaid}
 			>

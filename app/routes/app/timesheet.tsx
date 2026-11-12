@@ -22,10 +22,11 @@ import type { Route } from "./+types/timesheet";
 import { useOrganisation } from "./useOrganisation";
 
 // Timesheet, under Track: the person's own time (docs/navigation.md). Its Day
-// view is "Track time", the period's days and the day's entries, with the
-// period's submission at its foot; its Week view the grid of projects by days
-// with "Submit week" at its foot; its Calendar the week on an hour axis or the
-// month of days (TS-062); and History the person's periods.
+// view is "Track time", the period's days and the day's entries; its Week view
+// the grid of projects by days; its Calendar the week on an hour axis or the
+// month of days (TS-062); and History the person's periods. Day, Week and the
+// week calendar share one header row, with "Submit week" at its right end
+// (`timesheet/Submission.tsx`), and each shows the limits of its days (TS-090).
 // Each view is this destination's address with a query (`timesheet/views.ts`),
 // and each shows the caller's own time alone, whatever their role.
 

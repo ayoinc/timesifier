@@ -14,7 +14,6 @@ import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { dayLabel as leaveDayLabel, personStatusLabel } from "~/leave/days";
 import { leaveOfPeople } from "~/leave/leave.server";
-import { minutesLabel, shortDay } from "~/leave/words";
 import { RECORD_NAME_MAX_LENGTH, RecordName } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import { isAdministrator } from "~/organisations/access";
@@ -41,7 +40,7 @@ import {
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { personWeek, teamWeek } from "~/teams/week.server";
 import { dayLabel, hours, periodLabel, statusLabel, WEEK_PARAM } from "~/teams/words";
-import { formatTimeRange } from "~/time/format";
+import { formatDay, formatDuration, formatTimeRange } from "~/time/format";
 
 import type { Route } from "./+types/team";
 import { FormSheet } from "./FormSheet";
@@ -127,13 +126,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			status: shown.status,
 			comment: shown.comment,
 			seconds: shown.seconds,
-			expected: minutesLabel(theirs?.expectedMinutes ?? 0),
+			expected: formatDuration((theirs?.expectedMinutes ?? 0) * 60),
 			days: shown.days.map((d, index) => ({
 				day: d.day,
 				label: dayLabel(d.day),
 				seconds: d.seconds,
 				away: theirs?.days[index] ? leaveDayLabel(theirs.days[index]) : null,
-				expected: minutesLabel(theirs?.days[index]?.expectedMinutes ?? 0),
+				expected: formatDuration((theirs?.days[index]?.expectedMinutes ?? 0) * 60),
 				entries: d.entries.map((e) => ({
 					id: e.id,
 					project: e.project,
@@ -174,11 +173,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				...p,
 				// Where they stand now, shown on the current week alone.
 				now: isCurrent && theirs ? personStatusLabel(theirs.now) : null,
-				expected: minutesLabel(theirs?.expectedMinutes ?? 0),
+				expected: formatDuration((theirs?.expectedMinutes ?? 0) * 60),
 				leaveDays:
 					theirs?.days
 						.filter((d) => d.is.kind === "leave")
-						.map((d) => `${shortDay(d.day)} ${leaveDayLabel(d) ?? ""}`.trim()) ?? [],
+						.map((d) => `${formatDay(d.day, "short")} ${leaveDayLabel(d) ?? ""}`.trim()) ?? [],
 			};
 		}),
 	};

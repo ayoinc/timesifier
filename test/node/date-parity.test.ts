@@ -171,8 +171,9 @@ describe("the Timesheet's week of days, rendered", () => {
 					null,
 					createElement(WeekDays, {
 						week: week as never,
-						// No leave and nothing expected: the dates are what is compared.
+						// No leave, nothing expected and no limits: the dates are what is compared.
 						away: { days: [], expectedMinutes: 0 } as never,
+						rules: [],
 						day: "2026-11-11",
 						slug: "acme",
 					}),

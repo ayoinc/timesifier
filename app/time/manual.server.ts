@@ -2,6 +2,7 @@ import { and, eq, gte, lt } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
+import { refusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
 
@@ -16,8 +17,10 @@ import { gridEntryStart, placeOnDay } from "./grid";
  * acts on the caller's own entries alone: an entry of anybody else, in this
  * organisation or another, is not found, whatever the caller's role
  * (`mayChangeTimeOf`). A day in a submitted or approved period is refused,
- * before and after the change (`lockedDays`). Each change goes in one batch
- * with its row in the activity log.
+ * before and after the change (`lockedDays`), and so is time a day does not
+ * take: a public holiday, whole-day leave, or more than is left of the day's
+ * limit (TS-090, `refusalOf`). Each change goes in one batch with its row in
+ * the activity log.
  */
 
 /** Why a change was not made. */
@@ -27,7 +30,8 @@ export type NotWritten =
 	| "not-found"
 	| "running"
 	| "ends-before-start"
-	| "in-day-view";
+	| "in-day-view"
+	| "limit";
 
 export interface Span {
 	projectId: string;
@@ -36,7 +40,9 @@ export interface Span {
 	endedAt: number;
 }
 
-const refuse = (reason: NotWritten) => ({ ok: false as const, reason });
+const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, reason });
+/** A change the day's limit does not take, with what to tell the person (TS-090). */
+const limited = (message: string) => ({ ok: false as const, reason: "limit" as const, message });
 
 /** What the activity log records of an entry. */
 const ENTRY_FIELDS = ["projectId", "description", "startedAt", "endedAt"] as const;
@@ -56,7 +62,9 @@ async function ownEntry(scope: OrganisationScope, userId: string, id: string) {
 /**
  * Changes an entry of `userId` that has ended. The project must be active,
  * unless it is the one the entry already has: an entry of a project archived
- * since keeps it. A running entry is changed by the timer, not here.
+ * since keeps it. A running entry is changed by the timer, not here. Time
+ * may always be taken off a day, or moved off it; what it adds to a day must
+ * fit in the day's limit.
  */
 export async function editEntry(
 	scope: OrganisationScope,
@@ -64,6 +72,7 @@ export async function editEntry(
 	zone: string,
 	id: string,
 	span: Span,
+	now: number,
 ) {
 	const entry = await ownEntry(scope, userId, id);
 	if (!entry) return refuse("not-found");
@@ -74,6 +83,12 @@ export async function editEntry(
 	}
 	const days = [dayOf(entry.startedAt, zone), dayOf(span.startedAt, zone)];
 	if ((await lockedDays(scope, userId, days)).size > 0) return refuse("locked");
+	const over = await refusalOf(scope, userId, zone, now, {
+		day: dayOf(span.startedAt, zone),
+		replaces: id,
+		afterMs: span.endedAt - span.startedAt,
+	});
+	if (over) return limited(over);
 	const changed = {
 		projectId: span.projectId,
 		description: span.description,
@@ -158,6 +173,12 @@ export async function addHours(scope: OrganisationScope, userId: string, hours: 
 	const { projectId, description, day, minutes, zone, now } = hours;
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
+	const over = await refusalOf(scope, userId, zone, now, {
+		day,
+		replaces: null,
+		afterMs: minutes * 60_000,
+	});
+	if (over) return limited(over);
 	const wanted =
 		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
 	const placed = placeOnDay(day, zone, wanted, minutes, now, {
@@ -214,6 +235,13 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 		return refuse("in-day-view");
 	}
 	const [entry] = inCell;
+	const over = await refusalOf(scope, userId, zone, now, {
+		day,
+		replaces: entry?.id ?? null,
+		afterMs: minutes * 60_000,
+	});
+	if (over) return limited(over);
+
 	if (minutes === 0) {
 		if (entry) {
 			await scope.batch([

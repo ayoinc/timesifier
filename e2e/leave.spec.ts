@@ -14,7 +14,9 @@ import { createProject } from "./timesheet";
 // shown as on leave on Team > This week and on their own Timesheet. Then every
 // page and sheet of it at both window sizes and in both schemes, with no WCAG
 // 2.2 A or AA violation. Each test is new people with an organisation of their
-// own: what they add is seen by no other test, and nothing is seeded.
+// own: what they add is seen by no other test, and nothing is seeded. Leave
+// that needs notice is asked for well ahead of it (TS-090): short notice has
+// its own spec, `leave-rules.spec.ts`.
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS * 2 });
@@ -102,8 +104,8 @@ test("a member asks for leave and records sick leave; the owner approves; both s
 	await requestLeave(
 		other,
 		"Annual leave",
-		dayFromToday(10),
-		dayFromToday(11),
+		dayFromToday(30),
+		dayFromToday(31),
 		"Requested. It waits for a manager's approval.",
 	);
 	const mine = other.getByRole("list", { name: "Your requests" });
@@ -118,8 +120,8 @@ test("a member asks for leave and records sick leave; the owner approves; both s
 	await requestLeave(
 		other,
 		"Study leave",
-		dayFromToday(20),
-		dayFromToday(22),
+		dayFromToday(40),
+		dayFromToday(42),
 		"Requested. It waits for a manager's approval.",
 	);
 	await mine.getByRole("button", { name: /^Withdraw Study leave/ }).click();
@@ -196,12 +198,12 @@ test("a member asks for leave and records sick leave; the owner approves; both s
 	await expect(
 		other.getByRole("group", { name: "Days of the week" }).locator('a[aria-current="date"]'),
 	).toContainText("Sick leave");
-	// Tracking time on a whole day of leave is allowed, and said to be unusual.
-	await other.getByRole("button", { name: "Track time" }).click();
-	await expect(other.getByRole("dialog", { name: "Track time" })).toContainText(
-		"You are on sick leave this day. You can still track time on it.",
+	// A whole day of leave takes no time (TS-090): Track time is closed, and says why.
+	const track = other.getByRole("button", { name: "Track time" });
+	await expect(track).toBeDisabled();
+	await expect(track).toHaveAccessibleDescription(
+		"You are on sick leave that day: no time can be tracked on it.",
 	);
-	await other.keyboard.press("Escape");
 	await other.context().close();
 });
 
@@ -219,8 +221,8 @@ test("an owner whom nobody else can decide for is told so, and their leave is ap
 	await requestLeave(
 		page,
 		"Study leave",
-		dayFromToday(20),
-		dayFromToday(26),
+		dayFromToday(40),
+		dayFromToday(46),
 		"Approved automatically: nobody else can decide it.",
 	);
 	const mine = page.getByRole("list", { name: "Your requests" });
@@ -276,8 +278,8 @@ for (const viewport of [
 				await requestLeave(
 					page,
 					"Annual leave",
-					dayFromToday(14),
-					dayFromToday(20),
+					dayFromToday(30),
+					dayFromToday(36),
 					"Approved automatically: nobody else can decide it.",
 				);
 				await expectNoProblems(page, "Time off", [EMPTY_INPUT]);

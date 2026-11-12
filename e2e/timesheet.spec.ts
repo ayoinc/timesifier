@@ -329,7 +329,7 @@ test.describe("the Day view", () => {
 		await expect(weekDays(page).getByRole("link").first()).toHaveAttribute("aria-current", "date");
 	});
 
-	test("its foot submits the week, as the Week view's does, and the day is then locked", async ({
+	test("its header submits the week, as the Week view's does, and the day is then locked", async ({
 		page,
 	}) => {
 		await trackingOrganisation(page);

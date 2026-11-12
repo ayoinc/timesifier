@@ -2,6 +2,8 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
+import type { DayRule } from "~/leave/rules";
+import { daysOver } from "~/leave/rules.server";
 import {
 	type PeriodDays,
 	PeriodStatus,
@@ -18,7 +20,7 @@ import {
  */
 
 /** Why a submission or a withdrawal was not made. */
-export type NotMoved = "not-yet" | "running" | "not-from-here";
+export type NotMoved = "not-yet" | "running" | "not-from-here" | "over";
 
 export interface Step {
 	userId: string;
@@ -41,8 +43,9 @@ async function current(scope: OrganisationScope, userId: string, startsOn: strin
 
 /**
  * Submits the period of `userId` that starts on `startsOn`. Refused for a
- * week that has not begun, while a timer of theirs runs in it, and when the
- * period is already submitted or approved.
+ * week that has not begun, while a timer of theirs runs in it, while a day of
+ * it holds more time than the day takes (TS-090: `over` names those days),
+ * and when the period is already submitted or approved.
  */
 export async function submitPeriod(scope: OrganisationScope, step: Step) {
 	const { userId, startsOn, zone, weekStartsOn, now } = step;
@@ -66,6 +69,9 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 	if (statusAfter(status, "submitted") === null) {
 		return { ok: false as const, reason: "not-from-here" as NotMoved };
 	}
+
+	const over: DayRule[] = await daysOver(scope, userId, period.startsOn, period.endsOn, zone, now);
+	if (over.length > 0) return { ok: false as const, reason: "over" as NotMoved, over };
 
 	const at = new Date(now);
 	const id = row?.id ?? uuidv7();

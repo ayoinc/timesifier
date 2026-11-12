@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 
 import { cx } from "~/components/cx";
-import { minutesLabel } from "~/leave/words";
+import { type DayRule, overLabel } from "~/leave/rules";
 import { finishRunningTransition } from "~/shell/transitions";
 import type { Day } from "~/time/calendar";
 
@@ -22,16 +22,19 @@ const SHORT: Partial<Record<DayData["away"]["days"][number]["kind"], string>> = 
  * to its day with the time tracked on it, the day shown marked, and the
  * period's total. The totals are the Week view's, added up by the same
  * `weekSheet`. A day of leave, a public holiday and a day not worked say so
- * (TS-061), and the period's total stands beside the time expected over it.
+ * (TS-061), a day over its limit says "Over" (TS-090), and the period's total
+ * stands beside the time expected over it.
  */
 export function WeekDays({
 	week,
 	away,
+	rules,
 	day,
 	slug,
 }: {
 	week: DayData["week"];
 	away: DayData["away"];
+	rules: readonly DayRule[];
 	day: Day;
 	slug: string;
 }) {
@@ -47,6 +50,7 @@ export function WeekDays({
 						const isShown = each.day === day;
 						const marked = away.days[index];
 						const short = marked ? SHORT[marked.kind] : undefined;
+						const over = rules.find((rule) => rule.day === each.day)?.overMinutes ?? 0;
 						return (
 							<li key={each.day} className="min-w-0">
 								<Link
@@ -76,6 +80,13 @@ export function WeekDays({
 											<span className="sr-only">{marked.label}</span>
 										</span>
 									)}
+									{over > 0 && (
+										<span className="text-label-small text-error">
+											<span className="sr-only">, </span>
+											<span aria-hidden="true">Over</span>
+											<span className="sr-only">{overLabel(over)}</span>
+										</span>
+									)}
 								</Link>
 							</li>
 						);
@@ -88,7 +99,7 @@ export function WeekDays({
 					{formatDuration(week.total)}
 					<span className="text-label-large text-on-surface-variant">
 						{" "}
-						of {minutesLabel(away.expectedMinutes)} expected
+						of {formatDuration(away.expectedMinutes * 60_000)} expected
 					</span>
 				</span>
 			</p>

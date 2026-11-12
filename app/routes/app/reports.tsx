@@ -7,7 +7,6 @@ import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { halfDaysLabel } from "~/leave/kinds";
-import { minutesLabel } from "~/leave/words";
 import { membershipContext } from "~/organisations/membership.server";
 import {
 	EVERYONE,
@@ -33,7 +32,7 @@ import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { dayOf } from "~/time/calendar";
-import { formatTimeRange } from "~/time/format";
+import { formatDuration, formatTimeRange } from "~/time/format";
 
 import type { Route } from "./+types/reports";
 
@@ -177,11 +176,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					id: line.id,
 					name: line.name,
 					worked: hoursAndMinutes(line.worked),
-					expected: minutesLabel(line.expectedMinutes),
+					expected: formatDuration(line.expectedMinutes * 60),
 					leave:
 						line.leaveHalfDays === 0
 							? "No leave"
-							: `${minutesLabel(line.leaveMinutes)} leave (${halfDaysLabel(line.leaveHalfDays)})`,
+							: `${formatDuration(line.leaveMinutes * 60)} leave (${halfDaysLabel(line.leaveHalfDays)})`,
+					/** Requests for leave starting in the range made at short notice (TS-090); none says nothing. */
+					shortNotice: line.shortNotice === 0 ? null : `Short-notice requests: ${line.shortNotice}`,
 				})),
 				exportPath: reportExportPath(membership.organisation.slug, `?${search}`),
 			},
@@ -250,7 +251,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 						<Section
 							id="people"
 							heading="People"
-							lead="Time worked beside the time expected of each person: their working week, less public holidays and approved leave. Leave is never counted as worked."
+							lead="Time worked beside the time expected of each person: their working week, less public holidays and approved leave. Leave is never counted as worked. Requests for leave made at short notice are counted by the day the leave starts."
 						>
 							<Ledger heading="Worked, expected and leave" note={loaderData.range}>
 								<LedgerRows label="Worked, expected and leave by person">
@@ -258,7 +259,14 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 										<LedgerRow
 											key={person.id}
 											title={<span className="wrap-anywhere">{person.name}</span>}
-											detail={`${person.expected} expected · ${person.leave}`}
+											detail={
+												<>
+													{`${person.expected} expected · ${person.leave}`}
+													{person.shortNotice && (
+														<span className="block">{person.shortNotice}</span>
+													)}
+												</>
+											}
 											value={person.worked}
 										/>
 									))}

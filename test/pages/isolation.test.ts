@@ -205,6 +205,61 @@ describe("a member of one organisation asking for another organisation's address
 		},
 	);
 
+	// The intents of TS-090, each posted by a stranger to another organisation's
+	// address: the layout answers before any of them is read.
+	const MORE_FORMS: { id: string; fields: Record<string, string> }[] = [
+		{
+			id: "routes/app/time-off",
+			fields: {
+				intent: "request-work",
+				kind: "overtime",
+				startsOn: "2026-12-21",
+				endsOn: "2026-12-23",
+				hours: "2",
+			},
+		},
+		{ id: "routes/app/time-off", fields: { intent: "withdraw-work", requestId: "w-1" } },
+		{ id: "routes/app/time-off", fields: { intent: "approve-work", requestId: "w-1" } },
+		{ id: "routes/app/time-off", fields: { intent: "refuse-work", requestId: "w-1" } },
+		{
+			id: "routes/app/time-off",
+			fields: { intent: "cancel-work", requestId: "w-1", comment: "Plans changed" },
+		},
+		{ id: "routes/app/approvals", fields: { intent: "approve-work", requestId: "w-1" } },
+		{ id: "routes/app/approvals", fields: { intent: "refuse-work", requestId: "w-1" } },
+		{
+			id: "routes/app/settings",
+			fields: {
+				intent: "timesheet-rules",
+				overtime: "none",
+				weekend: "none",
+				shortNotice: "refused",
+			},
+		},
+	];
+
+	it.each(MORE_FORMS)(
+		"$id: $fields.intent posted to another organisation is 404",
+		async ({ id, fields }) => {
+			const route = withAction.find((each) => each.id === id);
+			if (!route) throw new Error(`No route ${id} with an action.`);
+			await twoOrganisations();
+
+			for (const byScript of [false, true]) {
+				const theirs = await submit(route.address, fields, grace, { byScript });
+				const nobodys = await submit(inNobodys(route.address), fields, grace, { byScript });
+
+				expect(theirs.status).toBe(404);
+				expect(nobodys.status).toBe(404);
+				expect(await said(theirs, THEIRS)).toBe(await said(nobodys, NOBODYS));
+			}
+			expect(await value("select count(*) from work_requests")).toBe(0);
+			expect(await value("select overtime_rule from organisations where slug = ?", THEIRS)).toBe(
+				"free",
+			);
+		},
+	);
+
 	it("is 404 for a person who belongs to no organisation at all", async () => {
 		await twoOrganisations();
 		const nobody = await person(mailbox, "nobody@example.com");

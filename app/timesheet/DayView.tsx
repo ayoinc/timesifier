@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, ViewTransition } from "react";
+import { useEffect, useId, useRef, useState, ViewTransition } from "react";
 import { Link, useFetcher, useLocation } from "react-router";
 
 import { Button } from "~/components/Button";
@@ -8,7 +8,7 @@ import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger"
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
-import { minutesLabel } from "~/leave/words";
+import { type DayRule, overLabel } from "~/leave/rules";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { destinationPath } from "~/shell/destinations";
@@ -17,24 +17,31 @@ import { TRANSITION, useTravel } from "~/shell/transitions";
 import { addDays } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 
+import { refusalOfDay } from "./DayRules";
 import { formatDuration, formatElapsed } from "./durations";
 import { dayNumber, useClockFormat, useDayFormat, usePeriodFormat } from "./format";
 import { GettingStartedList, usePutAwayAnswer } from "./GettingStarted";
 import { elapsedSeconds, useNow } from "./live";
 import { PeriodLinks } from "./PeriodLinks";
-import { Submission } from "./Submission";
-import { durationOf, PERIOD_STATE_LABELS, type SheetEntry } from "./sheets";
+import { PeriodHeader } from "./Submission";
+import { durationOf, type SheetEntry } from "./sheets";
 import type { DayData } from "./timesheet.server";
 import { dayPath, TIMER_ANCHOR } from "./views";
 import { WeekDays } from "./WeekDays";
 
 /**
  * The Day view (TS-012a, TS-013, TS-012b, TS-056): getting started while a
- * step is left, the period's seven days with their totals, "Track time", the
- * page's one primary action, with the running timer and its Stop, then the
- * chosen day's entries, earliest first, with a total, and the period's
- * submission at its foot. An entry is changed or deleted in a sheet. Nothing
- * on a day in a submitted or approved period can be tracked or changed.
+ * step is left, the period's header row with its "Submit week" (shared with
+ * the Week and Calendar views), the period's seven days with their totals,
+ * "Track time", the page's one primary action, with the running timer and its
+ * Stop, then the chosen day's entries, earliest first, with a total. An entry
+ * is changed or deleted in a sheet. Nothing on a day in a submitted or
+ * approved period can be tracked or changed.
+ *
+ * A day's limit (TS-090): beside Track time, what is left of a day that has
+ * one; on a day that takes no time, or has none left, Track time is disabled
+ * and says why. A day over its limit says by how much, and marks its entries
+ * as the ones to trim or move: changing and deleting them stay open.
  */
 export function DayView({ data, slug }: { data: DayData; slug: string }) {
 	const { day, today, entries, total, locked, projects, zone, now, submission } = data;
@@ -44,10 +51,13 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 	const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
 	const travel = useTravel(dayNumber(day));
 	const live = useNow(data.running !== null, now);
-	const canTrack = !locked && projects.some((p) => !p.archived);
+	// The day's limit (TS-090): why nothing can be tracked on it, if nothing can.
+	const rule = data.rules.find((r) => r.day === day);
+	const blocked = refusalOfDay(rule);
+	const canTrack = !locked && projects.some((p) => !p.archived) && blocked === null;
 	// The day as leave sees it: its name and the time expected on it (TS-061).
 	const shownDay = data.away.days.find((d) => d.day === day);
-
+	const over = rule?.overMinutes ?? 0;
 	const [task, setTask] = useState<"track" | "edit" | "delete" | null>(null);
 	const [entry, setEntry] = useState<SheetEntry | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -75,112 +85,111 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 				next={{ to: dayPath(slug, addDays(day, 1)), label: "Next day" }}
 			/>
 
-			<WeekDays week={data.week} away={data.away} day={day} slug={slug} />
-
-			<Timer
-				data={data}
-				slug={slug}
-				projectName={projectName}
-				onSaid={setSaid}
-				onTrack={canTrack ? () => setTask("track") : null}
-				now={live}
-			/>
-
-			{/* What the last task did. Always here, so what is put in it is read out. */}
-			<p role="status" className="mt-6 text-body-medium text-on-surface-variant empty:hidden">
-				{said}
-			</p>
-
+			{/* What changes with the day, from the period's header row down, moves
+			    as one, as on the Week and Calendar views: the boundary starts just
+			    below the links that step, so it is in view whenever they are used. */}
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-				<div className="mt-6 max-w-200">
-					<Ledger
-						heading={day === today ? `Today, ${formatDay(day)}` : formatDay(day)}
-						note={locked ? "Submitted" : undefined}
-					>
-						{shownDay && (
-							<p className="px-4 pb-3 text-body-medium text-on-surface-variant @sm:px-5">
-								{shownDay.label ? `${shownDay.label}. ` : ""}
-								{minutesLabel(shownDay.expectedMinutes)} expected.
-							</p>
-						)}
-						{entries.length === 0 ? (
-							<p className="px-4 pb-4 text-body-large text-on-surface-variant @sm:px-5">
-								Nothing tracked on this day.
-							</p>
-						) : (
-							<LedgerRows label="Entries">
-								{entries.map((each) => {
-									const isRunning = each.endedAt === null;
-									const name = projectName(each.projectId);
-									return (
-										<LedgerRow
-											key={each.id}
-											title={<span className="wrap-anywhere">{each.description || name}</span>}
-											detail={each.description ? name : undefined}
-											aside={`${clock(each.startedAt)}–${each.endedAt === null ? "Running" : clock(each.endedAt)}`}
-											value={formatDuration(durationOf(each, now))}
-											action={
-												!locked &&
-												!isRunning && (
-													<MenuTrigger>
-														<Button
-															variant="text"
-															aria-label={`Actions for ${each.description || name}, ${clock(each.startedAt)}`}
-														>
-															Actions
-														</Button>
-														<Menu
-															onAction={(chosen) => {
-																setEntry(each);
-																setTask(chosen === "edit" ? "edit" : "delete");
-															}}
-														>
-															<MenuItem id="edit">Edit entry</MenuItem>
-															<MenuItem id="delete">Delete entry</MenuItem>
-														</Menu>
-													</MenuTrigger>
-												)
-											}
-										/>
-									);
-								})}
-							</LedgerRows>
-						)}
-						<LedgerTotal label="Day total" value={formatDuration(total)} />
-					</Ledger>
-					{locked && (
-						<p className="mt-4 text-body-medium text-on-surface-variant">
-							This day is in a submitted or approved week, so nothing can be tracked or changed on
-							it.
-						</p>
-					)}
-				</div>
-			</ViewTransition>
+				<div>
+					<div className="mt-6">
+						<PeriodHeader
+							title={formatPeriod(submission.period.startsOn, submission.period.endsOn)}
+							submission={submission}
+							onSaid={setSaid}
+						/>
+					</div>
 
-			{/* The period's one submission action, as at the Week view's foot. Not
-			    filled: "Track time" is this view's primary action. */}
-			<Submission
-				submission={submission}
-				onSaid={setSaid}
-				variant="outlined"
-				heading={
-					<div>
-						<h2 className="text-title-large">
-							{formatPeriod(submission.period.startsOn, submission.period.endsOn)}
-						</h2>
-						<p className="text-label-large text-on-surface-variant">
-							<span className="sr-only">Status: </span>
-							{PERIOD_STATE_LABELS[submission.state]}
-						</p>
-						{submission.state === "returned" && (
-							<p className="mt-2 max-w-160 text-body-large">
-								Returned{submission.comment ? `: ${submission.comment}` : "."} Correct the week and
-								submit it again.
+					<WeekDays week={data.week} away={data.away} rules={data.rules} day={day} slug={slug} />
+
+					<Timer
+						data={data}
+						slug={slug}
+						projectName={projectName}
+						onSaid={setSaid}
+						onTrack={canTrack ? () => setTask("track") : null}
+						rule={locked ? undefined : rule}
+						blocked={locked ? null : blocked}
+						now={live}
+					/>
+
+					{/* What the last task did. Always here, so what is put in it is read out. */}
+					<p role="status" className="mt-6 text-body-medium text-on-surface-variant empty:hidden">
+						{said}
+					</p>
+
+					<div className="mt-6 max-w-200">
+						<Ledger
+							heading={day === today ? `Today, ${formatDay(day)}` : formatDay(day)}
+							note={locked ? "Submitted" : over > 0 ? overLabel(over) : undefined}
+						>
+							{shownDay && (
+								<p className="px-4 pb-3 text-body-medium text-on-surface-variant @sm:px-5">
+									{shownDay.label ? `${shownDay.label}. ` : ""}
+									{formatDuration(shownDay.expectedMinutes * 60_000)} expected.
+								</p>
+							)}
+							{over > 0 && (
+								<p role="note" className="px-4 pb-3 text-body-medium text-error @sm:px-5">
+									{overLabel(over)}
+									{rule?.limitMinutes != null
+										? ` of the ${formatDuration(rule.limitMinutes * 60_000)} this day takes`
+										: ""}
+									. Trim or move one of these entries before you submit the week.
+								</p>
+							)}
+							{entries.length === 0 ? (
+								<p className="px-4 pb-4 text-body-large text-on-surface-variant @sm:px-5">
+									Nothing tracked on this day.
+								</p>
+							) : (
+								<LedgerRows label={over > 0 ? "Entries to trim or move" : "Entries"}>
+									{entries.map((each) => {
+										const isRunning = each.endedAt === null;
+										const name = projectName(each.projectId);
+										return (
+											<LedgerRow
+												key={each.id}
+												title={<span className="wrap-anywhere">{each.description || name}</span>}
+												detail={each.description ? name : undefined}
+												aside={`${clock(each.startedAt)}–${each.endedAt === null ? "Running" : clock(each.endedAt)}`}
+												value={formatDuration(durationOf(each, now))}
+												action={
+													!locked &&
+													!isRunning && (
+														<MenuTrigger>
+															<Button
+																variant="text"
+																aria-label={`Actions for ${each.description || name}, ${clock(each.startedAt)}`}
+															>
+																Actions
+															</Button>
+															<Menu
+																onAction={(chosen) => {
+																	setEntry(each);
+																	setTask(chosen === "edit" ? "edit" : "delete");
+																}}
+															>
+																<MenuItem id="edit">Edit entry</MenuItem>
+																<MenuItem id="delete">Delete entry</MenuItem>
+															</Menu>
+														</MenuTrigger>
+													)
+												}
+											/>
+										);
+									})}
+								</LedgerRows>
+							)}
+							<LedgerTotal label="Day total" value={formatDuration(total)} />
+						</Ledger>
+						{locked && (
+							<p className="mt-4 text-body-medium text-on-surface-variant">
+								This day is in a submitted or approved week, so nothing can be tracked or changed on
+								it.
 							</p>
 						)}
 					</div>
-				}
-			/>
+				</div>
+			</ViewTransition>
 
 			<TrackTime data={data} isOpen={task === "track"} onClose={close} onDone={setSaid} />
 
@@ -223,7 +232,9 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
  * `1.5`, `1,5` or `1:30`, it is "Save entry", one entry of that length on the
  * day. A timer runs today only, so on another day the hours are asked for.
  * Opened from a slot of the calendar (TS-062) it has a start too, filled in
- * with the slot's, and the hours are asked for from that time.
+ * with the slot's, and the hours are asked for from that time. A day with a
+ * limit says what it has left (TS-090); the server refuses what does not fit.
+ * It is not offered on a day that takes no time, nor one with none left.
  */
 export function TrackTime({
 	data,
@@ -232,7 +243,7 @@ export function TrackTime({
 	onClose,
 	onDone,
 }: {
-	data: Pick<DayData, "day" | "today" | "projects" | "away">;
+	data: Pick<DayData, "day" | "today" | "projects" | "rules">;
 	/** The time the entry starts, `09:30`, where a slot of the calendar was chosen. */
 	start?: string;
 	isOpen: boolean;
@@ -245,12 +256,7 @@ export function TrackTime({
 	const timerAllowed = isToday && start === undefined;
 	const startsTimer = timerAllowed && hours.trim() === "";
 	const active = data.projects.filter((p) => !p.archived);
-	// A whole day of leave, or a public holiday: tracking is allowed, and said to be unusual (TS-061).
-	const away = data.away.days.find(
-		(d) =>
-			d.day === data.day &&
-			((d.kind === "leave" && d.expectedMinutes === 0) || d.kind === "holiday"),
-	);
+	const rule = data.rules.find((r) => r.day === data.day);
 	return (
 		<FormSheet
 			title="Track time"
@@ -266,15 +272,10 @@ export function TrackTime({
 			<p className="text-body-large text-on-surface-variant">
 				{isToday ? `Today, ${formatDay(data.day)}` : formatDay(data.day)}
 			</p>
-			{away && (
-				<p
-					role="note"
-					className="rounded-medium border-2 border-on-surface px-4 py-3 text-body-large"
-				>
-					{away.kind === "holiday"
-						? `${away.label} is a public holiday.`
-						: `You are on ${away.label?.toLowerCase()} this day.`}{" "}
-					You can still track time on it.
+			{rule && rule.limitMinutes !== null && rule.closedReason === null && (
+				<p role="note" className="text-body-medium text-on-surface-variant">
+					This day has {formatDuration((rule.leftMinutes ?? 0) * 60_000)} left of{" "}
+					{formatDuration(rule.limitMinutes * 60_000)}.
 				</p>
 			)}
 			<input type="hidden" name="day" value={data.day} />
@@ -371,6 +372,9 @@ export function EntryFields({
  * Where "Start timer" in the navigation leads: "Track time", which opens its
  * sheet, and the running entry with its elapsed time and Stop. With no active
  * project, the way to create one instead; on a locked day, no "Track time".
+ * Where the day takes no time, or has none left, Track time is disabled and
+ * says why beside it; where the day has a limit, what is left of it stands
+ * beside it (TS-090).
  */
 function Timer({
 	data,
@@ -378,6 +382,8 @@ function Timer({
 	projectName,
 	onSaid,
 	onTrack,
+	rule,
+	blocked,
 	now,
 }: {
 	data: DayData;
@@ -386,6 +392,10 @@ function Timer({
 	onSaid: (said: string) => void;
 	/** Opens "Track time"; null where nothing can be tracked. */
 	onTrack: (() => void) | null;
+	/** The shown day's limit, while its entries can change. */
+	rule: DayRule | undefined;
+	/** Why nothing can be tracked on the shown day, when it is its limit that says so. */
+	blocked: string | null;
 	now: number;
 }) {
 	const fetcher = useFetcher<Outcome>();
@@ -393,6 +403,12 @@ function Timer({
 	const clock = useClockFormat(data.zone);
 	const hasActive = data.projects.some((p) => !p.archived);
 	const { running } = data;
+	const whyId = useId();
+	const why =
+		blocked ??
+		(rule && rule.limitMinutes !== null
+			? `${formatDuration((rule.leftMinutes ?? 0) * 60_000)} left of ${formatDuration(rule.limitMinutes * 60_000)}`
+			: null);
 
 	return (
 		<section
@@ -417,10 +433,22 @@ function Timer({
 					</p>
 				</div>
 			)}
-			{onTrack && (
-				<Button icon={<AddIcon size="medium" />} onPress={onTrack}>
-					Track time
-				</Button>
+			{(onTrack || (hasActive && blocked)) && (
+				<div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+					<Button
+						icon={<AddIcon size="medium" />}
+						isDisabled={onTrack === null}
+						aria-describedby={why ? whyId : undefined}
+						onPress={onTrack ?? undefined}
+					>
+						Track time
+					</Button>
+					{why && (
+						<p id={whyId} className="max-w-120 text-body-medium text-on-surface-variant">
+							{why}
+						</p>
+					)}
+				</div>
 			)}
 			{running && (
 				<fetcher.Form
