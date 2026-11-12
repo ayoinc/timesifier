@@ -710,6 +710,40 @@ body {
 	}
 }
 
+/*
+ * A page whose sections stand inside one block of their own (the Day view's,
+ * which moves as one between days) marks that block `data-reveal-sections`:
+ * when the page takes its shape's place, those sections come in one after
+ * another too, after the block's place in the page. With reduced motion they
+ * do not move; the block fades in whole, as above.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	[data-reveal] [data-reveal-sections] > * {
+		--reveal-step: 2;
+		animation:
+			shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+			calc(var(--reveal-step) * 40ms) backwards,
+			reveal-rise var(--md-sys-motion-duration-medium2)
+			var(--md-sys-motion-easing-emphasized-decelerate) calc(var(--reveal-step) * 40ms) backwards;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(2) {
+		--reveal-step: 3;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(3) {
+		--reveal-step: 4;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(4) {
+		--reveal-step: 5;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(n + 5) {
+		--reveal-step: 6;
+	}
+}
+
 @keyframes reveal-rise {
 	from {
 		translate: 0 calc(var(--md-sys-spacing-unit) * 2);

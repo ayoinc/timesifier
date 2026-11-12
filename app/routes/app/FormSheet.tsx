@@ -54,6 +54,12 @@ export interface FormSheetProps {
 	children: ReactNode;
 	/** `multipart/form-data` for a form with a file field. */
 	encType?: "multipart/form-data";
+	/**
+	 * Takes a submission over when it is a quick action that answers at once
+	 * (TS-096): returns true when it has sent the form itself, and the sheet then
+	 * closes without waiting. Whoever sent it reports the answer, and a refusal.
+	 */
+	onSubmitAtOnce?: (form: FormData) => boolean;
 }
 
 /**
@@ -77,6 +83,7 @@ export function FormSheet({
 	children,
 	encType,
 	action,
+	onSubmitAtOnce,
 }: FormSheetProps) {
 	const form = useId();
 	const fetcher = useFetcher<Outcome>();
@@ -124,7 +131,15 @@ export function FormSheet({
 				encType={encType}
 				className="flex flex-col gap-4"
 				onSubmit={(event) => {
-					if (fetcher.state !== "idle") event.preventDefault();
+					if (fetcher.state !== "idle") {
+						event.preventDefault();
+						return;
+					}
+					if (onSubmitAtOnce?.(new FormData(event.currentTarget))) {
+						event.preventDefault();
+						onClose();
+						focusHeadingIfLost();
+					}
 				}}
 			>
 				<input type="hidden" name="intent" value={intent} />
