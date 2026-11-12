@@ -138,7 +138,7 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 		]);
 		const people = members.map((member) => member.userId);
 		const leave = await approvedLeave(scope, people, addDays(today, -LEAVE_DAYS_BACK));
-		const [names, takes] = await Promise.all([namesOf(people), leaveTaken(scope, leave)]);
+		const names = await namesOf(people);
 		const events: IcsEvent[] = leave.map((request) => {
 			const kind = maySeeLeaveKindOf(caller.access, request.userId)
 				? kinds.get(request.kindId)
@@ -146,7 +146,6 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 			return {
 				uid: `leave-${request.id}@timesifier`,
 				summary: `${names.get(request.userId) ?? "Someone"}: ${kind ?? "On leave"}${halfDays(request)}`,
-				description: takes(request),
 				allDay: { first: request.startsOn, last: request.endsOn },
 			};
 		});
@@ -199,7 +198,7 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 type LeaveRow = Awaited<ReturnType<typeof approvedLeave>>[number];
 
 /**
- * What each request takes, as a feed's event describes it: the person's
+ * What each of the person's own requests takes, as their feed's event describes it (a team's feed carries no words): the person's
  * working days, counted on their own work schedule, and its hours (TS-097).
  * "Takes 2.5 days, 18:45 of scheduled hours."
  */

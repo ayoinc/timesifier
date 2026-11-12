@@ -34,6 +34,9 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	},
 	// An organisation's name is 1 to 80 characters; this is none.
 	"routes/app/settings": () => formFromAMember("/app/acme/settings", "intent=rename&name="),
+	// A schedule is created, changed, archived, restored or assigned; this asks to delete one.
+	"routes/app/schedules": () =>
+		formFromAMember("/app/acme/settings/schedules", "intent=delete&scheduleId=s1"),
 	// The colour scheme is one of three words; this is none of them.
 	"routes/app/account": () => formFromAMember("/app/acme/account", "scheme=sepia"),
 	// A description is at most 500 characters; this is 501.

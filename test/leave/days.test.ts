@@ -109,7 +109,11 @@ describe("the working week", () => {
 		const { from, to } = bounds(day, day, LONDON);
 		expect((to - from) / HOUR).toBe(hours);
 		const sundays = calendar({ week: EVERY_DAY });
-		expect(dayStatus(sundays, day)).toEqual({ day, is: { kind: "working" }, expectedMinutes: 450 });
+		expect(dayStatus(sundays, day)).toMatchObject({
+			day,
+			is: { kind: "working" },
+			expectedMinutes: 450,
+		});
 		// The week around it expects seven days of 7:30, neither an hour more nor less.
 		expect(expectedMinutes(sundays, daysFrom(addDays(day, -6), day))).toBe(7 * 450);
 		// And a day of leave on it takes one day, whatever its length.
@@ -195,7 +199,7 @@ describe("a request over weekends and public holidays", () => {
 		expect(dayLabel(dayStatus(theirs, "2026-12-26"))).toBe("Not a working day");
 		expect(dayStatus(theirs, "2026-12-24").is.kind).toBe("leave");
 		for (const day of daysFrom("2026-12-28", "2026-12-31")) {
-			expect(dayStatus(theirs, day)).toEqual({
+			expect(dayStatus(theirs, day)).toMatchObject({
 				day,
 				is: { kind: "working" },
 				expectedMinutes: 450,

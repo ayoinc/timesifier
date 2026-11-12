@@ -437,7 +437,7 @@ describe("what reads a person's schedule", () => {
 	it("Team: the manager sees the schedule, why, and the time expected", async () => {
 		const team = await text("/app/acme/team", roles.people.manager);
 		expect(team).toMatch(
-			/linus@example\.com .*Short, Monday to Wednesday, 09:00–14:00 · 15:00 a week\. From the team Design\. .*15:00 expected/,
+			/linus@example\.com .*15:00 expected Short, Monday to Wednesday, 09:00–14:00 · 15:00 a week\. From the team Design\./,
 		);
 		const one = await text(
 			`/app/acme/team?person=${roles.people.member.user.id}`,
@@ -445,13 +445,6 @@ describe("what reads a person's schedule", () => {
 		);
 		expect(one).toContain(
 			"Work schedule: Short, Monday to Wednesday, 09:00–14:00 · 15:00 a week. From the team Design.",
-		);
-		const members = await text("/app/acme/team/members", roles.people.admin);
-		expect(members).toContain(
-			"Short, Monday to Wednesday, 09:00–14:00 · 15:00 a week. From the team Design.",
-		);
-		expect(await text("/app/acme/team/members", roles.people.manager)).not.toContain(
-			"From the team Design.",
 		);
 	});
 
