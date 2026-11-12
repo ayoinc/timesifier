@@ -1,11 +1,14 @@
+import { env } from "cloudflare:workers";
 import { useState } from "react";
 import { useDateFormatter } from "react-aria";
 import * as z from "zod";
 
+import { changes, record } from "~/activity/activity.server";
 import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { TextField } from "~/components/TextField";
+import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
 import { cancelInvitation, inviteMember, listOpenInvitations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -27,7 +30,7 @@ import { useOrganisation } from "./useOrganisation";
 
 const TITLE = "Invitations";
 /** The roles an invitation can give, the usual one first. */
-const INVITED_ROLES = ["member", "admin"] as const satisfies readonly z.output<
+const INVITED_ROLES = ["member", "finance", "admin"] as const satisfies readonly z.output<
 	typeof InvitedRole
 >[];
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
@@ -64,11 +67,14 @@ const form = z.discriminatedUnion("intent", [
 /**
  * Asks the server for one of them, in the organisation the layout read from
  * the address; no form names an organisation. The server allows or refuses by
- * the person's role, and what it refuses comes back as a sentence.
+ * the person's role, and what it refuses comes back as a sentence. An
+ * invitation sent or cancelled is recorded in the activity log.
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { id } = context.get(membershipContext).organisation;
+	const { organisation, user } = context.get(membershipContext);
+	const { id } = organisation;
+	const scope = organisationScope(env.DB, id);
 
 	switch (input.intent) {
 		case "invite": {
@@ -77,18 +83,32 @@ export async function action({ request, context }: Route.ActionArgs) {
 				return declined("That email address is not valid. Check it and try again.");
 			}
 			const invited = await inviteMember(request, id, { email: email.data, role: input.role });
-			return invited.ok
-				? done(
-						`An invitation is on its way to ${email.data}. Its link works once and expires in ${INVITATION_DAYS} days.`,
-					)
-				: refused(invited);
+			if (!invited.ok) return refused(invited);
+			await record(
+				scope,
+				user.id,
+				"invitation.created",
+				{ type: "invitation", id: invited.data.id },
+				// The role alone: the address stays in the invitation, which is deleted
+				// with it, and is not kept in the log for two years.
+				changes(null, { role: input.role }, ["role"]),
+			);
+			return done(
+				`An invitation is on its way to ${email.data}. Its link works once and expires in ${INVITATION_DAYS} days.`,
+			);
 		}
 
 		case "cancel": {
 			const cancelled = await cancelInvitation(request, id, input.invitationId);
-			return cancelled.ok
-				? done("Invitation cancelled. Its link no longer works.")
-				: refused(cancelled);
+			if (!cancelled.ok) return refused(cancelled);
+			await record(
+				scope,
+				user.id,
+				"invitation.cancelled",
+				{ type: "invitation", id: input.invitationId },
+				changes({ status: "pending" }, { status: "canceled" }, ["status"]),
+			);
+			return done("Invitation cancelled. Its link no longer works.");
 		}
 	}
 }

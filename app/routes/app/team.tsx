@@ -225,7 +225,7 @@ function outcome(change: TeamChange, said: string) {
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation, role } = context.get(membershipContext);
+	const { organisation, role, user } = context.get(membershipContext);
 	if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
 	const scope = organisationScope(env.DB, organisation.id);
 
@@ -235,27 +235,30 @@ export async function action({ request, context }: Route.ActionArgs) {
 			const name = RecordName.safeParse(input.name);
 			if (!name.success) return declined(NAME_PROBLEM);
 			return input.intent === "create"
-				? outcome(await createTeam(scope, name.data), `Team ${name.data} created.`)
-				: outcome(await renameTeam(scope, input.teamId, name.data), `Team renamed ${name.data}.`);
+				? outcome(await createTeam(scope, user.id, name.data), `Team ${name.data} created.`)
+				: outcome(
+						await renameTeam(scope, user.id, input.teamId, name.data),
+						`Team renamed ${name.data}.`,
+					);
 		}
 		case "delete":
 			return outcome(
-				await deleteTeam(scope, input.teamId),
+				await deleteTeam(scope, user.id, input.teamId),
 				"Team deleted. Its managers no longer see its members' time.",
 			);
 		case "add":
 			return outcome(
-				await addToTeam(scope, input.teamId, input.userId, input.manager === "on"),
+				await addToTeam(scope, user.id, input.teamId, input.userId, input.manager === "on"),
 				input.manager === "on" ? "Added to the team as its manager." : "Added to the team.",
 			);
 		case "remove":
 			return outcome(
-				await removeFromTeam(scope, input.teamId, input.userId),
+				await removeFromTeam(scope, user.id, input.teamId, input.userId),
 				"Taken out of the team.",
 			);
 		case "manager":
 			return outcome(
-				await setManager(scope, input.teamId, input.userId, input.isManager),
+				await setManager(scope, user.id, input.teamId, input.userId, input.isManager),
 				input.isManager ? "They now manage the team." : "They no longer manage the team.",
 			);
 	}

@@ -84,8 +84,13 @@ test.describe("a person who has just signed in for the first time", () => {
 				await expect(page.getByText(`${name} is ready`)).toBeVisible();
 				await expect(page.getByText("You are its owner.")).toBeVisible();
 
-				// Every destination, for its owner, each at its address in this organisation.
-				const links = destinationLinks(page);
+				// Every destination, for its owner, each at its address in this
+				// organisation: under 600px those the bar has no room for are in More.
+				const links = page
+					.getByRole("navigation", { name: "Main" })
+					.locator("ul")
+					.first()
+					.getByRole("link", { includeHidden: true });
 				// A link with a bar label holds both words; its label alone is what is read out.
 				await expect(links).toHaveText(
 					destinations.map(({ label, barLabel }) => `${barLabel ?? ""}${label}`),
@@ -102,9 +107,9 @@ test.describe("a person who has just signed in for the first time", () => {
 				);
 
 				// A move stays inside the organisation, and the welcome was for the moment alone.
-				await links.filter({ hasText: "Reports" }).click();
-				await expect(page).toHaveURL(destinationPath(slug, "reports"));
-				await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeFocused();
+				await links.filter({ hasText: "Projects" }).click();
+				await expect(page).toHaveURL(destinationPath(slug, "projects"));
+				await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeFocused();
 				await links.filter({ hasText: "Timesheet" }).click();
 				await expect(page).toHaveURL(organisationPath(slug));
 				await expect(page.getByText(`${name} is ready`)).toHaveCount(0);
@@ -238,12 +243,13 @@ test.describe("a person who has just signed in for the first time", () => {
 		// Until he gives a name, the others see his address. He gives one on My account.
 		await setName(other, bob.name);
 
-		// Bob, a member, is shown Timesheet, Time off, Projects and Reports. Team and
-		// Workspace settings are not his to open: their addresses are the 404 page.
+		// Bob, a member, is shown Timesheet, Time off, Expenses, Projects and
+		// Reports. Team and Workspace settings are not his to open: their addresses are the 404 page.
 		await openShell(other, organisationPath(slug));
 		await expect(destinationLinks(other)).toHaveText([
 			"Timesheet",
 			"Time off",
+			"Expenses",
 			"Projects",
 			"Reports",
 		]);

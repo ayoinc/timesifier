@@ -20,7 +20,7 @@ import { type Piece, piecesOf, type ReportEntry } from "./report";
 /**
  * A report read from the database (TS-014a, TS-014b). Whose time it holds is
  * `timeScopeOf` (docs/security.md, "Whose time"): a member's own, a manager's
- * and the people of the teams they manage, an owner's or admin's everyone's.
+ * and the people of the teams they manage, an owner's, admin's or Finance's everyone's.
  * The people are passed to SQL; nothing is filtered afterwards. Every read goes
  * through the organisation's scope.
  */
@@ -48,7 +48,7 @@ export interface ReportRequest {
 	zone: string;
 	/** Whose entries the report reads. */
 	people: TimeScope;
-	/** Whether the viewer may see everyone's time: an owner or admin. */
+	/** Whether the viewer may see everyone's time: an owner, an admin or Finance. */
 	seesEveryone: boolean;
 	/** The people the viewer may narrow the report to, themselves included, by name. */
 	choices: Person[];

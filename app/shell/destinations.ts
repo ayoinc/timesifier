@@ -32,15 +32,17 @@ export const ORGANISATION_PARAM = "organisation";
 export const WELCOME_PARAM = "welcome";
 
 /** The headings the navigation groups its links under, in their order. */
-export const HEADINGS = ["Track", "Organize", "Review"] as const;
+export const HEADINGS = ["Track", "Organize", "Bill", "Review"] as const;
 export type Heading = (typeof HEADINGS)[number];
 
 /**
  * Who is shown a destination. `everyone` is every member of the organisation;
  * `managers` adds, to owners and admins, a person who manages at least one
- * team (TS-038); `administrators` is owners and admins alone.
+ * team (TS-038); `administrators` is owners and admins alone; `finance` is
+ * owners, admins and Finance (TS-064); `oversight` is owners, admins, Finance
+ * and a person who manages a team.
  */
-export type Audience = "everyone" | "managers" | "administrators";
+export type Audience = "everyone" | "managers" | "administrators" | "finance" | "oversight";
 
 const LIST = [
 	{ id: "timesheet", label: "Timesheet", segment: "", heading: "Track", audience: "everyone" },
@@ -52,6 +54,23 @@ const LIST = [
 		audience: "everyone",
 	},
 	{
+		id: "expenses",
+		label: "Expenses",
+		segment: "expenses",
+		heading: "Track",
+		audience: "everyone",
+	},
+	{ id: "team", label: "Team", segment: "team", heading: "Organize", audience: "managers" },
+	{
+		id: "clients",
+		label: "Clients",
+		segment: "clients",
+		heading: "Organize",
+		audience: "finance",
+		// Hidden for everyone when the organisation turns Clients off (TS-048).
+		needsClients: true,
+	},
+	{
 		id: "projects",
 		label: "Projects",
 		segment: "projects",
@@ -59,15 +78,20 @@ const LIST = [
 		audience: "everyone",
 	},
 	{
-		id: "clients",
-		label: "Clients",
-		segment: "clients",
+		id: "tasks",
+		label: "Tasks",
+		segment: "tasks",
 		heading: "Organize",
 		audience: "administrators",
-		// Hidden for everyone when the organisation turns Clients off (TS-048).
-		needsClients: true,
 	},
-	{ id: "team", label: "Team", segment: "team", heading: "Organize", audience: "managers" },
+	{ id: "invoices", label: "Invoices", segment: "invoices", heading: "Bill", audience: "finance" },
+	{
+		id: "estimates",
+		label: "Estimates",
+		segment: "estimates",
+		heading: "Bill",
+		audience: "finance",
+	},
 	{
 		id: "approvals",
 		label: "Approvals",
@@ -77,9 +101,30 @@ const LIST = [
 	},
 	{ id: "reports", label: "Reports", segment: "reports", heading: "Review", audience: "everyone" },
 	{
+		id: "dashboards",
+		label: "Dashboards",
+		segment: "dashboards",
+		heading: "Review",
+		audience: "oversight",
+	},
+	{
+		id: "activity",
+		label: "Activity log",
+		segment: "activity",
+		heading: "Review",
+		audience: "oversight",
+	},
+	{
+		id: "integrations",
+		label: "Integrations",
+		segment: "integrations",
+		heading: null,
+		audience: "administrators",
+	},
+	{
 		id: "settings",
 		label: "Workspace settings",
-		// Eight links share the bar of a 390px window only if this one is short there (TS-061).
+		// Shorter in the bar under 600px, should it ever stand there (TS-061).
 		barLabel: "Settings",
 		segment: "settings",
 		heading: null,
@@ -117,7 +162,7 @@ export function destination(id: DestinationId): Destination {
 
 /** What decides which destinations a person is shown in one organisation. */
 export interface Viewer {
-	role: "owner" | "admin" | "member";
+	role: "owner" | "admin" | "finance" | "member";
 	/** Whether they manage at least one of the organisation's teams. */
 	managesTeams: boolean;
 	/** Whether the organisation has Clients turned on. */
@@ -129,6 +174,7 @@ export function canSee(viewer: Viewer, id: DestinationId): boolean {
 	const { audience, needsClients } = destination(id);
 	if (needsClients && !viewer.clientsEnabled) return false;
 	const administrator = viewer.role === "owner" || viewer.role === "admin";
+	const finance = administrator || viewer.role === "finance";
 	switch (audience) {
 		case "everyone":
 			return true;
@@ -136,6 +182,10 @@ export function canSee(viewer: Viewer, id: DestinationId): boolean {
 			return administrator || viewer.managesTeams;
 		case "administrators":
 			return administrator;
+		case "finance":
+			return finance;
+		case "oversight":
+			return finance || viewer.managesTeams;
 	}
 }
 
@@ -153,7 +203,7 @@ export interface NavigationGroup {
 /**
  * The navigation as drawn for a person shown `visible`: each heading with
  * the links under it, in the list's order. A heading with no link shown is
- * left out, so a member sees Track, Organize and Review with one link each.
+ * left out, so a member sees Track, Organize and Review, and no Bill.
  */
 export function navigationGroups(visible: readonly DestinationId[]): NavigationGroup[] {
 	const groups: NavigationGroup[] = [];
@@ -164,6 +214,32 @@ export function navigationGroups(visible: readonly DestinationId[]): NavigationG
 		else groups.push({ heading: each.heading, destinations: [each] });
 	}
 	return groups;
+}
+
+/**
+ * The destinations the bar under 600px keeps for everyone who is shown them,
+ * in this order: what a person opens most from a phone (docs/navigation.md,
+ * "The navigation under 600px").
+ */
+export const BAR: readonly DestinationId[] = ["timesheet", "time-off", "expenses", "projects"];
+
+/** The navigation under 600px: the links in the bar, and what "More" holds, under their headings. */
+export interface CompactNavigation {
+	bar: DestinationId[];
+	more: NavigationGroup[];
+}
+
+/**
+ * Splits what a person is shown between the bar and "More". The bar holds the
+ * destinations of `BAR` that the person is shown; More holds the rest. A More
+ * that would hold one destination holds none: that one sits in the bar, so a
+ * member, shown four or five, has every link in the bar and no More.
+ */
+export function compactNavigation(visible: readonly DestinationId[]): CompactNavigation {
+	const bar = visible.filter((id) => BAR.includes(id));
+	const rest = visible.filter((id) => !BAR.includes(id));
+	if (rest.length <= 1) return { bar: [...visible], more: [] };
+	return { bar, more: navigationGroups(rest) };
 }
 
 /** The address of the organisation with this slug, which is also the address of its first destination. */

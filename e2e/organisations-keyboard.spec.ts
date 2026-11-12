@@ -75,6 +75,8 @@ for (const viewport of [
 			await page.keyboard.press("Tab");
 			await expectRadioFocused(role.getByRole("radio", { name: /^Member/ }));
 			await page.keyboard.press("ArrowUp");
+			await expect(role.getByRole("radio", { name: /^Finance/ })).toBeChecked();
+			await page.keyboard.press("ArrowUp");
 			await expect(role.getByRole("radio", { name: /^Admin/ })).toBeChecked();
 			await page.keyboard.press("Escape");
 			await expect(role).toBeHidden();
@@ -111,6 +113,8 @@ for (const viewport of [
 			// Tab reaches the role, where the arrow keys choose, then the two buttons.
 			await page.keyboard.press("Tab");
 			await expectRadioFocused(inviting.getByRole("radio", { name: /^Member/ }));
+			await page.keyboard.press("ArrowDown");
+			await expectRadioFocused(inviting.getByRole("radio", { name: /^Finance/ }));
 			await page.keyboard.press("ArrowDown");
 			await expectRadioFocused(inviting.getByRole("radio", { name: /^Admin/ }));
 			await expect(inviting.getByRole("radio", { name: /^Admin/ })).toBeChecked();

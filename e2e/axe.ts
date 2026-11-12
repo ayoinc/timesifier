@@ -42,6 +42,14 @@ export async function problems(
 			),
 		)
 		.toBe(0);
+	// From 600px the navigation's column scrolls on its own when it is taller
+	// than the window, as an owner's is at 1280×800 with a timer running; Tab
+	// scrolls it to the link it reaches. Text it has scrolled part-way out of
+	// view cannot be measured, so it is scanned from its top, where it opens. A
+	// page outside an organisation has no such navigation.
+	await page.getByRole("navigation", { name: "Main" }).evaluateAll((found) => {
+		for (const navigation of found) navigation.scrollTop = 0;
+	});
 	let scan = new AxeBuilder({ page }).withTags(WCAG_22_AA);
 	for (const drawing of drawings) scan = scan.exclude(drawing);
 	const results = await scan.analyze();

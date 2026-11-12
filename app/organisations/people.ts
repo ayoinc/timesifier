@@ -15,6 +15,7 @@ export function nameOrEmail(person: { name?: string | null | undefined; email: s
 export const ROLE_LABELS: Record<Role, string> = {
 	owner: "Owner",
 	admin: "Admin",
+	finance: "Finance",
 	member: "Member",
 };
 
@@ -22,6 +23,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const AS_ROLE: Record<Role, string> = {
 	owner: "an owner",
 	admin: "an admin",
+	finance: "a Finance member",
 	member: "a member",
 };
 
@@ -29,5 +31,7 @@ export const AS_ROLE: Record<Role, string> = {
 export const ROLE_MEANINGS: Record<Role, string> = {
 	owner: "Owners can do everything, including deleting the organisation.",
 	admin: "Admins can rename the organisation, invite people and manage members.",
+	finance:
+		"Finance can see everyone's time and expenses, every rate and report, and run invoices and estimates, but manages nobody.",
 	member: "Members can see the organisation and who is in it.",
 };

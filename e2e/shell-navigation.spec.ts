@@ -1,15 +1,22 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { accountPath, type Destination, destinations, HEADINGS } from "../app/shell/destinations";
+import {
+	accountPath,
+	compactNavigation,
+	type Destination,
+	destinations,
+	HEADINGS,
+} from "../app/shell/destinations";
 import { openProfileMenu, profileButton } from "./auth";
 import { SIGNED_IN_AS_MEMBER } from "./auth-state";
 import { destinationLinks, expect, openShell, test } from "./fixtures";
 import { homeOrganisation, homePath } from "./organisation";
 
 // The shell's navigation, landmarks and focus (TS-006, criteria 1 and 3), and
-// its headings by role (TS-053). Every path and label comes from the one list
-// of destinations. The person signed in owns the organisation, so is shown
-// every destination; the member of it is shown three.
+// its headings by role (TS-053), and its compact form under 600px (TS-064;
+// audit W03 and W11). Every path and label comes from the one list of
+// destinations. The person signed in owns the organisation, so is shown every
+// destination; the member of it is shown four.
 
 const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
@@ -19,6 +26,40 @@ const last = destinations.at(-1) as Destination;
 
 function navigation(page: Page): Locator {
 	return page.getByRole("navigation", { name: "Main" });
+}
+
+/** "More", last in the bar under 600px, which opens the destinations the bar has no room for. */
+function more(page: Page): Locator {
+	return navigation(page).getByRole("button", { name: /^More\b/ });
+}
+
+/** The destinations' list, with its headings, apart from what More opens. */
+function destinationList(page: Page): Locator {
+	return navigation(page).locator("ul").first();
+}
+
+/** What More opens. */
+function morePopover(page: Page): Locator {
+	return page.locator("#navigation-more");
+}
+
+/** Whether the window is under 600px, where the navigation is the bar. */
+function isCompact(page: Page): boolean {
+	return (page.viewportSize()?.width ?? MEDIUM.width) < 600;
+}
+
+/** What the bar under 600px holds for the owner, and what More holds, by docs/navigation.md. */
+const OWNERS_COMPACT = compactNavigation(destinations.map(({ id }) => id));
+const IN_MORE = OWNERS_COMPACT.more.flatMap((group) => group.destinations);
+
+/** The link to `destination`, opening More first when the bar under 600px has no room for it. */
+async function linkTo(page: Page, destination: Destination): Promise<Locator> {
+	const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
+	if (isCompact(page) && IN_MORE.includes(destination) && !(await morePopover(page).isVisible())) {
+		await more(page).click();
+		await expect(morePopover(page)).toBeVisible();
+	}
+	return link;
 }
 
 function title(destination: Destination): string {
@@ -33,15 +74,18 @@ async function box(element: Locator): Promise<Box> {
 	return found;
 }
 
-/** Where the navigation and each of its links are drawn. */
+/** Where the navigation and each of its links are drawn; under 600px, More is the last. */
 async function drawn(page: Page): Promise<{ container: Box; links: Box[] }> {
 	const links = await destinationLinks(page).all();
+	if (isCompact(page) && (await more(page).count()) > 0) links.push(more(page));
 	return { container: await box(navigation(page)), links: await Promise.all(links.map(box)) };
 }
 
 /**
  * A navigation bar: along the bottom edge, as wide as the window, its
- * destinations side by side in one row, and no heading.
+ * destinations and More side by side in one row, each with an equal share of
+ * the width, at least 48px tall and 44px wide to press, their labels apart and
+ * in type no smaller than 12px (audit W03), and no heading.
  */
 async function expectBar(page: Page) {
 	const window = page.viewportSize() ?? COMPACT;
@@ -57,8 +101,30 @@ async function expectBar(page: Page) {
 	const lefts = links.map((link) => link.x);
 	expect(lefts).toEqual([...lefts].sort((a, b) => a - b));
 	expect(new Set(lefts).size).toBe(links.length);
+	expect(links.length, "four or five items, as audit W03 asks").toBeLessThanOrEqual(5);
+	const widths = links.map((link) => link.width);
+	expect(Math.max(...widths) - Math.min(...widths), "an equal share each").toBeLessThanOrEqual(1);
+	for (const link of links) {
+		expect(link.width).toBeGreaterThanOrEqual(44);
+		expect(link.height).toBeGreaterThanOrEqual(48);
+	}
+	// The labels, not only the targets, stand apart: at least 8px between the
+	// end of one and the start of the next.
+	const items = await destinationLinks(page).all();
+	if (await more(page).count()) items.push(more(page));
+	const labels = await Promise.all(items.map((item) => box(item.locator("span").first())));
+	for (let i = 1; i < labels.length; i++) {
+		const [before, after] = [labels[i - 1] as Box, labels[i] as Box];
+		expect(after.x - (before.x + before.width), "the labels stand apart").toBeGreaterThanOrEqual(8);
+	}
+	for (const item of items) {
+		const size = await item.evaluate((element) =>
+			Number.parseFloat(getComputedStyle(element).fontSize),
+		);
+		expect(size).toBeGreaterThanOrEqual(12);
+	}
 	for (const heading of HEADINGS) {
-		await expect(navigation(page).getByText(heading, { exact: true })).toBeHidden();
+		await expect(destinationList(page).getByText(heading, { exact: true })).toBeHidden();
 	}
 }
 
@@ -82,7 +148,7 @@ async function expectRail(page: Page) {
 	expect(new Set(tops).size).toBe(links.length);
 	// Each heading stands above its first link, and each link below its heading.
 	for (const heading of HEADINGS) {
-		const label = await box(navigation(page).getByText(heading, { exact: true }));
+		const label = await box(destinationList(page).getByText(heading, { exact: true }));
 		const under = destinations.filter((each) => each.heading === heading);
 		for (const each of under) {
 			const link = await box(navigation(page).getByRole("link", { name: each.label, exact: true }));
@@ -91,19 +157,48 @@ async function expectRail(page: Page) {
 	}
 }
 
-/** The same links, by role and name, in the order of the list, each to its own address. */
-async function expectDestinations(page: Page, current: Destination) {
-	const links = destinationLinks(page);
-	// A link with a bar label holds both words; its label alone is what is read out.
-	await expect(links).toHaveText(
-		destinations.map((destination) => `${destination.barLabel ?? ""}${destination.label}`),
-	);
-	for (const destination of destinations) {
-		const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
+/** Each of `shown` is a link to its own address, marked current when it is `current`. */
+async function expectLinks(scope: Locator, shown: readonly Destination[], current: Destination) {
+	for (const destination of shown) {
+		const link = scope.getByRole("link", { name: destination.label, exact: true });
 		await expect(link).toHaveAttribute("href", homePath(destination.id));
 		if (destination === current) await expect(link).toHaveAttribute("aria-current", "page");
 		else await expect(link).not.toHaveAttribute("aria-current");
 	}
+}
+
+/**
+ * The same links, by role and name, in the order of the list, each to its own
+ * address. Under 600px the bar holds some and More the rest, under their
+ * headings; More reads as current when the page on screen is one of its own.
+ */
+async function expectDestinations(page: Page, current: Destination) {
+	const links = destinationLinks(page);
+	if (!isCompact(page)) {
+		// What is drawn: a bar label (Settings) is hidden from 600px.
+		await expect(links).toHaveText(
+			destinations.map((destination) => destination.label),
+			{ useInnerText: true },
+		);
+		await expectLinks(navigation(page), destinations, current);
+		return;
+	}
+	const bar = destinations.filter(({ id }) => OWNERS_COMPACT.bar.includes(id));
+	await expect(links).toHaveText(bar.map((destination) => destination.label));
+	await expectLinks(navigation(page), bar, current);
+
+	const inMore = IN_MORE.includes(current);
+	await expect(more(page)).toHaveAccessibleName(inMore ? `More, now on ${current.label}` : "More");
+	await expect(morePopover(page)).toBeHidden();
+	await more(page).click();
+	await expect(morePopover(page)).toBeVisible();
+	await expect(morePopover(page).getByRole("link")).toHaveText(IN_MORE.map(({ label }) => label));
+	for (const { heading } of OWNERS_COMPACT.more) {
+		if (heading) await expect(morePopover(page).getByText(heading, { exact: true })).toBeVisible();
+	}
+	await expectLinks(morePopover(page), IN_MORE, current);
+	await page.keyboard.press("Escape");
+	await expect(morePopover(page)).toBeHidden();
 }
 
 /**
@@ -119,6 +214,24 @@ async function expectContentClearOfNavigation(page: Page) {
 	expect(apart, "the main region does not lie under the navigation").toBe(true);
 }
 
+/**
+ * The heights of the rows fixed across the whole width of the window, from
+ * the top: what covers the page whatever it scrolls to (audit W11).
+ */
+async function fixedRows(page: Page): Promise<number[]> {
+	return page.evaluate(() =>
+		[...document.querySelectorAll<HTMLElement>("body *")]
+			.filter((element) => {
+				if (getComputedStyle(element).position !== "fixed") return false;
+				const { width, height } = element.getBoundingClientRect();
+				return height > 0 && width >= window.innerWidth * 0.9;
+			})
+			.map((element) => element.getBoundingClientRect())
+			.sort((a, b) => a.top - b.top)
+			.map(({ height }) => Math.round(height)),
+	);
+}
+
 async function focused(page: Page): Promise<string> {
 	return page.evaluate(() => {
 		const element = document.activeElement;
@@ -129,7 +242,7 @@ async function focused(page: Page): Promise<string> {
 test.describe("in a window 390px wide", () => {
 	test.use({ viewport: COMPACT });
 
-	test("the navigation is a bar along the bottom with every destination", async ({ page }) => {
+	test("the navigation is a bar along the bottom, with More holding the rest", async ({ page }) => {
 		await openShell(page, homePath(first.id));
 
 		await expectBar(page);
@@ -137,12 +250,63 @@ test.describe("in a window 390px wide", () => {
 		await expectContentClearOfNavigation(page);
 	});
 
-	test("every destination an owner is shown fits in the bar, whole", async ({ page }) => {
+	test("every item of the bar fits in it, whole, and so does every link More opens", async ({
+		page,
+	}) => {
 		await openShell(page, homePath(last.id));
 
 		for (const link of await destinationLinks(page).all()) {
 			await expect(link).toBeInViewport({ ratio: 1 });
 		}
+		await expect(more(page)).toBeInViewport({ ratio: 1 });
+		await more(page).click();
+		for (const link of await morePopover(page).getByRole("link").all()) {
+			await expect(link).toBeInViewport({ ratio: 1 });
+			expect((await box(link)).height).toBeGreaterThanOrEqual(48);
+		}
+	});
+
+	test("a destination in More is opened from it, which closes, and More reads as current", async ({
+		page,
+	}) => {
+		await openShell(page, homePath(first.id));
+		const target = IN_MORE.at(-1) as Destination;
+
+		await (await linkTo(page, target)).click();
+		await expect(page).toHaveURL(homePath(target.id));
+		await expect(morePopover(page)).toBeHidden();
+		await expect(more(page)).toHaveAccessibleName(`More, now on ${target.label}`);
+		// The rule that marks the current destination is drawn under More.
+		await expect(more(page).locator("span[aria-hidden]")).toBeVisible();
+	});
+
+	test("Track time floats above the bar, the one fixed row besides it, and is not on the Timesheet", async ({
+		page,
+	}) => {
+		const projects = destinations.find(({ id }) => id === "projects") as Destination;
+		await openShell(page, homePath(projects.id));
+		const track = navigation(page).getByRole("link", { name: "Track time" });
+		const bar = await box(navigation(page));
+
+		// A button at the bottom right, above the bar, not a row across the page (audit W11).
+		const button = await box(track);
+		expect(button.height).toBeGreaterThanOrEqual(48);
+		expect(button.width).toBeGreaterThanOrEqual(48);
+		expect(button.width).toBeLessThan(COMPACT.width / 2);
+		expect(button.x + button.width).toBeLessThanOrEqual(COMPACT.width - 16);
+		expect(button.y + button.height).toBeLessThanOrEqual(bar.y - 8);
+		expect(await fixedRows(page)).toEqual([64]);
+		await expectContentClearOfNavigation(page);
+
+		// On the Timesheet, the page's own Track time is the one control.
+		await navigation(page).getByRole("link", { name: first.label, exact: true }).click();
+		await expect(page).toHaveURL(homePath(first.id));
+		await expect(track).toBeHidden();
+		// No second control under another name: at most the page's own button.
+		expect(await page.getByRole("button", { name: "Track time" }).count()).toBeLessThanOrEqual(1);
+		await expect(page.getByRole("link", { name: "Track time" })).toHaveCount(0);
+		await expect(page.getByText("Start timer", { exact: true })).toHaveCount(0);
+		expect(await fixedRows(page)).toEqual([64]);
 	});
 });
 
@@ -159,13 +323,13 @@ test.describe("in a window 1280px wide", () => {
 		await expectContentClearOfNavigation(page);
 	});
 
-	test("the timer's control stands before the first heading: Start timer while nothing runs", async ({
+	test("the timer's control stands before the first heading: Track time while nothing runs", async ({
 		page,
 	}) => {
 		await openShell(page, homePath(first.id));
 
 		const before = await navigation(page).evaluate((nav) => nav.firstElementChild?.textContent);
-		expect(before).toBe("Start timer");
+		expect(before).toBe("Track time");
 	});
 
 	test("the profile menu is in the band, beside the organisation's name, and leads to My account", async ({
@@ -188,7 +352,7 @@ test.describe("in a window 1280px wide", () => {
 test.describe("signed in as a member of the organisation", () => {
 	test.use({ storageState: SIGNED_IN_AS_MEMBER, viewport: MEDIUM });
 
-	test("the navigation shows Timesheet, Time off, Projects and Reports, each under its heading", async ({
+	test("the navigation shows Timesheet, Time off, Expenses, Projects and Reports, each under its heading", async ({
 		page,
 	}) => {
 		await openShell(page, homePath(first.id));
@@ -196,12 +360,31 @@ test.describe("signed in as a member of the organisation", () => {
 		await expect(destinationLinks(page)).toHaveText([
 			"Timesheet",
 			"Time off",
+			"Expenses",
 			"Projects",
 			"Reports",
 		]);
 		for (const heading of HEADINGS) {
-			await expect(navigation(page).getByText(heading, { exact: true })).toBeVisible();
+			const shown = heading !== "Bill";
+			const label = destinationList(page).getByText(heading, { exact: true });
+			if (shown) await expect(label).toBeVisible();
+			else await expect(label).toHaveCount(0);
 		}
+	});
+
+	test("under 600px every link is in the bar, and there is no More", async ({ page }) => {
+		await page.setViewportSize(COMPACT);
+		await openShell(page, homePath(first.id));
+
+		await expect(destinationLinks(page)).toHaveText([
+			"Timesheet",
+			"Time off",
+			"Expenses",
+			"Projects",
+			"Reports",
+		]);
+		await expect(more(page)).toHaveCount(0);
+		await expectBar(page);
 	});
 });
 
@@ -236,6 +419,7 @@ test.describe("without script", () => {
 	}) => {
 		await page.goto(homePath(first.id));
 		await expectBar(page);
+		// More is the browser's own popover, which opens without script.
 		await expectDestinations(page, first);
 
 		await page.setViewportSize(MEDIUM);
@@ -300,7 +484,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 			// Every other destination, then back to the first.
 			for (const destination of [...others, first]) {
 				const before = await page.title();
-				await navigation(page).getByRole("link", { name: destination.label, exact: true }).click();
+				await (await linkTo(page, destination)).click();
 
 				await expect(page).toHaveURL(homePath(destination.id));
 				await expect(
@@ -321,16 +505,33 @@ for (const viewport of [COMPACT, MEDIUM]) {
 
 			for (const destination of [...others, first]) {
 				const link = navigation(page).getByRole("link", { name: destination.label, exact: true });
+				// Under 600px a destination More holds is reached by More: Tab to it,
+				// Enter opens it, and Tab goes on into what it opened.
+				const throughMore = isCompact(page) && IN_MORE.includes(destination);
+				const stop = throughMore ? more(page) : link;
 				// Shift+Tab goes back from the heading into the navigation, which comes
 				// before it: the link is one of a handful of stops, however much the
 				// page below the heading holds.
-				for (let presses = 0; presses < 12; presses++) {
-					if (await link.evaluate((element) => element === document.activeElement)) break;
+				for (let presses = 0; presses < 24; presses++) {
+					if (await stop.evaluate((element) => element === document.activeElement)) break;
 					await page.keyboard.press("Shift+Tab");
 				}
+				await expect(stop).toBeFocused();
+				if (throughMore) {
+					await page.keyboard.press("Enter");
+					await expect(morePopover(page)).toBeVisible();
+					for (let presses = 0; presses < 16; presses++) {
+						if (await link.evaluate((element) => element === document.activeElement)) break;
+						await page.keyboard.press("Tab");
+					}
+				}
 				await expect(link).toBeFocused();
-				// The keyboard's focus indicator is drawn around the link's label.
-				await expect(link.locator("span").first()).toHaveCSS("outline-style", "solid");
+				// The keyboard's focus indicator is drawn around the link's label in
+				// the navigation, and inside the row in More.
+				await expect(throughMore ? link : link.locator("span").first()).toHaveCSS(
+					"outline-style",
+					"solid",
+				);
 
 				await page.keyboard.press("Enter");
 				await expect(page).toHaveURL(homePath(destination.id));

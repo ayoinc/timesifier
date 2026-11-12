@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { type Destination, destinations } from "../app/shell/destinations";
+import { compactNavigation, type Destination, destinations } from "../app/shell/destinations";
 import { expect, openShell, test } from "./fixtures";
 import { homePath } from "./organisation";
 
@@ -13,6 +13,14 @@ const MEDIUM = { width: 1280, height: 800 };
 
 const [first, second] = destinations as [Destination, Destination];
 const last = destinations.at(-1) as Destination;
+/**
+ * The farthest destination a press in the navigation reaches at once: the
+ * last of the list from 600px, the last in the bar under it, where the rest
+ * are in More (docs/navigation.md, "The navigation under 600px").
+ */
+const lastInBar = destinations.find(
+	({ id }) => id === compactNavigation(destinations.map((each) => each.id)).bar.at(-1),
+) as Destination;
 
 /** One animation of one part of a view transition. */
 type Part = {
@@ -170,6 +178,7 @@ for (const { viewport, axis, leave, arrive } of [
 ] as const) {
 	const other = axis === 0 ? 1 : 0;
 	const direction = axis === 0 ? "across" : "up and down";
+	const far = viewport === COMPACT ? lastInBar : last;
 
 	test.describe(`in a window ${viewport.width}px wide`, () => {
 		test.use({ viewport, reducedMotion: "no-preference" });
@@ -182,7 +191,7 @@ for (const { viewport, axis, leave, arrive } of [
 			// Loading the page starts no transition.
 			expect(await viewTransitions(page)).toEqual([]);
 
-			const forward = await travel(page, last);
+			const forward = await travel(page, far);
 			const leavingForward = part(forward, leave);
 			const arrivingForward = part(forward, arrive);
 			expect(leavingForward.pseudo).toMatch(/^::view-transition-old\(/);
@@ -252,16 +261,16 @@ for (const { viewport, axis, leave, arrive } of [
 		}) => {
 			await watchViewTransitions(page);
 			await openShell(page, homePath(first.id));
-			const pressed = part(await travel(page, last), arrive);
+			const pressed = part(await travel(page, far), arrive);
 
 			// Back is a move to an earlier destination, Forward to a later one.
 			const back = part(await travel(page, first, () => page.goBack()), arrive);
 			expect(back.from[axis]).toBe(-pressed.from[axis]);
 			await expect(page).toHaveURL(homePath(first.id));
 
-			const forward = part(await travel(page, last, () => page.goForward()), arrive);
+			const forward = part(await travel(page, far, () => page.goForward()), arrive);
 			expect(forward.from[axis]).toBe(pressed.from[axis]);
-			await expect(page).toHaveURL(homePath(last.id));
+			await expect(page).toHaveURL(homePath(far.id));
 		});
 
 		test("a second press during a transition interrupts it", async ({ page, context }) => {
@@ -286,14 +295,14 @@ for (const { viewport, axis, leave, arrive } of [
 			).toBeGreaterThan(0);
 
 			const pressed = Date.now();
-			await links.getByRole("link", { name: last.label, exact: true }).click();
+			await links.getByRole("link", { name: far.label, exact: true }).click();
 			await expect(
-				page.getByRole("heading", { level: 1, name: last.label, exact: true }),
+				page.getByRole("heading", { level: 1, name: far.label, exact: true }),
 			).toBeFocused();
 			// The slowed transition was cut short, not waited for.
 			expect(Date.now() - pressed).toBeLessThan(2000);
-			await expect(page).toHaveURL(homePath(last.id));
-			await expect(page).toHaveTitle(`${last.label} · Timesifier`);
+			await expect(page).toHaveURL(homePath(far.id));
+			await expect(page).toHaveTitle(`${far.label} · Timesifier`);
 		});
 	});
 
@@ -307,7 +316,7 @@ for (const { viewport, axis, leave, arrive } of [
 				await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches),
 			).toBe(true);
 
-			for (const destination of [last, first]) {
+			for (const destination of [far, first]) {
 				const transition = await travel(page, destination);
 
 				// No running animation changes transform, translate, scale or rotate.

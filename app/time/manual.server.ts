@@ -1,6 +1,7 @@
 import { and, eq, gte, lt } from "drizzle-orm";
 
-import type { OrganisationScope } from "~/db";
+import { changes, recordStatement } from "~/activity/activity.server";
+import { type OrganisationScope, uuidv7 } from "~/db";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
 
@@ -14,7 +15,8 @@ import { gridEntryStart } from "./grid";
  * acts on the caller's own entries alone: an entry of anybody else, in this
  * organisation or another, is not found, whatever the caller's role
  * (`mayChangeTimeOf`). A day in a submitted or approved period is refused,
- * before and after the change (`lockedDays`).
+ * before and after the change (`lockedDays`). Each change goes in one batch
+ * with its row in the activity log.
  */
 
 /** Why a change was not made. */
@@ -34,6 +36,13 @@ export interface Span {
 }
 
 const refuse = (reason: NotWritten) => ({ ok: false as const, reason });
+
+/** What the activity log records of an entry. */
+const ENTRY_FIELDS = ["projectId", "description", "startedAt", "endedAt"] as const;
+
+/** The entry `id` of `userId`, as the activity log names it. */
+const subject = (userId: string, id: string) =>
+	({ type: "time_entry", id, ownerId: userId }) as const;
 
 /** The caller's entry by id, or null: another person's is none. */
 async function ownEntry(scope: OrganisationScope, userId: string, id: string) {
@@ -64,15 +73,22 @@ export async function editEntry(
 	}
 	const days = [dayOf(entry.startedAt, zone), dayOf(span.startedAt, zone)];
 	if ((await lockedDays(scope, userId, days)).size > 0) return refuse("locked");
-	await scope.timeEntries.update(
-		{
-			projectId: span.projectId,
-			description: span.description,
-			startedAt: new Date(span.startedAt),
-			endedAt: new Date(span.endedAt),
-		},
-		(e) => and(eq(e.id, id), eq(e.userId, userId)),
-	);
+	const changed = {
+		projectId: span.projectId,
+		description: span.description,
+		startedAt: new Date(span.startedAt),
+		endedAt: new Date(span.endedAt),
+	};
+	await scope.batch([
+		scope.timeEntries.statements.update(changed, (e) => and(eq(e.id, id), eq(e.userId, userId))),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.updated",
+			subject(userId, id),
+			changes(entry, changed, ENTRY_FIELDS),
+		),
+	]);
 	return { ok: true as const };
 }
 
@@ -89,7 +105,16 @@ export async function deleteEntry(
 	if ((await lockedDays(scope, userId, [dayOf(entry.startedAt, zone)])).size > 0) {
 		return refuse("locked");
 	}
-	await scope.timeEntries.delete((e) => and(eq(e.id, id), eq(e.userId, userId)));
+	await scope.batch([
+		scope.timeEntries.statements.delete((e) => and(eq(e.id, id), eq(e.userId, userId))),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.deleted",
+			subject(userId, id),
+			changes(entry, null, ENTRY_FIELDS),
+		),
+	]);
 	return { ok: true as const };
 }
 
@@ -126,14 +151,25 @@ export async function addHours(scope: OrganisationScope, userId: string, hours: 
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
 	const startedAt =
 		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
-	const [added] = await scope.timeEntries.insert({
+	const added = {
+		id: uuidv7(),
 		userId,
 		projectId,
 		description,
 		startedAt: new Date(startedAt),
 		endedAt: new Date(startedAt + minutes * 60_000),
-	});
-	return { ok: true as const, entry: added };
+	};
+	const [[entry]] = await scope.batch([
+		scope.timeEntries.statements.insert(added),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.created",
+			subject(userId, added.id),
+			changes(null, added, ENTRY_FIELDS),
+		),
+	]);
+	return { ok: true as const, entry };
 }
 
 export interface CellHours {
@@ -165,25 +201,55 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 	const length = minutes * 60_000;
 
 	if (entry) {
+		const at = subject(userId, entry.id);
 		if (minutes === 0) {
-			await scope.timeEntries.delete((e) => and(eq(e.id, entry.id), eq(e.userId, userId)));
+			await scope.batch([
+				scope.timeEntries.statements.delete((e) => and(eq(e.id, entry.id), eq(e.userId, userId))),
+				recordStatement(
+					scope,
+					userId,
+					"time_entry.deleted",
+					at,
+					changes(entry, null, ENTRY_FIELDS),
+				),
+			]);
 		} else {
-			await scope.timeEntries.update(
-				{ endedAt: new Date(entry.startedAt.getTime() + length) },
-				(e) => and(eq(e.id, entry.id), eq(e.userId, userId)),
-			);
+			const endedAt = new Date(entry.startedAt.getTime() + length);
+			await scope.batch([
+				scope.timeEntries.statements.update({ endedAt }, (e) =>
+					and(eq(e.id, entry.id), eq(e.userId, userId)),
+				),
+				recordStatement(
+					scope,
+					userId,
+					"time_entry.updated",
+					at,
+					changes(entry, { endedAt }, ["endedAt"]),
+				),
+			]);
 		}
 		return { ok: true as const };
 	}
 	if (minutes === 0) return { ok: true as const };
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
 	const startedAt = gridEntryStart(day, zone, ofDay, now);
-	await scope.timeEntries.insert({
+	const added = {
+		id: uuidv7(),
 		userId,
 		projectId,
 		description: null,
 		startedAt: new Date(startedAt),
 		endedAt: new Date(startedAt + length),
-	});
+	};
+	await scope.batch([
+		scope.timeEntries.statements.insert(added),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.created",
+			subject(userId, added.id),
+			changes(null, added, ENTRY_FIELDS),
+		),
+	]);
 	return { ok: true as const };
 }

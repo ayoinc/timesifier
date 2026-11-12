@@ -6,6 +6,8 @@
  * `biome.json` refuses an import of `~/db/schema` or `~/db/scope` anywhere else.
  */
 export {
+	type ActivitySummary,
+	type ActivityValue,
 	accounts,
 	organisations,
 	rateLimits,

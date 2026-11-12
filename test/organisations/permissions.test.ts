@@ -15,7 +15,7 @@ import {
 	value,
 } from "./harness";
 
-const ROLES: Role[] = ["owner", "admin", "member"];
+const ROLES: Role[] = ["owner", "admin", "finance", "member"];
 
 /**
  * The permission table of docs/security.md, "Organisations and roles", cell
@@ -23,19 +23,40 @@ const ROLES: Role[] = ["owner", "admin", "member"];
  * that every cell has its evidence and that none is contradicted.
  */
 const TABLE = {
-	"See the organisation and its members": { owner: "yes", admin: "yes", member: "yes" },
-	"Rename the organisation": { owner: "yes", admin: "yes", member: "no" },
-	"Delete the organisation": { owner: "yes", admin: "no", member: "no" },
-	"Invite a person": { owner: "yes", admin: "yes", member: "no" },
-	"Cancel an invitation": { owner: "yes", admin: "yes", member: "no" },
-	"Change a member's role between admin and member": { owner: "yes", admin: "yes", member: "no" },
+	"See the organisation and its members": {
+		owner: "yes",
+		admin: "yes",
+		finance: "yes",
+		member: "yes",
+	},
+	"Rename the organisation": { owner: "yes", admin: "yes", finance: "no", member: "no" },
+	"Delete the organisation": { owner: "yes", admin: "no", finance: "no", member: "no" },
+	"Invite a person": { owner: "yes", admin: "yes", finance: "no", member: "no" },
+	"Cancel an invitation": { owner: "yes", admin: "yes", finance: "no", member: "no" },
+	"Change a member's role between admin, Finance and member": {
+		owner: "yes",
+		admin: "yes",
+		finance: "no",
+		member: "no",
+	},
 	"Make another person owner, or change an owner's role": {
 		owner: "yes",
 		admin: "no",
+		finance: "no",
 		member: "no",
 	},
-	"Remove a member": { owner: "yes", admin: "yes, except an owner", member: "no" },
-	"Leave the organisation": { owner: "yes, unless the last owner", admin: "yes", member: "yes" },
+	"Remove a member": {
+		owner: "yes",
+		admin: "yes, except an owner",
+		finance: "no",
+		member: "no",
+	},
+	"Leave the organisation": {
+		owner: "yes, unless the last owner",
+		admin: "yes",
+		finance: "yes",
+		member: "yes",
+	},
 } as const;
 
 type Action = keyof typeof TABLE;
@@ -196,6 +217,11 @@ const attempts = {
 		request: changeRole((stage) => stage.member.memberId, "admin"),
 		done: async ({ member }) => (await roleOf(member.memberId)) === "admin",
 	},
+	toFinance: {
+		to: "make a member Finance",
+		request: changeRole((stage) => stage.member.memberId, "finance"),
+		done: async ({ member }) => (await roleOf(member.memberId)) === "finance",
+	},
 	demote: {
 		to: "make an admin a member",
 		request: changeRole((stage) => stage.admin.memberId, "member"),
@@ -236,42 +262,94 @@ const trials: Trial[] = [
 	...row("See the organisation and its members", attempts.see, {
 		owner: true,
 		admin: true,
+		finance: true,
 		member: true,
 	}),
 	...row("See the organisation and its members", attempts.listMembers, {
 		owner: true,
 		admin: true,
+		finance: true,
 		member: true,
 	}),
-	...row("Rename the organisation", attempts.rename, { owner: true, admin: true, member: false }),
-	...row("Delete the organisation", attempts.delete, { owner: true, admin: false, member: false }),
-	...row("Invite a person", attempts.invite, { owner: true, admin: true, member: false }),
-	...row("Cancel an invitation", attempts.cancel, { owner: true, admin: true, member: false }),
-	...row("Change a member's role between admin and member", attempts.promote, {
+	...row("Rename the organisation", attempts.rename, {
 		owner: true,
 		admin: true,
+		finance: false,
 		member: false,
 	}),
-	...row("Change a member's role between admin and member", attempts.demote, {
+	...row("Delete the organisation", attempts.delete, {
+		owner: true,
+		admin: false,
+		finance: false,
+		member: false,
+	}),
+	...row("Invite a person", attempts.invite, {
 		owner: true,
 		admin: true,
+		finance: false,
+		member: false,
+	}),
+	...row("Cancel an invitation", attempts.cancel, {
+		owner: true,
+		admin: true,
+		finance: false,
+		member: false,
+	}),
+	...row("Change a member's role between admin, Finance and member", attempts.promote, {
+		owner: true,
+		admin: true,
+		finance: false,
+		member: false,
+	}),
+	...row("Change a member's role between admin, Finance and member", attempts.toFinance, {
+		owner: true,
+		admin: true,
+		finance: false,
+		member: false,
+	}),
+	...row("Change a member's role between admin, Finance and member", attempts.demote, {
+		owner: true,
+		admin: true,
+		finance: false,
 		member: false,
 	}),
 	...row("Make another person owner, or change an owner's role", attempts.makeOwner, {
 		owner: true,
 		admin: false,
+		finance: false,
 		member: false,
 	}),
 	...row("Make another person owner, or change an owner's role", attempts.demoteAnOwner, {
 		owner: true,
 		admin: false,
+		finance: false,
 		member: false,
 	}),
-	...row("Remove a member", attempts.removeAMember, { owner: true, admin: true, member: false }),
-	...row("Remove a member", attempts.removeAnAdmin, { owner: true, admin: true, member: false }),
+	...row("Remove a member", attempts.removeAMember, {
+		owner: true,
+		admin: true,
+		finance: false,
+		member: false,
+	}),
+	...row("Remove a member", attempts.removeAnAdmin, {
+		owner: true,
+		admin: true,
+		finance: false,
+		member: false,
+	}),
 	// "yes, except an owner"
-	...row("Remove a member", attempts.removeAnOwner, { owner: true, admin: false, member: false }),
-	...row("Leave the organisation", attempts.leave, { owner: true, admin: true, member: true }),
+	...row("Remove a member", attempts.removeAnOwner, {
+		owner: true,
+		admin: false,
+		finance: false,
+		member: false,
+	}),
+	...row("Leave the organisation", attempts.leave, {
+		owner: true,
+		admin: true,
+		finance: true,
+		member: true,
+	}),
 	// "yes, unless the last owner"
 	{
 		action: "Leave the organisation",
@@ -290,12 +368,12 @@ const VERDICTS: Record<string, boolean[]> = {
 };
 
 describe("the permission table", () => {
-	it("has 27 cells, each with a trial, and no trial contradicts its cell", () => {
+	it("has 36 cells, each with a trial, and no trial contradicts its cell", () => {
 		const cells = Object.entries(TABLE).flatMap(([action, byRole]) =>
 			ROLES.map((role) => ({ action, role, says: byRole[role] })),
 		);
 
-		expect(cells).toHaveLength(27);
+		expect(cells).toHaveLength(36);
 		for (const { action, role, says } of cells) {
 			const shown = trials.filter((trial) => trial.action === action && trial.as === role);
 			const verdicts = [...new Set(shown.map((trial) => trial.can))].sort();
@@ -307,7 +385,7 @@ describe("the permission table", () => {
 	it.each(
 		trials.map((trial) => ({
 			...trial,
-			title: `${trial.as === "member" ? "a" : "an"} ${trial.as} ${trial.can ? "can" : "cannot"} ${trial.attempt.to}`,
+			title: `${trial.as === "admin" || trial.as === "owner" ? "an" : "a"} ${trial.as} ${trial.can ? "can" : "cannot"} ${trial.attempt.to}`,
 		})),
 	)("$action: $title", async ({ as, can, attempt }) => {
 		const stage = await stageFor(as);

@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
-import type { OrganisationScope } from "~/db";
+import { changes, record, recordStatement } from "~/activity/activity.server";
+import { type OrganisationScope, uuidv7 } from "~/db";
 import { nameKey } from "~/lib/names";
 
 /**
@@ -8,6 +9,8 @@ import { nameKey } from "~/lib/names";
  * a role a person holds for one team: `team_members.is_manager`. What a
  * manager may see is the time of the members of the teams they manage, read
  * from the database on every request, so a change takes effect on the next.
+ * Every change is recorded in the activity log as the act of `actor`, the
+ * person who made it.
  */
 
 /** The ids of the teams `userId` manages in the organisation. */
@@ -85,10 +88,24 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 /** Creates a team called `name`, unless the organisation has one called that already. */
-export async function createTeam(scope: OrganisationScope, name: string): Promise<TeamChange> {
+export async function createTeam(
+	scope: OrganisationScope,
+	actor: string,
+	name: string,
+): Promise<TeamChange> {
 	if (await nameTaken(scope, name)) return "taken";
+	const id = uuidv7();
 	try {
-		await scope.teams.insert({ name, nameKey: nameKey(name) });
+		await scope.batch([
+			scope.teams.statements.insert({ id, name, nameKey: nameKey(name) }),
+			recordStatement(
+				scope,
+				actor,
+				"team.created",
+				{ type: "team", id },
+				changes(null, { name }, ["name"]),
+			),
+		]);
 	} catch (error) {
 		if (isUniqueViolation(error)) return "taken";
 		throw error;
@@ -99,16 +116,27 @@ export async function createTeam(scope: OrganisationScope, name: string): Promis
 /** Gives the team `teamId` the name `name`. */
 export async function renameTeam(
 	scope: OrganisationScope,
+	actor: string,
 	teamId: string,
 	name: string,
 ): Promise<TeamChange> {
 	if (await nameTaken(scope, name, teamId)) return "taken";
+	const [team] = await scope.teams.select((t) => eq(t.id, teamId), { limit: 1 });
+	if (!team) return "missing";
 	try {
-		const changed = await scope.teams.update(
-			{ name, nameKey: nameKey(name), updatedAt: new Date() },
-			(t) => eq(t.id, teamId),
-		);
-		return changed.length > 0 ? "done" : "missing";
+		await scope.batch([
+			scope.teams.statements.update({ name, nameKey: nameKey(name), updatedAt: new Date() }, (t) =>
+				eq(t.id, teamId),
+			),
+			recordStatement(
+				scope,
+				actor,
+				"team.renamed",
+				{ type: "team", id: teamId },
+				changes(team, { name }, ["name"]),
+			),
+		]);
+		return "done";
 	} catch (error) {
 		if (isUniqueViolation(error)) return "taken";
 		throw error;
@@ -116,14 +144,27 @@ export async function renameTeam(
 }
 
 /** Deletes the team `teamId`; its places go with it, and its managers stop managing it. */
-export async function deleteTeam(scope: OrganisationScope, teamId: string): Promise<TeamChange> {
-	const deleted = await scope.teams.delete((t) => eq(t.id, teamId));
-	return deleted.length > 0 ? "done" : "missing";
+export async function deleteTeam(
+	scope: OrganisationScope,
+	actor: string,
+	teamId: string,
+): Promise<TeamChange> {
+	const [deleted] = await scope.teams.delete((t) => eq(t.id, teamId));
+	if (!deleted) return "missing";
+	await record(
+		scope,
+		actor,
+		"team.deleted",
+		{ type: "team", id: teamId },
+		changes(deleted, null, ["name"]),
+	);
+	return "done";
 }
 
 /** Puts `userId`, a member of the organisation, in the team `teamId`, as its manager or not. */
 export async function addToTeam(
 	scope: OrganisationScope,
+	actor: string,
 	teamId: string,
 	userId: string,
 	isManager: boolean,
@@ -139,7 +180,16 @@ export async function addToTeam(
 	if (!membership) return "not-member";
 	if (place) return "already";
 	try {
-		await scope.teamMembers.insert({ teamId, userId, isManager });
+		await scope.batch([
+			scope.teamMembers.statements.insert({ teamId, userId, isManager }),
+			recordStatement(
+				scope,
+				actor,
+				"team.member_added",
+				{ type: "team", id: teamId, ownerId: userId },
+				changes(null, { isManager }, ["isManager"]),
+			),
+		]);
 	} catch (error) {
 		if (isUniqueViolation(error)) return "already";
 		throw error;
@@ -150,24 +200,48 @@ export async function addToTeam(
 /** Takes `userId` out of the team `teamId`, which also ends their time as its manager. */
 export async function removeFromTeam(
 	scope: OrganisationScope,
+	actor: string,
 	teamId: string,
 	userId: string,
 ): Promise<TeamChange> {
-	const removed = await scope.teamMembers.delete((t) =>
+	const [removed] = await scope.teamMembers.delete((t) =>
 		and(eq(t.teamId, teamId), eq(t.userId, userId)),
 	);
-	return removed.length > 0 ? "done" : "missing";
+	if (!removed) return "missing";
+	await record(
+		scope,
+		actor,
+		"team.member_removed",
+		{ type: "team", id: teamId, ownerId: userId },
+		changes(removed, null, ["isManager"]),
+	);
+	return "done";
 }
 
 /** Makes `userId` a manager of the team `teamId`, or ends their time as one; they stay in it. */
 export async function setManager(
 	scope: OrganisationScope,
+	actor: string,
 	teamId: string,
 	userId: string,
 	isManager: boolean,
 ): Promise<TeamChange> {
+	const [place] = await scope.teamMembers.select(
+		(t) => and(eq(t.teamId, teamId), eq(t.userId, userId)),
+		{ limit: 1 },
+	);
+	if (!place) return "missing";
+	if (place.isManager === isManager) return "done";
 	const changed = await scope.teamMembers.update({ isManager, updatedAt: new Date() }, (t) =>
 		and(eq(t.teamId, teamId), eq(t.userId, userId)),
 	);
-	return changed.length > 0 ? "done" : "missing";
+	if (changed.length === 0) return "missing";
+	await record(
+		scope,
+		actor,
+		"team.manager_changed",
+		{ type: "team", id: teamId, ownerId: userId },
+		changes(place, { isManager }, ["isManager"]),
+	);
+	return "done";
 }

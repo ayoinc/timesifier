@@ -1,5 +1,5 @@
 /**
- * The three roles a member of an organisation can hold, and what each may do.
+ * The four roles a member of an organisation can hold, and what each may do.
  *
  * This is the permission table of `docs/security.md`, "Organisations and
  * roles", in the form Better Auth's organization plugin checks on every
@@ -14,11 +14,11 @@
 import { createAccessControl } from "better-auth/plugins/access";
 import * as z from "zod";
 
-export const Role = z.enum(["owner", "admin", "member"]);
+export const Role = z.enum(["owner", "admin", "finance", "member"]);
 export type Role = z.infer<typeof Role>;
 
 /** The roles an invitation can give. Ownership is given by an owner to a member, never by invitation. */
-export const InvitedRole = z.enum(["admin", "member"]);
+export const InvitedRole = z.enum(["admin", "finance", "member"]);
 
 /** Every action a role can be allowed, by the resource it acts on. The names are the plugin's. */
 const actions = {
@@ -39,6 +39,14 @@ export const roles = {
 		organization: ["update"],
 		member: ["update", "delete"],
 		invitation: ["create", "cancel"],
+	}),
+	// Finance (TS-064) administers no people: in the plugin it is a member. What
+	// it may see beyond a member, Bill, rates and everyone's time and expenses,
+	// is decided in `access.ts` and `app/shell/destinations.ts`.
+	finance: accessControl.newRole({
+		organization: [],
+		member: [],
+		invitation: [],
 	}),
 	// Seeing the organisation and its members, and leaving it, need no permission
 	// beyond being a member.
@@ -62,13 +70,13 @@ export function allows(role: Role, wanted: Wanted): boolean {
 
 /**
  * The roles `actor` may give a member who holds `target`: every role for an
- * owner, admin and member for an admin acting on anyone but an owner, and none
+ * owner, admin, Finance and member for an admin acting on anyone but an owner, and none
  * otherwise. Only an owner makes or changes an owner.
  */
 export function rolesToGive(actor: Role, target: Role): Role[] {
 	if (!allows(actor, { member: ["update"] })) return [];
 	if (actor === "owner") return [...Role.options];
-	return target === "owner" ? [] : ["admin", "member"];
+	return target === "owner" ? [] : ["admin", "finance", "member"];
 }
 
 /** Whether `actor` may remove a member who holds `target`. Only an owner removes an owner. */

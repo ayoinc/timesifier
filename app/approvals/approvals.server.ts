@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
+import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, organisationScope, users } from "~/db";
 import {
 	type Access,
@@ -22,8 +23,9 @@ import type { Day } from "~/time/calendar";
  * time. Whose periods a person decides is `mayDecidePeriodOf` in
  * `access.ts`: an owner or admin everyone's, a manager the members of the
  * teams they manage and never their own. Every decision changes the period
- * through `statusAfter` and records who took it and when in `period_events`,
- * in one D1 batch, so neither is written without the other.
+ * through `statusAfter` and records who took it and when in `period_events`
+ * and in the activity log, in one D1 batch, so neither is written without
+ * the other.
  */
 
 /** The people whose periods `access` decides, and so is shown on Approvals. */
@@ -168,7 +170,7 @@ function mayTake(access: Access, period: PeriodRow, decision: Decision): boolean
 	return mayDecidePeriodOf(access, period.userId);
 }
 
-/** The two writes of one decision: the period's new state and the step that brought it there. */
+/** The writes of one decision: the period's new state, the step that brought it there, and its row in the activity log. */
 function statementsOf(
 	scope: OrganisationScope,
 	period: PeriodRow,
@@ -189,6 +191,13 @@ function statementsOf(
 			actorId,
 			comment,
 		}),
+		recordStatement(
+			scope,
+			actorId,
+			`period.${decision.action}`,
+			{ type: "period", id: period.id, ownerId: period.userId },
+			changes({ status: period.status }, { status: next, comment }, ["status", "comment"]),
+		),
 	] as const;
 }
 

@@ -191,10 +191,21 @@ for (const viewport of [
 			const slug = await ownOrganisationWithAWeek(page);
 
 			await openShell(page, `${destinationPath(slug, "approvals")}?week=${WEEK}`);
-			// The link counts what waits.
-			await expect(
-				page.getByRole("navigation").getByRole("link", { name: "Approvals 1 pending" }),
-			).toBeVisible();
+			// The link counts what waits. Under 600px it is in More, which counts it too.
+			const navigation = page.getByRole("navigation");
+			const expectApprovalsLink = async (count: string) => {
+				if (viewport.width < 600) {
+					const more = navigation.getByRole("button", {
+						name: `More${count}, now on Approvals`,
+					});
+					await expect(more).toBeVisible();
+					await more.click();
+				}
+				const link = navigation.getByRole("link", { name: `Approvals${count}`, exact: true });
+				await expect(link).toBeVisible();
+				if (viewport.width < 600) await page.keyboard.press("Escape");
+			};
+			await expectApprovalsLink(" 1 pending");
 			await expectNoProblems(page, "Approvals");
 			await expect(page.getByText("5 to 11 January 2026").first()).toBeVisible();
 
@@ -215,9 +226,7 @@ for (const viewport of [
 				.getByRole("button", { name: "Approve", exact: true })
 				.press("Enter");
 			await expect(page.getByRole("status")).toHaveText("Timesheet approved.");
-			await expect(
-				page.getByRole("navigation").getByRole("link", { name: "Approvals", exact: true }),
-			).toBeVisible();
+			await expectApprovalsLink("");
 
 			// The status and the grouping are chosen with the keyboard, and kept in the address.
 			await choose(page, "Status", "Approved (1)");
