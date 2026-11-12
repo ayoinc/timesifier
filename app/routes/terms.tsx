@@ -12,8 +12,8 @@ import type { Route } from "./+types/terms";
 
 // The terms. Like the privacy notice, they say what the application does and
 // what it expects, and no more: the limits are the ones docs/security.md gives,
-// the roles the ones in BOARD.md under TS-009. Nothing here is a legal promise
-// that the repository cannot back.
+// the roles the ones in app/organisations/roles.ts and access.ts. Nothing here
+// is a legal promise that the repository cannot back.
 
 export function meta({ matches }: Route.MetaArgs) {
 	return pageMeta({
@@ -21,26 +21,30 @@ export function meta({ matches }: Route.MetaArgs) {
 		path: TERMS_PATH,
 		title: "Terms · Timesifier",
 		description:
-			"What Timesifier is today, how accounts and organisations work, the limits on its use, and how to leave.",
+			"What Timesifier is today, how accounts, organisations and roles work, the limits on its use, and how to leave.",
 	});
 }
+
+/** This version of the terms. */
+const VERSION = { date: "2026-11-12", inWords: "12 November 2026" };
 
 export default function Terms() {
 	return (
 		<Document
 			path={TERMS_PATH}
 			title="Terms"
-			lead="What Timesifier is today, what an account and an organisation are, the limits on their use, and how to leave. They will change as the product does, and their date with them."
+			version={VERSION}
+			lead="What Timesifier is today, what an account and an organisation are, the limits on their use, and how to leave. They change as the product does, and their date with them."
 		>
 			<DocumentSection id="what" title="What Timesifier is">
 				<p>
-					Timesifier is a web application that will keep track of time, for one person or a small
-					team. It is an early version. Today you can sign in with your email address, create an
-					organisation and invite people into it. The timer, the projects and the weekly report that
-					the home page shows are being built, and are not in the product yet.
+					Timesifier is a web application that keeps track of time, for one person or a team. In it
+					you track time with a timer or by hand, submit your timesheet for approval, ask for leave,
+					and record expenses with their receipts; reports add the time up. Owners, admins and
+					Finance also set rates and budgets, and send clients invoices and estimates.
 				</p>
 				<p>
-					Being an early version, it can be unavailable for a time, and what it does will change.
+					It is an early version. It can be unavailable for a time, and what it does will change.
 				</p>
 			</DocumentSection>
 
@@ -56,7 +60,7 @@ export default function Terms() {
 			<DocumentSection id="organisations" title="Organisations">
 				<p>
 					What you keep in Timesifier belongs to an organisation. The person who creates one is its
-					owner, and an organisation always has at least one owner.
+					owner, and an organisation always has at least one owner. Each person in it has one role.
 				</p>
 				<Rows>
 					<Row term="Owners">
@@ -65,11 +69,26 @@ export default function Terms() {
 						given a lesser role.
 					</Row>
 					<Row term="Admins">
-						Rename the organisation, invite people and cancel invitations, change a role between
-						admin and member, and remove anyone except an owner.
+						Rename the organisation and set how it works; invite people and cancel invitations; make
+						anyone but an owner an admin, Finance or a member; remove anyone except an owner; manage
+						teams, clients, tasks and the integrations; see everyone's time, expenses and leave, and
+						approve timesheets and leave.
 					</Row>
-					<Row term="Members">See the organisation and who is in it, and leave it.</Row>
+					<Row term="Finance">
+						See everyone's time and expenses, set rates, and make and send invoices and estimates
+						and record their payments. Finance manages no people.
+					</Row>
+					<Row term="Members">
+						Track their own time, submit their timesheet, ask for leave and record their expenses;
+						see the organisation's projects and who is in it; leave it.
+					</Row>
 				</Rows>
+				<p>
+					Whatever their role, a person an owner or admin makes the manager of a team also sees the
+					time, expenses and leave of the people in it, and approves their timesheets and leave, but
+					never their own. Nobody changes another person's time entries or expenses. The privacy
+					notice says in full who sees what.
+				</p>
 				<p>
 					To anyone who is not in it, an organisation answers exactly as one that does not exist.
 				</p>
@@ -91,10 +110,14 @@ export default function Terms() {
 						for seven days, and only for the address it was sent to.
 					</Row>
 					<Row term="Organisations">One person can own at most five.</Row>
+					<Row term="Invoices and estimates by email">
+						An organisation can send at most 200 in 24 hours.
+					</Row>
 				</Rows>
 				<p>
-					Do not invite people who are not expecting it, try to reach an organisation you do not
-					belong to, or try to get around these limits.
+					Do not invite people who are not expecting it, send invoices or estimates to anyone who is
+					not your client's contact, try to reach an organisation you do not belong to, or try to
+					get around these limits.
 				</p>
 			</DocumentSection>
 
@@ -107,14 +130,16 @@ export default function Terms() {
 
 			<DocumentSection id="leaving" title="Your data, and leaving">
 				<p>
-					What you put into Timesifier is yours. The{" "}
+					What you put into Timesifier is yours and your organisation's. The{" "}
 					<a href={PRIVACY_PATH} className={LINK}>
 						privacy notice
 					</a>{" "}
-					says what is stored, where, and for how long.
+					says what is stored, who sees it, where, for how long, and how to export it.
 				</p>
 				<p>
-					You can stop using Timesifier whenever you like. To have your account deleted, or to ask
+					You can stop using Timesifier whenever you like. You can leave an organisation from My
+					account; the time and expenses you recorded in it stay with it. An owner can delete an
+					organisation, and everything in it goes with it. To have your account deleted, or to ask
 					anything about these terms, write to{" "}
 					<a href={`mailto:${PRIVACY_EMAIL}`} className={LINK}>
 						{PRIVACY_EMAIL}

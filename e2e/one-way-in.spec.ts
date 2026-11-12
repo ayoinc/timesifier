@@ -78,7 +78,7 @@ for (const viewport of [COMPACT, WIDE]) {
 		}) => {
 			const person = newPerson();
 			await page.goto("/");
-			await page.getByRole("main").getByRole("link", { name: "Get started" }).first().click();
+			await page.getByRole("main").getByRole("link", { name: "Start tracking" }).first().click();
 			await expectLoadedWhole(page);
 			await expect(page).toHaveURL("/sign-in");
 
@@ -145,7 +145,7 @@ for (const viewport of [COMPACT, WIDE]) {
 			// The band holds the name and nothing else: this page is the way in.
 			await expect(band.getByRole("link")).toHaveText(["Timesifier"]);
 			await expect(page.getByRole("link", { name: "Sign in" })).toHaveCount(0);
-			await expect(page.getByRole("link", { name: "Get started" })).toHaveCount(0);
+			await expect(page.getByRole("link", { name: "Start tracking" })).toHaveCount(0);
 
 			// The heading in the public pages' face, and the action their size.
 			expect(

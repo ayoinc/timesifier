@@ -28,7 +28,7 @@ export function TimerStates() {
 	return (
 		<figure className="@container">
 			<p className="flex items-baseline justify-between gap-4 pb-3 text-label-large">
-				<span>How the timer will work</span>
+				<span>How the timer works</span>
 				<span className="text-on-surface-variant">{EXAMPLE_NOTE}</span>
 			</p>
 			<ol className="timer-steps divide-y divide-outline-variant border-y-2 border-on-surface">
