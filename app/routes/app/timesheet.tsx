@@ -1,13 +1,18 @@
+import { env } from "cloudflare:workers";
 import { useEffect, useState } from "react";
 import { data, Link, useLocation, useNavigate } from "react-router";
 
+import { alertBudgetsAfter } from "~/budgets/alerts.server";
 import { cx } from "~/components/cx";
+import { organisationScope } from "~/db";
 import { membershipContext } from "~/organisations/membership.server";
 import { DoneMark } from "~/routes/auth/AuthPage";
 import { destination, invitationsPath, WELCOME_PARAM } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading } from "~/shell/PageHeading";
 import { finishRunningTransition } from "~/shell/transitions";
+import { TrackChoicesContext } from "~/tasks/track";
+import { trackChoices } from "~/tasks/track.server";
 import { timesheetAction } from "~/timesheet/actions.server";
 import { CalendarView } from "~/timesheet/CalendarView";
 import { DayView } from "~/timesheet/DayView";
@@ -50,9 +55,18 @@ export async function loader({ request, url, context }: Route.LoaderArgs) {
 	const chosen = chosenView(url.searchParams, membership.organisation.weekStartsOn);
 	const cookie = request.headers.get("Cookie");
 	const marks = readMarks(cookie, membership.user.id);
+	const sheet = await timesheetData(membership, chosen, Date.now(), marks);
+	const shown = "entries" in sheet ? sheet.entries.map((e) => e.id) : [];
 	const page = {
 		welcome: url.searchParams.has(WELCOME_PARAM) && membership.role === "owner",
-		data: await timesheetData(membership, chosen, Date.now(), marks),
+		data: sheet,
+		// The tasks, tags and budget warnings Track time and an entry's sheet offer (TS-066, TS-085, TS-069).
+		track: await trackChoices(
+			organisationScope(env.DB, membership.organisation.id),
+			membership,
+			shown,
+			Date.now(),
+		),
 	};
 	if (chosen.view !== "week" || marks.week) return page;
 	return data(page, {
@@ -62,7 +76,12 @@ export async function loader({ request, url, context }: Route.LoaderArgs) {
 
 /** Track time, the timer's Stop, entries by hand, a cell of the grid, a week's submission and getting started (`timesheet/actions.server.ts`). */
 export async function action({ request, context }: Route.ActionArgs) {
-	return timesheetAction(request, context.get(membershipContext));
+	const membership = context.get(membershipContext);
+	const since = Date.now();
+	const outcome = await timesheetAction(request, membership);
+	// A change that takes a project past its budget alert tells those who look after it (TS-069).
+	await alertBudgetsAfter(membership, since, new URL(request.url).origin);
+	return outcome;
 }
 
 export default function Timesheet({ loaderData }: Route.ComponentProps) {
@@ -126,10 +145,12 @@ export default function Timesheet({ loaderData }: Route.ComponentProps) {
 				})}
 			</fieldset>
 
-			{data.view === "day" && <DayView data={data} slug={organisation.slug} />}
-			{data.view === "week" && <WeekView data={data} slug={organisation.slug} />}
-			{data.view === "calendar" && <CalendarView data={data} slug={organisation.slug} />}
-			{data.view === "history" && <HistoryView data={data} slug={organisation.slug} />}
+			<TrackChoicesContext value={loaderData.track}>
+				{data.view === "day" && <DayView data={data} slug={organisation.slug} />}
+				{data.view === "week" && <WeekView data={data} slug={organisation.slug} />}
+				{data.view === "calendar" && <CalendarView data={data} slug={organisation.slug} />}
+				{data.view === "history" && <HistoryView data={data} slug={organisation.slug} />}
+			</TrackChoicesContext>
 		</>
 	);
 }

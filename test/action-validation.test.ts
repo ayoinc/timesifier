@@ -57,6 +57,20 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	"routes/app/projects": () => formFromAMember("/app/acme/projects", "intent=delete&projectId=p1"),
 	// A client's name is 1 to 120 characters; this is none.
 	"routes/app/clients": () => formFromAMember("/app/acme/clients", "intent=create&name="),
+	// A task's change is one of eight; deleting one is none of them (TS-066).
+	"routes/app/tasks": () => formFromAMember("/app/acme/tasks", "intent=delete&taskId=t1"),
+	// A project's type is hourly, fixed fee or non-billable; this is none of them (TS-067).
+	"routes/app/project": () =>
+		formFromAMember(
+			"/app/acme/projects/p1",
+			"intent=billing&billingType=barter&rateMode=project&currency=GBP",
+		),
+	// A default rate is a person's or a task's; a client's is neither (TS-067).
+	"routes/app/rates": () =>
+		formFromAMember(
+			"/app/acme/projects/rates",
+			"intent=rate&level=client&key=c1&amount=10&from=2026-12-01",
+		),
 	// A request's first day is a date the calendar has; 31 February is not.
 	"routes/app/time-off": () =>
 		formFromAMember(

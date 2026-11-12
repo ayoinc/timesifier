@@ -3,7 +3,7 @@ import * as z from "zod";
 import { periodAfter, periodContaining } from "~/periods/periods";
 import { addDays, Day } from "~/time/calendar";
 
-import { EVERYONE, GROUPS, type Grouping, RANGES, type Range } from "./choices";
+import { ANY_TAG, EVERYONE, GROUPS, type Grouping, RANGES, type Range } from "./choices";
 
 /**
  * What a report is asked for (TS-014a): a range of days, how its time is
@@ -28,6 +28,11 @@ const ReportQuery = z.object({
 	group: z.preprocess(blankIsAbsent, z.enum(GROUPS).default("project")),
 	person: z.preprocess(
 		(value) => (value === EVERYONE ? undefined : blankIsAbsent(value)),
+		z.string().max(64).optional(),
+	),
+	/** Only the time with this tag, on the entry or on its project (TS-085). */
+	tag: z.preprocess(
+		(value) => (value === ANY_TAG ? undefined : blankIsAbsent(value)),
 		z.string().max(64).optional(),
 	),
 });
@@ -185,6 +190,7 @@ export function reportSearch(report: {
 	days: ReportDays;
 	group: Grouping;
 	person?: string;
+	tag?: string;
 }): URLSearchParams {
 	const search = new URLSearchParams({ range: report.range });
 	if (report.range === "custom") {
@@ -195,6 +201,7 @@ export function reportSearch(report: {
 	}
 	search.set("group", report.group);
 	if (report.person !== undefined) search.set("person", report.person);
+	if (report.tag !== undefined) search.set("tag", report.tag);
 	return search;
 }
 

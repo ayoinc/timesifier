@@ -1,4 +1,8 @@
+import { env } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
+import { organisationScope } from "~/db";
+import { maySeeRates } from "~/organisations/access";
+import type { Role } from "~/organisations/roles";
 import { ORGANISATION_PARAM } from "~/shell/destinations";
 
 // The application's routes as it was built, for the tests that request every
@@ -71,11 +75,63 @@ export function isNotFound(route: RouteUnderTest): boolean {
 	return route.id === NOT_FOUND_ROUTE;
 }
 
+/** What `standIn` puts where an address names a record, such as `:projectId`. */
+const STAND_IN_RECORD = "x";
+
+/**
+ * The pages of one record, such as a project's own page
+ * (`projects/:projectId`, TS-066), and how to make a record for each in an
+ * organisation. Their stand-in address names no record and answers 404, so
+ * `addressFor` gives each a real one before it is asked for.
+ */
+const RECORD_PAGES: Record<string, (organisationId: string) => Promise<string>> = {
+	"routes/app/project": async (organisationId) => {
+		const [project] = await organisationScope(env.DB, organisationId).projects.insert({
+			name: "Site",
+			nameKey: "site",
+		});
+		if (!project) throw new Error("No project was made.");
+		return project.id;
+	},
+};
+
 /**
  * Whether the route's address names a record of the organisation, such as an
- * expense's receipt: its stand-in names none, so even a member is answered 404
- * there. Each such route has a test of its own with a real record.
+ * expense's receipt, that `addressFor` makes none for: its stand-in names
+ * none, so even a member is answered 404 there. Each such route has a test of
+ * its own with a real record.
  */
-export function namesARecord(route: Pick<RouteUnderTest, "address">): boolean {
-	return route.address.split("/").includes("x");
+export function namesARecord(route: Pick<RouteUnderTest, "id" | "address">): boolean {
+	return route.address.split("/").includes(STAND_IN_RECORD) && !(route.id in RECORD_PAGES);
+}
+
+/**
+ * The address to ask for the route at in the organisation `organisationId`:
+ * its own address, or for a page of one record, that of a record made for it.
+ */
+export async function addressFor(route: RouteUnderTest, organisationId: string): Promise<string> {
+	const make = RECORD_PAGES[route.id];
+	if (!make) return route.address;
+	if (!route.address.endsWith(`/${STAND_IN_RECORD}`)) {
+		throw new Error(`${route.id}: its address does not end in a record's stand-in.`);
+	}
+	return `${route.address.slice(0, -STAND_IN_RECORD.length)}${await make(organisationId)}`;
+}
+
+/**
+ * The pages below a destination that only some of those shown it may open,
+ * and who: the default rates (`projects/rates`, TS-067) are below Projects,
+ * which everyone is shown, and the Contractors report and its export
+ * (TS-079) below Reports; each holds money and is open to those who see rates
+ * alone. Anyone else gets the 404 a destination they are not shown answers.
+ */
+const NARROWER: Record<string, (role: Role) => boolean> = {
+	"routes/app/rates": maySeeRates,
+	"routes/app/contractors": maySeeRates,
+	"routes/app/contractors.export": maySeeRates,
+};
+
+/** Whether a person of `role`, who is shown the route's destination, may open the route. */
+export function opensFor(route: RouteUnderTest, role: Role): boolean {
+	return NARROWER[route.id]?.(role) ?? true;
 }

@@ -8,6 +8,10 @@ export interface GeneralSettings {
 	timeZone?: string;
 	weekStartsOn?: number;
 	clientsEnabled?: boolean;
+	/** The currency of money nobody gives another (TS-067). A rate keeps the one it was set in. */
+	currency?: string;
+	/** Whether non-billable time counts against hour budgets (TS-069). */
+	budgetCountsNonBillable?: boolean;
 }
 
 /**

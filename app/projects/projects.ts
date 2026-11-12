@@ -1,3 +1,6 @@
+// Relative: routes.ts reads this file when the routes are built, without the `~` alias.
+import { destinationPath } from "../shell/destinations";
+
 /**
  * What the pages of projects and clients share with the browser
  * (TS-011a, TS-011b, TS-057). The rules that read the database are in
@@ -83,4 +86,34 @@ export function groupedByClient<P extends Grouped>(projects: readonly P[]): Clie
 		if (a.client === null || b.client === null) return a.client === null ? 1 : -1;
 		return a.client.key < b.client.key ? -1 : a.client.key > b.client.key ? 1 : 0;
 	});
+}
+
+/** The route parameter that names a project on its own page (harvest-taste.md item 11). */
+export const PROJECT_PARAM = "projectId";
+
+/** What follows Projects in the address of the default rates: each person's and each task's (TS-067). */
+export const DEFAULT_RATES_SEGMENT = "rates";
+
+/** The address of the project `id`'s own page in the organisation `slug`; `tab` picks one of its tabs. */
+export function projectPath(slug: string, id: string, tab?: ProjectTab): string {
+	const path = `${destinationPath(slug, "projects")}/${id}`;
+	return tab === undefined || tab === "overview" ? path : `${path}?${TAB_PARAM}=${tab}`;
+}
+
+/** The address of the default rates in the organisation `slug`. */
+export function defaultRatesPath(slug: string): string {
+	return `${destinationPath(slug, "projects")}/${DEFAULT_RATES_SEGMENT}`;
+}
+
+/** The tabs of a project's page, in order: what it has come to, its tasks, its people and its settings. */
+export const PROJECT_TABS = ["overview", "tasks", "team", "settings"] as const;
+export type ProjectTab = (typeof PROJECT_TABS)[number];
+
+/** The query that picks a project page's tab, kept in the address so a tab can be linked to. */
+export const TAB_PARAM = "tab";
+
+/** The tab an address asks for: Overview unless it names another. */
+export function projectTabIn(search: URLSearchParams): ProjectTab {
+	const asked = search.get(TAB_PARAM);
+	return PROJECT_TABS.find((tab) => tab === asked) ?? "overview";
 }

@@ -1,6 +1,5 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
-import { Button as AriaButton } from "react-aria-components";
 import { Link, type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
 import * as z from "zod";
 
@@ -15,17 +14,24 @@ import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
-import { mayManageClients, mayManageIntegrations, timeScopeOf } from "~/organisations/access";
+import {
+	mayManageClients,
+	mayManageIntegrations,
+	maySeeRates,
+	timeScopeOf,
+} from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
 import {
+	defaultRatesPath,
 	groupedByClient,
 	keptTab,
 	NO_CLIENT,
 	onlyTabChanged,
+	projectPath,
 	SEARCH_PARAM,
 	searchIn,
 } from "~/projects/projects";
@@ -93,6 +99,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		hoursOf,
 		clients: clients.map(({ id, name }) => ({ id, name })),
 		givesClients,
+		/** Whether the default rates are the viewer's to see (TS-067). */
+		seesRates: maySeeRates(membership.role),
 	};
 }
 
@@ -204,26 +212,35 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 
 	const create = <Button onPress={() => setTask("create")}>Create project</Button>;
 
-	// A project's name opens its sheet, which edits it and holds Archive or
-	// Restore: two things, so no menu (docs/design-direction.md, rule 2).
+	// A project's name opens its own page (harvest-taste.md item 11); Edit
+	// opens its sheet, which edits it and holds Archive or Restore: two things,
+	// so no menu (docs/design-direction.md, rule 2).
 	const list = (shown: Project[], label: string) => (
 		<LedgerRows label={label}>
 			{shown.map((each) => (
 				<LedgerRow
 					key={each.id}
 					title={
+						<Link
+							to={projectPath(organisation.slug, each.id)}
+							className={cx(ACTION_LINK, "wrap-anywhere")}
+						>
+							{each.name}
+						</Link>
+					}
+					action={
 						// React Aria's button presses on key up, as every button that opens a
 						// sheet here does, so the sheet's field keeps the focus it is given.
-						<AriaButton
-							aria-haspopup="dialog"
-							className={cx(ACTION_LINK, "cursor-pointer text-start wrap-anywhere")}
+						<Button
+							variant="text"
+							aria-label={`Edit ${each.name}`}
 							onPress={() => {
 								setProject(each);
 								setTask("rename");
 							}}
 						>
-							{each.name}
-						</AriaButton>
+							Edit
+						</Button>
 					}
 					value={each.hours}
 				/>
@@ -285,6 +302,13 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
 			</p>
+			{loaderData.seesRates && (
+				<p className="mt-4 text-body-large">
+					<Link to={defaultRatesPath(organisation.slug)} className={ACTION_LINK}>
+						Default rates
+					</Link>
+				</p>
+			)}
 
 			<div className="mt-10 max-w-200">
 				{projects.length === 0 && query === "" ? (

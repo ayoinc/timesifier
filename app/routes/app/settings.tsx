@@ -38,6 +38,7 @@ import { setTimesheetRules, timesheetRulesOf } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
 import { LockSettings } from "~/locks/LockSettings";
 import { LOCK_FORMS, lockAction, lockingData } from "~/locks/settings.server";
+import { CurrencyCode } from "~/money/money";
 import { isAdministrator } from "~/organisations/access";
 import { deleteOrganisation, renameOrganisation } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -47,6 +48,8 @@ import { AS_ROLE } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows } from "~/organisations/roles";
 import { WeekStart } from "~/periods/periods";
+import { MoneySettings } from "~/projects/MoneySettings";
+import { organisationMoney } from "~/projects/money.server";
 import { APP_PATH, destination } from "~/shell/destinations";
 import { PageHeading, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
@@ -112,6 +115,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 		},
 		/** The lock date, the deadline and auto-lock (TS-065). */
 		locking,
+		/** The currency, and whether non-billable hours count against budgets (TS-067, TS-069). */
+		money: await organisationMoney(organisation.id),
 	};
 }
 
@@ -167,6 +172,8 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("week-start"), weekStartsOn: WeekStart }),
 	// A switch sends its value only while it is on: no `clientsEnabled` is off.
 	z.object({ intent: z.literal("clients"), clientsEnabled: z.literal("on").optional() }),
+	z.object({ intent: z.literal("currency"), currency: CurrencyCode }),
+	z.object({ intent: z.literal("budget-hours"), countNonBillable: z.literal("on").optional() }),
 	// What the person typed to confirm. It is compared with the name; it is never used as one.
 	z.object({ intent: z.literal("delete"), confirmation: z.string().max(200) }),
 	z.object({
@@ -252,6 +259,24 @@ export async function action({ request, context }: Route.ActionArgs) {
 				clientsEnabled
 					? "Clients is on. Everyone sees each project's client."
 					: "Clients is off. Nothing was deleted; turn it on to show them again.",
+			);
+		}
+
+		case "currency":
+		case "budget-hours": {
+			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
+			if (input.intent === "currency") {
+				await changeGeneral(env.DB, organisation.id, { currency: input.currency });
+				return done(
+					`Amounts are now in ${input.currency} unless a client or a project has its own.`,
+				);
+			}
+			const counts = input.countNonBillable === "on";
+			await changeGeneral(env.DB, organisation.id, { budgetCountsNonBillable: counts });
+			return done(
+				counts
+					? "Non-billable hours now count against hour budgets."
+					: "Only billable hours now count against hour budgets.",
 			);
 		}
 
@@ -400,6 +425,13 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 					</LedgerRows>
 				</Ledger>
 			</Section>
+
+			<MoneySettings
+				currency={loaderData.money.currency}
+				budgetCountsNonBillable={loaderData.money.budgetCountsNonBillable}
+				canChange={organisation.canChange}
+				onDone={setSaid}
+			/>
 
 			<LeaveSettings data={leave} onDone={setSaid} />
 

@@ -51,6 +51,9 @@ function entry(
 		description: "Work",
 		startedAt: typeof startedAt === "number" ? startedAt : Date.parse(startedAt),
 		endedAt: endedAt === null ? null : typeof endedAt === "number" ? endedAt : Date.parse(endedAt),
+		taskId: null,
+		task: null,
+		billable: false,
 		...more,
 	};
 }

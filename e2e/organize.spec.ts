@@ -95,9 +95,10 @@ for (const viewport of [
 					creating.getByText("Everyone in", { exact: false }),
 				);
 
-				// The row's name opens its sheet, which holds Archive (TS-091, W24). The
-				// check of the sheet closes it, so the name opens it again.
-				const row = page.getByRole("button", { name: "Design", exact: true });
+				// The row's Edit opens its sheet, which holds Archive (TS-091, W24); its
+				// name opens the project's own page (TS-066). The check of the sheet
+				// closes it, so Edit opens it again.
+				const row = page.getByRole("button", { name: "Edit Design", exact: true });
 				await row.click();
 				const editing = page.getByRole("dialog", { name: "Edit Design" });
 				await expectNoProblemsInSheet(page, editing, editing.getByText("Done with it?"));
@@ -150,8 +151,12 @@ test("a project is created, renamed and archived with the keyboard alone", async
 	await expect(creating).toBeHidden();
 	await expect(page.getByRole("status")).toHaveText("Project created: Design.");
 
-	// Rename: the project's name is a button in the tab order that opens its sheet (TS-091, W24).
-	const row = page.getByRole("button", { name: "Design", exact: true });
+	// Rename: the row's Edit is a button in the tab order that opens its sheet
+	// (TS-091, W24); the project's name, before it, is the link to its own page (TS-066).
+	await expect(
+		page.getByRole("main").getByRole("link", { name: "Design", exact: true }),
+	).toHaveAttribute("href", /\/projects\/[^/]+$/);
+	const row = page.getByRole("button", { name: "Edit Design", exact: true });
 	await heading.focus();
 	while (!(await row.evaluate((element) => element === document.activeElement))) {
 		await page.keyboard.press("Tab");
@@ -169,7 +174,7 @@ test("a project is created, renamed and archived with the keyboard alone", async
 	await expect(page.getByRole("status")).toHaveText("Project saved: Design system.");
 
 	// Archive: from the same sheet, then the confirming sheet's own button.
-	const renamed = page.getByRole("button", { name: "Design system", exact: true });
+	const renamed = page.getByRole("button", { name: "Edit Design system", exact: true });
 	await renamed.focus();
 	await expectFocusShown(renamed);
 	await page.keyboard.press("Enter");

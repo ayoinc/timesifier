@@ -1,7 +1,5 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { contractorsPath } from "~/contractors/paths";
-import { maySeeRates } from "~/organisations/access";
 import {
 	canSee,
 	compactNavigation,
@@ -16,7 +14,14 @@ import {
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, seedTeam, value } from "../organisations/harness";
-import { allRoutes, isMoved, namesARecord, STAND_IN_ORGANISATION } from "../routes";
+import {
+	addressFor,
+	allRoutes,
+	isMoved,
+	namesARecord,
+	opensFor,
+	STAND_IN_ORGANISATION,
+} from "../routes";
 import { open, openData, type Person, pageBody, person, submit, textOf } from "./harness";
 
 // The navigation by heading and role (docs/navigation.md, "The navigation, top
@@ -29,16 +34,21 @@ import { open, openData, type Person, pageBody, person, submit, textOf } from ".
 const ACME = STAND_IN_ORGANISATION;
 const NOBODYS = "globex";
 
-/** The pages of one organisation that belong to a destination, read from the route configuration. */
+/**
+ * The pages of one organisation that belong to a destination, read from the
+ * route configuration. A page of one record is asked for at a record made for
+ * it (`addressFor`); a page below a destination that only some of those shown
+ * it may open, such as the default rates, says who (`opensFor`).
+ */
 const destinationPages = allRoutes
 	.filter((route) => !isMoved(route))
-	.map((route) => ({ ...route, index: destinationIndex(ACME, route.address) }))
+	.map((route) => ({ route, index: destinationIndex(ACME, route.address) }))
 	.filter(({ index }) => index >= 0)
 	// A record's address, such as a receipt's, is 404 to a member too: its own test follows it.
-	.filter((route) => !namesARecord(route))
-	.map(({ id, address, index }) => ({
-		id,
-		address,
+	.filter(({ route }) => !namesARecord(route))
+	.map(({ route, index }) => ({
+		route,
+		address: route.address,
 		destination: destinations[index]?.id as DestinationId,
 	}));
 
@@ -274,10 +284,13 @@ describe("the list of destinations", () => {
 		}
 	});
 
-	it("covers every destination and the pages of Team in the pages walked below", () => {
+	it("covers every destination, the pages of Team, a project's page and the default rates in the pages walked below", () => {
 		const covered = new Set(destinationPages.map(({ destination }) => destination));
 		expect([...covered].sort()).toEqual(destinations.map(({ id }) => id).sort());
+		const ids = destinationPages.map(({ route }) => route.id);
 		expect(destinationPages.map(({ address }) => address)).toContain(membersPath(ACME));
+		expect(ids).toContain("routes/app/project");
+		expect(ids).toContain("routes/app/rates");
 	});
 });
 
@@ -310,21 +323,31 @@ describe.each(Object.keys(SHOWN))("to a %s", (kind) => {
 
 	it("every page of a destination: shown, or the same 404 as another organisation's", async () => {
 		const who = people[kind] as Person;
-		for (const { address, destination } of destinationPages) {
+		const viewer = VIEWERS[kind] as Viewer;
+		for (const { route, destination } of destinationPages) {
+			const address = await addressFor(route, acme.id);
 			const page = await open(address, who);
 			const data = await openData(address, who);
 
-			// The Contractors report and its export are below Reports but hold
-			// money: whoever does not see rates gets the same 404 there (TS-079).
-			const viewer = VIEWERS[kind] as Viewer;
-			const money = address.startsWith(contractorsPath(ACME));
-			if (canSee(viewer, destination) && (!money || maySeeRates(viewer.role))) {
+			// A page below a destination that holds money, such as the default
+			// rates or the Contractors report, is the same 404 to whoever does
+			// not see rates (TS-067, TS-079).
+			if (canSee(viewer, destination) && opensFor(route, viewer.role)) {
 				expect(page.status, address).toBe(200);
 				expect(data.status, address).toBe(200);
 				continue;
 			}
 			expect(page.status, address).toBe(404);
 			expect(data.status, address).toBe(404);
+			if (canSee(viewer, destination) && route.hasPage) {
+				// A page below a destination they are shown: the 404 of an address
+				// that holds no page, drawn in their own shell, with none of the page.
+				// A file, such as the Contractors export, answers as a stranger's would.
+				const text = textOf(await pageBody(page));
+				expect(text, address).toContain("There's no page here");
+				expect(text, address).not.toContain("Default rates");
+				continue;
+			}
 			// The person asking for an organisation nobody has, and a stranger
 			// asking for this one, get this very answer.
 			const nobodys = address.replace(organisationPath(ACME), organisationPath(NOBODYS));

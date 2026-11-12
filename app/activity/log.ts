@@ -20,6 +20,7 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	invitation: "Invitations",
 	team: "Teams",
 	task: "Tasks",
+	tag: "Tags",
 	rate: "Rates",
 	budget: "Budgets",
 	expense: "Expenses",
