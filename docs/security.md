@@ -241,6 +241,8 @@ The money records are all the organisation's own, so nobody's: rates (a cost rat
 
 An expense's receipt is stored in R2 under a key scoped to the organisation, `org/<organisation id>/receipts/<expense id>`, built on the server from the expense's row and never taken from a request. It is served through the Worker only to a person who may see the expense (`maySeeExpensesOf`); anyone else, in this organisation or another, gets the same 404 (TS-070). A receipt is accepted only as a PDF, PNG or JPEG of at most 10 MB, judged by its first bytes as well as its declared type; its file name is cleaned of control characters, quotes and path parts before it is kept, and it is served with its stored type, `nosniff` and a policy under which nothing loads. Only `app/expenses/receipts.server.ts` reaches the `RECEIPTS` binding.
 
+A receipt is deleted from R2 when its expense is deleted, when its expense's receipt is removed or replaced, and when its organisation is deleted. Before an organisation's row goes, `beforeDeleteOrganization` (`app/auth/organisations.server.ts`) lists every key under `org/<organisation id>/receipts/` a page at a time, following R2's cursor, and deletes each page in one call (`deleteOrganisationReceipts`). If any of it fails the organisation is not deleted: the request is answered 503 with the code `RECEIPTS_NOT_DELETED`, Workspace settings says the organisation was not deleted and to try again, and asking again deletes what is left and then the organisation (`test/db/delete-organisation.test.ts`). The R2 bucket has the `eu` jurisdiction (`wrangler.jsonc`): "Jurisdictional Restrictions guarantee objects in a bucket are stored within a specific jurisdiction" ([Cloudflare, R2 data location](https://developers.cloudflare.com/r2/reference/data-location/)).
+
 ### Invoices, estimates and payments
 
 Invoices, Estimates and every page below them (TS-073, TS-074, TS-077, TS-078, TS-088) are owners', admins' and Finance's alone: the organisation layout's destination check answers anyone else 404 at every address under them, for a page, a data request, a PDF, a CSV and a form alike (`test/billing/invoices.test.ts`, `test/pages/destinations.test.ts`). A page of one record, `/invoices/<id>`, `/estimates/<id>` and their PDFs, reads the record through `organisationScope`, so another organisation's id is the same 404 as one that does not exist (`test/pages/isolation.test.ts`, which expects 404 at the stand-in id of every such page).
@@ -302,7 +304,7 @@ Creating an organisation and sending an invitation each allow one client 10 requ
 | `invitations`   | The invited address, the role offered, who sent it, when it expires and what became of it      |
 | `sessions`      | One more column, the plugin's "active organisation", which the plugin writes and nothing reads |
 
-Deleting an organisation deletes its memberships and invitations with it. An invitation works for seven days; its row stays afterwards, with what became of it, until card TS-033's daily job.
+Deleting an organisation deletes its row, and every table of the organisation goes with it: each has a foreign key to `organisations` that cascades (`test/claims.test.ts` holds it), and its receipts in R2 are deleted first (see "Receipts"). A person's account is not deleted with an organisation. An invitation works for seven days; its row stays afterwards, with what became of it, until the organisation is deleted.
 
 ### Organisations: never logged
 

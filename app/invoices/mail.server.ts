@@ -142,7 +142,7 @@ export function documentMessage(words: DocumentMessage) {
 					),
 				],
 				reason: fillTemplate(
-					"You are a billing contact of {client} at {organisation}. Reply to {organisation} if this is not for you.",
+					"You are a billing contact of {client} at {organisation}. If this is not for you, tell {organisation}: a reply to this email does not reach them.",
 					values,
 				),
 			});

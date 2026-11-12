@@ -327,7 +327,8 @@ export function budgetAlertEmail(alert: {
 			{ action: "Open the project", link: alert.link },
 			"You are told once for each budget period. Tracking time to the project is not stopped.",
 		],
-		reason: "You got this email because you look after this project's organisation on Timesifier.",
+		reason:
+			"You got this email because you are an owner or admin of this organisation on Timesifier, or manage a team with someone in it who tracked time to this project.",
 	});
 }
 
