@@ -36,7 +36,7 @@ import {
 	requestsToDecide,
 } from "~/leave/leave.server";
 import { noticeLabel, WORK_KIND_LABELS } from "~/leave/rules";
-import { minutesLabel, spanLabel } from "~/leave/words";
+import { spanLabel } from "~/leave/words";
 import { decideWork, workToDecide } from "~/leave/work.server";
 import { parseRequest } from "~/lib/validate";
 import { mayReopenPeriods } from "~/organisations/access";
@@ -52,7 +52,7 @@ import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
 import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
-import { formatDayAndTime } from "~/time/format";
+import { formatDayAndTime, formatDuration } from "~/time/format";
 
 import type { Route } from "./+types/approvals";
 import { FormSheet } from "./FormSheet";
@@ -232,7 +232,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				startsHalf: false,
 				endsHalf: false,
 			}),
-			perDay: `${minutesLabel(w.minutesPerDay)} a day`,
+			perDay: `${formatDuration(w.minutesPerDay * 60)} a day`,
 			reason: w.reason,
 		})),
 		rows,

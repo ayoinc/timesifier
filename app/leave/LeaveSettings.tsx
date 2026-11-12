@@ -6,10 +6,11 @@ import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { TextField } from "~/components/TextField";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { Section } from "~/shell/PageHeading";
+import { formatDuration } from "~/time/format";
 
 import { halfDaysLabel, type KindKey, LEAVE_NAME_MAX_LENGTH } from "./kinds";
 import { heldToNotice, LONGEST_NOTICE_DAYS, noticeLabel } from "./rules";
-import { minutesLabel, spanLabel, WEEKDAY_NAMES, workingWeekLabel } from "./words";
+import { spanLabel, WEEKDAY_NAMES, workingWeekLabel } from "./words";
 
 // Workspace settings for leave (TS-061): the working week everyone is
 // expected to work, the kinds of leave, and the public holidays. Only owners
@@ -34,7 +35,7 @@ export interface LeaveSettingsData {
 type Task = "week" | "kind" | "add-holiday" | "remove-holiday";
 
 /** Hours as the working week's fields show them: 450 is "7:30", none is empty. */
-const hoursText = (minutes: number) => (minutes > 0 ? minutesLabel(minutes) : "");
+const hoursText = (minutes: number) => (minutes > 0 ? formatDuration(minutes * 60) : "");
 
 /** The notice a kind asks for, as its row reads: "14 days' notice", "No notice", "Never needs notice". */
 const noticeText = (kind: { key: KindKey; noticeDays: number }) => {
@@ -71,7 +72,9 @@ export function LeaveSettings({
 							<LedgerRow
 								key={name}
 								title={name}
-								value={(data.week[index] ?? 0) > 0 ? minutesLabel(data.week[index] ?? 0) : "Off"}
+								value={
+									(data.week[index] ?? 0) > 0 ? formatDuration((data.week[index] ?? 0) * 60) : "Off"
+								}
 							/>
 						))}
 					</LedgerRows>

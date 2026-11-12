@@ -17,6 +17,7 @@ import { nameOrEmail } from "~/organisations/people";
 import { canSee } from "~/shell/destinations";
 import { type Person, peopleOf } from "~/teams/people.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { formatDayWithYear } from "~/time/format";
 
 import {
 	type Balance,
@@ -54,7 +55,6 @@ import {
 	noticeLabel,
 	type ShortNoticeRule,
 } from "./rules";
-import { dateWords } from "./words";
 
 /**
  * Leave as the database holds it (TS-061): the organisation's kinds, working
@@ -363,7 +363,7 @@ export async function requestLeave(
 			ok: false,
 			problem: {
 				field: "kindId",
-				message: `${kind.name} needs ${noticeLabel({ noticeDays: noticeAsked(kind), shortNotice: false })} here: the earliest first day is ${dateWords(earliestNoticed(kind, asking.today))}.`,
+				message: `${kind.name} needs ${noticeLabel({ noticeDays: noticeAsked(kind), shortNotice: false })} here: the earliest first day is ${formatDayWithYear(earliestNoticed(kind, asking.today))}.`,
 			},
 		};
 	}

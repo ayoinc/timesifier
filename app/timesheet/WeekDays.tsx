@@ -2,7 +2,6 @@ import { Link } from "react-router";
 
 import { cx } from "~/components/cx";
 import { type DayRule, overLabel } from "~/leave/rules";
-import { minutesLabel } from "~/leave/words";
 import { finishRunningTransition } from "~/shell/transitions";
 import type { Day } from "~/time/calendar";
 
@@ -100,7 +99,7 @@ export function WeekDays({
 					{formatDuration(week.total)}
 					<span className="text-label-large text-on-surface-variant">
 						{" "}
-						of {minutesLabel(away.expectedMinutes)} expected
+						of {formatDuration(away.expectedMinutes * 60_000)} expected
 					</span>
 				</span>
 			</p>

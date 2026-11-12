@@ -313,7 +313,7 @@ The dates and times a page writes do not follow that locale: see "Dates and time
 
 ### Dates and times
 
-Every page writes a date, a period, a time and a length of time through `app/time/format.ts`, one form for each kind (audit W12). The Timesheet's hooks (`app/timesheet/format.ts`), Reports' words (`app/reports/format.ts`) and Team's and Approvals' (`app/teams/words.ts`) call it; nothing else in `app/` makes an `Intl.DateTimeFormat` for visible text.
+Every page writes a date, a period, a time and a length of time through `app/time/format.ts`, one form for each kind (audit W12). The Timesheet's hooks (`app/timesheet/format.ts`), Reports' words (`app/reports/format.ts`), Team's and Approvals' (`app/teams/words.ts`) and Time off's (`app/leave/words.ts`) call it; nothing else in `app/` makes an `Intl.DateTimeFormat` for visible text.
 
 | Kind                              | Function                            | Written                                                                                                         |
 | --------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |

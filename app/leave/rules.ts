@@ -1,10 +1,11 @@
 import * as z from "zod";
 
 import { addDays, type Day, daysFrom } from "~/time/calendar";
+import { formatDuration } from "~/time/format";
 
 import { type DayStatus, dayStatus, type LeaveCalendar, weekMinutes } from "./days";
 import type { KindKey, LeaveStatus } from "./kinds";
-import { minutesLabel, WEEKDAY_NAMES } from "./words";
+import { WEEKDAY_NAMES } from "./words";
 
 /**
  * Leave and tracked time together (TS-090): how much time a day of a person
@@ -225,12 +226,12 @@ export function closedReason(closed: Closed, day: Day): string {
 
 /** What a refused change says when it would take a day past its limit: "This day has 3:45 left." */
 export function leftMessage(minutes: number): string {
-	return `This day has ${minutesLabel(minutes)} left.`;
+	return `This day has ${formatDuration(minutes * 60)} left.`;
 }
 
 /** A day over its limit in words: "Over by 0:15". */
 export function overLabel(minutes: number): string {
-	return `Over by ${minutesLabel(minutes)}`;
+	return `Over by ${formatDuration(minutes * 60)}`;
 }
 
 /**

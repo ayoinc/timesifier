@@ -5,7 +5,6 @@ import * as z from "zod";
 import { organisationScope } from "~/db";
 import { overLabel } from "~/leave/rules";
 import { daysOver } from "~/leave/rules.server";
-import { shortDay } from "~/leave/words";
 import { parseRequest } from "~/lib/validate";
 import type { Membership } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -14,6 +13,7 @@ import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submissio
 import { Day, dayOf, exactInstantAt } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { startTimer, stopTimer } from "~/time/entries.server";
+import { formatDay } from "~/time/format";
 import {
 	addHours,
 	deleteEntry,
@@ -169,7 +169,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			const [over] = await daysOver(scope, user.id, day, day, zone, now);
 			return done(
 				over
-					? `Timer stopped. ${shortDay(day)} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
+					? `Timer stopped. ${formatDay(day, "short")} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
 					: "Timer stopped.",
 			);
 		}
@@ -217,7 +217,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			});
 			if (submitted.ok) return done("Week submitted. Its entries are locked until it is decided.");
 			const over = (("over" in submitted && submitted.over) || [])
-				.map((d) => `${shortDay(d.day)} ${overLabel(d.overMinutes).toLowerCase()}`)
+				.map((d) => `${formatDay(d.day, "short")} ${overLabel(d.overMinutes).toLowerCase()}`)
 				.join(", ");
 			const problem: Record<NotMoved, string> = {
 				"not-yet": "A week can be submitted once it has begun.",

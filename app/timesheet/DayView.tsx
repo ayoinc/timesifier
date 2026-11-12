@@ -9,7 +9,6 @@ import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { type DayRule, overLabel } from "~/leave/rules";
-import { minutesLabel } from "~/leave/words";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { destinationPath } from "~/shell/destinations";
@@ -125,14 +124,14 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 							{shownDay && (
 								<p className="px-4 pb-3 text-body-medium text-on-surface-variant @sm:px-5">
 									{shownDay.label ? `${shownDay.label}. ` : ""}
-									{minutesLabel(shownDay.expectedMinutes)} expected.
+									{formatDuration(shownDay.expectedMinutes * 60_000)} expected.
 								</p>
 							)}
 							{over > 0 && (
 								<p role="note" className="px-4 pb-3 text-body-medium text-error @sm:px-5">
 									{overLabel(over)}
 									{rule?.limitMinutes != null
-										? ` of the ${minutesLabel(rule.limitMinutes)} this day takes`
+										? ` of the ${formatDuration(rule.limitMinutes * 60_000)} this day takes`
 										: ""}
 									. Trim or move one of these entries before you submit the week.
 								</p>
@@ -275,8 +274,8 @@ export function TrackTime({
 			</p>
 			{rule && rule.limitMinutes !== null && rule.closedReason === null && (
 				<p role="note" className="text-body-medium text-on-surface-variant">
-					This day has {minutesLabel(rule.leftMinutes ?? 0)} left of{" "}
-					{minutesLabel(rule.limitMinutes)}.
+					This day has {formatDuration((rule.leftMinutes ?? 0) * 60_000)} left of{" "}
+					{formatDuration(rule.limitMinutes * 60_000)}.
 				</p>
 			)}
 			<input type="hidden" name="day" value={data.day} />
@@ -408,7 +407,7 @@ function Timer({
 	const why =
 		blocked ??
 		(rule && rule.limitMinutes !== null
-			? `${minutesLabel(rule.leftMinutes ?? 0)} left of ${minutesLabel(rule.limitMinutes)}`
+			? `${formatDuration((rule.leftMinutes ?? 0) * 60_000)} left of ${formatDuration(rule.limitMinutes * 60_000)}`
 			: null);
 
 	return (

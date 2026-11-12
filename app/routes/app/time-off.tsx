@@ -53,7 +53,7 @@ import {
 	type WorkItemToDecide,
 	WorkToDecideSection,
 } from "~/leave/WorkRequests";
-import { dateWords, minutesLabel, spanLabel } from "~/leave/words";
+import { spanLabel } from "~/leave/words";
 import {
 	cancelWork,
 	decideWork,
@@ -71,6 +71,7 @@ import { NOT_ALLOWED } from "~/organisations/problems";
 import { canSee, destination, destinationPath } from "~/shell/destinations";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
+import { formatDayWithYear, formatDuration } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
 import { TypedHours } from "~/timesheet/durations";
 
@@ -170,7 +171,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				kind: w.kind,
 				label: WORK_KIND_LABELS[w.kind],
 				days: workDaysLabel(w),
-				hours: minutesLabel(w.minutesPerDay),
+				hours: formatDuration(w.minutesPerDay * 60),
 				reason: w.reason,
 				cancellable: w.cancellable,
 			});
@@ -224,7 +225,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				kind: w.kind,
 				label: WORK_KIND_LABELS[w.kind],
 				days: workDaysLabel(w),
-				hours: minutesLabel(w.minutesPerDay),
+				hours: formatDuration(w.minutesPerDay * 60),
 				status: w.status,
 				statusLabel: LEAVE_STATUS_LABELS[w.status],
 				reason: w.reason,
@@ -666,7 +667,7 @@ function RequestFields({
 					<p className="text-on-surface-variant">
 						{kind.noticeDays === 0
 							? `${kind.name} needs no notice.`
-							: `${kind.name} needs ${noticeLabel({ noticeDays: kind.noticeDays, shortNotice: false })}: the earliest well-noticed first day is ${dateWords(kind.earliest)}.`}
+							: `${kind.name} needs ${noticeLabel({ noticeDays: kind.noticeDays, shortNotice: false })}: the earliest well-noticed first day is ${formatDayWithYear(kind.earliest)}.`}
 					</p>
 				)}
 				{short &&
@@ -674,7 +675,7 @@ function RequestFields({
 					(shortNotice === "refused" ? (
 						<p className="text-error">
 							This is short notice ({given}), which this organisation does not take, so it cannot be
-							sent. Choose {dateWords(kind.earliest)} or later.
+							sent. Choose {formatDayWithYear(kind.earliest)} or later.
 						</p>
 					) : (
 						<p>This is short notice ({given}).</p>

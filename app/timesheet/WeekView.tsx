@@ -5,7 +5,6 @@ import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { Select } from "~/components/Select";
 import { type DayRule, leftMessage, minutesLeft, overLabel, wholeMinutes } from "~/leave/rules";
-import { minutesLabel } from "~/leave/words";
 import type { Outcome } from "~/organisations/problems";
 import { periodAfter } from "~/periods/periods";
 import { TRANSITION, useTravel } from "~/shell/transitions";
@@ -235,12 +234,12 @@ function Grid({
 							</th>
 							{away.days.map((each) => (
 								<td key={each.day} className="px-2 pb-3 text-end tabular-nums">
-									{minutesLabel(each.expectedMinutes)}
+									{formatDuration(each.expectedMinutes * 60_000)}
 								</td>
 							))}
 							<td className="px-4 pb-3 text-end tabular-nums">
 								<span className="sr-only">Week expected </span>
-								{minutesLabel(away.expectedMinutes)}
+								{formatDuration(away.expectedMinutes * 60_000)}
 							</td>
 						</tr>
 					</tfoot>
@@ -346,7 +345,9 @@ function Cell({
 			inputMode="decimal"
 			autoComplete="off"
 			aria-label={
-				rule?.leftMinutes != null ? `${label}, ${minutesLabel(rule.leftMinutes)} left` : label
+				rule?.leftMinutes != null
+					? `${label}, ${formatDuration(rule.leftMinutes * 60_000)} left`
+					: label
 			}
 			aria-invalid={invalid ? true : undefined}
 			value={value}

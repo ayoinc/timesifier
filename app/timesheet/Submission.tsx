@@ -4,8 +4,8 @@ import { useFetcher } from "react-router";
 import { Button } from "~/components/Button";
 import { Dialog } from "~/components/Dialog";
 import { overLabel } from "~/leave/rules";
-import { shortDay } from "~/leave/words";
 import type { Outcome } from "~/organisations/problems";
+import { formatDay } from "~/time/format";
 
 import { PERIOD_STATE_LABELS } from "./sheets";
 import type { PeriodSubmission } from "./timesheet.server";
@@ -30,7 +30,7 @@ export function PeriodHeader({
 	tools,
 	onSaid,
 }: {
-	/** The period's name, or the month's: `9 – 15 November 2026`. */
+	/** The period's name, or the month's, written by app/time/format.ts: `9–15 November 2026`. */
 	title: string;
 	submission: PeriodSubmission | null;
 	aside?: ReactNode;
@@ -64,7 +64,7 @@ export function PeriodHeader({
 		notes.push("Stop the timer before you submit the week.");
 	if (submittable && over.length > 0) {
 		const days = new Intl.ListFormat("en-GB", { type: "conjunction" }).format(
-			over.map((d) => `${shortDay(d.day)} (${overLabel(d.overMinutes).toLowerCase()})`),
+			over.map((d) => `${formatDay(d.day, "short")} (${overLabel(d.overMinutes).toLowerCase()})`),
 		);
 		notes.push(`Correct ${days} before you submit.`);
 	}

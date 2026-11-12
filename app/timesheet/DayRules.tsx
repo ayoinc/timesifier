@@ -1,5 +1,5 @@
 import { type DayRule, leftMessage, overLabel } from "~/leave/rules";
-import { minutesLabel } from "~/leave/words";
+import { formatDuration } from "~/time/format";
 
 import { useDayFormat } from "./format";
 
@@ -25,7 +25,7 @@ export function ruleWords(rule: DayRule | undefined): { text: string; over: bool
 	if (rule.overMinutes > 0) return { text: overLabel(rule.overMinutes), over: true };
 	if (rule.closedReason !== null) return { text: "Closed", over: false };
 	if (rule.limitMinutes === null) return null;
-	return { text: `${minutesLabel(rule.leftMinutes ?? 0)} left`, over: false };
+	return { text: `${formatDuration((rule.leftMinutes ?? 0) * 60)} left`, over: false };
 }
 
 /** The day's limit in a short line: "3:45 left of 3:45", "Over by 0:15", "Closed". */
@@ -34,7 +34,7 @@ export function RuleLine({ rule }: { rule: DayRule | undefined }) {
 	if (!rule || !words) return null;
 	const full =
 		!words.over && rule.limitMinutes !== null && rule.closedReason === null
-			? `${words.text} of ${minutesLabel(rule.limitMinutes)}`
+			? `${words.text} of ${formatDuration(rule.limitMinutes * 60)}`
 			: words.text;
 	return (
 		<span

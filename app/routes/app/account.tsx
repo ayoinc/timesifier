@@ -13,7 +13,7 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { workingWeekOf } from "~/leave/leave.server";
-import { minutesLabel, WEEKDAY_NAMES, workingWeekLabel } from "~/leave/words";
+import { WEEKDAY_NAMES, workingWeekLabel } from "~/leave/words";
 import { parseRequest } from "~/lib/validate";
 import { leaveOrganisation, listOrganisations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -36,6 +36,7 @@ import {
 } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
+import { formatDuration } from "~/time/format";
 import { isTimeZone, TimeZone } from "~/time/zones";
 import { ownZoneOf, setTimeZone } from "~/time/zones.server";
 
@@ -77,7 +78,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		/** The organisation's working week, which is the person's (TS-061). */
 		workingWeek: WEEKDAY_NAMES.map((name, index) => ({
 			name,
-			hours: (week[index] ?? 0) > 0 ? minutesLabel(week[index] ?? 0) : "Not a working day",
+			hours: (week[index] ?? 0) > 0 ? formatDuration((week[index] ?? 0) * 60) : "Not a working day",
 		})),
 		workingWeekLabel: workingWeekLabel(week),
 	};
