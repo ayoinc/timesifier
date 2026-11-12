@@ -57,6 +57,13 @@
 			"when": 1794439837210,
 			"tag": "0008_business",
 			"breakpoints": true
+		},
+		{
+			"idx": 8,
+			"version": "6",
+			"when": 1794471987325,
+			"tag": "0009_leave_notice",
+			"breakpoints": true
 		}
 	]
 }
