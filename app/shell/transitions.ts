@@ -58,13 +58,17 @@ export function finishRunningTransition() {
 
 /**
  * Whether a rejected promise is a view transition the browser skipped: an
- * `AbortError` saying "Transition was skipped".
+ * `AbortError` saying "Transition was skipped", or the `InvalidStateError`
+ * Chromium gives a whole-page transition (`@view-transition` in app/app.css) it
+ * abandons because the page stopped taking part, as when a form sent as a whole
+ * page starts its own transition on the way out.
  */
 export function isSkippedTransition(reason: unknown): boolean {
+	if (!(reason instanceof DOMException)) return false;
+	if (reason.name === "AbortError") return reason.message.includes("Transition was skipped");
 	return (
-		reason instanceof DOMException &&
-		reason.name === "AbortError" &&
-		reason.message.includes("Transition was skipped")
+		reason.name === "InvalidStateError" &&
+		reason.message.includes("Transition was aborted because of invalid state")
 	);
 }
 

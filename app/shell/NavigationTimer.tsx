@@ -101,7 +101,7 @@ export function NavigationTimer({
 						"medium:min-h-12"
 					}
 				>
-					<span className="rounded-extra-small py-1 underline-offset-4 group-data-hovered:underline medium:group-data-focus-visible:focus-indicator">
+					<span className="rounded-extra-small py-1 hover-underline transition-link group-data-hovered:decoration-current medium:group-data-focus-visible:focus-indicator">
 						Track time
 					</span>
 				</AriaButton>

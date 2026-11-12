@@ -67,7 +67,7 @@ export function Navigation({ organisation, visible, activeIndex, counts = {} }: 
 				<nav
 					aria-label="Main"
 					className={
-						"z-10 bg-surface " +
+						"shell-rail z-10 bg-surface " +
 						"max-medium:fixed max-medium:inset-x-0 max-medium:bottom-0 max-medium:flex max-medium:h-16 max-medium:border-t-2 max-medium:border-on-surface max-medium:px-1 " +
 						"medium:pointer-events-auto medium:max-h-full medium:w-24 medium:overflow-y-auto medium:pt-6"
 					}
@@ -123,7 +123,7 @@ export function Navigation({ organisation, visible, activeIndex, counts = {} }: 
 									.join(", ")}
 								className="group relative flex h-full w-full items-center justify-center text-label-medium outline-none"
 							>
-								<span className="rounded-extra-small px-1 py-1 underline-offset-4 group-hover:underline group-focus-visible:focus-indicator">
+								<span className="rounded-extra-small px-1 py-1 hover-underline transition-link group-hover:decoration-current group-focus-visible:focus-indicator">
 									More
 									{moreCount > 0 && <span className="tabular-nums"> {moreCount}</span>}
 								</span>
@@ -218,7 +218,7 @@ function DestinationLink({
 			className="group relative flex items-center text-label-large outline-none max-medium:h-full max-medium:justify-center max-medium:whitespace-nowrap max-medium:text-label-medium medium:min-h-10 medium:ps-4"
 		>
 			{/* The keyboard's focus indicator is drawn around the label. */}
-			<span className="rounded-extra-small py-1 underline-offset-4 group-hover:underline group-focus-visible:focus-indicator max-medium:px-1">
+			<span className="rounded-extra-small py-1 hover-underline transition-link group-hover:decoration-current group-focus-visible:focus-indicator max-medium:px-1">
 				{destination.barLabel ? (
 					<>
 						<span aria-hidden="true" className="medium:hidden">
@@ -260,7 +260,12 @@ function MoreLink({
 			onClick={close}
 			className="group flex min-h-12 items-center rounded-small px-3 text-label-large outline-none hover:bg-surface-container-high focus-visible:focus-indicator-inner"
 		>
-			<span className={cx("underline-offset-4 group-hover:underline", isActive && "underline")}>
+			<span
+				className={cx(
+					"hover-underline transition-link group-hover:decoration-current",
+					isActive && "decoration-current",
+				)}
+			>
 				{destination.label}
 				<Count count={count} />
 			</span>

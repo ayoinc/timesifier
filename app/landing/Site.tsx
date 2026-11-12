@@ -93,7 +93,7 @@ export function rootOrigin(matches: readonly ({ loaderData?: unknown } | undefin
 export const PAGE = "mx-auto w-full max-w-300 px-5 medium:px-8";
 
 export const LINK =
-	"rounded-extra-small underline decoration-1 underline-offset-4 outline-none hover:decoration-2 focus-visible:focus-indicator";
+	"rounded-extra-small transition-link underline decoration-1 underline-offset-4 outline-none hover:decoration-2 focus-visible:focus-indicator";
 
 export interface SiteLink {
 	href: string;
@@ -125,7 +125,7 @@ export interface SiteHeaderProps {
 }
 
 const HEADER_LINK =
-	"inline-block rounded-extra-small py-2 underline-offset-4 outline-none hover:underline focus-visible:focus-indicator";
+	"inline-block rounded-extra-small py-2 hover-underline transition-link outline-none hover:decoration-current focus-visible:focus-indicator";
 
 /**
  * The top band of the sheet: the product's name, which leads home, the places on

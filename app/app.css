@@ -348,6 +348,25 @@ body {
 		border-radius var(--md-sys-motion-spring-duration) var(--md-sys-motion-spring-easing);
 }
 
+/* A link's hover: its underline comes in, thickens or takes the ink, on the same
+   short curve a control's state layer does. The line is always drawn, so the
+   change is one of colour and thickness, which can move; with reduced motion the
+   change is the same, as it is a change of colour. */
+@utility transition-link {
+	transition:
+		color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+		text-decoration-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+		text-decoration-thickness var(--md-sys-motion-duration-short3)
+		var(--md-sys-motion-easing-standard);
+}
+
+/* An underline that appears on hover, as a link standing alone in a bar has. */
+@utility hover-underline {
+	text-decoration-line: underline;
+	text-decoration-color: transparent;
+	text-underline-offset: calc(var(--md-sys-spacing-unit));
+}
+
 /* Disabled: the on-surface colour at Material's disabled opacities. */
 @utility text-disabled {
 	color: color-mix(
@@ -548,15 +567,16 @@ body {
 
 /*
  * A time that changes while it is looked at (app/components/Digits.tsx). A digit
- * that changes arrives from below, as a clock's does; a digit that stays is the
- * same element and does not move. With reduced motion the digit simply changes.
+ * that replaces another arrives from below, as a clock's does (`tick-in`); a digit
+ * that stays is the same element and does not move, and the digits a time is
+ * first drawn with are simply there. With reduced motion the digit simply changes.
  */
 .tick-digit {
 	display: inline-block;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.tick-digit {
+	.tick-in {
 		animation: tick-in var(--md-sys-motion-duration-short4)
 			var(--md-sys-motion-easing-emphasized-decelerate);
 	}
@@ -625,4 +645,121 @@ body {
 	to {
 		opacity: 0;
 	}
+}
+
+/*
+ * A shape that holds the place of something on its way (app/components/Skeleton.tsx):
+ * it breathes, slowly, between full and a little more than half its strength.
+ * With reduced motion it stands still.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	.skeleton-pulse {
+		animation: skeleton-pulse calc(var(--md-sys-motion-duration-extra-long4) * 1.6)
+			var(--md-sys-motion-easing-standard) infinite alternate;
+	}
+}
+
+@keyframes skeleton-pulse {
+	to {
+		opacity: 0.55;
+	}
+}
+
+/*
+ * A page that takes the place of its shape (app/shell/arrival.ts) brings its
+ * sections in one after another: each rises 8px and fades in, 40ms after the one
+ * before, the fifth and later together. A page that arrives without having
+ * waited slides in whole instead (the transitions above), and a page loaded or
+ * reloaded whole is simply there. With reduced motion the sections fade in
+ * together and nothing moves.
+ */
+[data-reveal] > * > * {
+	animation: shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+		both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	[data-reveal] > * > * {
+		--reveal-step: 0;
+		animation:
+			shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+			calc(var(--reveal-step) * 40ms) both,
+			reveal-rise var(--md-sys-motion-duration-medium2)
+			var(--md-sys-motion-easing-emphasized-decelerate) calc(var(--reveal-step) * 40ms) both;
+	}
+
+	[data-reveal] > * > :nth-child(2) {
+		--reveal-step: 1;
+	}
+
+	[data-reveal] > * > :nth-child(3) {
+		--reveal-step: 2;
+	}
+
+	[data-reveal] > * > :nth-child(4) {
+		--reveal-step: 3;
+	}
+
+	[data-reveal] > * > :nth-child(n + 5) {
+		--reveal-step: 4;
+	}
+}
+
+@keyframes reveal-rise {
+	from {
+		translate: 0 calc(var(--md-sys-spacing-unit) * 2);
+	}
+}
+
+/*
+ * A page loaded whole (a link from a public page, the answer to a form sent
+ * without script, Back to a page the browser had let go) hands over the way a
+ * change of destination does: the band and the navigation stay exactly where
+ * they are, and only the content changes, the old fading out quickly and the
+ * new fading in. A reload is not a navigation the browser animates; it draws
+ * the same page again, in the same place, with nothing that moves. The names
+ * are given only while the browser runs this transition, so the in-app
+ * transitions (React's) never see them.
+ */
+@view-transition {
+	navigation: auto;
+	types: document-load;
+}
+
+html:active-view-transition-type(document-load) {
+	.site-header {
+		view-transition-name: shell-band;
+	}
+
+	.shell-rail {
+		view-transition-name: shell-rail;
+	}
+
+	#main {
+		view-transition-name: shell-page;
+	}
+}
+
+/* The frame is the same picture before and after: it is shown once, still. */
+::view-transition-group(shell-band),
+::view-transition-group(shell-rail),
+::view-transition-group(shell-page),
+::view-transition-new(shell-band),
+::view-transition-new(shell-rail) {
+	animation: none;
+}
+
+::view-transition-old(shell-band),
+::view-transition-old(shell-rail) {
+	display: none;
+}
+
+::view-transition-old(shell-page) {
+	animation: var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-emphasized-accelerate)
+		both shell-fade-out;
+}
+
+::view-transition-new(shell-page) {
+	animation: var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-emphasized-decelerate)
+		var(--md-sys-motion-duration-short2) both shell-fade-in;
 }

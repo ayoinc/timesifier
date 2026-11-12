@@ -83,8 +83,8 @@
 
 :root {
 	/* Type scale */
-	--md-ref-typeface-brand: "Sofia Sans Condensed Variable", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-	--md-ref-typeface-plain: "Sofia Sans Variable", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+	--md-ref-typeface-brand: "Sofia Sans Condensed Variable", "Sofia Sans Condensed Fallback", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+	--md-ref-typeface-plain: "Sofia Sans Variable", "Sofia Sans Fallback", system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 	--md-sys-typescale-display-large-font: var(--md-ref-typeface-brand);
 	--md-sys-typescale-display-large-size: 5.5rem;
 	--md-sys-typescale-display-large-line-height: 5.25rem;
