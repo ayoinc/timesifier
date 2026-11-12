@@ -22,6 +22,7 @@ import {
 	withoutTab,
 } from "~/approvals/choices";
 import { Button } from "~/components/Button";
+import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
@@ -819,15 +820,23 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 	);
 }
 
-/** The status and the grouping, chosen together; the week shown stays. */
+/** The status and the grouping, applied as each is chosen (W28); the week shown stays. */
 function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "week">) {
 	return (
-		<Form
-			method="get"
-			aria-label="Choose timesheets"
-			className="mt-8 flex max-w-200 flex-wrap items-end gap-6"
-		>
-			<input type="hidden" name={WEEK_PARAM} value={week.period.startsOn} />
+		<div className="mt-8 max-w-200">
+			<FilterBar name="Choose timesheets" keep={{ [WEEK_PARAM]: week.period.startsOn }}>
+				<ViewFields query={query} counts={counts} />
+			</FilterBar>
+		</div>
+	);
+}
+
+function ViewFields({ query, counts }: Pick<Loaded, "query" | "counts">) {
+	const apply = useApplyFilters();
+	// The hidden selects hold the new value once React has drawn it.
+	const applySoon = () => setTimeout(apply, 0);
+	return (
+		<>
 			<div className="min-w-0 flex-1 basis-56">
 				<Select
 					label="Status"
@@ -840,6 +849,7 @@ function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "
 						};
 					})}
 					defaultValue={query.status}
+					onChange={applySoon}
 				/>
 			</div>
 			<div className="min-w-0 flex-1 basis-56">
@@ -848,9 +858,9 @@ function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "
 					name="group"
 					options={APPROVAL_GROUPS.map((id) => ({ id, label: APPROVAL_GROUP_LABELS[id] }))}
 					defaultValue={query.group}
+					onChange={applySoon}
 				/>
 			</div>
-			<Button type="submit">Show</Button>
-		</Form>
+		</>
 	);
 }
