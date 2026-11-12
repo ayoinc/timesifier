@@ -11,6 +11,16 @@ export function hours(seconds: number): string {
 	return formatDuration(seconds);
 }
 
+/**
+ * Time of which some is overtime, as regular and overtime apart: "7:30 + 1:00
+ * overtime" (TS-095). Null when none of it is overtime, so time with none
+ * reads as it always has.
+ */
+export function regularAndOvertime(seconds: number, overtimeSeconds: number): string | null {
+	if (overtimeSeconds <= 0) return null;
+	return `${hours(seconds - overtimeSeconds)} + ${hours(overtimeSeconds)} overtime`;
+}
+
 /** Where a period stands, as a person reads it. A withdrawn period is one not submitted. */
 export function statusLabel(status: PeriodStatus | null): string {
 	switch (status) {

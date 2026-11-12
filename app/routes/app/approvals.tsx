@@ -57,7 +57,7 @@ import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading"
 import type { Person } from "~/teams/people.server";
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
-import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
+import { hours, periodLabel, regularAndOvertime, WEEK_PARAM } from "~/teams/words";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
 import { formatDayAndTime, formatDuration, formatRange } from "~/time/format";
 
@@ -75,7 +75,9 @@ import { useOrganisation } from "./useOrganisation";
 // The page shows the period's timesheets in one status, `?status=`, grouped by
 // person or by project, `?group=`, with the time logged in the period and its
 // total (TS-058; app/approvals/choices.ts). The tabs it had before are a
-// status now, and their addresses (`?tab=`) are sent to it.
+// status now, and their addresses (`?tab=`) are sent to it. Time that is
+// overtime is shown apart from regular time under each figure, "7:30 + 1:00
+// overtime", so it is seen before it is approved (TS-095).
 //
 // Time off waiting lists the requests for leave the viewer decides, each with
 // the notice it gave, and beside them the requests for overtime and weekend
@@ -183,6 +185,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		id: string;
 		person: { id: string; name: string; address: string | null };
 		seconds: number;
+		/** Of `seconds`, those of overtime (TS-095), so an approver sees it before approving. */
+		overtimeSeconds: number;
 		detail: string;
 		comment: string | null;
 		periodId: string | null;
@@ -211,6 +215,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			address: person.address,
 		},
 		seconds: secondsOf(person.id),
+		overtimeSeconds: time.reduce(
+			(sum, each) => (each.userId === person.id ? sum + each.overtimeSeconds : sum),
+			0,
+		),
 		detail,
 		comment,
 		periodId,
@@ -241,6 +249,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			rows = notSubmitted?.map((p) => row(p, "Not submitted")) ?? null;
 			break;
 	}
+	const totalSeconds = rows?.reduce((sum, r) => sum + r.seconds, 0) ?? 0;
 
 	return {
 		query,
@@ -282,15 +291,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			perDay: `${formatDuration(w.minutesPerDay * 60)} a day`,
 			reason: w.reason,
 		})),
-		rows,
+		rows:
+			rows?.map((r) => ({ ...r, split: regularAndOvertime(r.seconds, r.overtimeSeconds) })) ?? null,
 		projects:
 			rows !== null && query.group === "project"
 				? byProject(
 						rows.map((r) => r.person),
 						time,
-					).map((group) => ({ ...group, hours: hours(group.seconds) }))
+					).map((group) => ({
+						...group,
+						hours: hours(group.seconds),
+						split: regularAndOvertime(group.seconds, group.overtimeSeconds),
+					}))
 				: [],
-		total: hours(rows?.reduce((sum, r) => sum + r.seconds, 0) ?? 0),
+		total: hours(totalSeconds),
+		/** "7:30 + 1:00 overtime" under the total; null when none of it is overtime (TS-095). */
+		totalSplit: regularAndOvertime(
+			totalSeconds,
+			rows?.reduce((sum, r) => sum + r.overtimeSeconds, 0) ?? 0,
+		),
 		expenseTotal: moneyWords(
 			totalsByCurrency((rows ?? []).flatMap((r) => spent.get(r.person.id)?.total ?? [])),
 		),
@@ -557,7 +576,16 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 													)}
 												</>
 											}
-											value={hours(p.seconds)}
+											value={
+												<>
+													{hours(p.seconds)}
+													{p.split && (
+														<span className="block text-body-medium text-on-surface-variant">
+															{p.split}
+														</span>
+													)}
+												</>
+											}
 											action={
 												query.status === "pending" ? (
 													<span className="flex gap-1">
@@ -600,7 +628,16 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 										key={project.id}
 										title={<span className="wrap-anywhere">{project.name}</span>}
 										detail={<span className="wrap-anywhere">{project.people.join(", ")}</span>}
-										value={project.hours}
+										value={
+											<>
+												{project.hours}
+												{project.split && (
+													<span className="block text-body-medium text-on-surface-variant">
+														{project.split}
+													</span>
+												)}
+											</>
+										}
 									/>
 								))}
 							</LedgerRows>
@@ -612,7 +649,19 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 						{loaderData.expenseTotal && (
 							<LedgerTotal label="Expenses" value={loaderData.expenseTotal} />
 						)}
-						<LedgerTotal label="Total" value={total} />
+						<LedgerTotal
+							label="Total"
+							value={
+								<>
+									{total}
+									{loaderData.totalSplit && (
+										<span className="block text-body-medium text-on-surface-variant">
+											{loaderData.totalSplit}
+										</span>
+									)}
+								</>
+							}
+						/>
 					</Ledger>
 				)}
 			</div>

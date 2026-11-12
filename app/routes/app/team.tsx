@@ -40,7 +40,14 @@ import {
 } from "~/teams/teams.server";
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { personWeek, teamWeek } from "~/teams/week.server";
-import { dayLabel, hours, periodLabel, statusLabel, WEEK_PARAM } from "~/teams/words";
+import {
+	dayLabel,
+	hours,
+	periodLabel,
+	regularAndOvertime,
+	statusLabel,
+	WEEK_PARAM,
+} from "~/teams/words";
 import { formatDay, formatDuration, formatTimeRange } from "~/time/format";
 
 import type { Route } from "./+types/team";
@@ -53,7 +60,9 @@ import { useOrganisation } from "./useOrganisation";
 //
 // Its own address shows This week: each person's time in one period, with
 // arrows to earlier ones, the period's total above them and a filter by name in
-// `?q=` (TS-058), and `?person=` opens one person's week to read.
+// `?q=` (TS-058), and `?person=` opens one person's week to read. Overtime is
+// shown apart from regular time, "7:30 + 1:00 overtime", and each entry of it
+// is marked Overtime (TS-095).
 // `?show=teams` shows the teams, which owners and admins create, rename and
 // delete, fill and give managers. Members and Invitations are pages of their own.
 
@@ -127,11 +136,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			status: shown.status,
 			comment: shown.comment,
 			seconds: shown.seconds,
+			split: regularAndOvertime(shown.seconds, shown.overtimeSeconds),
 			expected: formatDuration((theirs?.expectedMinutes ?? 0) * 60),
 			days: shown.days.map((d, index) => ({
 				day: d.day,
 				label: dayLabel(d.day),
 				seconds: d.seconds,
+				overtime: d.overtimeSeconds > 0 ? hours(d.overtimeSeconds) : null,
 				away: theirs?.days[index] ? leaveDayLabel(theirs.days[index]) : null,
 				expected: formatDuration((theirs?.days[index]?.expectedMinutes ?? 0) * 60),
 				entries: d.entries.map((e) => ({
@@ -140,6 +151,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					description: e.description,
 					times: formatTimeRange(e.startedAt, e.endedAt, person.timeZone),
 					seconds: e.seconds,
+					overtime: e.overtime,
 				})),
 			})),
 		};
@@ -174,6 +186,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			const address = addresses.get(p.id) ?? null;
 			return {
 				...p,
+				split: regularAndOvertime(p.seconds, p.overtimeSeconds),
 				// The name, or the start of the address with the whole of it under (harvest-taste item 9).
 				name: address ? shownName({ email: address }) : p.name,
 				address,
@@ -310,6 +323,10 @@ function ThisWeek({ data }: { data: WeekData }) {
 	const organisation = useOrganisation();
 	const { week, people, filter, everyone } = data;
 	const total = people.reduce((sum, p) => sum + p.seconds, 0);
+	const totalSplit = regularAndOvertime(
+		total,
+		people.reduce((sum, p) => sum + p.overtimeSeconds, 0),
+	);
 	const thisWeek = `?${WEEK_PARAM}=${week.period.startsOn}`;
 	return (
 		<>
@@ -376,6 +393,11 @@ function ThisWeek({ data }: { data: WeekData }) {
 												<>
 													{hours(p.seconds)}
 													<span className="sr-only"> logged</span>
+													{p.split && (
+														<span className="block text-body-medium text-on-surface-variant">
+															{p.split}
+														</span>
+													)}
 													<span className="block text-body-medium text-on-surface-variant">
 														{p.expected} expected
 														{p.leave && ` · ${p.leave} leave`}
@@ -388,7 +410,16 @@ function ThisWeek({ data }: { data: WeekData }) {
 								{/* The week's total, of the people listed above it. */}
 								<LedgerTotal
 									label={filter === "" ? "Week's total" : `Total for “${filter}”`}
-									value={hours(total)}
+									value={
+										<>
+											{hours(total)}
+											{totalSplit && (
+												<span className="block text-body-medium text-on-surface-variant">
+													{totalSplit}
+												</span>
+											)}
+										</>
+									}
 								/>
 							</Ledger>
 						</div>
@@ -401,7 +432,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 
 function PersonWeek({ data }: { data: PersonData }) {
 	const organisation = useOrganisation();
-	const { week, person, days, seconds, status, comment, expected } = data;
+	const { week, person, days, seconds, split, status, comment, expected } = data;
 	return (
 		<>
 			<p>
@@ -431,7 +462,7 @@ function PersonWeek({ data }: { data: PersonData }) {
 					<Ledger
 						key={d.day}
 						heading={d.away ? `${d.label} · ${d.away}` : d.label}
-						note={`${hours(d.seconds)} of ${d.expected}`}
+						note={`${hours(d.seconds)} of ${d.expected}${d.overtime ? ` · ${d.overtime} overtime` : ""}`}
 					>
 						{d.entries.length === 0 ? (
 							<p className="border-t border-outline-variant px-4 py-3 text-body-medium text-on-surface-variant @sm:px-5">
@@ -443,7 +474,11 @@ function PersonWeek({ data }: { data: PersonData }) {
 									<LedgerRow
 										key={e.id}
 										title={<span className="wrap-anywhere">{e.description || e.project}</span>}
-										detail={e.description ? e.project : undefined}
+										detail={
+											[e.description ? e.project : null, e.overtime ? "Overtime" : null]
+												.filter(Boolean)
+												.join(" · ") || undefined
+										}
 										aside={e.times}
 										value={hours(e.seconds)}
 									/>
@@ -453,7 +488,17 @@ function PersonWeek({ data }: { data: PersonData }) {
 					</Ledger>
 				))}
 				<Ledger heading="Week" note={statusLabel(status)}>
-					<LedgerTotal label="Total" value={hours(seconds)} />
+					<LedgerTotal
+						label="Total"
+						value={
+							<>
+								{hours(seconds)}
+								{split && (
+									<span className="block text-body-medium text-on-surface-variant">{split}</span>
+								)}
+							</>
+						}
+					/>
 				</Ledger>
 			</div>
 		</>

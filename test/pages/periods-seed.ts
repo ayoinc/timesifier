@@ -47,6 +47,11 @@ export async function seedEntry(
 	return id;
 }
 
+/** Marks the entry `id` as overtime rather than regular time (TS-095). */
+export async function markOvertime(id: string): Promise<void> {
+	await env.DB.prepare("update time_entries set overtime = 1 where id = ?").bind(id).run();
+}
+
 /** A period of `userId` starting on `startsOn`, a Monday, standing at `status`. */
 export async function seedPeriod(
 	organisationId: string,

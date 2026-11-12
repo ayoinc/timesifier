@@ -11,7 +11,7 @@ import {
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
-import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
+import { markOvertime, seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Team (TS-045, TS-038): This week, one person's week, and the teams. Owners
 // and admins see everyone and manage the teams; a manager sees the members of
@@ -397,5 +397,100 @@ describe("who is not working (TS-061)", () => {
 		text = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, ada)));
 		expect(text).toMatch(/bob bob@example\.com Not submitted 0:00 logged 37:30 expected/);
 		expect(text).not.toContain("Not working today");
+	});
+});
+
+describe("overtime (TS-095)", () => {
+	/**
+	 * Grace, in Mona's team, logs 7:30 and 1:00 of overtime on Tuesday; Linus,
+	 * in no team, 1:00 and 2:00 of overtime on Wednesday.
+	 */
+	async function overtimeWorld() {
+		const alan = await memberOfAcme("admin", "alan@example.com");
+		const mona = await memberOfAcme("member", "mona@example.com");
+		const grace = await memberOfAcme("member", "grace@example.com");
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const fin = await memberOfAcme("finance", "fin@example.com");
+		await seedTeam(acme.id, "Design", { members: [grace.user.id], managers: [mona.user.id] });
+		const project = await seedProject(acme.id, "Website");
+		await seedEntry(
+			acme.id,
+			grace.user.id,
+			project,
+			"2026-01-06T10:00:00Z",
+			"2026-01-06T17:30:00Z",
+			"Copy",
+		);
+		await markOvertime(
+			await seedEntry(
+				acme.id,
+				grace.user.id,
+				project,
+				"2026-01-06T17:30:00Z",
+				"2026-01-06T18:30:00Z",
+				"Late copy",
+			),
+		);
+		await seedEntry(
+			acme.id,
+			linus.user.id,
+			project,
+			"2026-01-07T10:00:00Z",
+			"2026-01-07T11:00:00Z",
+		);
+		await markOvertime(
+			await seedEntry(
+				acme.id,
+				linus.user.id,
+				project,
+				"2026-01-07T11:00:00Z",
+				"2026-01-07T13:00:00Z",
+			),
+		);
+		return { alan, mona, grace, linus, fin };
+	}
+
+	it.each(["owner", "admin"] as const)(
+		"shows the %s each person's overtime apart from their regular time",
+		async (role) => {
+			const world = await overtimeWorld();
+			const who = role === "owner" ? ada : world.alan;
+			const text = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, who)));
+			expect(text).toMatch(/grace@example\.com Not submitted 8:30 logged 7:30 \+ 1:00 overtime/);
+			expect(text).toMatch(/linus@example\.com Not submitted 3:00 logged 1:00 \+ 2:00 overtime/);
+			expect(text).toContain("Week's total 11:30 8:30 + 3:00 overtime");
+		},
+	);
+
+	it("shows a manager the overtime of their team's people and nobody else's", async () => {
+		const { mona, grace, linus } = await overtimeWorld();
+		const text = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, mona)));
+		expect(text).toMatch(/grace@example\.com Not submitted 8:30 logged 7:30 \+ 1:00 overtime/);
+		expect(text).toContain("Week's total 8:30 7:30 + 1:00 overtime");
+		expect(text).not.toContain("linus@example.com");
+		expect(text).not.toContain("2:00 overtime");
+
+		const week = textOf(
+			await pageBody(await open(`${TEAM}?week=${WEEK}&person=${grace.user.id}`, mona)),
+		);
+		expect(week).toContain("Tuesday 6 January 8:30 of 7:30 · 1:00 overtime");
+		expect(week).toContain("Total 8:30 7:30 + 1:00 overtime");
+		expect((await open(`${TEAM}?week=${WEEK}&person=${linus.user.id}`, mona)).status).toBe(404);
+	});
+
+	it("marks each entry of overtime on a person's week", async () => {
+		const { grace } = await overtimeWorld();
+		const week = textOf(
+			await pageBody(await open(`${TEAM}?week=${WEEK}&person=${grace.user.id}`, ada)),
+		);
+		expect(week).toContain("Late copy Website · Overtime");
+		expect(week).toContain("Copy Website");
+		expect(week).not.toMatch(/(?<!Late )Copy Website · Overtime/);
+	});
+
+	it("is not shown to Finance or a member", async () => {
+		const { fin, grace } = await overtimeWorld();
+		expect((await open(`${TEAM}?week=${WEEK}`, fin)).status).toBe(404);
+		expect((await open(`${TEAM}?week=${WEEK}`, grace)).status).toBe(404);
 	});
 });

@@ -69,6 +69,8 @@ export interface ProjectGroup {
 	id: string;
 	name: string;
 	seconds: number;
+	/** Of `seconds`, those of overtime (TS-095). */
+	overtimeSeconds: number;
 	/** The names of the people who logged time on it, in the order given. */
 	people: string[];
 }
@@ -89,9 +91,11 @@ export function byProject(
 				id: each.projectId,
 				name: each.project,
 				seconds: 0,
+				overtimeSeconds: 0,
 				people: [],
 			};
 			group.seconds += each.seconds;
+			group.overtimeSeconds += each.overtimeSeconds;
 			if (!group.people.includes(person.name)) group.people.push(person.name);
 			groups.set(each.projectId, group);
 		}
