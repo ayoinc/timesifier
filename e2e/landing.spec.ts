@@ -356,21 +356,24 @@ test.describe("the clock", () => {
 	}
 
 	/**
-	 * Opens the page at `OPENED` and holds its time still ten and a half seconds
-	 * later, once the clock is running: between two of its ticks, so that a tick is
-	 * never due at the very moment the time is held.
+	 * Opens the page at `OPENED`, its time held still from the start, then lets
+	 * ten and a half seconds pass at once (`pass`): between two of its ticks, so
+	 * that a tick is never due at the very moment the time is held.
 	 *
-	 * Holding the time fires the tick that was waiting, but React draws what it
-	 * set a task or more later. Read at once, the page still shows the second of
-	 * the tick before the jump: in WebKit, which takes the page over more slowly,
-	 * about nine seconds early, which made these tests flaky. So it waits until
-	 * the page shows the held time.
+	 * The time is held before the page loads, so no tick can fire on its own: a
+	 * tick that fired as the time was held used to leave its drawing, and the
+	 * effect that sets the next tick, for after the jump, and that next tick was
+	 * then never due. In WebKit, which takes the page over more slowly, the page
+	 * stayed about nine seconds early, which made these tests flaky. `pass` lets
+	 * the page finish what it started before the jump, so the one tick waiting
+	 * fires at the held time.
 	 */
 	async function open(page: Page) {
 		await page.clock.install({ time: OPENED });
+		await page.clock.pauseAt(new Date(OPENED.getTime() + 500));
 		await page.goto("/");
 		await expect(stop(page)).toBeVisible();
-		await page.clock.pauseAt(new Date(OPENED.getTime() + 10_500));
+		await pass(page, 10_000);
 		await expect.poll(() => shownTime(page)).toBe(HELD);
 	}
 
