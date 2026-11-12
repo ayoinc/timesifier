@@ -1,4 +1,6 @@
 import { index, type RouteConfig, route } from "@react-router/dev/routes";
+import { ACTIVITY_EXPORT_SEGMENT, HISTORY_SEGMENT } from "./activity/paths";
+import { CONTRACTORS_EXPORT_SEGMENT, CONTRACTORS_SEGMENT } from "./contractors/paths";
 import {
 	EXPENSE_REPORT_EXPORT_SEGMENT,
 	EXPENSE_REPORT_SEGMENT,
@@ -52,6 +54,10 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(EXPENSE_REPORT_SEGMENT, "routes/app/reports.expenses.tsx"),
 	route(EXPENSE_REPORT_EXPORT_SEGMENT, "routes/app/reports.expenses.export.ts"),
 	route(RECEIPT_SEGMENT, "routes/app/expenses.receipt.ts"),
+	route(CONTRACTORS_SEGMENT, "routes/app/contractors.tsx"),
+	route(CONTRACTORS_EXPORT_SEGMENT, "routes/app/contractors.export.ts"),
+	route(ACTIVITY_EXPORT_SEGMENT, "routes/app/activity.export.ts"),
+	route(HISTORY_SEGMENT, "routes/app/history.tsx"),
 	route(ACCOUNT_SEGMENT, "routes/app/account.tsx"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	...Object.keys(MOVED).map((segment) =>

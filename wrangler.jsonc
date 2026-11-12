@@ -106,13 +106,16 @@
 	],
 	// Set with `wrangler secret put`; locally they are read from .dev.vars. A deploy
 	// fails while either is missing. See docs/security.md, "Secrets".
-	// Every minute the Worker sends the webhooks' deliveries that are due
-	// (TS-087, app/integrations/webhooks.server.ts).
-	"triggers": { "crons": ["* * * * *"] },
 	"secrets": { "required": ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY"] },
 	// Cloudflare Email Service. app/auth/email.server.ts is the only code that
 	// uses the binding. The pipeline adds `allowed_sender_addresses`: the binding
 	// may send from the deployment's one address and no other. Locally Wrangler
 	// writes each message to a file and sends nothing.
-	"send_email": [{ "name": "EMAIL" }]
+	"send_email": [{ "name": "EMAIL" }],
+	// The scheduled handler, workers/scheduled.ts. Every minute: the webhooks'
+	// deliveries that are due are sent (TS-087, app/integrations/webhooks.server.ts).
+	// Hourly: auto-lock moves each organisation's lock date within the hour its
+	// deadline's wait ends (TS-065). Daily at 03:17 UTC: rows past their retention
+	// are deleted, activity records after 730 days (TS-072, TS-033).
+	"triggers": { "crons": ["* * * * *", "0 * * * *", "17 3 * * *"] }
 }

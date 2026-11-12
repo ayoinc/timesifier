@@ -1,12 +1,11 @@
 import { createRequestHandler, RouterContextProvider } from "react-router";
 
-import { dispatchWebhooks } from "~/integrations/webhooks.server";
-
 import { canonicalHost } from "./canonical-host";
 import { formerSignUp } from "./former-sign-up";
 import { keepNoCopy } from "./no-copy";
 import { createNonce, nonceContext } from "./nonce";
 import { rejectCrossOrigin } from "./origin-check";
+import { scheduled } from "./scheduled";
 import { withSecurityHeaders } from "./security-headers";
 
 const requestHandler = createRequestHandler(
@@ -31,8 +30,8 @@ export default {
 			(await handleWithFramework(request, nonce));
 		return withSecurityHeaders(keepNoCopy(request, response), nonce);
 	},
-	// The cron trigger in wrangler.jsonc: the webhooks' deliveries that are due.
-	async scheduled(controller, _env, context) {
-		context.waitUntil(dispatchWebhooks({ now: controller.scheduledTime }));
+	// Background work on the Cron Triggers: auto-lock, and deleting expired rows.
+	scheduled(controller, env, context) {
+		context.waitUntil(scheduled(controller, env));
 	},
 } satisfies ExportedHandler<Env>;

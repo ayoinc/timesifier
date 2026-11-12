@@ -36,6 +36,8 @@ import {
 } from "~/leave/rules";
 import { setTimesheetRules, timesheetRulesOf } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
+import { LockSettings } from "~/locks/LockSettings";
+import { LOCK_FORMS, lockAction, lockingData } from "~/locks/settings.server";
 import { isAdministrator } from "~/organisations/access";
 import { deleteOrganisation, renameOrganisation } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -77,13 +79,14 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation, role } = context.get(membershipContext);
 	const canChange = allows(role, { organization: ["update"] });
 	const scope = organisationScope(env.DB, organisation.id);
-	const [week, kinds, holidays, rules, categories, terms] = await Promise.all([
+	const [week, kinds, holidays, rules, categories, terms, locking] = await Promise.all([
 		workingWeekOf(scope),
 		leaveKindsOf(scope),
 		publicHolidaysOf(scope),
 		timesheetRulesOf(organisation.id),
 		listCategories(scope),
 		termsOf(organisation.id),
+		lockingData(organisation, Date.now()),
 	]);
 	return {
 		organisation: {
@@ -107,6 +110,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 			today: dayOf(Date.now(), organisation.timeZone),
 			categories,
 		},
+		/** The lock date, the deadline and auto-lock (TS-065). */
+		locking,
 	};
 }
 
@@ -211,6 +216,7 @@ const form = z.discriminatedUnion("intent", [
 		intent: z.enum(["archive-category", "restore-category"]),
 		categoryId: z.string().min(1).max(64),
 	}),
+	...LOCK_FORMS,
 ]);
 
 /**
@@ -220,7 +226,8 @@ const form = z.discriminatedUnion("intent", [
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation, role } = context.get(membershipContext);
+	const membership = context.get(membershipContext);
+	const { organisation, role } = membership;
 	switch (input.intent) {
 		case "rename": {
 			const renamed = await renameOrganisation(request, organisation.id, input.name);
@@ -313,6 +320,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return kept.ok ? done(kept.said) : declined(kept.problem, kept.status);
 		}
 
+		case "deadline":
+		case "lock-date":
+		case "remove-lock-date":
+			return lockAction(input, membership, Date.now());
 		case "delete": {
 			if (input.confirmation.trim() !== organisation.name) {
 				return declined("That is not the organisation's name. Type it exactly as it is shown.");
@@ -327,7 +338,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 type Task = "rename" | "time-zone" | "week-start" | "delete";
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-	const { organisation, zones, leave, rules, expenses } = loaderData;
+	const { organisation, zones, leave, rules, expenses, locking } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	// The name typed to confirm a deletion. The confirmation waits until it is the name exactly.
@@ -391,6 +402,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 			</Section>
 
 			<LeaveSettings data={leave} onDone={setSaid} />
+
+			<LockSettings data={locking} onDone={setSaid} />
 
 			<RulesSection rules={rules} onDone={setSaid} />
 

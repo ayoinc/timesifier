@@ -60,6 +60,15 @@ export function mayInvoice(role: Role): boolean {
 	return maySeeRates(role);
 }
 
+/**
+ * Whether `role` may create, rename, archive and restore clients, and give a
+ * project its client. Finance is shown Clients, to invoice them, and changes
+ * none (docs/security.md, "Destinations by role").
+ */
+export function mayManageClients(role: Role): boolean {
+	return isAdministrator(role);
+}
+
 /** Whether `role` may create, change and archive tasks and tags. */
 export function mayManageTasks(role: Role): boolean {
 	return isAdministrator(role);

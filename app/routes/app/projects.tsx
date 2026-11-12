@@ -15,9 +15,9 @@ import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
-import { mayManageIntegrations, timeScopeOf } from "~/organisations/access";
+import { mayManageClients, mayManageIntegrations, timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
-import { membershipContext, notFound, viewerOf } from "~/organisations/membership.server";
+import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
@@ -38,7 +38,7 @@ import {
 	setProjectArchived,
 } from "~/projects/projects.server";
 import { hoursAndMinutes } from "~/reports/format";
-import { canSee, destination } from "~/shell/destinations";
+import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 
@@ -49,11 +49,11 @@ import { useOrganisation } from "./useOrganisation";
 // Projects: what the organisation tracks time against (TS-011a). Every role
 // sees every project, active and archived, and creates, renames, archives and
 // restores them; none is ever deleted. A project's client is shown while the
-// organisation has Clients turned on; only those who are shown Clients, its
-// owners and admins, give a project one (TS-011b). The list is searched by a
-// project's or its client's name, grouped under the clients, and each project
-// shows the hours tracked on it to date by the people whose time the viewer
-// may see (TS-057).
+// organisation has Clients turned on; only its owners and admins give a
+// project one (TS-011b): Finance, shown Clients, changes none (TS-075). The
+// list is searched by a project's or its client's name, grouped under the
+// clients, and each project shows the hours tracked on it to date by the
+// people whose time the viewer may see (TS-057).
 
 const { label } = destination("projects");
 
@@ -72,7 +72,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const scope = organisationScope(env.DB, membership.organisation.id);
 	const showsClients = membership.organisation.clientsEnabled;
-	const givesClients = canSee(viewerOf(membership), "clients");
+	const givesClients = showsClients && mayManageClients(membership.role);
 	const query = searchIn(new URL(request.url).searchParams);
 	const access = await accessOf(membership);
 	const whose = timeScopeOf(access);
@@ -133,11 +133,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 	switch (input.intent) {
 		case "create":
 		case "rename": {
-			// A project's client is given by those shown Clients, and by nobody
+			// A project's client is given by an owner or admin, and by nobody
 			// while Clients is turned off. Leaving the field out keeps it as it is.
 			let clientId: string | null | undefined;
 			if (input.clientId !== undefined) {
-				if (!canSee(viewerOf(membership), "clients")) return declined(NOT_ALLOWED, 403);
+				if (!membership.organisation.clientsEnabled || !mayManageClients(membership.role)) {
+					return declined(NOT_ALLOWED, 403);
+				}
 				clientId = input.clientId === NO_CLIENT ? null : input.clientId;
 			}
 			if (input.intent === "create") {

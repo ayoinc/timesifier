@@ -57,3 +57,46 @@ export function lockOfChange(before: LockInput | null, after: LockInput | null):
 export function mayChangeItem(before: LockInput | null, after: LockInput | null): boolean {
 	return lockOfChange(before, after) === null;
 }
+
+/** The lock date as the people it binds are told it: the date, and the owner's or admin's reason when one was given. */
+export interface LockNotice {
+	lockedThrough: Day;
+	reason: string | null;
+}
+
+/** A locked day's short label, beside its heading. */
+export const LOCK_LABELS: Record<LockReason, string> = {
+	"locked-through": "Locked",
+	submitted: "Submitted",
+	approved: "Approved",
+	invoiced: "Invoiced",
+};
+
+/**
+ * Why nothing can be tracked or changed on a locked day, in a sentence:
+ * `formatDay` writes the lock date as the page writes days.
+ */
+export function lockSentence(
+	reason: LockReason,
+	lockDate: LockNotice | null,
+	formatDay: (day: Day) => string,
+): string {
+	switch (reason) {
+		case "locked-through": {
+			const through = lockDate ? `, ${formatDay(lockDate.lockedThrough)}` : "";
+			const why = lockDate?.reason ? ` The reason given: ${lockDate.reason}` : "";
+			return `This day is on or before the lock date${through}, so nothing can be tracked or changed on it until an owner or admin moves the date back.${why}`;
+		}
+		case "submitted":
+		case "approved":
+			return "This day is in a submitted or approved week, so nothing can be tracked or changed on it.";
+		case "invoiced":
+			return "This day's time is on an invoice, so it cannot be changed until it is taken off.";
+	}
+}
+
+/** The lock date in a sentence, for a view that holds days on or before it. */
+export function lockDateNotice(lockDate: LockNotice, formatDay: (day: Day) => string): string {
+	const why = lockDate.reason ? ` The reason given: ${lockDate.reason}` : "";
+	return `Locked through ${formatDay(lockDate.lockedThrough)}: nothing on or before that day can be tracked or changed until an owner or admin moves the lock date back.${why}`;
+}

@@ -20,9 +20,10 @@ import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
-import { mayManageIntegrations } from "~/organisations/access";
+import { mayManageClients, mayManageIntegrations } from "~/organisations/access";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
+import { NOT_ALLOWED } from "~/organisations/problems";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
 import { keptTab, onlyTabChanged, SEARCH_PARAM, searchIn } from "~/projects/projects";
 import { destination } from "~/shell/destinations";
@@ -33,13 +34,15 @@ import type { Route } from "./+types/clients";
 import { FormSheet } from "./FormSheet";
 import { useOrganisation } from "./useOrganisation";
 
-// Clients: the companies the organisation's projects are for (TS-011b). Its owners and
-// admins are shown it while the organisation has Clients turned on, and
-// nobody else is: the layout answers them 404, actions included
-// (docs/navigation.md). They create, rename, archive and restore clients, and
-// see each client's projects; a client is never deleted. An archived client is
-// offered to no project, and the projects that have it keep it. The list is
-// filtered by a client's name, in the address (TS-057).
+// Clients: whom the organisation's projects are for (TS-011b). Its owners,
+// admins and Finance are shown it while the organisation has Clients turned
+// on, and nobody else is: the layout answers them 404, actions included
+// (docs/navigation.md). Owners and admins create, rename, archive and restore
+// clients; Finance reads them, to invoice them, and the action answers its
+// forms 403 (TS-075). Everyone shown it sees each client's projects; a client
+// is never deleted. An archived client is offered to no project, and the
+// projects that have it keep it. The list is filtered by a client's name, in
+// the address (TS-057).
 
 const { label } = destination("clients");
 
@@ -52,7 +55,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const query = searchIn(new URL(request.url).searchParams);
 	const scope = organisationScope(env.DB, membership.organisation.id);
-	return { clients: await listClients(scope, query), query };
+	return {
+		clients: await listClients(scope, query),
+		query,
+		canManage: mayManageClients(membership.role),
+	};
 }
 
 /** Moving between the tabs reads nothing again: the loader sent both lists. */
@@ -80,12 +87,13 @@ const form = z.discriminatedUnion("intent", [
 
 /**
  * Creates, renames, archives or restores a client of the organisation in the
- * address; a client of another is no client here, so it answers 404 and
- * nothing changes.
+ * address, for an owner or admin; anyone else is answered 403. A client of
+ * another organisation is no client here, so it answers 404 and nothing changes.
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation, user } = context.get(membershipContext);
+	const { organisation, user, role } = context.get(membershipContext);
+	if (!mayManageClients(role)) return declined(NOT_ALLOWED, 403);
 	const scope = organisationScope(env.DB, organisation.id);
 	switch (input.intent) {
 		case "create":
@@ -123,7 +131,7 @@ type Client = Route.ComponentProps["loaderData"]["clients"][number];
 type Task = "create" | "rename" | "archive" | "restore";
 
 export default function Clients({ loaderData }: Route.ComponentProps) {
-	const { clients, query } = loaderData;
+	const { clients, query, canManage } = loaderData;
 	const organisation = useOrganisation();
 	const [task, setTask] = useState<Task | null>(null);
 	// Which client the open sheet is about. Kept after it closes, so the sheet
@@ -133,7 +141,10 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 	const close = () => setTask(null);
 	const [search] = useSearchParams();
 
-	const create = <Button onPress={() => setTask("create")}>Create client</Button>;
+	// Finance reads the clients and changes none, so it is offered nothing to press.
+	const create = canManage ? (
+		<Button onPress={() => setTask("create")}>Create client</Button>
+	) : null;
 
 	const rows = (shown: Client[], archived: boolean) =>
 		shown.length === 0 ? (
@@ -141,29 +152,38 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 				{query !== ""
 					? `No ${archived ? "archived" : "active"} client has “${query}” in its name.`
 					: archived
-						? "No archived clients. A client you archive is kept here, with its projects, and can be restored."
-						: "No active clients. Restore one from Archived, or create one."}
+						? canManage
+							? "No archived clients. A client you archive is kept here, with its projects, and can be restored."
+							: "No archived clients. A client an owner or admin archives is kept here, with its projects."
+						: canManage
+							? "No active clients. Restore one from Archived, or create one."
+							: "No active clients. Owners and admins create and restore them."}
 			</p>
 		) : (
 			// A client's name opens its sheet, which renames it and holds Archive or
 			// Restore: two things, so no menu (docs/design-direction.md, rule 2).
+			// Finance changes no client, so its names are text.
 			<LedgerRows label={archived ? "Archived clients" : "Active clients"}>
 				{shown.map((each) => (
 					<LedgerRow
 						key={each.id}
 						title={
-							// React Aria's button presses on key up, as every button that opens a
-							// sheet here does, so the sheet's field keeps the focus it is given.
-							<AriaButton
-								aria-haspopup="dialog"
-								className={cx(ACTION_LINK, "cursor-pointer text-start wrap-anywhere")}
-								onPress={() => {
-									setClient(each);
-									setTask("rename");
-								}}
-							>
-								{each.name}
-							</AriaButton>
+							canManage ? (
+								// React Aria's button presses on key up, as every button that opens a
+								// sheet here does, so the sheet's field keeps the focus it is given.
+								<AriaButton
+									aria-haspopup="dialog"
+									className={cx(ACTION_LINK, "cursor-pointer text-start wrap-anywhere")}
+									onPress={() => {
+										setClient(each);
+										setTask("rename");
+									}}
+								>
+									{each.name}
+								</AriaButton>
+							) : (
+								<span className="wrap-anywhere">{each.name}</span>
+							)
 						}
 						detail={
 							<span className="wrap-anywhere">
@@ -188,8 +208,10 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
-				The companies your projects are for. Give a project its client on Projects; everyone sees it
-				there.
+				The companies your projects are for.{" "}
+				{canManage
+					? "Give a project its client on Projects; everyone sees it there."
+					: "Each client is listed with its projects; owners and admins manage them."}
 			</PageLead>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
@@ -203,7 +225,7 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 							<h2 className="text-title-large">No clients yet</h2>
 							<p className="max-w-160 text-body-large text-on-surface-variant">
 								A client is whom a project is for. Group projects by client to see the time each one
-								takes.
+								takes.{canManage ? "" : " Owners and admins create them."}
 							</p>
 							{create}
 						</div>

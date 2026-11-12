@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, ViewTransition } from "react";
 import { Link, useFetcher, useLocation } from "react-router";
 
+import { entryHistoryPath } from "~/activity/paths";
 import { Button } from "~/components/Button";
 import { Digits } from "~/components/Digits";
 import { AddIcon } from "~/components/icons/AddIcon";
@@ -9,6 +10,7 @@ import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { type DayRule, overLabel } from "~/leave/rules";
+import { LOCK_LABELS, lockSentence } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { destinationPath } from "~/shell/destinations";
@@ -44,7 +46,19 @@ import { WeekDays } from "./WeekDays";
  * as the ones to trim or move: changing and deleting them stay open.
  */
 export function DayView({ data, slug }: { data: DayData; slug: string }) {
-	const { day, today, entries, total, locked, projects, zone, now, submission } = data;
+	const {
+		day,
+		today,
+		entries,
+		total,
+		locked,
+		lockReason,
+		lockDate,
+		projects,
+		zone,
+		now,
+		submission,
+	} = data;
 	const formatDay = useDayFormat();
 	const formatPeriod = usePeriodFormat();
 	const clock = useClockFormat(zone);
@@ -119,7 +133,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 					<div className="mt-6 max-w-200">
 						<Ledger
 							heading={day === today ? `Today, ${formatDay(day)}` : formatDay(day)}
-							note={locked ? "Submitted" : over > 0 ? overLabel(over) : undefined}
+							note={lockReason ? LOCK_LABELS[lockReason] : over > 0 ? overLabel(over) : undefined}
 						>
 							{shownDay && (
 								<p className="px-4 pb-3 text-body-medium text-on-surface-variant @sm:px-5">
@@ -164,12 +178,16 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 															</Button>
 															<Menu
 																onAction={(chosen) => {
+																	if (chosen === "history") return;
 																	setEntry(each);
 																	setTask(chosen === "edit" ? "edit" : "delete");
 																}}
 															>
 																<MenuItem id="edit">Edit entry</MenuItem>
 																<MenuItem id="delete">Delete entry</MenuItem>
+																<MenuItem id="history" href={entryHistoryPath(slug, each.id)}>
+																	History
+																</MenuItem>
 															</Menu>
 														</MenuTrigger>
 													)
@@ -181,10 +199,9 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 							)}
 							<LedgerTotal label="Day total" value={formatDuration(total)} />
 						</Ledger>
-						{locked && (
+						{lockReason && (
 							<p className="mt-4 text-body-medium text-on-surface-variant">
-								This day is in a submitted or approved week, so nothing can be tracked or changed on
-								it.
+								{lockSentence(lockReason, lockDate, formatDay)}
 							</p>
 						)}
 					</div>

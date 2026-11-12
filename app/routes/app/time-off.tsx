@@ -279,6 +279,7 @@ const STEPPED: Record<Exclude<Stepped, "done">, [string, number]> = {
 	missing: ["That request is no longer there.", 404],
 	"not-allowed": [NOT_ALLOWED, 403],
 	stale: ["That request has changed since this page was opened. Look at it again.", 409],
+	locked: ["Those days are on or before the lock date, so the request can no longer change.", 409],
 };
 
 function outcome(result: Stepped, said: string) {
