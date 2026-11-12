@@ -1,6 +1,6 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
-import { organisationPath } from "../app/shell/destinations";
+import { destinationPath, organisationPath } from "../app/shell/destinations";
 import { newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems } from "./axe";
@@ -10,9 +10,10 @@ import { createProject } from "./timesheet";
 
 // The views of Reports beside Time and Dashboards in a browser (TS-068, TS-071,
 // TS-080, TS-084, TS-086): the tabs, the shared filter bar and stepper,
-// saving a report and opening it from Saved, the keyboard alone, and axe at
-// 390px and 1280px in both schemes. Each test is a new person, the owner of an
-// organisation of their own, with two hours tracked yesterday.
+// saving a report and opening it from Saved, the money panels of Dashboards
+// and a project's profit, the keyboard alone, and axe at 390px and 1280px in
+// both schemes. Each test is a new person, the owner of an organisation of
+// their own, with two hours tracked yesterday.
 
 const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
@@ -42,6 +43,26 @@ async function ownerWithTime(page: Page) {
 }
 
 const tabs = (page: Page) => page.getByRole("group", { name: "Report views" });
+
+/** Presses Tab until `target` has the focus: the way a person without a pointer gets there. */
+async function tabTo(page: Page, target: Locator, most = 80) {
+	for (let step = 0; step < most; step++) {
+		if (await target.evaluate((element) => element === document.activeElement)) return;
+		await page.keyboard.press("Tab");
+	}
+	throw new Error("Tab never reached the control.");
+}
+
+/** The address of Site's own page, from its link on Projects. */
+async function siteAddress(page: Page, slug: string): Promise<string> {
+	await openShell(page, destinationPath(slug, "projects"));
+	const href = await page
+		.getByRole("main")
+		.getByRole("link", { name: "Site", exact: true })
+		.getAttribute("href");
+	if (!href) throw new Error("Site has no link.");
+	return href;
+}
 
 /** The views at their own addresses, each with what it is about. */
 const VIEWS = [
@@ -94,12 +115,55 @@ test("with the keyboard alone: the tabs, then a range field, apply", async ({ pa
 	await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
 });
 
+test("an owner reads the money panels of Dashboards and a project's profit, and reaches each report with the keyboard alone", async ({
+	page,
+}) => {
+	const { organisation, day } = await ownerWithTime(page);
+	const dashboards = `${organisationPath(organisation.slug)}/dashboards?range=this-week`;
+	const main = page.getByRole("main");
+
+	// Nothing is invoiced yet: each panel says so and carries its way on.
+	await openShell(page, dashboards);
+	await expect(main).toContainText("Nothing billable is waiting to be invoiced.");
+	await expect(main).toContainText("Nothing is owed: every issued invoice is paid.");
+	await expect(main.getByRole("link", { name: "Create an invoice" })).toBeVisible();
+	await tabTo(page, main.getByRole("link", { name: "Open uninvoiced" }));
+	await page.keyboard.press("Enter");
+	await expect(page).toHaveURL(/\/invoices\/uninvoiced$/);
+	await expect(page.getByRole("heading", { level: 1, name: "Uninvoiced" })).toBeVisible();
+
+	await openShell(page, dashboards);
+	await tabTo(page, main.getByRole("link", { name: "Open receivables" }));
+	await page.keyboard.press("Enter");
+	await expect(page).toHaveURL(/\/invoices\/reports\?report=receivables$/);
+	await expect(page.getByRole("heading", { level: 1, name: "Invoice reports" })).toBeVisible();
+
+	// The project's profit over yesterday is its row of the Profitability report.
+	const site = await siteAddress(page, organisation.slug);
+	await openShell(page, `${site}?range=custom&from=${day}&to=${day}`);
+	const profit = page.getByRole("region", { name: "Profit" });
+	await expect(profit.getByRole("group", { name: "Profit range" })).toBeVisible();
+	await expect(profit.getByRole("list", { name: "Profit over the range" })).toContainText(
+		"Revenue",
+	);
+	const totalLine = profit.locator("p", { has: page.getByText("Profit", { exact: true }) });
+	const total = ((await totalLine.textContent()) ?? "").replace("Profit", "").trim();
+	expect(total).not.toBe("");
+	await tabTo(page, profit.getByRole("link", { name: "Open profitability" }));
+	await page.keyboard.press("Enter");
+	await expect(page).toHaveURL(
+		new RegExp(`/reports/profitability\\?range=custom&from=${day}&to=${day}&group=project$`),
+	);
+	const row = page.getByRole("list", { name: "Profit by project" }).getByRole("listitem");
+	await expect(row.filter({ hasText: "Site" })).toContainText(total);
+});
+
 for (const viewport of [COMPACT, MEDIUM]) {
 	for (const scheme of ["light", "dark"] as const) {
 		test.describe(`at ${viewport.width}px in the ${scheme} scheme`, () => {
 			test.use({ viewport, chosenScheme: scheme });
 
-			test("axe finds nothing on any view or Dashboards; nothing overflows the window", async ({
+			test("axe finds nothing on any view, Dashboards or a project's Overview; nothing overflows the window", async ({
 				page,
 			}) => {
 				const { reports, organisation } = await ownerWithTime(page);
@@ -111,6 +175,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 					...VIEWS.map(([, path]) => `${reports}${path}?range=this-week`),
 					`${reports}/saved`,
 					`${organisationPath(organisation.slug)}/dashboards?range=this-week`,
+					`${await siteAddress(page, organisation.slug)}?range=this-week`,
 				];
 				for (const address of pages) {
 					await openShell(page, address);

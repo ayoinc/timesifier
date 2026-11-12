@@ -272,6 +272,92 @@ describe("importing Harvest's export of all time", () => {
 		).toBe(1);
 	});
 
+	it("records each imported entry, client, project and task, and each reverted entry, as from the import", async () => {
+		await seedExisting();
+		const { location } = await upload(harvestExport);
+		const id = importIdOf(location);
+		await submit(`${IMPORT}?kind=time`, { intent: "import", importId: id }, ada);
+
+		const recordsOf = async (action: string) =>
+			(
+				await env.DB.prepare(
+					"select actor_id, source, subject_type, subject_id, owner_id from activity_records where action = ? order by subject_id",
+				)
+					.bind(action)
+					.all<{
+						actor_id: string;
+						source: string;
+						subject_type: string;
+						subject_id: string;
+						owner_id: string | null;
+					}>()
+			).results;
+		const entries = (
+			await env.DB.prepare("select id, user_id from time_entries where import_id = ? order by id")
+				.bind(id)
+				.all<{ id: string; user_id: string }>()
+		).results;
+		expect(entries).toHaveLength(3);
+		expect(await recordsOf("time_entry.created")).toEqual(
+			entries.map((e) => ({
+				actor_id: ada.user.id,
+				source: "import",
+				subject_type: "time_entry",
+				subject_id: e.id,
+				owner_id: e.user_id,
+			})),
+		);
+		for (const [action, table] of [
+			["client.created", "clients"],
+			["project.created", "projects"],
+			["task.created", "tasks"],
+		] as const) {
+			const made = await recordsOf(action);
+			expect(made.length).toBeGreaterThan(0);
+			for (const record of made) {
+				expect(record).toMatchObject({ actor_id: ada.user.id, source: "import", owner_id: null });
+				expect(await value(`select count(*) from ${table} where id = ?`, record.subject_id)).toBe(
+					1,
+				);
+			}
+		}
+		expect(await recordsOf("import.imported")).toEqual([
+			{
+				actor_id: ada.user.id,
+				source: "import",
+				subject_type: "import",
+				subject_id: id,
+				owner_id: null,
+			},
+		]);
+		// The notes typed in the file are never copied into the log.
+		expect(
+			await value("select count(*) from activity_records where summary like '%Homepage%'"),
+		).toBe(0);
+
+		await submit(`${IMPORT}?kind=time`, { intent: "revert", importId: id }, ada, {
+			byScript: true,
+		});
+		expect(await recordsOf("time_entry.deleted")).toEqual(
+			entries.map((e) => ({
+				actor_id: ada.user.id,
+				source: "import",
+				subject_type: "time_entry",
+				subject_id: e.id,
+				owner_id: e.user_id,
+			})),
+		);
+		expect(await recordsOf("import.reverted")).toEqual([
+			{
+				actor_id: ada.user.id,
+				source: "import",
+				subject_type: "import",
+				subject_id: id,
+				owner_id: null,
+			},
+		]);
+	});
+
 	it("is refused to anyone but an owner or admin", async () => {
 		for (const role of ["member", "finance"] as const) {
 			const who = await memberOfAcme(role, `${role}@example.com`, role);

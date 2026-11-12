@@ -56,7 +56,7 @@ const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, 
 const limited = (message: string) => ({ ok: false as const, reason: "limit" as const, message });
 
 /** What the activity log records of an entry. */
-const ENTRY_FIELDS = [
+export const ENTRY_FIELDS = [
 	"projectId",
 	"taskId",
 	"billable",

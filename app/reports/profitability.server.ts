@@ -208,7 +208,8 @@ export async function setCostRate(
 				scope,
 				actor,
 				"rate.updated",
-				{ type: "rate", id: held.id, ownerId: rate.userId },
+				// The organisation's, not the person's: a manager reads their people's records and never sees money.
+				{ type: "rate", id: held.id },
 				changes(held, rate, fields),
 			),
 		]);
@@ -228,8 +229,8 @@ export async function setCostRate(
 			scope,
 			actor,
 			"rate.created",
-			{ type: "rate", id, ownerId: rate.userId },
-			changes(null, rate, fields),
+			{ type: "rate", id },
+			changes(null, { ...rate, kind: "cost" }, ["kind", "userId", ...fields]),
 		),
 	]);
 }
@@ -237,9 +238,17 @@ export async function setCostRate(
 /** Sets a project's first and last day; false when the organisation has no such project. */
 export async function setProjectDates(
 	scope: OrganisationScope,
+	actor: string,
 	projectId: string,
 	dates: { startsOn: Day; endsOn: Day },
 ): Promise<boolean> {
-	const changed = await scope.projects.update(dates, (p) => eq(p.id, projectId));
-	return changed.length === 1;
+	const [project] = await scope.projects.select((p) => eq(p.id, projectId), { limit: 1 });
+	if (!project) return false;
+	const summary = changes(project, dates, ["startsOn", "endsOn"]);
+	if (!summary.before && !summary.after) return true;
+	await scope.batch([
+		scope.projects.statements.update(dates, (p) => eq(p.id, projectId)),
+		recordStatement(scope, actor, "project.updated", { type: "project", id: projectId }, summary),
+	]);
+	return true;
 }

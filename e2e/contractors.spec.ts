@@ -115,7 +115,10 @@ test("time tracked on the Timesheet is on the Contractors report, unrounded, wit
 	await expect(editing).toBeHidden();
 
 	await openShell(page, week());
-	await expect(page.getByRole("heading", { level: 1, name: "Contractors" })).toBeVisible();
+	await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
+	await expect(
+		page.getByRole("group", { name: "Report views" }).getByRole("link", { name: "Contractors" }),
+	).toHaveAttribute("aria-current", "page");
 	const row = contractors(page).getByRole("listitem");
 	await expect(row).toHaveCount(1);
 	await expect(row).toContainText(NAME);

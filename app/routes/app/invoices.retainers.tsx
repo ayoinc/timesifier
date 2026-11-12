@@ -104,6 +104,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 	if (input.intent === "open") {
 		const opened = await openRetainer(
 			scope,
+			membership.user.id,
 			input.clientId,
 			input.projectId === ALL_WORK ? null : input.projectId,
 			input.currency,

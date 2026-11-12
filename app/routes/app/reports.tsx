@@ -1,7 +1,6 @@
-import { data, Link } from "react-router";
+import { data } from "react-router";
 
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
-import { expenseReportPath } from "~/expenses/paths";
 import { halfDaysLabel } from "~/leave/kinds";
 import { membershipContext } from "~/organisations/membership.server";
 import { billableSplitOf } from "~/reports/amounts.server";
@@ -20,7 +19,7 @@ import { timetableOf } from "~/reports/timetable";
 import { openedFrom, viewAction, viewFrame, viewsFor } from "~/reports/view.server";
 import { WeekTimetable as Timetable } from "~/reports/WeekTimetable";
 import { destination } from "~/shell/destinations";
-import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
+import { ACTION_LINK } from "~/shell/links";
 import { negotiateLocale } from "~/shell/locale";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { tagOptions } from "~/tags/tags.server";
@@ -85,7 +84,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					: "Your time.",
 		zone,
 		groupings: showClients ? [...GROUPS] : GROUPS.filter((each) => each !== "client"),
-		expensesPath: expenseReportPath(membership.organisation.slug),
 	};
 
 	// A custom range that makes no report: the form again, holding what was
@@ -194,12 +192,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>
-				{loaderData.whose}{" "}
-				<Link to={loaderData.expensesPath} className={TEXT_LINK}>
-					Report on expenses
-				</Link>
-			</PageLead>
+			<PageLead>{loaderData.whose}</PageLead>
 
 			<ReportTabs
 				slug={loaderData.slug}

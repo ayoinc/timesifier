@@ -1,5 +1,6 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
+import { changes, recordStatement, recordStatementWhen } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import type { Day } from "~/time/calendar";
@@ -76,15 +77,35 @@ export interface UnitPrice {
 	from: Day;
 }
 
+/** What a category's record compares. */
+const CATEGORY_FIELDS = ["name", "unitName", "unitPriceMinor", "effectiveFrom"] as const;
+
 /** Adds a category: plain, or unit-priced from `unit.from` on. */
 export async function createCategory(
 	scope: OrganisationScope,
+	actor: string,
 	name: string,
 	unit: UnitPrice | null,
 ): Promise<CategoryResult> {
 	const id = uuidv7();
 	try {
 		await scope.batch([
+			recordStatement(
+				scope,
+				actor,
+				"expense_category.created",
+				{ type: "expense_category", id },
+				changes(
+					null,
+					{
+						name,
+						unitName: unit?.unitName,
+						unitPriceMinor: unit?.unitPriceMinor,
+						effectiveFrom: unit?.from,
+					},
+					CATEGORY_FIELDS,
+				),
+			),
 			scope.expenseCategories.statements.insert({
 				id,
 				name,
@@ -117,6 +138,7 @@ export async function createCategory(
  */
 export async function changeCategory(
 	scope: OrganisationScope,
+	actor: string,
 	id: string,
 	name: string,
 	unit: UnitPrice | null,
@@ -132,8 +154,33 @@ export async function changeCategory(
 				: "A category without a unit price keeps none. Add a new category for one.",
 		};
 	}
+	// The price compared is the one set from that very day, which this replaces.
+	const [price] = unit
+		? await scope.expenseCategoryPrices.select(
+				(p) => and(eq(p.categoryId, id), eq(p.effectiveFrom, unit.from)),
+				{ limit: 1 },
+			)
+		: [];
+	const summary = changes(
+		{ name: category.name, unitName: category.unitName, ...price },
+		{
+			name,
+			unitName: unit?.unitName ?? null,
+			...(unit && { effectiveFrom: unit.from, unitPriceMinor: unit.unitPriceMinor }),
+		},
+		CATEGORY_FIELDS,
+	);
+	// Nothing differs: nothing to change, nothing to record.
+	if (!summary.before && !summary.after) return { ok: true };
 	try {
 		await scope.batch([
+			recordStatement(
+				scope,
+				actor,
+				"expense_category.updated",
+				{ type: "expense_category", id },
+				summary,
+			),
 			scope.expenseCategories.statements.update(
 				{
 					name,
@@ -166,14 +213,29 @@ export async function changeCategory(
 /** Archives or restores category `id`. Null when there is no such category. */
 export async function setCategoryArchived(
 	scope: OrganisationScope,
+	actor: string,
 	id: string,
 	archived: boolean,
 ): Promise<CategoryResult> {
-	const changed = await scope.expenseCategories.update(
-		{ archivedAt: archived ? new Date() : null },
-		(c) => eq(c.id, id),
+	const [category] = await scope.expenseCategories.select((c) => eq(c.id, id), { limit: 1 });
+	if (!category) return null;
+	// Only one that is not so already changes, and only that is recorded.
+	const stillOtherwise = scope.expenseCategories.exists((c) =>
+		and(eq(c.id, id), archived ? isNull(c.archivedAt) : isNotNull(c.archivedAt)),
 	);
-	return changed.length === 0 ? null : { ok: true };
+	await scope.batch([
+		recordStatementWhen(
+			scope,
+			stillOtherwise,
+			actor,
+			archived ? "expense_category.archived" : "expense_category.restored",
+			{ type: "expense_category", id },
+		),
+		scope.expenseCategories.statements.update({ archivedAt: archived ? new Date() : null }, (c) =>
+			and(eq(c.id, id), archived ? isNull(c.archivedAt) : isNotNull(c.archivedAt)),
+		),
+	]);
+	return { ok: true };
 }
 
 /** A change to the categories, as Workspace settings' form sends it. */
@@ -201,6 +263,7 @@ export type CategoryOutcome =
  */
 export async function keepCategory(
 	scope: OrganisationScope,
+	actor: string,
 	input: CategoryIntent,
 	currency: string,
 	today: Day,
@@ -208,7 +271,7 @@ export async function keepCategory(
 	const missing = { ok: false as const, problem: "That category is no longer there.", status: 404 };
 	if (input.intent === "archive-category" || input.intent === "restore-category") {
 		const archived = input.intent === "archive-category";
-		const result = await setCategoryArchived(scope, input.categoryId, archived);
+		const result = await setCategoryArchived(scope, actor, input.categoryId, archived);
 		return result === null
 			? missing
 			: { ok: true, said: archived ? "Category archived." : "Category restored." };
@@ -233,8 +296,8 @@ export async function keepCategory(
 
 	const result =
 		input.intent === "add-category"
-			? await createCategory(scope, name, unit)
-			: await changeCategory(scope, input.categoryId, name, unit);
+			? await createCategory(scope, actor, name, unit)
+			: await changeCategory(scope, actor, input.categoryId, name, unit);
 	if (result === null) return missing;
 	if (!result.ok) return { ok: false, problem: result.problem, status: 409 };
 	return { ok: true, said: input.intent === "add-category" ? `${name} added.` : `${name} saved.` };

@@ -22,6 +22,8 @@ export interface LinkTabsProps {
 	tabs: LinkTab[];
 	/** The `id` of the tab whose address is shown. */
 	current: string;
+	/** More tabs than fit a compact window: there they wrap into rows of three rather than squeeze or hide. */
+	wraps?: boolean;
 }
 
 /**
@@ -30,10 +32,14 @@ export interface LinkTabsProps {
  * the shell has one navigation landmark, the main one. The shown tab is marked
  * `aria-current="page"`. Place it below the page's heading and intro.
  */
-export function LinkTabs({ label, tabs, current }: LinkTabsProps) {
+export function LinkTabs({ label, tabs, current, wraps = false }: LinkTabsProps) {
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: a fieldset is for form controls; these are links named as one group.
-		<div role="group" aria-label={label} className={TAB_ROW}>
+		<div
+			role="group"
+			aria-label={label}
+			className={cx(TAB_ROW, wraps && "max-medium:grid max-medium:grid-cols-3 max-medium:*:px-2")}
+		>
 			{tabs.map((tab) => {
 				const isCurrent = tab.id === current;
 				return (

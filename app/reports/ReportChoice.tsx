@@ -38,6 +38,8 @@ export interface ReportChoiceProps {
 	query: ChosenReport;
 	/** The groupings offered; none for a view that is not grouped. */
 	groupings?: readonly Grouping[];
+	/** A view's own grouping in place of the time groupings, as the Expenses view's (TS-070). */
+	ownGroups?: { options: readonly { id: string; label: string }[]; value: string };
 	/** The people the viewer may narrow the report to; none when they see only their own time. */
 	choices: readonly { id: string; name: string }[];
 	/** What the person field calls everyone the viewer may see. */
@@ -81,6 +83,7 @@ export function ReportChoice(props: ReportChoiceProps) {
 function ReportFields({
 	query,
 	groupings,
+	ownGroups,
 	choices,
 	everyone,
 	range: shown,
@@ -90,6 +93,9 @@ function ReportFields({
 	const apply = useApplyFilters();
 	// The hidden select and the inputs hold the new value once React has drawn it.
 	const applySoon = () => setTimeout(apply, 0);
+	const [own, setOwn] = useState(ownGroups?.value ?? "");
+	const ownValue = ownGroups?.value ?? "";
+	useEffect(() => setOwn(ownValue), [ownValue]);
 
 	const [range, setRange] = useState<Range>(query.range);
 	const [group, setGroup] = useState<Grouping>(query.group);
@@ -132,6 +138,20 @@ function ReportFields({
 					}}
 				/>
 			</div>
+			{ownGroups && (
+				<div className={FIELD}>
+					<Select
+						label="Group by"
+						name="group"
+						options={[...ownGroups.options]}
+						value={own}
+						onChange={(id) => {
+							setOwn(id ?? own);
+							applySoon();
+						}}
+					/>
+				</div>
+			)}
 			{groupings && groupings.length > 0 && (
 				<div className={FIELD}>
 					<Select

@@ -1,4 +1,3 @@
-import { and, eq, isNull } from "drizzle-orm";
 import { Link } from "react-router";
 import * as z from "zod";
 
@@ -17,6 +16,7 @@ import { recurringListPath } from "~/invoices/paths";
 import { FREQUENCY_LABELS, Frequency } from "~/invoices/recurring";
 import {
 	addRecurringLine,
+	changeRecurring,
 	findRecurring,
 	removeRecurringLine,
 	stopRecurring,
@@ -89,7 +89,8 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context, params }: Route.ActionArgs) {
-	const { scope, now } = await billingOf(context, request);
+	const { scope, now, membership } = await billingOf(context, request);
+	const actor = membership.user.id;
 	const form = await readForm(request, Form);
 	if ("refusal" in form) return form.refusal;
 	const { input } = form;
@@ -104,23 +105,23 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 				const problem = "The last date cannot be before the next.";
 				return refuse(problem, { endsOn: [problem] });
 			}
-			const changed = await scope.recurringInvoices.update(
-				{ ...change, updatedAt: new Date(now) },
-				(r) => and(eq(r.id, id), isNull(r.stoppedAt)),
-			);
-			return changed.length > 0
+			const changed = await changeRecurring(scope, actor, id, change, new Date(now));
+			return changed
 				? answered("The recurring invoice is saved.")
 				: refuse("That recurring invoice has stopped.");
 		}
 		case "add-line": {
 			const parsed = parseLine(input, found.recurring.currency);
 			if (!parsed.ok) return lineRefusal(parsed.problem);
-			return outcomeOf(await addRecurringLine(scope, id, parsed.line), () => "Line added.");
+			return outcomeOf(await addRecurringLine(scope, actor, id, parsed.line), () => "Line added.");
 		}
 		case "remove-line":
-			return outcomeOf(await removeRecurringLine(scope, id, input.lineId), () => "Line removed.");
+			return outcomeOf(
+				await removeRecurringLine(scope, actor, id, input.lineId),
+				() => "Line removed.",
+			);
 		case "stop": {
-			const stopped = await stopRecurring(scope, id, new Date(now));
+			const stopped = await stopRecurring(scope, actor, id, new Date(now));
 			return stopped
 				? answered("Stopped. No more invoices are made from it.")
 				: refuse("That recurring invoice has stopped already.");

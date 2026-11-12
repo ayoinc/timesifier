@@ -112,6 +112,9 @@ export async function setRate(
 		if (same.effectiveFrom <= today && same.amountMinor !== rate.amountMinor) {
 			return { ok: false, reason: "in-force" };
 		}
+		if (same.amountMinor === rate.amountMinor && same.currency === rate.currency) {
+			return { ok: true };
+		}
 		const changed = { amountMinor: rate.amountMinor, currency: rate.currency };
 		await scope.batch([
 			scope.rates.statements.update(changed, (r) => eq(r.id, same.id)),

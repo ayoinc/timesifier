@@ -22,7 +22,9 @@ import {
 	type Step,
 	steppedRange,
 } from "~/reports/query";
-import { membersPath } from "~/shell/destinations";
+import { ReportTabs } from "~/reports/ReportTabs";
+import { viewsFor } from "~/reports/view.server";
+import { destination, membersPath } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { negotiateLocale } from "~/shell/locale";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
@@ -40,11 +42,13 @@ import type { Route } from "./+types/contractors";
 
 const TITLE = "Contractors";
 
+const { label: REPORTS } = destination("reports");
+
 /** A date field's value once a whole date is in it. */
 const WHOLE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function meta() {
-	return [{ title: `${TITLE} · Timesifier` }];
+	return [{ title: `${TITLE} · ${REPORTS} · Timesifier` }];
 }
 
 export const middleware: Route.MiddlewareFunction[] = [
@@ -67,6 +71,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		organisation: organisation.name,
 		/** Owners and admins mark contractors, on Members; Finance is not shown Team. */
 		members: isAdministrator(membership.role) ? membersPath(organisation.slug) : null,
+		slug: organisation.slug,
+		views: viewsFor(membership.role),
+		tabSearch: "",
 	};
 
 	// A custom range that makes no report: the form again, holding what was
@@ -117,6 +124,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	return data(
 		{
 			...page,
+			tabSearch: searchOf(query.range, days),
 			query: { range: query.range, from: days.first, to: days.last },
 			problem: null as RangeProblem | null,
 			range: rangeLabel(days.first, days.last),
@@ -158,11 +166,17 @@ export default function Contractors({ loaderData }: Route.ComponentProps) {
 
 	return (
 		<>
-			<PageHeading>{TITLE}</PageHeading>
+			<PageHeading>{REPORTS}</PageHeading>
 			<PageLead>
 				What each contractor in {loaderData.organisation} tracked, unrounded, and what it cost at
 				their cost rates, including people who have left.
 			</PageLead>
+			<ReportTabs
+				slug={loaderData.slug}
+				current="contractors"
+				views={loaderData.views}
+				search={loaderData.tabSearch}
+			/>
 
 			<div className="mt-8 max-w-200">
 				<FilterBar name="Choose a range">

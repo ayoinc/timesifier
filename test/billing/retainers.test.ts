@@ -71,7 +71,7 @@ afterEach(() => {
 });
 
 async function retainer(project: string | null = null) {
-	const opened = await openRetainer(scope, clientId, project, "GBP");
+	const opened = await openRetainer(scope, owner.user.id, clientId, project, "GBP");
 	if (!opened?.ok) throw new Error("not opened");
 	return opened.id;
 }
@@ -144,11 +144,11 @@ describe("opening a retainer", () => {
 	it("one per client, and one per client and project", async () => {
 		await retainer();
 		await retainer(projectId);
-		expect(await openRetainer(scope, clientId, null, "GBP")).toEqual({
+		expect(await openRetainer(scope, owner.user.id, clientId, null, "GBP")).toEqual({
 			ok: false,
 			problem: RETAINER_EXISTS,
 		});
-		expect(await openRetainer(scope, clientId, projectId, "GBP")).toEqual({
+		expect(await openRetainer(scope, owner.user.id, clientId, projectId, "GBP")).toEqual({
 			ok: false,
 			problem: RETAINER_EXISTS,
 		});

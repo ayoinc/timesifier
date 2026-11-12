@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import type { OrganisationScope } from "~/db";
 import type { Day } from "~/time/calendar";
@@ -10,7 +10,6 @@ import {
 	findInvoice,
 	type InvoiceLineRow,
 	type InvoiceRow,
-	linesOf,
 	type PaymentRow,
 	settledOf,
 } from "./invoices.server";
@@ -39,59 +38,90 @@ export async function invoiceView(
 	scope: OrganisationScope,
 	organisationName: string,
 	id: string,
-	{ locale, today }: { locale: string; today: Day },
+	words: { locale: string; today: Day },
 ): Promise<InvoiceView | null> {
 	const invoice = await findInvoice(scope, id);
 	if (!invoice) return null;
-	const [lines, taxes, details, [client], payments, settledById] = await Promise.all([
-		linesOf(scope, id),
+	const [view] = await invoiceViews(scope, organisationName, [invoice], words);
+	return view ?? null;
+}
+
+/** How many invoices `invoiceViews` reads at once: each query binds every id, and D1 binds at most 100 values. */
+export const VIEWS_AT_ONCE = 50;
+
+/**
+ * Each of `invoices` (at most `VIEWS_AT_ONCE`) as `invoiceView` reads it, with
+ * one query of each kind for all of them, so the export of every invoice
+ * (TS-076) prints what each invoice's own PDF prints.
+ */
+export async function invoiceViews(
+	scope: OrganisationScope,
+	organisationName: string,
+	invoices: readonly InvoiceRow[],
+	{ locale, today }: { locale: string; today: Day },
+): Promise<InvoiceView[]> {
+	if (invoices.length === 0) return [];
+	const ids = invoices.map((i) => i.id);
+	const clientIds = [...new Set(invoices.map((i) => i.clientId))];
+	const [allLines, taxes, details, clients, allPayments, settledById] = await Promise.all([
+		scope.invoiceLines.select((l) => inArray(l.invoiceId, ids), {
+			orderBy: (l) => [asc(l.position)],
+		}),
 		taxesOf(scope),
 		invoiceDetailsOf(scope),
-		scope.clients.select((c) => eq(c.id, invoice.clientId), { limit: 1 }),
-		scope.payments.select((p) => eq(p.invoiceId, id), { orderBy: (p) => [desc(p.paidOn)] }),
-		settledOf(scope, [id]),
+		scope.clients.select((c) => inArray(c.id, clientIds)),
+		scope.payments.select((p) => inArray(p.invoiceId, ids), {
+			orderBy: (p) => [desc(p.paidOn)],
+		}),
+		settledOf(scope, ids),
 	]);
-	const settled = settledById.get(id) ?? { paidMinor: 0, writtenOffMinor: 0 };
-	const balanceMinor = balanceOf(invoice.totalMinor, settled);
-	const issued = invoice.status !== "draft";
-	const after: [string, number][] = [];
-	if (issued && invoice.status !== "void") {
-		if (settled.paidMinor > 0) after.push(["Paid", -settled.paidMinor]);
-		if (settled.writtenOffMinor > 0) after.push(["Written off", -settled.writtenOffMinor]);
-		after.push(["Balance due", balanceMinor]);
-	}
-	const facts: [string, string][] = [
-		["Issued", formatDayWithYear(invoice.issuedOn)],
-		["Due", formatDayWithYear(invoice.dueOn)],
-		["Terms", termsLabel(daysBetween(invoice.issuedOn, invoice.dueOn))],
-	];
-	if (invoice.poNumber) facts.push(["PO number", invoice.poNumber]);
-	const printed = printedDocument({
-		title: "Invoice",
-		number: invoice.number,
-		organisationName,
-		details,
-		clientName: client?.name ?? "",
-		facts,
-		subject: invoice.subject,
-		notes: invoice.notes,
-		currency: invoice.currency,
-		discountBasisPoints: invoice.discountBasisPoints,
-		lines,
-		taxes,
-		after,
-		locale,
+	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	return invoices.map((invoice) => {
+		const lines = allLines.filter((l) => l.invoiceId === invoice.id);
+		const payments = allPayments.filter((p) => p.invoiceId === invoice.id);
+		const clientName = clientNames.get(invoice.clientId) ?? "";
+		const settled = settledById.get(invoice.id) ?? { paidMinor: 0, writtenOffMinor: 0 };
+		const balanceMinor = balanceOf(invoice.totalMinor, settled);
+		const issued = invoice.status !== "draft";
+		const after: [string, number][] = [];
+		if (issued && invoice.status !== "void") {
+			if (settled.paidMinor > 0) after.push(["Paid", -settled.paidMinor]);
+			if (settled.writtenOffMinor > 0) after.push(["Written off", -settled.writtenOffMinor]);
+			after.push(["Balance due", balanceMinor]);
+		}
+		const facts: [string, string][] = [
+			["Issued", formatDayWithYear(invoice.issuedOn)],
+			["Due", formatDayWithYear(invoice.dueOn)],
+			["Terms", termsLabel(daysBetween(invoice.issuedOn, invoice.dueOn))],
+		];
+		if (invoice.poNumber) facts.push(["PO number", invoice.poNumber]);
+		const printed = printedDocument({
+			title: "Invoice",
+			number: invoice.number,
+			organisationName,
+			details,
+			clientName,
+			facts,
+			subject: invoice.subject,
+			notes: invoice.notes,
+			currency: invoice.currency,
+			discountBasisPoints: invoice.discountBasisPoints,
+			lines,
+			taxes,
+			after,
+			locale,
+		});
+		return {
+			invoice,
+			clientName,
+			lines,
+			payments,
+			settled,
+			balanceMinor,
+			state: stateOf(invoice, settled, today),
+			printed,
+		};
 	});
-	return {
-		invoice,
-		clientName: client?.name ?? "",
-		lines,
-		payments,
-		settled,
-		balanceMinor,
-		state: stateOf(invoice, settled, today),
-		printed,
-	};
 }
 
 /** The history of an invoice: its activity records, newest first. */

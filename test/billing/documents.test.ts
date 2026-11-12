@@ -332,11 +332,12 @@ describe("the PDF", () => {
 
 describe("sending", () => {
 	it("goes to each billing contact with the PDF, and is logged on the invoice's history", async () => {
-		expect(await addContact(scope, clientId, { name: "Bola", email: "bola@initech.example" })).toBe(
-			true,
-		);
-		await addContact(scope, clientId, { name: null, email: "Accounts@Initech.example" });
-		await addContact(scope, clientId, { name: null, email: "accounts@initech.example" });
+		const actor = owner.user.id;
+		expect(
+			await addContact(scope, actor, clientId, { name: "Bola", email: "bola@initech.example" }),
+		).toBe(true);
+		await addContact(scope, actor, clientId, { name: null, email: "Accounts@Initech.example" });
+		await addContact(scope, actor, clientId, { name: null, email: "accounts@initech.example" });
 		const contacts = await contactsOf(scope, clientId);
 		expect(contacts.map((c) => c.email)).toEqual([
 			"bola@initech.example",

@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import { recordStatement } from "~/activity/activity.server";
+import { recordStatement, recordStatementWhen } from "~/activity/activity.server";
 import { type OrganisationScope, type TenantRow, uuidv7 } from "~/db";
 import { lineAmount } from "~/money/money";
 import { addDays, type Day } from "~/time/calendar";
@@ -202,6 +202,15 @@ export async function createDraft(
 	draft.lines.forEach((line, index) => {
 		items.push(...lineStatements(scope, id, [line], lineTaxes[index] ?? [null, null], index));
 	});
+	// An estimate's invoice: the estimate points at it in the same batch.
+	if (draft.estimateId) {
+		const estimateId = draft.estimateId;
+		items.push(
+			scope.estimates.statements.update({ invoiceId: id }, (e) =>
+				and(eq(e.id, estimateId), isNull(e.invoiceId)),
+			).query,
+		);
+	}
 	items.push(
 		recordStatement(
 			scope,
@@ -332,7 +341,7 @@ export async function addLine(
 			"invoice.updated",
 			{ type: "invoice", id: invoiceId },
 			{
-				after: { lineAdded: line.description },
+				after: { line: "added" },
 			},
 		),
 	]);
@@ -418,7 +427,7 @@ export async function deleteLine(
 			"invoice.updated",
 			{ type: "invoice", id: invoiceId },
 			{
-				before: { lineRemoved: current.description, amountMinor: current.amountMinor },
+				before: { line: "removed", amountMinor: current.amountMinor },
 			},
 		),
 	]);
@@ -438,14 +447,10 @@ export async function deleteDraft(
 	if (!found?.ok) return found;
 	const lineIds = (await linesOf(scope, id)).map((l) => l.id);
 	await inOneBatch([
-		...(lineIds.length > 0
-			? [scope.invoiceLineSources.statements.delete((s) => inArray(s.lineId, lineIds)).query]
-			: []),
-		scope.estimates.statements.update({ invoiceId: null }, (e) => eq(e.invoiceId, id)).query,
-		scope.invoiceLines.statements.delete((l) => eq(l.invoiceId, id)).query,
-		scope.invoices.statements.delete((i) => and(eq(i.id, id), eq(i.status, "draft"))).query,
-		recordStatement(
+		// Recorded first, while it is still a draft: two deletes at once record one.
+		recordStatementWhen(
 			scope,
+			scope.invoices.exists((i) => and(eq(i.id, id), eq(i.status, "draft"))),
 			actor,
 			"invoice.deleted",
 			{ type: "invoice", id },
@@ -453,6 +458,12 @@ export async function deleteDraft(
 				before: { number: found.invoice.number },
 			},
 		).query,
+		...(lineIds.length > 0
+			? [scope.invoiceLineSources.statements.delete((s) => inArray(s.lineId, lineIds)).query]
+			: []),
+		scope.estimates.statements.update({ invoiceId: null }, (e) => eq(e.invoiceId, id)).query,
+		scope.invoiceLines.statements.delete((l) => eq(l.invoiceId, id)).query,
+		scope.invoices.statements.delete((i) => and(eq(i.id, id), eq(i.status, "draft"))).query,
 	]);
 	return { ok: true, number: found.invoice.number };
 }
@@ -473,15 +484,17 @@ export async function issueInvoice(
 	if (lines.length === 0) return { ok: false, problem: "Add a line before issuing the invoice." };
 	const status = found.invoice.totalMinor === 0 ? "paid" : "sent";
 	await scope.batch([
-		scope.invoices.statements.update({ status }, (i) => and(eq(i.id, id), eq(i.status, "draft"))),
-		recordStatement(
+		// Recorded first, while the invoice is still a draft: two issues at once record one.
+		recordStatementWhen(
 			scope,
+			scope.invoices.exists((i) => and(eq(i.id, id), eq(i.status, "draft"))),
 			actor,
 			"invoice.updated",
 			{ type: "invoice", id },
 			{ before: { status: "draft" }, after: { status: "open", number: found.invoice.number } },
 			source,
 		),
+		scope.invoices.statements.update({ status }, (i) => and(eq(i.id, id), eq(i.status, "draft"))),
 	]);
 	return { ok: true, number: found.invoice.number };
 }
@@ -512,14 +525,10 @@ export async function voidInvoice(
 	}
 	const lineIds = (await linesOf(scope, id)).map((l) => l.id);
 	await inOneBatch([
-		...(lineIds.length > 0
-			? [scope.invoiceLineSources.statements.delete((s) => inArray(s.lineId, lineIds)).query]
-			: []),
-		scope.invoices.statements.update({ status: "void", voidedAt: now }, (i) =>
-			and(eq(i.id, id), inArray(i.status, [...OWING, "paid"])),
-		).query,
-		recordStatement(
+		// Recorded first, while the invoice is still issued: two voids at once record one.
+		recordStatementWhen(
 			scope,
+			scope.invoices.exists((i) => and(eq(i.id, id), inArray(i.status, [...OWING, "paid"]))),
 			actor,
 			"invoice.voided",
 			{ type: "invoice", id },
@@ -527,6 +536,12 @@ export async function voidInvoice(
 				before: { status: invoice.status },
 				after: { status: "void" },
 			},
+		).query,
+		...(lineIds.length > 0
+			? [scope.invoiceLineSources.statements.delete((s) => inArray(s.lineId, lineIds)).query]
+			: []),
+		scope.invoices.statements.update({ status: "void", voidedAt: now }, (i) =>
+			and(eq(i.id, id), inArray(i.status, [...OWING, "paid"])),
 		).query,
 	]);
 	return { ok: true, number: invoice.number };

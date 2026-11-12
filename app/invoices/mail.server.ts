@@ -5,7 +5,7 @@ import { recordStatement } from "~/activity/activity.server";
 import { sendEmail } from "~/auth/email.server";
 import { compose } from "~/auth/email-frame";
 import { takeOne } from "~/auth/quota.server";
-import type { OrganisationScope } from "~/db";
+import type { OrganisationScope, ScopedStatement } from "~/db";
 
 import { formatDayWithYear } from "~/time/format";
 
@@ -39,6 +39,7 @@ export function contactsOf(scope: OrganisationScope, clientId: string) {
 /** Adds a billing contact to a client; an address it already has is kept once. */
 export async function addContact(
 	scope: OrganisationScope,
+	actor: string,
 	clientId: string,
 	contact: { name: string | null; email: string },
 ): Promise<boolean> {
@@ -50,18 +51,43 @@ export async function addContact(
 		{ limit: 1 },
 	);
 	if (held) return true;
-	await scope.clientContacts.insert({
-		clientId,
-		name: contact.name,
-		email: contact.email,
-		emailKey,
-	});
+	await scope.batch([
+		scope.clientContacts.statements.insert({
+			clientId,
+			name: contact.name,
+			email: contact.email,
+			emailKey,
+		}),
+		recordStatement(
+			scope,
+			actor,
+			"client.updated",
+			{ type: "client", id: clientId },
+			{ after: { billingContact: contact.email } },
+		),
+	]);
 	return true;
 }
 
 /** Removes a billing contact. */
-export async function removeContact(scope: OrganisationScope, contactId: string): Promise<boolean> {
-	return (await scope.clientContacts.delete((c) => eq(c.id, contactId))).length > 0;
+export async function removeContact(
+	scope: OrganisationScope,
+	actor: string,
+	contactId: string,
+): Promise<boolean> {
+	const [contact] = await scope.clientContacts.select((c) => eq(c.id, contactId), { limit: 1 });
+	if (!contact) return false;
+	await scope.batch([
+		scope.clientContacts.statements.delete((c) => eq(c.id, contactId)),
+		recordStatement(
+			scope,
+			actor,
+			"client.updated",
+			{ type: "client", id: contact.clientId },
+			{ before: { billingContact: contact.email } },
+		),
+	]);
+	return true;
 }
 
 /** The words a document's message is written from, with the document's own values put in. */
@@ -157,8 +183,9 @@ export function documentMessage(words: DocumentMessage) {
 
 /**
  * Sends `printed` as a PDF to each of `to`, one message each, and records
- * the send on the document's history. Refused, before anything is sent,
- * when the organisation has reached its daily cap.
+ * the send on the document's history in one batch with `alongside`, the
+ * change sending makes to the document (its sent time or status). Refused,
+ * before anything is sent, when the organisation has reached its daily cap.
  */
 export async function sendDocument(
 	scope: OrganisationScope,
@@ -168,6 +195,7 @@ export async function sendDocument(
 	words: DocumentMessage,
 	printed: PrintedDocument,
 	source: "web" | "system" = "web",
+	alongside: readonly ScopedStatement<unknown>[] = [],
 ): Promise<{ ok: true } | { ok: false; problem: string }> {
 	for (const _ of to) {
 		if (!(await takeOne(env.DB, `document-emails:${scope.organisationId}`, DOCUMENT_EMAILS))) {
@@ -197,6 +225,7 @@ export async function sendDocument(
 			{ after: { recipients: to.length, reminder: words.kind === "reminder" } },
 			source,
 		),
+		...alongside,
 	]);
 	return { ok: true };
 }

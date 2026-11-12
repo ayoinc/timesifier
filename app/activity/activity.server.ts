@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+
 import type { ActivitySummary, ActivityValue, OrganisationScope } from "~/db";
 
 import type { ActivityAction, ActivitySource, SubjectType } from "./actions";
@@ -127,6 +129,50 @@ export function recordStatement(
 	source: ActivitySource = "web",
 ) {
 	return scope.activityRecords.statements.insert(rowOf(actor, action, subject, summary, source));
+}
+
+/**
+ * The row recording `action`, written only when `condition` holds as the
+ * batch reaches it: for a change whose own statement may find nothing to
+ * change (another request got there first), so the record lands exactly when
+ * the change did.
+ */
+export function recordStatementWhen(
+	scope: OrganisationScope,
+	condition: SQL,
+	actor: string | null,
+	action: ActivityAction,
+	subject: Subject,
+	summary: ActivitySummary = {},
+	source: ActivitySource = "web",
+) {
+	return scope.activityRecords.statements.insertWhen(
+		rowOf(actor, action, subject, summary, source),
+		condition,
+	);
+}
+
+/** One record of a change made to many things at once. */
+export interface Recorded {
+	action: ActivityAction;
+	subject: Subject;
+	summary?: ActivitySummary;
+}
+
+/**
+ * The rows recording `records`, as one statement, for the batch that makes
+ * them (an import's rows). D1 binds at most 100 values to a statement, so a
+ * caller sends at most 8 records to one.
+ */
+export function recordsStatement(
+	scope: OrganisationScope,
+	actor: string | null,
+	records: readonly Recorded[],
+	source: ActivitySource,
+) {
+	return scope.activityRecords.statements.insert(
+		records.map((r) => rowOf(actor, r.action, r.subject, r.summary ?? {}, source)),
+	);
 }
 
 /** Records `action` on its own, for a change that has already been made. */

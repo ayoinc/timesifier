@@ -2,13 +2,20 @@ import { env } from "cloudflare:workers";
 import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { changes, record, recordStatement } from "~/activity/activity.server";
+import {
+	changes,
+	type Recorded,
+	recordStatement,
+	recordStatementWhen,
+	recordsStatement,
+} from "~/activity/activity.server";
 import { type OrganisationScope, organisations, type ScopedStatement, users, uuidv7 } from "~/db";
 import { nameKey, recordName } from "~/lib/names";
 import { lockOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
 import { bounds, type Day, dayOf, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
+import { ENTRY_FIELDS } from "~/time/manual.server";
 
 import { type CsvRow, parseCsv } from "./csv";
 import {
@@ -487,12 +494,25 @@ function duplicateKey(
 
 // ── Importing ────────────────────────────────────────────────────────────────
 
-/** Sends `statements` in batches. */
-async function sendAll(scope: OrganisationScope, statements: ScopedStatement<unknown>[]) {
-	for (let start = 0; start < statements.length; start += STATEMENTS_PER_BATCH) {
-		const [first, ...rest] = statements.slice(start, start + STATEMENTS_PER_BATCH);
-		if (first) await scope.batch([first, ...rest]);
+/**
+ * Sends `groups` in batches of about `STATEMENTS_PER_BATCH` statements. A
+ * group is never split: a write and the records of it land in one batch.
+ */
+async function sendAll(scope: OrganisationScope, groups: ScopedStatement<unknown>[][]) {
+	let batch: ScopedStatement<unknown>[] = [];
+	for (const group of [...groups, null]) {
+		if (group === null || batch.length + group.length > STATEMENTS_PER_BATCH) {
+			const [first, ...rest] = batch;
+			if (first) await scope.batch([first, ...rest]);
+			batch = [];
+		}
+		if (group) batch.push(...group);
 	}
+}
+
+/** The records of `records`, as from an import by `actorId`, a statement per insert's worth. */
+function importRecords(scope: OrganisationScope, actorId: string, records: Recorded[]) {
+	return inChunks(records).map((chunk) => recordsStatement(scope, actorId, chunk, "import"));
 }
 
 function inChunks<T>(rows: T[], size = ROWS_PER_INSERT): T[][] {
@@ -525,15 +545,28 @@ export async function runImport(
 		return { ok: false, problem: `Choose a column for ${preview.missing.join(", ")}.` };
 	}
 	const count = preview.kind === "time" ? preview.rows.length : preview.records.length;
-	const [claimed] = await scope.importJobs.update(
-		{ status: "imported", importedAt: new Date(now), source: null },
-		(j) => and(eq(j.id, id), eq(j.status, "previewed")),
-	);
+	const [, [claimed]] = await scope.batch([
+		// Recorded first, while the import still waits: two imports at once record one.
+		recordStatementWhen(
+			scope,
+			scope.importJobs.exists((j) => and(eq(j.id, id), eq(j.status, "previewed"))),
+			actorId,
+			"import.imported",
+			{ type: "import", id },
+			{ after: { kind: preview.kind, imported: count, skipped: preview.skipped.length } },
+			"import",
+		),
+		scope.importJobs.statements.update(
+			{ status: "imported", importedAt: new Date(now), source: null },
+			(j) => and(eq(j.id, id), eq(j.status, "previewed")),
+		),
+	]);
 	if (!claimed) return { ok: false, problem: "This import is not waiting to be imported." };
 
 	const known = await recordsToCreate(scope, actorId, preview);
-	const entries = preview.kind === "time" ? await entriesToCreate(scope, id, preview, known) : [];
-	await sendAll(scope, [...known.statements, ...entries]);
+	const entries =
+		preview.kind === "time" ? await entriesToCreate(scope, actorId, id, preview, known) : [];
+	await sendAll(scope, [...known.groups, ...entries]);
 	await scope.importJobs.update(
 		{
 			importedCount: count,
@@ -542,20 +575,13 @@ export async function runImport(
 		},
 		(j) => eq(j.id, id),
 	);
-	await record(
-		scope,
-		actorId,
-		"import.imported",
-		{ type: "import", id },
-		{ after: { kind: preview.kind, imported: count, skipped: preview.skipped.length } },
-		"import",
-	);
 	return { ok: true, imported: count, skipped: preview.skipped.length };
 }
 
 /** What adding a file's records takes, and the ids of the projects and tasks by name, the new ones included. */
 interface Known {
-	statements: ScopedStatement<unknown>[];
+	/** Each insert with the records of what it adds. */
+	groups: ScopedStatement<unknown>[][];
 	projectId: Map<string, string>;
 	taskId: Map<string, string>;
 	/** Whether a task is billable on a project, by `projectId|taskId`. */
@@ -578,7 +604,6 @@ async function recordsToCreate(
 	const projectId = new Map(projects.map((p) => [p.nameKey, p.id]));
 	const taskId = new Map(tasks.map((t) => [t.nameKey, t.id]));
 	const billable = new Map(links.map((l) => [`${l.projectId}|${l.taskId}`, l.billable]));
-	const statements: ScopedStatement<unknown>[] = [];
 
 	const newClients: { id: string; name: string; nameKey: string }[] = [];
 	const ensureClient = (name: string | null) => {
@@ -636,55 +661,42 @@ async function recordsToCreate(
 			}
 		}
 	}
-	for (const chunk of inChunks(newClients)) statements.push(scope.clients.statements.insert(chunk));
-	for (const chunk of inChunks(newProjects))
-		statements.push(scope.projects.statements.insert(chunk));
-	for (const chunk of inChunks(newTasks)) statements.push(scope.tasks.statements.insert(chunk));
-	for (const chunk of inChunks(newLinks)) {
-		statements.push(scope.projectTasks.statements.insert(chunk));
-	}
-	const created = [
-		...newClients.map((c) => ({
-			action: "client.created" as const,
-			type: "client" as const,
-			id: c.id,
-			name: c.name,
-		})),
-		...newProjects.map((p) => ({
-			action: "project.created" as const,
-			type: "project" as const,
-			id: p.id,
-			name: p.name,
-		})),
-		...newTasks.map((t) => ({
-			action: "task.created" as const,
-			type: "task" as const,
-			id: t.id,
-			name: t.name,
-		})),
-	];
-	for (const made of created) {
-		statements.push(
-			recordStatement(
+	/** Each chunk's insert with a `<type>.created` record of each row it adds. */
+	const created = <R extends { id: string; name: string }>(
+		type: "client" | "project" | "task",
+		rows: R[],
+		insert: (chunk: R[]) => ScopedStatement<unknown>,
+	) =>
+		inChunks(rows).map((chunk) => [
+			insert(chunk),
+			...importRecords(
 				scope,
 				actorId,
-				made.action,
-				{ type: made.type, id: made.id },
-				changes(null, { name: made.name }, ["name"]),
-				"import",
+				chunk.map((row) => ({
+					action: `${type}.created` as const,
+					subject: { type, id: row.id },
+					summary: changes(null, row, ["name"]),
+				})),
 			),
-		);
-	}
-	return { statements, projectId, taskId, billable };
+		]);
+	const groups = [
+		...created("client", newClients, (chunk) => scope.clients.statements.insert(chunk)),
+		...created("project", newProjects, (chunk) => scope.projects.statements.insert(chunk)),
+		...created("task", newTasks, (chunk) => scope.tasks.statements.insert(chunk)),
+		// A task's place on a project is part of making them: no record of its own.
+		...inChunks(newLinks).map((chunk) => [scope.projectTasks.statements.insert(chunk)]),
+	];
+	return { groups, projectId, taskId, billable };
 }
 
 /** The entries of a time import: each day's rows one after another from 09:00, or after the day's last entry. */
 async function entriesToCreate(
 	scope: OrganisationScope,
+	actorId: string,
 	importId: string,
 	preview: Preview,
 	known: Known,
-): Promise<ScopedStatement<unknown>[]> {
+): Promise<ScopedStatement<unknown>[][]> {
 	const { zone: organisationZone } = await organisationOf(scope.organisationId);
 	const members = new Map((await membersOf(scope, organisationZone)).map((m) => [m.userId, m]));
 	const nextStart = new Map<string, number>();
@@ -721,7 +733,18 @@ async function entriesToCreate(
 			importId,
 		});
 	}
-	return inChunks(entries).map((chunk) => scope.timeEntries.statements.insert(chunk));
+	return inChunks(entries).map((chunk) => [
+		scope.timeEntries.statements.insert(chunk),
+		...importRecords(
+			scope,
+			actorId,
+			chunk.map((entry) => ({
+				action: "time_entry.created" as const,
+				subject: { type: "time_entry" as const, id: entry.id, ownerId: entry.userId },
+				summary: changes(null, entry, ENTRY_FIELDS),
+			})),
+		),
+	]);
 }
 
 // ── Reverting ────────────────────────────────────────────────────────────────
@@ -790,25 +813,42 @@ export async function revertImport(
 			locked: lockedEntries.slice(0, NAMED_LOCKED),
 		};
 	}
-	const deletes = inChunks(ids, 90).map((chunk) =>
-		scope.timeEntries.statements.delete((e) => and(eq(e.importId, id), inArray(e.id, chunk))),
-	);
-	await sendAll(scope, [
-		...deletes,
-		scope.importJobs.statements.update({ status: "reverted", revertedAt: new Date(now) }, (j) =>
-			eq(j.id, id),
+	const deletes = inChunks(entries, 90).map((chunk) => [
+		scope.timeEntries.statements.delete((e) =>
+			and(
+				eq(e.importId, id),
+				inArray(
+					e.id,
+					chunk.map((entry) => entry.id),
+				),
+			),
+		),
+		...importRecords(
+			scope,
+			actorId,
+			chunk.map((entry) => ({
+				action: "time_entry.deleted" as const,
+				subject: { type: "time_entry" as const, id: entry.id, ownerId: entry.userId },
+				summary: changes(entry, null, ENTRY_FIELDS),
+			})),
 		),
 	]);
-	await record(
-		scope,
-		actorId,
-		"import.reverted",
-		{ type: "import", id },
-		{
-			before: { entries: ids.length },
-		},
-		"import",
-	);
+	await sendAll(scope, [
+		...deletes,
+		[
+			scope.importJobs.statements.update({ status: "reverted", revertedAt: new Date(now) }, (j) =>
+				eq(j.id, id),
+			),
+			recordStatement(
+				scope,
+				actorId,
+				"import.reverted",
+				{ type: "import", id },
+				{ before: { entries: ids.length } },
+				"import",
+			),
+		],
+	]);
 	return { ok: true, deleted: ids.length };
 }
 

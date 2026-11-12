@@ -1,17 +1,14 @@
 import { index, type RouteConfig, route } from "@react-router/dev/routes";
 import { ACTIVITY_EXPORT_SEGMENT, HISTORY_SEGMENT } from "./activity/paths";
-import { CONTRACTORS_EXPORT_SEGMENT, CONTRACTORS_SEGMENT } from "./contractors/paths";
-import {
-	EXPENSE_REPORT_EXPORT_SEGMENT,
-	EXPENSE_REPORT_SEGMENT,
-	RECEIPT_SEGMENT,
-} from "./expenses/paths";
+import { CONTRACTORS_EXPORT_SEGMENT } from "./contractors/paths";
+import { EXPENSE_REPORT_EXPORT_SEGMENT, RECEIPT_SEGMENT } from "./expenses/paths";
 import {
 	API_PATH,
 	CALENDAR_FEEDS_SEGMENT,
 	EXPORT_SEGMENT,
 	FEED_PATH,
 	IMPORT_SEGMENT,
+	INVOICES_EXPORT_SEGMENT,
 } from "./integrations/paths";
 import { BILLING_SEGMENTS, ESTIMATE_LINK_SEGMENT } from "./invoices/paths";
 import { DEFAULT_RATES_SEGMENT, PROJECT_PARAM } from "./projects/projects";
@@ -55,10 +52,9 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(REPORT_EXPORT_SEGMENT, "routes/app/reports.export.ts"),
 	route(IMPORT_SEGMENT, "routes/app/integrations.import.tsx"),
 	route(EXPORT_SEGMENT, "routes/app/integrations.export.ts"),
-	route(EXPENSE_REPORT_SEGMENT, "routes/app/reports.expenses.tsx"),
+	route(INVOICES_EXPORT_SEGMENT, "routes/app/integrations.invoices-export.ts"),
 	route(EXPENSE_REPORT_EXPORT_SEGMENT, "routes/app/reports.expenses.export.ts"),
 	route(RECEIPT_SEGMENT, "routes/app/expenses.receipt.ts"),
-	route(CONTRACTORS_SEGMENT, "routes/app/contractors.tsx"),
 	route(CONTRACTORS_EXPORT_SEGMENT, "routes/app/contractors.export.ts"),
 	route(ACTIVITY_EXPORT_SEGMENT, "routes/app/activity.export.ts"),
 	route(HISTORY_SEGMENT, "routes/app/history.tsx"),

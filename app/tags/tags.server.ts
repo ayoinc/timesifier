@@ -202,6 +202,49 @@ export function entryTagStatements(
 	];
 }
 
+/** The tags of each of these expenses, by id. */
+export async function tagsOfExpenses(
+	scope: OrganisationScope,
+	expenseIds: readonly string[],
+): Promise<Map<string, string[]>> {
+	const byExpense = new Map<string, string[]>();
+	if (expenseIds.length === 0) return byExpense;
+	const rows = await scope.expenseTags.select(
+		(et) => sql`${et.expenseId} in (select value from json_each(${JSON.stringify(expenseIds)}))`,
+	);
+	for (const row of rows) {
+		byExpense.set(row.expenseId, [...(byExpense.get(row.expenseId) ?? []), row.tagId]);
+	}
+	return byExpense;
+}
+
+/**
+ * The statements that make an expense's tags exactly `tagIds`, as
+ * `entryTagStatements` does for an entry. Check `tagsAllowed` first.
+ */
+export function expenseTagStatements(
+	scope: OrganisationScope,
+	expenseId: string,
+	current: readonly string[],
+	tagIds: readonly string[],
+) {
+	const wanted = [...new Set(tagIds)];
+	const removed = current.filter((id) => !wanted.includes(id));
+	const added = wanted.filter((id) => !current.includes(id));
+	return [
+		...(removed.length > 0
+			? [
+					scope.expenseTags.statements.delete((et) =>
+						and(eq(et.expenseId, expenseId), inArray(et.tagId, removed)),
+					),
+				]
+			: []),
+		...(added.length > 0
+			? [scope.expenseTags.statements.insert(added.map((tagId) => ({ expenseId, tagId })))]
+			: []),
+	];
+}
+
 /** Makes a project's tags exactly `tagIds`, for an owner or admin. Null for no such project here. */
 export async function setProjectTags(
 	scope: OrganisationScope,

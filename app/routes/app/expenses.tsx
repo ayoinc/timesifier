@@ -33,7 +33,8 @@ import { receiptPath } from "~/expenses/paths";
 import { overLabel } from "~/leave/rules";
 import { daysOver } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
-import type { LockReason } from "~/locks/locks";
+import { type LockReason, lockDateNotice } from "~/locks/locks";
+import { lockNoticeOf } from "~/locks/locks.server";
 import { formatMoney, totalsByCurrency } from "~/money/money";
 import { isAdministrator, maySeeExpensesOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
@@ -46,6 +47,8 @@ import { peopleToChoose } from "~/reports/reports.server";
 import { destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
+import { TagIds } from "~/tags/tags";
+import { tagOptions } from "~/tags/tags.server";
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { dayLabel, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { Day } from "~/time/calendar";
@@ -93,10 +96,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const url = new URL(request.url);
 	const scope = organisationScope(env.DB, organisation.id);
 	const access = await accessOf(membership);
-	const [viewed, choices, terms] = await Promise.all([
+	const [viewed, choices, terms, tags, lockDate] = await Promise.all([
 		viewedPeriod(membership, url),
 		peopleToChoose(scope, access),
 		termsOf(organisation.id),
+		tagOptions(scope),
+		lockNoticeOf(organisation.id),
 	]);
 	const personId = url.searchParams.get(PERSON_PARAM) || user.id;
 	const person = choices.find(({ id }) => id === personId);
@@ -162,6 +167,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		person: { id: person.id, name: person.name, own },
 		choices: choices.length > 1 ? choices : [],
 		currency: terms.currency,
+		tags,
+		// The lock date with the owner's or admin's reason, for a week that holds days on or before it.
+		lockNotice:
+			lockDate && period.startsOn <= lockDate.lockedThrough
+				? lockDateNotice(lockDate, formatDay)
+				: null,
 		expenses: expenses.map((e) => ({
 			id: e.id,
 			title: `${e.category} · ${e.project}`,
@@ -176,6 +187,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				...(e.reimbursable ? ["Reimburse me"] : []),
 			].join(" · "),
 			notes: e.notes,
+			// In the order of the organisation's tags (by name), not of their ids.
+			tags: tags
+				.filter((tag) => e.tagIds.includes(tag.id))
+				.map((tag) => tag.name)
+				.join(", "),
 			receipt:
 				e.receiptName === null
 					? null
@@ -194,6 +210,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				billable: e.billable,
 				reimbursable: e.reimbursable,
 				receiptName: e.receiptName,
+				tagIds: e.tagIds,
 			} satisfies ExpenseValues,
 		})),
 		total: sum(expenses),
@@ -258,6 +275,7 @@ const fields = {
 		.optional()
 		.transform((file) => (file === "" ? undefined : file)),
 	removeReceipt: Ticked,
+	tagIds: TagIds,
 };
 
 const form = z.discriminatedUnion("intent", [
@@ -288,6 +306,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		reimbursable: fields.reimbursable,
 		receipt: fields.receipt ?? null,
 		removeReceipt: fields.removeReceipt,
+		tagIds: fields.tagIds,
 	});
 
 	switch (input.intent) {
@@ -355,6 +374,9 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
+			{loaderData.lockNotice && (
+				<p className="mt-2 max-w-160 text-body-large">{loaderData.lockNotice}</p>
+			)}
 			<PageLead>
 				{person.own
 					? "Costs you spend on a project, submitted with your week's time."
@@ -438,6 +460,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 											{e.day} · {e.flags}
 											{e.quantity && <span className="block">{e.quantity}</span>}
 											{e.notes && <span className="block wrap-anywhere">“{e.notes}”</span>}
+											{e.tags && <span className="block wrap-anywhere">Tags: {e.tags}</span>}
 											{e.receipt && (
 												<span className="block">
 													<a
@@ -511,6 +534,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 						<ExpenseFields
 							projects={form.projects}
 							categories={form.categories}
+							tags={loaderData.tags}
 							currency={loaderData.currency}
 							values={{
 								spentOn: loaderData.firstDay,
@@ -522,6 +546,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 								billable: form.projects[0]?.billable ?? false,
 								reimbursable: false,
 								receiptName: null,
+								tagIds: [],
 							}}
 						/>
 					</FormSheet>
@@ -540,6 +565,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 								<ExpenseFields
 									projects={withChoice(form.projects, target.project)}
 									categories={withChoice(form.categories, target.category)}
+									tags={loaderData.tags}
 									currency={loaderData.currency}
 									values={target.values}
 								/>
