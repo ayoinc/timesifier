@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { contractorsPath } from "~/contractors/paths";
+import { maySeeRates } from "~/organisations/access";
 import {
 	canSee,
 	compactNavigation,
@@ -312,7 +314,11 @@ describe.each(Object.keys(SHOWN))("to a %s", (kind) => {
 			const page = await open(address, who);
 			const data = await openData(address, who);
 
-			if (canSee(VIEWERS[kind] as Viewer, destination)) {
+			// The Contractors report and its export are below Reports but hold
+			// money: whoever does not see rates gets the same 404 there (TS-079).
+			const viewer = VIEWERS[kind] as Viewer;
+			const money = address.startsWith(contractorsPath(ACME));
+			if (canSee(viewer, destination) && (!money || maySeeRates(viewer.role))) {
 				expect(page.status, address).toBe(200);
 				expect(data.status, address).toBe(200);
 				continue;

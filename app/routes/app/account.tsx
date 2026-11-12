@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Link, redirect, replace, useFetcher, useRouteLoaderData } from "react-router";
 import * as z from "zod";
 
+import { changes, record } from "~/activity/activity.server";
 import { changeName } from "~/auth/auth.server";
 import { PERSON_NAME_MAX, PersonName } from "~/auth/person-name";
 import { Button } from "~/components/Button";
@@ -144,9 +145,25 @@ export async function action({ request, url, context }: Route.ActionArgs) {
 		}
 
 		case "leave": {
-			const { organisation } = context.get(membershipContext);
+			const { organisation, user } = context.get(membershipContext);
+			const scope = organisationScope(env.DB, organisation.id);
+			const [membership] = await scope.memberships.select((m) => eq(m.userId, user.id), {
+				limit: 1,
+			});
 			const left = await leaveOrganisation(request, organisation.id);
-			return left.ok ? redirect(APP_PATH) : refused(left);
+			if (!left.ok) return refused(left);
+			// Recorded as a removal of the person by themselves, with what they
+			// were, so a contractor who left is still known as one (TS-079).
+			if (membership) {
+				await record(
+					scope,
+					user.id,
+					"membership.removed",
+					{ type: "membership", id: membership.id, ownerId: user.id },
+					changes(membership, null, ["role", "isContractor"]),
+				);
+			}
+			return redirect(APP_PATH);
 		}
 	}
 }

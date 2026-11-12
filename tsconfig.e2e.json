@@ -5,6 +5,8 @@
 		"e2e/**/*.ts",
 		"app/shell/destinations.ts",
 		"app/integrations/paths.ts",
+		"app/contractors/paths.ts",
+		"app/activity/paths.ts",
 		"app/auth/code.ts",
 		"app/auth/person-name.ts",
 		"app/shell/color-scheme.server.ts"

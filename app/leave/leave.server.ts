@@ -2,7 +2,9 @@ import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
+import { changes, record } from "~/activity/activity.server";
 import { type OrganisationScope, organisationScope, type ScopedAccessor, users } from "~/db";
+import { lockDateOf } from "~/locks/locks.server";
 import {
 	type Access,
 	isAdministrator,
@@ -335,6 +337,17 @@ export async function requestLeave(
 			problem: { field: "endsOn", message: "The last day comes before the first." },
 		};
 	}
+	const lockedThrough = await lockDateOf(scope.organisationId);
+	if (lockedThrough !== null && span.startsOn <= lockedThrough) {
+		return {
+			ok: false,
+			problem: {
+				field: "form",
+				message:
+					"Some of these days are on or before the lock date, so leave cannot be asked for on them.",
+			},
+		};
+	}
 	if (daysFrom(span.startsOn, span.endsOn).length > LONGEST_REQUEST_DAYS) {
 		return {
 			ok: false,
@@ -423,7 +436,7 @@ export async function requestLeave(
 
 	const alone = kind.needsApproval && !(await someoneElseDecides(scope, userId));
 	const status: LeaveStatus = kind.needsApproval && !alone ? "pending" : "approved";
-	await scope.leaveRequests.insert({
+	const [made] = await scope.leaveRequests.insert({
 		userId,
 		kindId: kind.id,
 		...span,
@@ -436,7 +449,42 @@ export async function requestLeave(
 		// Nobody but the person could decide it, so it is approved as it is made (TS-061).
 		...(alone ? { decidedBy: userId, comment: APPROVED_ALONE } : {}),
 	});
+	if (made) {
+		await record(
+			scope,
+			userId,
+			"leave.requested",
+			{ type: "leave", id: made.id, ownerId: userId },
+			changes(null, made, LEAVE_FIELDS),
+		);
+	}
 	return { ok: true, status, alone };
+}
+
+/** What the activity log records of a request for leave: never its note or comment's text. */
+const LEAVE_FIELDS = ["kindId", "startsOn", "endsOn", "startsHalf", "endsHalf", "status"] as const;
+
+/** Whether `row`'s days reach the lock date, so it can no longer change (TS-065). */
+async function reachesLockDate(scope: OrganisationScope, row: { startsOn: Day }) {
+	const lockedThrough = await lockDateOf(scope.organisationId);
+	return lockedThrough !== null && row.startsOn <= lockedThrough;
+}
+
+/** Records a step on a request that has been taken. */
+function recordStep(
+	scope: OrganisationScope,
+	actorId: string,
+	action: "leave.withdrawn" | "leave.approved" | "leave.declined" | "leave.cancelled",
+	row: { id: string; userId: string; status: string },
+	status: string,
+) {
+	return record(
+		scope,
+		actorId,
+		action,
+		{ type: "leave", id: row.id, ownerId: row.userId },
+		changes({ status: row.status }, { status }, ["status"]),
+	);
 }
 
 /** The comment on a request approved as it was made because nobody else could decide it. */
@@ -474,8 +522,8 @@ export async function someoneElseDecides(
 	return managers.length > 0;
 }
 
-/** What a step on a request came to. */
-export type Stepped = "done" | "missing" | "not-allowed" | "stale";
+/** What a step on a request came to. `locked`: its days reach the lock date (TS-065). */
+export type Stepped = "done" | "missing" | "not-allowed" | "stale" | "locked";
 
 async function requestRow(scope: OrganisationScope, id: string) {
 	const [row] = await scope.leaveRequests.select((r) => eq(r.id, id), { limit: 1 });
@@ -492,10 +540,13 @@ export async function withdrawLeave(
 	if (!row) return "missing";
 	if (!mayChangeTimeOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "pending") return "stale";
+	if (await reachesLockDate(scope, row)) return "locked";
 	const changed = await scope.leaveRequests.update({ status: "withdrawn" }, (r) =>
 		and(eq(r.id, row.id), eq(r.status, "pending")),
 	);
-	return changed.length === 1 ? "done" : "stale";
+	if (changed.length !== 1) return "stale";
+	await recordStep(scope, access.userId, "leave.withdrawn", row, "withdrawn");
+	return "done";
 }
 
 /** A decision on a pending request. */
@@ -513,6 +564,7 @@ export async function decideLeave(
 	if (!row) return "missing";
 	if (!mayDecideLeaveOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "pending") return "stale";
+	if (await reachesLockDate(scope, row)) return "locked";
 	const changed = await scope.leaveRequests.update(
 		{
 			status: decision.action,
@@ -522,7 +574,15 @@ export async function decideLeave(
 		},
 		(r) => and(eq(r.id, row.id), eq(r.status, "pending")),
 	);
-	return changed.length === 1 ? "done" : "stale";
+	if (changed.length !== 1) return "stale";
+	await recordStep(
+		scope,
+		access.userId,
+		decision.action === "approved" ? "leave.approved" : "leave.declined",
+		row,
+		decision.action,
+	);
+	return "done";
 }
 
 /**
@@ -541,11 +601,14 @@ export async function cancelLeave(
 	if (!row) return "missing";
 	if (!mayCancelLeaveOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "approved" || row.startsOn <= (await todayOf(row.userId))) return "stale";
+	if (await reachesLockDate(scope, row)) return "locked";
 	const changed = await scope.leaveRequests.update(
 		{ status: "cancelled", decidedBy: access.userId, decidedAt: now, comment: reason },
 		(r) => and(eq(r.id, row.id), eq(r.status, "approved")),
 	);
-	return changed.length === 1 ? "done" : "stale";
+	if (changed.length !== 1) return "stale";
+	await recordStep(scope, access.userId, "leave.cancelled", row, "cancelled");
+	return "done";
 }
 
 /** The people whose leave `access` decides: everyone else for an owner or admin, the members of their teams for a manager. */

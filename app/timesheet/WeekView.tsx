@@ -5,6 +5,7 @@ import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { Select } from "~/components/Select";
 import { type DayRule, leftMessage, minutesLeft, overLabel, wholeMinutes } from "~/leave/rules";
+import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
 import { periodAfter } from "~/periods/periods";
 import { TRANSITION, useTravel } from "~/shell/transitions";
@@ -28,8 +29,9 @@ import { dayPath, weekPath } from "./views";
  * says by how much (TS-090).
  */
 export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
-	const { period, days, lockedDays, projects, today } = data;
+	const { period, days, lockedDays, lockDate, projects, today } = data;
 	const formatPeriod = usePeriodFormat();
+	const formatDay = useDayFormat();
 	const travel = useTravel(dayNumber(period.startsOn));
 	const [said, setSaid] = useState<string | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 	];
 	const inGrid = new Set(rows.map((row) => row.projectId));
 	const addable = projects.filter((p) => !p.archived && !inGrid.has(p.id));
-	const editable = lockedDays.length === 0;
+	const editable = lockedDays.length < days.length;
 	const thisWeek = period.startsOn <= today && today <= period.endsOn;
 
 	return (
@@ -64,6 +66,9 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 						submission={data}
 						onSaid={setSaid}
 					/>
+					{lockDate && period.startsOn <= lockDate.lockedThrough && (
+						<p className="mt-2 max-w-160 text-body-large">{lockDateNotice(lockDate, formatDay)}</p>
+					)}
 
 					<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 						{said}

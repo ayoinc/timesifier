@@ -4,6 +4,7 @@ import type { ActivitySource } from "~/activity/actions";
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
 import { refusalOf } from "~/leave/rules.server";
+import { invoicedIds } from "~/locks/locks.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
 
@@ -32,7 +33,8 @@ export type NotWritten =
 	| "running"
 	| "ends-before-start"
 	| "in-day-view"
-	| "limit";
+	| "limit"
+	| "invoiced";
 
 export interface Span {
 	projectId: string;
@@ -85,6 +87,7 @@ export async function editEntry(
 	}
 	const days = [dayOf(entry.startedAt, zone), dayOf(span.startedAt, zone)];
 	if ((await lockedDays(scope, userId, days)).size > 0) return refuse("locked");
+	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
 	const over = await refusalOf(scope, userId, zone, now, {
 		day: dayOf(span.startedAt, zone),
 		replaces: id,
@@ -125,6 +128,7 @@ export async function deleteEntry(
 	if ((await lockedDays(scope, userId, [dayOf(entry.startedAt, zone)])).size > 0) {
 		return refuse("locked");
 	}
+	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
 	await scope.batch([
 		scope.timeEntries.statements.delete((e) => and(eq(e.id, id), eq(e.userId, userId))),
 		recordStatement(
@@ -246,6 +250,9 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 		return refuse("in-day-view");
 	}
 	const [entry] = inCell;
+	if (entry && (await invoicedIds(scope, "time_entry", [entry.id])).size > 0) {
+		return refuse("invoiced");
+	}
 	const over = await refusalOf(scope, userId, zone, now, {
 		day,
 		replaces: entry?.id ?? null,

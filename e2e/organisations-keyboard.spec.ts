@@ -50,7 +50,7 @@ for (const viewport of [
 		test("the members and invitations: every control, the menu and every sheet, with the keyboard alone", async ({
 			page,
 		}) => {
-			const { slug, name, member, guest } = homeOrganisation();
+			const { slug, name, owner, member, guest } = homeOrganisation();
 			await openShell(page, homePath("team"));
 
 			// From Team to the members, by the link, with Enter.
@@ -61,9 +61,11 @@ for (const viewport of [
 			// The move puts the focus on the page's heading; Tab goes on from there.
 			await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
 
-			// The member's actions, after the tabs: a menu the arrow keys move through.
+			// The member's actions, after the tabs and the owner's own, which mark
+			// them a contractor (TS-079): a menu the arrow keys move through.
 			const actions = page.getByRole("button", { name: `Actions for ${member.name}` });
 			await tabThroughTeamTabs(page);
+			await tabTo(page, page.getByRole("button", { name: `Actions for ${owner.name}` }));
 			await tabTo(page, actions);
 			await page.keyboard.press("Enter");
 			const changeRole = page.getByRole("menuitem", { name: "Change role" });

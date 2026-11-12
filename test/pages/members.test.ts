@@ -125,7 +125,7 @@ describe("what the page shows", () => {
 		expect(html).toContain('aria-label="Actions for linus@example.com"');
 	});
 
-	it("to an owner: actions for every other member, the invitations, and Invite", async () => {
+	it("to an owner: actions for every member, the invitations, and Invite", async () => {
 		await memberOfAcme("owner", "grace@example.com");
 		await memberOfAcme("member", "linus@example.com");
 		await invite(ada.cookie, acme.id, "hedy@example.com", "admin");
@@ -134,7 +134,9 @@ describe("what the page shows", () => {
 
 		expect(html).toContain('aria-label="Actions for grace@example.com"');
 		expect(html).toContain('aria-label="Actions for linus@example.com"');
-		expect(html).not.toContain('aria-label="Actions for ada@example.com"');
+		// Their own row's actions hold only marking themselves a contractor (TS-079):
+		// their role is another owner's to change, and their way out is leaving.
+		expect(html).toContain('aria-label="Actions for ada@example.com"');
 
 		const invitations = await pageBody(await open(INVITATIONS, ada));
 		expect(textOf(invitations)).toContain("hedy@example.com Invited as an admin. Expires");

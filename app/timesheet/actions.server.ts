@@ -80,9 +80,10 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 const REFUSALS: Record<Exclude<NotWritten, "limit">, [string, number]> = {
 	"no-project": ["Choose an active project of this organisation.", 400],
 	locked: [
-		"That week is submitted or approved, so its entries cannot be changed. Withdraw it first.",
+		"That day is locked: its week is submitted or approved, or it is on or before the lock date. Withdraw the week, or ask an owner or admin to move the lock date back.",
 		409,
 	],
+	invoiced: ["That entry is on an invoice, so it cannot be changed until it is taken off.", 409],
 	"not-found": ["That entry is not one of yours.", 404],
 	running: ["That entry is running. Stop the timer first.", 409],
 	"ends-before-start": ["An entry ends after it starts.", 400],

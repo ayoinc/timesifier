@@ -6,6 +6,8 @@ import { type DayKind, dayLabel } from "~/leave/days";
 import { daysOf } from "~/leave/leave.server";
 import type { DayRule } from "~/leave/rules";
 import { dayRulesOf } from "~/leave/rules.server";
+import type { LockNotice, LockReason } from "~/locks/locks";
+import { lockNoticeOf, lockReasonsOn } from "~/locks/locks.server";
 import type { Membership } from "~/organisations/membership.server";
 import { lockedDays } from "~/periods/locks.server";
 import {
@@ -182,8 +184,12 @@ export interface DayData extends TimesheetBase {
 	/** The day's entries, earliest first. */
 	entries: SheetEntry[];
 	total: number;
-	/** Whether the day is in a submitted or approved period. */
+	/** Whether the day is in a submitted or approved period, or on or before the lock date. */
 	locked: boolean;
+	/** Why the day is locked, or null when it is not (`app/locks/locks.ts`). */
+	lockReason: LockReason | null;
+	/** The organisation's lock date and its reason, or null when it has none (TS-065). */
+	lockDate: LockNotice | null;
 	/** The seven days of the period the day is in, each with its total, and the period's: the Week view's sums (TS-056). */
 	week: Pick<WeekSheet, "days" | "total">;
 	/** The period the day is in, for the submission in the view's header row (TS-056, W29). */
@@ -202,8 +208,10 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	sheet: WeekSheet;
 	/** The active projects with time in the week before, which "Copy last week's rows" adds (TS-052). */
 	lastWeekProjects: string[];
-	/** The days of the week in a submitted or approved period: all of them, or none. */
+	/** The days of the week in a submitted or approved period, or on or before the lock date. */
 	lockedDays: Day[];
+	/** The organisation's lock date and its reason, or null when it has none (TS-065). */
+	lockDate: LockNotice | null;
 	/** The days of the week as leave sees them, and the time expected over it (TS-061). */
 	away: WeekAway;
 	/** Each day of the week with its limit, what is left and what is over (TS-090). */
@@ -375,9 +383,10 @@ async function dayData(
 	zone: string,
 	now: number,
 ): Promise<Omit<DayData, keyof TimesheetBase | "gettingStarted">> {
-	const [{ entries: ofPeriod, rules, submission }, locked, away] = await Promise.all([
+	const [{ entries: ofPeriod, rules, submission }, reasons, lockDate, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
-		lockedDays(scope, userId, [day]),
+		lockReasonsOn(scope, userId, [day]),
+		lockNoticeOf(scope.organisationId),
 		weekAway(scope, userId, period),
 	]);
 	const entries = ofPeriod.filter((entry) => dayOf(entry.startedAt, zone) === day);
@@ -387,7 +396,9 @@ async function dayData(
 		day,
 		entries,
 		total: totalOf(entries, now),
-		locked: locked.has(day),
+		locked: reasons.has(day),
+		lockReason: reasons.get(day) ?? null,
+		lockDate,
 		week: { days, total },
 		submission,
 		away,
@@ -405,10 +416,11 @@ async function weekData(
 ): Promise<Omit<WeekData, keyof TimesheetBase>> {
 	const days = daysFrom(period.startsOn, period.endsOn);
 	const before = periodAfter(period, -1);
-	const [{ entries, rules, submission }, previous, locked, away] = await Promise.all([
+	const [{ entries, rules, submission }, previous, locked, lockDate, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
 		entriesStartingIn(scope, userId, periodBounds(before, zone)),
 		lockedDays(scope, userId, days),
+		lockNoticeOf(scope.organisationId),
 		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
@@ -419,6 +431,7 @@ async function weekData(
 		sheet: weekSheet(entries, days, zone, now, { projectOrder: projects.map((p) => p.id) }),
 		lastWeekProjects: [...new Set(previous.map((e) => e.projectId))].filter((id) => active.has(id)),
 		lockedDays: days.filter((day) => locked.has(day)),
+		lockDate,
 		away,
 		rules,
 	};

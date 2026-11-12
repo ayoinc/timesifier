@@ -1,20 +1,22 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useState } from "react";
+import { Link, useFetcher } from "react-router";
 import * as z from "zod";
 
-import { changes, record } from "~/activity/activity.server";
+import { changes, record, recordStatement } from "~/activity/activity.server";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { mayMarkContractor } from "~/contractors/contractors";
 import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
+import { isAdministrator } from "~/organisations/access";
 import { changeRole, listMembers, removeMember } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
-import { done, refused, unavailable } from "~/organisations/outcome.server";
+import { declined, done, refused, unavailable } from "~/organisations/outcome.server";
 import { AS_ROLE, nameOrEmail, ROLE_LABELS } from "~/organisations/people";
-import { NEEDS_AN_OWNER, NOT_ALLOWED } from "~/organisations/problems";
+import { NEEDS_AN_OWNER, NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows, mayRemove, Role, rolesToGive } from "~/organisations/roles";
 import { invitationsPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
@@ -40,8 +42,12 @@ export function meta() {
 /** Everyone in the organisation, each with what the person may do to them. */
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const { organisation, role, user } = context.get(membershipContext);
-	const members = await listMembers(request, organisation.id);
+	const [members, rows] = await Promise.all([
+		listMembers(request, organisation.id),
+		organisationScope(env.DB, organisation.id).memberships.select(),
+	]);
 	if (!members.ok) throw unavailable(members);
+	const contractors = new Set(rows.filter((row) => row.isContractor).map(({ id }) => id));
 
 	return {
 		canInvite: allows(role, { invitation: ["create"] }),
@@ -53,9 +59,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				email: member.user.email,
 				role: member.role,
 				isYou,
+				isContractor: contractors.has(member.id),
 				// A person's own way out is leaving, and their own role is another's to change.
 				rolesToGive: isYou ? [] : rolesToGive(role, member.role),
 				canRemove: !isYou && mayRemove(role, member.role),
+				canMarkContractor: mayMarkContractor(role, member.role, isYou),
 			};
 		}),
 	};
@@ -67,6 +75,12 @@ const Id = z.string().min(1).max(64);
 const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("role"), memberId: Id, role: Role }),
 	z.object({ intent: z.literal("remove"), memberId: Id }),
+	// Employee or contractor (TS-079). It grants nothing.
+	z.object({
+		intent: z.literal("contractor"),
+		memberId: Id,
+		isContractor: z.enum(["true", "false"]).transform((value) => value === "true"),
+	}),
 ]);
 
 /**
@@ -107,7 +121,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 					user.id,
 					"membership.removed",
 					subject,
-					changes(member ?? null, null, ["role"]),
+					changes(member ?? null, null, ["role", "isContractor"]),
 				);
 				return done("Member removed. They can no longer open this organisation.");
 			}
@@ -118,6 +132,31 @@ export async function action({ request, context }: Route.ActionArgs) {
 				YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER:
 					role === "owner" ? NEEDS_AN_OWNER : NOT_ALLOWED,
 			});
+		}
+
+		case "contractor": {
+			// Marked by owners and admins alone; anybody else learns nothing of the member.
+			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
+			if (!member) return refused({ ok: false, status: 404, code: "MEMBER_NOT_FOUND" });
+			if (!mayMarkContractor(role, Role.parse(member.role), member.userId === user.id)) {
+				return declined(NOT_ALLOWED, 403);
+			}
+			if (member.isContractor !== input.isContractor) {
+				await scope.batch([
+					scope.memberships.statements.update(
+						{ isContractor: input.isContractor, updatedAt: new Date() },
+						(m) => eq(m.id, member.id),
+					),
+					recordStatement(
+						scope,
+						user.id,
+						"membership.contractor_changed",
+						subject,
+						changes(member, { isContractor: input.isContractor }, ["isContractor"]),
+					),
+				]);
+			}
+			return done(input.isContractor ? "Marked as a contractor." : "Marked as an employee.");
 		}
 	}
 }
@@ -137,6 +176,14 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 	const [member, setMember] = useState<Member | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
+
+	// Marking a member as a contractor or an employee needs no sheet: it is
+	// undone by the same menu. What the server said is read out like a sheet's.
+	const marking = useFetcher<Outcome>();
+	const marked = marking.state === "idle" ? marking.data : undefined;
+	useEffect(() => {
+		if (marked) setSaid(marked.ok ? marked.said : marked.problem);
+	}, [marked]);
 
 	return (
 		<>
@@ -167,16 +214,28 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 									value={
 										<span className="text-label-large text-on-surface-variant">
 											{ROLE_LABELS[each.role]}
+											{each.isContractor && " · Contractor"}
 										</span>
 									}
 									action={
-										(each.rolesToGive.length > 0 || each.canRemove) && (
+										(each.rolesToGive.length > 0 || each.canRemove || each.canMarkContractor) && (
 											<MenuTrigger>
 												<Button variant="text" aria-label={`Actions for ${each.name}`}>
 													Actions
 												</Button>
 												<Menu
 													onAction={(chosen) => {
+														if (chosen === "contractor") {
+															marking.submit(
+																{
+																	intent: "contractor",
+																	memberId: each.id,
+																	isContractor: String(!each.isContractor),
+																},
+																{ method: "post" },
+															);
+															return;
+														}
 														setMember(each);
 														setTask(chosen === "role" ? "role" : "remove");
 													}}
@@ -186,6 +245,11 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 													) : null}
 													{each.canRemove ? (
 														<MenuItem id="remove">Remove from organisation</MenuItem>
+													) : null}
+													{each.canMarkContractor ? (
+														<MenuItem id="contractor">
+															{each.isContractor ? "Mark as employee" : "Mark as contractor"}
+														</MenuItem>
 													) : null}
 												</Menu>
 											</MenuTrigger>
