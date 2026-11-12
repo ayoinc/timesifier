@@ -9,6 +9,11 @@ export interface WordmarkProps {
 	 */
 	tone?: "two" | "one";
 	className?: string;
+	/**
+	 * Under 600px, the mark alone, the name kept for assistive technology: the
+	 * signed-in band gives the organisation's name the room (audit W17).
+	 */
+	compact?: boolean;
 }
 
 /**
@@ -17,11 +22,11 @@ export interface WordmarkProps {
  * from it (docs/design-direction.md, "The mark"). The mark is decoration here:
  * the name beside it is what is read, once.
  */
-export function Wordmark({ tone = "two", className }: WordmarkProps) {
+export function Wordmark({ tone = "two", className, compact = false }: WordmarkProps) {
 	return (
 		<span className={cx("inline-flex items-center gap-2 text-headline-small", className)}>
 			<Mark tone={tone} className="h-6 w-auto" />
-			Timesifier
+			<span className={compact ? "max-medium:sr-only" : undefined}>Timesifier</span>
 		</span>
 	);
 }

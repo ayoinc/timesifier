@@ -74,6 +74,17 @@ describe("/app", () => {
 });
 
 describe("/app/new", () => {
+	it("names its way back for where it goes: the one organisation, or the list of several (W31)", async () => {
+		const ada = await person(mailbox, "ada@example.com");
+		await createOrganisation(ada.cookie, "Acme");
+		const one = await pageBody(await open("/app/new", ada));
+		expect(one).toMatch(/<a[^>]*href="\/app\/acme"[^>]*>Back to Acme<\/a>/);
+
+		await createOrganisation(ada.cookie, "Globex");
+		const two = await pageBody(await open("/app/new", ada));
+		expect(two).toMatch(/<a[^>]*href="\/app"[^>]*>Back to your organisations<\/a>/);
+	});
+
 	it("asks a person with no organisation for its name, and nothing else", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 

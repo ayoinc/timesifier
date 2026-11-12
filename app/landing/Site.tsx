@@ -149,7 +149,7 @@ export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 					aria-current={current === "/" ? "page" : undefined}
 					className={`${settles ? "site-name " : ""}inline-flex min-h-9.5 items-center rounded-extra-small outline-none focus-visible:focus-indicator`}
 				>
-					<Wordmark tone="one" />
+					<Wordmark tone="one" compact={signedIn} />
 				</a>
 				{signedIn && end}
 				{!signedIn && (signIn || sections.length > 0) && (

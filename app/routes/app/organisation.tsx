@@ -1,6 +1,8 @@
+import { env } from "cloudflare:workers";
 import { Link, Outlet, useParams } from "react-router";
 
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
+import { organisationCountOf } from "~/db";
 import { pendingLeaveOf } from "~/leave/leave.server";
 import { maySeeRates } from "~/organisations/access";
 import {
@@ -95,10 +97,11 @@ export function meta({ error }: Route.MetaArgs) {
 export async function loader({ context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { organisation, role } = membership;
-	const [periods, leave, timer] = await Promise.all([
+	const [periods, leave, timer, organisationCount] = await Promise.all([
 		pendingApprovalsOf(membership),
 		pendingLeaveOf(membership),
 		navigationTimer(membership),
+		organisationCountOf(env.DB, membership.user.id),
 	]);
 	return {
 		name: organisation.name,
@@ -111,6 +114,10 @@ export async function loader({ context }: Route.LoaderArgs) {
 		 */
 		pendingApprovals: periods === null ? null : periods + (leave ?? 0),
 		timer,
+		/** For "My time report" in the profile menu: Reports with this person's time. */
+		userId: membership.user.id,
+		/** How many organisations the person belongs to: with more than one, the menu lists them (W31). */
+		organisationCount,
 	};
 }
 

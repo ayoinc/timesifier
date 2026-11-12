@@ -189,7 +189,8 @@ test("creating an organisation: the field, the action and the way out, with the 
 	// The field has the focus when the page arrives, so typing can begin at once.
 	await expect(page.getByLabel("Organisation name")).toBeFocused();
 	await tabTo(page, page.getByRole("button", { name: "Create organisation" }));
-	await tabTo(page, page.getByRole("link", { name: "Back to your organisations" }));
+	// Named for where it goes: the one organisation, or the list of several (W31).
+	await tabTo(page, page.getByRole("link", { name: /^Back to / }));
 	// The way out is in the profile menu at the end of the band, just before the field.
 	await page.getByLabel("Organisation name").focus();
 	await page.keyboard.press("Shift+Tab");

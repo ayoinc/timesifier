@@ -9,7 +9,14 @@
 import { and, asc, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { activityRecords, apiTokens, calendarFeeds, webhookDeliveries, webhooks } from "./schema";
+import {
+	activityRecords,
+	apiTokens,
+	calendarFeeds,
+	memberships,
+	webhookDeliveries,
+	webhooks,
+} from "./schema";
 
 /** The token whose keyed hash is `hash`, revoked or not, or null. */
 export async function apiTokenByHash(
@@ -111,4 +118,16 @@ export async function activityAfter(
 		)
 		.orderBy(asc(row))
 		.limit(limit);
+}
+
+/**
+ * How many organisations the signed-in person belongs to: the profile menu
+ * offers the list of them when there is more than one (audit W31).
+ */
+export async function organisationCountOf(database: D1Database, userId: string): Promise<number> {
+	const [found] = await drizzle(database)
+		.select({ count: sql<number>`count(*)` })
+		.from(memberships)
+		.where(eq(memberships.userId, userId));
+	return found?.count ?? 0;
 }

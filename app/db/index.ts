@@ -10,6 +10,7 @@ export {
 	activityAfter,
 	apiTokenByHash,
 	calendarFeedByHash,
+	organisationCountOf,
 	organisationsWithWebhooks,
 } from "./lookups";
 export {
