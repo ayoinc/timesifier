@@ -450,14 +450,6 @@ describe("the working week, the kinds of leave and the public holidays (TS-061)"
 			acme.id,
 			key,
 		);
-	const week = async () =>
-		(
-			await env.DB.prepare(
-				"select minutes from working_days where organisation_id = ? order by weekday",
-			)
-				.bind(acme.id)
-				.all<{ minutes: number }>()
-		).results.map((d) => d.minutes);
 	const holidays = async () =>
 		(
 			await env.DB.prepare(
@@ -466,68 +458,32 @@ describe("the working week, the kinds of leave and the public holidays (TS-061)"
 				.bind(acme.id)
 				.all()
 		).results;
-	const DEFAULT_WEEK = [450, 450, 450, 450, 450, 0, 0];
-
-	it("are shown to an owner and an admin, and the working week on everyone's My account", async () => {
+	it("are shown to an owner and an admin, with the default work schedule, and each person's schedule on their My account (TS-097)", async () => {
 		const grace = await memberOfAcme("admin", "grace@example.com");
 		for (const who of [ada, grace]) {
 			const text = textOf(await pageBody(await open(SETTINGS, who)));
+			expect(text).toContain("Work schedules");
+			expect(text).toContain(
+				"Standard Default Everyone without another schedule Monday to Friday, 09:00–17:30 · 37:30 a week",
+			);
 			expect(text).toContain("Annual leave");
 			expect(text).toContain("Public holiday");
 			expect(text).toContain("No public holidays are set.");
 		}
 		const linus = await memberOfAcme("member", "linus@example.com");
 		const text = textOf(await pageBody(await open(ACCOUNT, linus)));
-		expect(text).toContain("Your working week");
-		expect(text).toContain("Monday to Friday, 7:30 a day, as Acme sets it for everyone.");
-		expect(text).toMatch(/Monday 7:30 .*Saturday Not a working day Sunday Not a working day/);
+		expect(text).toContain("Your work schedule");
+		expect(text).toContain(
+			"Standard: Monday to Friday, 09:00–17:30 · 37:30 a week. The organisation's default.",
+		);
+		expect(text).toMatch(
+			/Monday 09:00–17:30, 1:00 break · 7:30 .*Saturday Not a working day Sunday Not a working day/,
+		);
 	});
 
-	it.each(["owner", "admin"] as const)(
-		"an %s sets the working week, in hours as 7.5 or 7:30, and empty is no working day",
-		async (role) => {
-			const who = role === "owner" ? ada : await memberOfAcme("admin", "grace@example.com");
-			const answer = await outcome(
-				await submit(
-					SETTINGS,
-					{
-						intent: "working-week",
-						day1: "8",
-						day2: "7:30",
-						day3: "7,5",
-						day4: "6.25",
-						day5: "",
-						day6: "",
-						day7: "4",
-					},
-					who,
-					{ byScript: true },
-				),
-			);
-			expect(answer.status).toBe(200);
-			expect(answer.said).toContain("The working week is saved.");
-			expect(await week()).toEqual([480, 450, 450, 375, 0, 0, 240]);
-			expect(textOf(await pageBody(await open(ACCOUNT, who)))).toContain(
-				"Monday 8:00, Tuesday 7:30, Wednesday 7:30, Thursday 6:15, Sunday 4:00",
-			);
-		},
-	);
-
-	it("refuses hours that are not hours, and more than a day", async () => {
-		for (const day1 of ["eight", "25", "7:75"]) {
-			const fields = {
-				intent: "working-week",
-				day1,
-				day2: "",
-				day3: "",
-				day4: "",
-				day5: "",
-				day6: "",
-				day7: "",
-			};
-			expect((await submit(SETTINGS, fields, ada, { byScript: true })).status, day1).toBe(400);
-		}
-		expect(await week()).toEqual(DEFAULT_WEEK);
+	it("no longer takes the working week: schedules are set on their own page", async () => {
+		const fields = { intent: "working-week", day1: "8" };
+		expect((await submit(SETTINGS, fields, ada, { byScript: true })).status).toBe(400);
 	});
 
 	it.each(["owner", "admin"] as const)(
@@ -724,16 +680,6 @@ describe("the working week, the kinds of leave and the public holidays (TS-061)"
 
 		for (const who of [linus, mary]) {
 			const forms: Record<string, string>[] = [
-				{
-					intent: "working-week",
-					day1: "1",
-					day2: "",
-					day3: "",
-					day4: "",
-					day5: "",
-					day6: "",
-					day7: "",
-				},
 				{ intent: "kind", kindId: (await kindOf("annual")) ?? "", name: "Mine", enabled: "on" },
 				{ intent: "add-holiday", day: "2026-12-26", name: "Boxing Day" },
 				{ intent: "remove-holiday", holidayId: holidayId ?? "" },
@@ -745,7 +691,6 @@ describe("the working week, the kinds of leave and the public holidays (TS-061)"
 				).toBe(404);
 			}
 		}
-		expect(await week()).toEqual(DEFAULT_WEEK);
 		expect((await kindRow("annual"))?.name).toBe("Annual leave");
 		expect(await holidays()).toEqual([{ day: "2026-12-25", name: "Christmas Day" }]);
 	});

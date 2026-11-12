@@ -74,7 +74,7 @@ const Text = z.string().max(16).optional().default("");
 /** One weekday's fields: whether it is worked, its start and finish as clock times, and the break in minutes. */
 const dayFields = Object.fromEntries(
 	[1, 2, 3, 4, 5, 6, 7].flatMap((n) => [
-		[`worked${n}`, z.literal("on").optional()],
+		[`worked${n}`, z.string().max(4).optional()],
 		[`start${n}`, Text],
 		[`finish${n}`, Text],
 		[`break${n}`, Text],

@@ -10,6 +10,7 @@ import { freshDatabase } from "../db/database";
 import { createOrganisation, type Role, seedMembership, value } from "../organisations/harness";
 import { open, openData, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
+import { seedDefaultWeek } from "./schedule-seed";
 
 // Timesheet, /app/<slug>: the timer (TS-012a), the Day and Week views
 // (TS-013), entries by hand (TS-012b), the week's grid (TS-052), a week's
@@ -1241,7 +1242,7 @@ describe("days not worked (TS-061)", () => {
 
 		expect(await textAt(`${PAGE}?day=2026-11-12`)).toContain("Annual leave. 0:00 expected.");
 		expect(await textAt(`${PAGE}?day=2026-11-13`)).toContain(
-			"Annual leave (half day). 3:45 expected.",
+			"Annual leave (half day). 09:00–17:30, 3:45 expected.",
 		);
 		const pending = await textAt(`${PAGE}?day=2026-11-10`);
 		expect(pending).toContain("7:30 expected.");
@@ -1264,11 +1265,9 @@ describe("days not worked (TS-061)", () => {
 		expect(week).toContain("Expected 7:30 7:30 7:30 0:00 3:45 0:00 0:00 Week expected 26:15");
 	});
 
-	it("a working week that works Sundays expects 7:30 on the day the clocks go back", async () => {
+	it("a schedule that works Sundays expects 7:30 on the day the clocks go back", async () => {
 		clockAt(Date.parse("2026-10-25T12:00:00Z"));
-		await env.DB.prepare("update working_days set minutes = 450 where organisation_id = ?")
-			.bind(acme.id)
-			.run();
+		await seedDefaultWeek(acme.id, [450, 450, 450, 450, 450, 450, 450]);
 		expect(await textAt(`${PAGE}?day=2026-10-25`)).toContain("7:30 expected.");
 		expect(await textAt(`${PAGE}?view=week&start=2026-10-19`)).toContain(
 			"Expected 7:30 7:30 7:30 7:30 7:30 7:30 7:30 Week expected 52:30",
