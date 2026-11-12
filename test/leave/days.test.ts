@@ -34,6 +34,7 @@ import {
 	type LeaveStatus,
 	requestableKinds,
 } from "~/leave/kinds";
+import { DEFAULT_NOTICE_DAYS } from "~/leave/rules";
 import { addDays, bounds, type Day, daysFrom } from "~/time/calendar";
 
 // The rules of leave (TS-061) without the database: working days, half days,
@@ -365,6 +366,7 @@ describe("the kinds of leave", () => {
 		enabled: key !== "study",
 		needsApproval: DEFAULT_KINDS[key].needsApproval,
 		allowanceHalfDays: DEFAULT_KINDS[key].allowanceHalfDays,
+		noticeDays: DEFAULT_NOTICE_DAYS[key],
 	}));
 
 	it("are six, Annual with 25 days a year, Sick and Public holiday approved at once", () => {

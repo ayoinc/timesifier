@@ -16,6 +16,7 @@ import {
 	ROWS_PER_DAY,
 	ZOOM_GEOMETRY,
 } from "./calendar-sheets";
+import { ClosedDays, RuleLine, refusalOfDay } from "./DayRules";
 import { formatDuration } from "./durations";
 import { useClockFormat, useDayFormat } from "./format";
 import type { SheetEntry } from "./sheets";
@@ -28,8 +29,10 @@ import { dayPath } from "./views";
  * each day's total at the head of its column. A block opens the entry's edit
  * sheet; an empty slot opens Track time from its start. A day of a submitted
  * or approved week takes neither: its blocks lead to the Day view, which says
- * why. The hours are 24px tall when compact, so the whole day is in view, and
- * 96px in detail, so a quarter of an hour is a line of text.
+ * why. A day that takes no time, or has none left, offers no slot, and its
+ * head says why; a day with a limit says what is left, and a day over it by
+ * how much (TS-090). The hours are 24px tall when compact, so the whole day
+ * is in view, and 96px in detail, so a quarter of an hour is a line of text.
  *
  * For assistive technology it is a grid of two rows: the days' heads, then
  * the days' entries and free slots. Arrow keys move between days and along a
@@ -83,14 +86,15 @@ export function CalendarWeek({
 	const columns = days.map((day) => {
 		const placed = placeSegments(segments.get(day) ?? [], geometry.leastRows);
 		const locked = lockedDays.includes(day);
+		const rule = data.rules.find((each) => each.day === day);
 		const slots =
-			locked || !canTrack
+			locked || !canTrack || refusalOfDay(rule) !== null
 				? []
 				: freeSlots(placed, geometry.slotMinutes).filter(
 						// A time the clocks skip cannot start an entry.
 						(minutes) => exactInstantAt(day, minutes, zone) !== null,
 					);
-		return { day, placed, slots, locked, status: statuses[day] };
+		return { day, placed, slots, locked, status: statuses[day], rule };
 	});
 
 	// The items of the grid in the order the arrow keys walk them: each day's
@@ -171,172 +175,178 @@ export function CalendarWeek({
 
 	const geometryClass = DAY_HEIGHT[zoom];
 	return (
-		<div
-			ref={scroller}
-			className={cx(
-				"mt-6 overflow-auto overscroll-contain rounded-large border-2 border-on-surface",
-				zoom === "detailed" && "max-h-160",
-			)}
-		>
-			<table
-				ref={grid}
-				aria-label={`Week calendar, ${formatLong(days[0] as Day)} to ${formatLong(days.at(-1) as Day)}`}
-				onKeyDown={onKeyDown}
-				className="w-full min-w-182 table-fixed border-separate border-spacing-0 expanded:min-w-0"
+		<>
+			<div
+				ref={scroller}
+				className={cx(
+					"mt-6 overflow-auto overscroll-contain rounded-large border-2 border-on-surface",
+					zoom === "detailed" && "max-h-160",
+				)}
 			>
-				<thead>
-					<tr>
-						<th
-							scope="col"
-							className="sticky top-0 left-0 z-30 w-14 border-b-2 border-on-surface bg-surface px-1 py-3 align-middle font-normal"
-						>
-							<span className="block text-label-small text-on-surface-variant">
-								Week<span className="sr-only"> total</span>
-							</span>
-							<span className="block text-label-large tabular-nums">
-								{formatDuration(totals.total)}
-							</span>
-						</th>
-						{columns.map(({ day, locked, status }, col) => {
-							const total = totals.days.find((each) => each.day === day)?.total ?? 0;
-							const isToday = day === today;
-							return (
-								<th
+				<table
+					ref={grid}
+					aria-label={`Week calendar, ${formatLong(days[0] as Day)} to ${formatLong(days.at(-1) as Day)}`}
+					onKeyDown={onKeyDown}
+					className="w-full min-w-182 table-fixed border-separate border-spacing-0 expanded:min-w-0"
+				>
+					<thead>
+						<tr>
+							<th
+								scope="col"
+								className="sticky top-0 left-0 z-30 w-14 border-b-2 border-on-surface bg-surface px-1 py-3 align-middle font-normal"
+							>
+								<span className="block text-label-small text-on-surface-variant">
+									Week<span className="sr-only"> total</span>
+								</span>
+								<span className="block text-label-large tabular-nums">
+									{formatDuration(totals.total)}
+								</span>
+							</th>
+							{columns.map(({ day, locked, status, rule }, col) => {
+								const total = totals.days.find((each) => each.day === day)?.total ?? 0;
+								const isToday = day === today;
+								return (
+									<th
+										key={day}
+										scope="col"
+										className={cx(
+											"sticky top-0 z-20 border-b-2 border-l border-b-on-surface border-l-outline-variant p-1 font-normal",
+											locked || status?.quiet ? "bg-surface-container-low" : "bg-surface",
+										)}
+									>
+										<Link
+											to={dayPath(slug, day)}
+											onClick={finishRunningTransition}
+											aria-current={isToday ? "date" : undefined}
+											data-col={col}
+											{...itemProps(headId(day))}
+											className={cx(
+												"flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-medium px-1 py-2 outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator-inner",
+												isToday && "border-2 border-on-surface",
+												status?.quiet ? "text-on-surface-variant" : "text-on-surface",
+											)}
+										>
+											<span className="text-label-large">
+												<span aria-hidden="true">{formatShort(day)}</span>
+												<span className="sr-only">
+													{isToday ? "Today, " : ""}
+													{formatLong(day)},
+												</span>
+											</span>
+											<span className="text-title-small tabular-nums">
+												{formatDuration(total)}
+												<span className="sr-only"> tracked</span>
+											</span>
+											{status && (
+												<span className="max-w-full truncate text-label-small text-on-surface-variant">
+													<span className="sr-only">, </span>
+													{status.label}
+												</span>
+											)}
+											{!locked && <RuleLine rule={rule} />}
+											{locked && (
+												<span className="text-label-small text-on-surface-variant">
+													<span className="sr-only">, </span>Submitted
+												</span>
+											)}
+										</Link>
+									</th>
+								);
+							})}
+						</tr>
+					</thead>
+					<tbody>
+						<tr ref={body}>
+							<th
+								ref={axis}
+								scope="row"
+								className="sticky left-0 z-20 bg-surface p-0 align-top font-normal"
+							>
+								<span className="sr-only">Entries by time of day</span>
+								<span aria-hidden="true" className={cx("grid grid-rows-24", geometryClass)}>
+									{HOURS.map((hour) => (
+										<span
+											key={hour}
+											className="-translate-y-2 pe-2 text-end text-label-small text-on-surface-variant tabular-nums"
+										>
+											{hour === 0 ? "" : clockOfMinutes(hour * 60)}
+										</span>
+									))}
+								</span>
+							</th>
+							{columns.map(({ day, placed, slots, locked, status }, col) => (
+								<td
 									key={day}
-									scope="col"
 									className={cx(
-										"sticky top-0 z-20 border-b-2 border-l border-b-on-surface border-l-outline-variant p-1 font-normal",
-										locked || status?.quiet ? "bg-surface-container-low" : "bg-surface",
+										"border-l border-outline-variant p-0 align-top",
+										(locked || status?.quiet) && "bg-surface-container-low",
 									)}
 								>
-									<Link
-										to={dayPath(slug, day)}
-										onClick={finishRunningTransition}
-										aria-current={isToday ? "date" : undefined}
-										data-col={col}
-										{...itemProps(headId(day))}
-										className={cx(
-											"flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-medium px-1 py-2 outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator-inner",
-											isToday && "border-2 border-on-surface",
-											status?.quiet ? "text-on-surface-variant" : "text-on-surface",
-										)}
-									>
-										<span className="text-label-large">
-											<span aria-hidden="true">{formatShort(day)}</span>
-											<span className="sr-only">
-												{isToday ? "Today, " : ""}
-												{formatLong(day)},
-											</span>
-										</span>
-										<span className="text-title-small tabular-nums">
-											{formatDuration(total)}
-											<span className="sr-only"> tracked</span>
-										</span>
-										{status && (
-											<span className="max-w-full truncate text-label-small text-on-surface-variant">
-												<span className="sr-only">, </span>
-												{status.label}
-											</span>
-										)}
-										{locked && (
-											<span className="text-label-small text-on-surface-variant">
-												<span className="sr-only">, </span>Submitted
-											</span>
-										)}
-									</Link>
-								</th>
-							);
-						})}
-					</tr>
-				</thead>
-				<tbody>
-					<tr ref={body}>
-						<th
-							ref={axis}
-							scope="row"
-							className="sticky left-0 z-20 bg-surface p-0 align-top font-normal"
-						>
-							<span className="sr-only">Entries by time of day</span>
-							<span aria-hidden="true" className={cx("grid grid-rows-24", geometryClass)}>
-								{HOURS.map((hour) => (
-									<span
-										key={hour}
-										className="-translate-y-2 pe-2 text-end text-label-small text-on-surface-variant tabular-nums"
-									>
-										{hour === 0 ? "" : clockOfMinutes(hour * 60)}
-									</span>
-								))}
-							</span>
-						</th>
-						{columns.map(({ day, placed, slots, locked, status }, col) => (
-							<td
-								key={day}
-								className={cx(
-									"border-l border-outline-variant p-0 align-top",
-									(locked || status?.quiet) && "bg-surface-container-low",
-								)}
-							>
-								<div className={cx("relative", geometryClass)}>
-									<div
-										aria-hidden="true"
-										className="absolute inset-0 grid grid-rows-24 divide-y divide-outline-variant"
-									>
-										{HOURS.map((hour) => (
-											<span key={hour} />
-										))}
-									</div>
-									<div className="relative grid h-full grid-cols-60 grid-rows-288">
-										{slots.map((minutes) => (
-											<button
-												key={minutes}
-												type="button"
-												data-col={col}
-												data-at={minutes}
-												{...itemProps(slotId(day, minutes))}
-												onClick={() => onTrack(day, clockOfMinutes(minutes))}
-												// Not "Track time": that is the Day view's button and the sheet's title.
-												aria-label={`New entry, ${formatLong(day)}, from ${clockOfMinutes(minutes)}`}
-												className={cx(
-													"group col-span-60 flex items-start justify-start rounded-small px-2 text-label-small text-on-surface-variant outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator-inner",
-													placement(
-														minutes / ROW_MINUTES,
-														(minutes + geometry.slotMinutes) / ROW_MINUTES,
-													),
-												)}
-											>
-												<span
-													aria-hidden="true"
-													className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+									<div className={cx("relative", geometryClass)}>
+										<div
+											aria-hidden="true"
+											className="absolute inset-0 grid grid-rows-24 divide-y divide-outline-variant"
+										>
+											{HOURS.map((hour) => (
+												<span key={hour} />
+											))}
+										</div>
+										<div className="relative grid h-full grid-cols-60 grid-rows-288">
+											{slots.map((minutes) => (
+												<button
+													key={minutes}
+													type="button"
+													data-col={col}
+													data-at={minutes}
+													{...itemProps(slotId(day, minutes))}
+													onClick={() => onTrack(day, clockOfMinutes(minutes))}
+													// Not "Track time": that is the Day view's button and the sheet's title.
+													aria-label={`New entry, ${formatLong(day)}, from ${clockOfMinutes(minutes)}`}
+													className={cx(
+														"group col-span-60 flex items-start justify-start rounded-small px-2 text-label-small text-on-surface-variant outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator-inner",
+														placement(
+															minutes / ROW_MINUTES,
+															(minutes + geometry.slotMinutes) / ROW_MINUTES,
+														),
+													)}
 												>
-													+ {clockOfMinutes(minutes)}
-												</span>
-											</button>
-										))}
-										{placed.map((part) => (
-											<Block
-												key={blockId(part)}
-												part={part}
-												col={col}
-												zoom={zoom}
-												locked={locked}
-												slug={slug}
-												now={now}
-												name={part.entry.description || projectName(part.entry.projectId)}
-												project={part.entry.description ? projectName(part.entry.projectId) : null}
-												clock={clock}
-												focusProps={itemProps(blockId(part))}
-												onEdit={onEdit}
-											/>
-										))}
-										{day === today && <NowLine now={now} day={day} zone={zone} />}
+													<span
+														aria-hidden="true"
+														className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+													>
+														+ {clockOfMinutes(minutes)}
+													</span>
+												</button>
+											))}
+											{placed.map((part) => (
+												<Block
+													key={blockId(part)}
+													part={part}
+													col={col}
+													zoom={zoom}
+													locked={locked}
+													slug={slug}
+													now={now}
+													name={part.entry.description || projectName(part.entry.projectId)}
+													project={
+														part.entry.description ? projectName(part.entry.projectId) : null
+													}
+													clock={clock}
+													focusProps={itemProps(blockId(part))}
+													onEdit={onEdit}
+												/>
+											))}
+											{day === today && <NowLine now={now} day={day} zone={zone} />}
+										</div>
 									</div>
-								</div>
-							</td>
-						))}
-					</tr>
-				</tbody>
-			</table>
-		</div>
+								</td>
+							))}
+						</tr>
+					</tbody>
+				</table>
+			</div>
+			<ClosedDays rules={data.rules} />
+		</>
 	);
 }
 

@@ -44,6 +44,17 @@ import {
 	LeaveStatus,
 	LONGEST_REQUEST_DAYS,
 } from "./kinds";
+import {
+	daysLabel,
+	earliestNoticed,
+	heldToNotice,
+	isShortNotice,
+	noticeAsked,
+	noticeGiven,
+	noticeLabel,
+	type ShortNoticeRule,
+} from "./rules";
+import { dateWords } from "./words";
 
 /**
  * Leave as the database holds it (TS-061): the organisation's kinds, working
@@ -63,6 +74,7 @@ export async function leaveKindsOf(scope: OrganisationScope): Promise<LeaveKind[
 			enabled: row.enabled,
 			needsApproval: row.needsApproval,
 			allowanceHalfDays: row.allowanceHalfDays,
+			noticeDays: row.noticeDays,
 		})),
 	);
 }
@@ -103,6 +115,12 @@ export interface LeaveRequest extends LeaveRequestLike {
 	decidedBy: string | null;
 	decidedAt: number | null;
 	createdAt: number;
+	/** Days from the day it was made to its first day (TS-090). */
+	noticeDays: number;
+	/** Whether it gave less notice than its kind asked for. */
+	shortNotice: boolean;
+	/** Why, when it was short. */
+	noticeReason: string | null;
 }
 
 type LeaveRequests = OrganisationScope["leaveRequests"] extends ScopedAccessor<infer T> ? T : never;
@@ -126,6 +144,9 @@ function requestOf(row: RequestRow, kinds: readonly LeaveKind[]): LeaveRequest {
 		decidedBy: row.decidedBy,
 		decidedAt: row.decidedAt?.getTime() ?? null,
 		createdAt: row.createdAt.getTime(),
+		noticeDays: row.noticeDays,
+		shortNotice: row.shortNotice,
+		noticeReason: row.noticeReason,
 	};
 }
 
@@ -265,12 +286,23 @@ async function takenByYear(scope: OrganisationScope, span: LeaveSpan) {
 export interface NewRequest extends LeaveSpan {
 	kindId: string;
 	note: string | null;
+	/** Why it is asked for at short notice (TS-090); kept only when it is. */
+	noticeReason: string | null;
+}
+
+/** When a request is made, as notice is counted (TS-090). */
+export interface Asking {
+	/** The day it is made, in the person's zone. */
+	today: Day;
+	/** Whether the organisation takes short notice with a reason, or refuses it. */
+	shortNotice: ShortNoticeRule;
 }
 
 /** Why a request was not made, by the field it concerns. */
 export type NotRequested =
 	| { field: "kindId"; message: string }
 	| { field: "endsOn"; message: string }
+	| { field: "noticeReason"; message: string }
 	| { field: "form"; message: string };
 
 /**
@@ -278,12 +310,15 @@ export type NotRequested =
  * once; any other waits. Refused for a kind switched off or the public
  * holidays, for days that hold no working day, for days that share one with
  * another of the person's pending or approved requests, and for more than the
- * kind's allowance leaves in a year.
+ * kind's allowance leaves in a year. A request that gives less notice than
+ * its kind asks (sick leave never does) needs a reason, and is refused where
+ * the organisation does not take short notice (TS-090).
  */
 export async function requestLeave(
 	scope: OrganisationScope,
 	userId: string,
 	request: NewRequest,
+	asking: Asking,
 	now = new Date(),
 ): Promise<
 	{ ok: true; status: LeaveStatus; alone: boolean } | { ok: false; problem: NotRequested }
@@ -318,6 +353,27 @@ export async function requestLeave(
 		return {
 			ok: false,
 			problem: { field: "endsOn", message: "These days hold no working day to take." },
+		};
+	}
+	const noticeDays = noticeGiven(asking.today, span.startsOn);
+	const short = isShortNotice(kind, asking.today, span.startsOn);
+	const noticeReason = short ? request.noticeReason?.trim() || null : null;
+	if (short && asking.shortNotice === "refused") {
+		return {
+			ok: false,
+			problem: {
+				field: "kindId",
+				message: `${kind.name} needs ${noticeLabel({ noticeDays: noticeAsked(kind), shortNotice: false })} here: the earliest first day is ${dateWords(earliestNoticed(kind, asking.today))}.`,
+			},
+		};
+	}
+	if (short && noticeReason === null) {
+		return {
+			ok: false,
+			problem: {
+				field: "noticeReason",
+				message: `This is short notice (${daysLabel(Math.max(0, noticeDays))}): say why in one line.`,
+			},
 		};
 	}
 
@@ -373,6 +429,9 @@ export async function requestLeave(
 		...span,
 		status,
 		note: request.note,
+		noticeDays,
+		shortNotice: short,
+		noticeReason,
 		decidedAt: status === "approved" ? now : null,
 		// Nobody but the person could decide it, so it is approved as it is made (TS-061).
 		...(alone ? { decidedBy: userId, comment: APPROVED_ALONE } : {}),
@@ -591,19 +650,26 @@ export async function pendingLeaveOf(membership: Membership): Promise<number | n
 	return countPending(scope, people);
 }
 
-/** How many requests of `people` wait for a decision. */
+/** How many requests of `people` wait for a decision: for leave, and for overtime and weekend work (TS-090). */
 export async function countPending(
 	scope: OrganisationScope,
 	people: readonly Person[],
 ): Promise<number> {
 	const ids = people.map((p) => p.id);
 	if (ids.length === 0) return 0;
-	const [row] = await scope.leaveRequests.sum(
-		() => sqlOne,
-		(r) => r.status,
-		(r) => and(inArray(r.userId, ids), eq(r.status, "pending")),
-	);
-	return row?.total ?? 0;
+	const [[leave], [work]] = await Promise.all([
+		scope.leaveRequests.sum(
+			() => sqlOne,
+			(r) => r.status,
+			(r) => and(inArray(r.userId, ids), eq(r.status, "pending")),
+		),
+		scope.workRequests.sum(
+			() => sqlOne,
+			(w) => w.status,
+			(w) => and(inArray(w.userId, ids), eq(w.status, "pending")),
+		),
+	]);
+	return (leave?.total ?? 0) + (work?.total ?? 0);
 }
 
 /** One for each row: what `sum` adds up to count them. */
@@ -624,6 +690,8 @@ export interface KindChange {
 	enabled: boolean;
 	needsApproval: boolean;
 	allowanceHalfDays: number | null;
+	/** Days of notice a request should give (TS-090); sick leave and public holidays keep none. */
+	noticeDays: number;
 }
 
 /** Changes one of the organisation's kinds; false when it has no such kind. */
@@ -641,6 +709,7 @@ export async function changeKind(
 			enabled: change.enabled,
 			needsApproval: holiday ? false : change.needsApproval,
 			allowanceHalfDays: holiday ? null : change.allowanceHalfDays,
+			noticeDays: heldToNotice({ key: KindKey.parse(row.key) }) ? change.noticeDays : 0,
 		},
 		(k) => eq(k.id, row.id),
 	);
@@ -722,4 +791,113 @@ export async function leaveOfPeople(
 			];
 		}),
 	);
+}
+
+/** One approved stretch of a colleague's leave to come, as Time off lists it. */
+export interface UpcomingLeave {
+	id: string;
+	person: string;
+	/** The kind's name where the viewer may see it (`maySeeLeaveKindOf`); else "On leave". */
+	kind: string;
+	startsOn: Day;
+	endsOn: Day;
+	startsHalf: boolean;
+	endsHalf: boolean;
+}
+
+/** How far ahead Time off lists the team's leave, in days. */
+export const TEAM_LEAVE_AHEAD_DAYS = 42;
+
+/**
+ * The approved leave of the viewer's colleagues from `today` to
+ * `TEAM_LEAVE_AHEAD_DAYS` later (TS-090), soonest first. Colleagues are the
+ * people who share a team with the viewer and those they manage; everyone in
+ * the organisation for an owner or admin, or for a person in no team. The
+ * kind is named only where `access` may see it.
+ */
+export async function teamLeaveAhead(
+	scope: OrganisationScope,
+	organisation: { timeZone: string },
+	access: Access,
+	today: Day,
+): Promise<UpcomingLeave[]> {
+	let only: Set<string> | undefined;
+	if (!isAdministrator(access.role)) {
+		const mine = await scope.teamMembers.select((t) => eq(t.userId, access.userId));
+		if (mine.length > 0) {
+			const mates = await scope.teamMembers.select((t) =>
+				inArray(
+					t.teamId,
+					mine.map((m) => m.teamId),
+				),
+			);
+			only = new Set([...mates.map((m) => m.userId), ...access.managed]);
+		}
+	}
+	only?.delete(access.userId);
+	if (only?.size === 0) return [];
+	const last = addDays(today, TEAM_LEAVE_AHEAD_DAYS);
+	const [kinds, rows] = await Promise.all([
+		leaveKindsOf(scope),
+		scope.leaveRequests.select(
+			(r) =>
+				and(
+					ne(r.userId, access.userId),
+					only ? inArray(r.userId, [...only]) : undefined,
+					eq(r.status, "approved"),
+					lte(r.startsOn, last),
+					gte(r.endsOn, today),
+				),
+			{ orderBy: (r) => [asc(r.startsOn)] },
+		),
+	]);
+	const people = await peopleOf(
+		scope,
+		organisation,
+		rows.map((r) => r.userId),
+	);
+	const names = new Map(people.map((p) => [p.id, p.name]));
+	return rows.flatMap((row) => {
+		const name = names.get(row.userId);
+		if (!name) return [];
+		const request = requestOf(row, kinds);
+		return [
+			{
+				id: row.id,
+				person: name,
+				kind: maySeeLeaveKindOf(access, row.userId) ? request.kindName : "On leave",
+				startsOn: row.startsOn,
+				endsOn: row.endsOn,
+				startsHalf: row.startsHalf,
+				endsHalf: row.endsHalf,
+			},
+		];
+	});
+}
+
+/**
+ * How many requests for leave each of `userIds` made at short notice from
+ * `first` to `last` (TS-090), counted by the day the leave starts, whatever
+ * became of them but a withdrawal. Reports shows it per person.
+ */
+export async function shortNoticeCounts(
+	scope: OrganisationScope,
+	userIds: readonly string[],
+	first: Day,
+	last: Day,
+): Promise<Map<string, number>> {
+	const ids = [...new Set(userIds)];
+	if (ids.length === 0) return new Map();
+	const rows = await scope.leaveRequests.select((r) =>
+		and(
+			inArray(r.userId, ids),
+			eq(r.shortNotice, true),
+			ne(r.status, "withdrawn"),
+			gte(r.startsOn, first),
+			lte(r.startsOn, last),
+		),
+	);
+	const counts = new Map<string, number>();
+	for (const row of rows) counts.set(row.userId, (counts.get(row.userId) ?? 0) + 1);
+	return counts;
 }

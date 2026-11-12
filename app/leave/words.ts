@@ -6,7 +6,7 @@ import type { LeaveSpan } from "./days";
 // How the pages put leave into words. Nothing here runs only on the server.
 
 /** A day with its year: "14 December 2026". */
-function dateWords(day: Day): string {
+export function dateWords(day: Day): string {
 	return new Intl.DateTimeFormat("en-GB", {
 		day: "numeric",
 		month: "long",

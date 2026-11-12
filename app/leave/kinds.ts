@@ -37,6 +37,8 @@ export interface LeaveKind {
 	needsApproval: boolean;
 	/** Half days a year, or null for no allowance: nothing is counted against it. */
 	allowanceHalfDays: number | null;
+	/** Days of notice a request should give (TS-090); 0 asks for none. */
+	noticeDays: number;
 }
 
 /** The kinds in the order they are listed. */

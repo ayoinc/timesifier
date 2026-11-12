@@ -25,6 +25,7 @@ import { formatDuration } from "./durations";
 import { dayNumber, useClockFormat, usePeriodFormat } from "./format";
 import { useNow } from "./live";
 import { PeriodLinks } from "./PeriodLinks";
+import { PeriodHeader } from "./Submission";
 import { type SheetEntry, weekSheet } from "./sheets";
 import type { CalendarData } from "./timesheet.server";
 import { calendarPath } from "./views";
@@ -35,7 +36,10 @@ import { calendarPath } from "./views";
  * totals, and the zoom, by its control or by `-` and `+`, from the month to
  * the week, the week in detail, and the Day view. The address holds the
  * scale, the day and the zoom. The totals are the Day and Week views': an
- * entry counts on the day it starts, and the sums are `weekSheet`'s.
+ * entry counts on the day it starts, and the sums are `weekSheet`'s. Its
+ * header row is the Day and Week views' (`PeriodHeader`), with "Submit week"
+ * on the week's scale. A day that takes no time offers no slot to add time
+ * and says why; a day over its limit says by how much (TS-090).
  */
 export function CalendarView({ data, slug }: { data: CalendarData; slug: string }) {
 	const { scale, zoom, date, days, today, zone, projects } = data;
@@ -120,22 +124,26 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
 				<div className="mt-6">
-					<div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-						<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-							<h2 className="text-title-large">{title}</h2>
+					<PeriodHeader
+						title={title}
+						submission={data.submission}
+						onSaid={setSaid}
+						aside={
 							<p className="text-label-large text-on-surface-variant">
 								{isMonth ? "Month total" : "Week total"}{" "}
 								<span className="text-title-medium text-on-surface tabular-nums">
 									{formatDuration(ofMonth ? ofMonth.total : week.total)}
 								</span>
 							</p>
-						</div>
-						<Zoom
-							level={level}
-							onOut={zoomOut ? () => void navigate(zoomOut, { preventScrollReset: true }) : null}
-							onIn={zoomIn ? () => void navigate(zoomIn, { preventScrollReset: true }) : null}
-						/>
-					</div>
+						}
+						tools={
+							<Zoom
+								level={level}
+								onOut={zoomOut ? () => void navigate(zoomOut, { preventScrollReset: true }) : null}
+								onIn={zoomIn ? () => void navigate(zoomIn, { preventScrollReset: true }) : null}
+							/>
+						}
+					/>
 
 					<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 						{said}
@@ -167,7 +175,7 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 			</ViewTransition>
 
 			<TrackTime
-				data={{ day: slot.day, today, projects, away: data.away }}
+				data={{ day: slot.day, today, projects, rules: data.rules }}
 				start={slot.start}
 				isOpen={task === "track"}
 				onClose={close}

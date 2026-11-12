@@ -5,6 +5,7 @@ import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
@@ -20,6 +21,17 @@ import {
 	setWorkingWeek,
 	workingWeekOf,
 } from "~/leave/leave.server";
+import {
+	LONGEST_NOTICE_DAYS,
+	SHORT_NOTICE_LABELS,
+	SHORT_NOTICE_RULES,
+	ShortNoticeRule,
+	type TimesheetRules,
+	WORK_RULE_LABELS,
+	WORK_RULES,
+	WorkRule,
+} from "~/leave/rules";
+import { setTimesheetRules, timesheetRulesOf } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
 import { isAdministrator } from "~/organisations/access";
 import { deleteOrganisation, renameOrganisation } from "~/organisations/api.server";
@@ -46,9 +58,10 @@ import { FormSheet } from "./FormSheet";
 // they are shown it; anybody else gets 404 here (app/shell/destinations.ts).
 // General holds its name, its default time zone, the day its weeks start on
 // and whether Clients is shown (TS-048). Below it are the working week, the
-// kinds of leave with their allowances, and the public holidays, which apply to
-// everyone in the organisation (TS-061). The person's own account is on My
-// account.
+// kinds of leave with their allowances and notice, and the public holidays,
+// which apply to everyone in the organisation (TS-061), then the timesheet
+// rules: overtime, weekend work and short-notice leave (TS-090). The person's
+// own account is on My account.
 
 const { label } = destination("settings");
 
@@ -61,10 +74,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation, role } = context.get(membershipContext);
 	const canChange = allows(role, { organization: ["update"] });
 	const scope = organisationScope(env.DB, organisation.id);
-	const [week, kinds, holidays] = await Promise.all([
+	const [week, kinds, holidays, rules] = await Promise.all([
 		workingWeekOf(scope),
 		leaveKindsOf(scope),
 		publicHolidaysOf(scope),
+		timesheetRulesOf(organisation.id),
 	]);
 	return {
 		organisation: {
@@ -80,6 +94,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 		zones: canChange ? timeZones() : [],
 		/** The working week, the kinds of leave and the public holidays (TS-061). */
 		leave: { week: [...week], kinds, holidays },
+		/** Overtime, weekend work and short-notice leave (TS-090). */
+		rules,
 	};
 }
 
@@ -111,6 +127,23 @@ const AllowanceDays = z
 		}
 		return days * 2;
 	});
+/** Days of notice a kind asks for, whole; empty is none. */
+const NoticeDays = z
+	.string()
+	.trim()
+	.max(6)
+	.transform((text, context) => {
+		if (text === "") return 0;
+		const days = Number(text);
+		if (!/^\d+$/.test(text) || days > LONGEST_NOTICE_DAYS) {
+			context.addIssue({
+				code: "custom",
+				message: `Type whole days, at most ${LONGEST_NOTICE_DAYS}.`,
+			});
+			return z.NEVER;
+		}
+		return days;
+	});
 /** Each thing this page can ask for. A form says which with its `intent`. */
 const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("rename"), name: Name }),
@@ -137,6 +170,14 @@ const form = z.discriminatedUnion("intent", [
 		enabled: Ticked,
 		needsApproval: Ticked,
 		allowanceDays: AllowanceDays.optional(),
+		// Not sent for sick leave and public holidays, which never need notice.
+		noticeDays: NoticeDays.optional(),
+	}),
+	z.object({
+		intent: z.literal("timesheet-rules"),
+		overtime: WorkRule,
+		weekend: WorkRule,
+		shortNotice: ShortNoticeRule,
 	}),
 	z.object({ intent: z.literal("add-holiday"), day: Day, name: LeaveName }),
 	z.object({ intent: z.literal("remove-holiday"), holidayId: z.string().min(1).max(64) }),
@@ -202,6 +243,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 					enabled: input.enabled,
 					needsApproval: input.needsApproval,
 					allowanceHalfDays: input.allowanceDays ?? null,
+					noticeDays: input.noticeDays ?? 0,
 				});
 				return changed
 					? done(`${input.name} is saved.`)
@@ -215,6 +257,16 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return (await removePublicHoliday(scope, input.holidayId))
 				? done("Public holiday removed.")
 				: declined("That public holiday is no longer there.", 404);
+		}
+
+		case "timesheet-rules": {
+			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
+			await setTimesheetRules(organisation.id, {
+				overtime: input.overtime,
+				weekend: input.weekend,
+				shortNotice: input.shortNotice,
+			});
+			return done("The timesheet rules are saved.");
 		}
 
 		case "delete": {
@@ -231,7 +283,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 type Task = "rename" | "time-zone" | "week-start" | "delete";
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-	const { organisation, zones, leave } = loaderData;
+	const { organisation, zones, leave, rules } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	// The name typed to confirm a deletion. The confirmation waits until it is the name exactly.
@@ -295,6 +347,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 			</Section>
 
 			<LeaveSettings data={leave} onDone={setSaid} />
+
+			<RulesSection rules={rules} onDone={setSaid} />
 
 			{/* Deletion is last, under its own rule. */}
 			{organisation.canDelete && (
@@ -412,6 +466,103 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 				/>
 			</FormSheet>
 		</>
+	);
+}
+
+/**
+ * The timesheet rules (TS-090): whether overtime and work on days nobody is
+ * expected to work are free, need pre-approval or are not allowed, and
+ * whether leave asked for at short notice is allowed with a reason. One sheet
+ * changes all three.
+ */
+function RulesSection({
+	rules,
+	onDone,
+}: {
+	rules: TimesheetRules;
+	onDone: (said: string) => void;
+}) {
+	const [isOpen, setOpen] = useState(false);
+	const close = () => setOpen(false);
+
+	return (
+		<Section
+			id="timesheet-rules"
+			heading="Timesheet rules"
+			lead="What people may track beyond their working week, and how leave asked for at short notice is treated. They apply to everyone in the organisation."
+			className="max-w-200"
+		>
+			<Ledger heading="Rules">
+				<LedgerRows label="Timesheet rules">
+					<LedgerRow
+						title={WORK_RULE_LABELS[rules.overtime]}
+						detail="Overtime. Time past a working day's expected hours."
+					/>
+					<LedgerRow
+						title={WORK_RULE_LABELS[rules.weekend]}
+						detail="Weekend and non-working days. Time on a day the working week has no hours for."
+					/>
+					<LedgerRow
+						title={SHORT_NOTICE_LABELS[rules.shortNotice]}
+						detail="Short-notice leave requests. Leave asked for with less notice than its kind needs."
+					/>
+				</LedgerRows>
+			</Ledger>
+			<div className="mt-4">
+				<Button variant="outlined" onPress={() => setOpen(true)}>
+					Change timesheet rules
+				</Button>
+			</div>
+
+			<FormSheet
+				title="Change the timesheet rules"
+				intent="timesheet-rules"
+				submitLabel="Save"
+				isOpen={isOpen}
+				onClose={close}
+				onDone={onDone}
+			>
+				<p>
+					Unless overtime is allowed freely, every working day is limited to its expected hours plus
+					any overtime approved for it.
+				</p>
+				<RadioGroup label="Overtime" name="overtime" defaultValue={rules.overtime} isRequired>
+					{WORK_RULES.map((rule) => (
+						<Radio key={rule} value={rule}>
+							{WORK_RULE_LABELS[rule]}
+						</Radio>
+					))}
+				</RadioGroup>
+				<RadioGroup
+					label="Weekend and non-working days"
+					name="weekend"
+					defaultValue={rules.weekend}
+					isRequired
+				>
+					{WORK_RULES.map((rule) => (
+						<Radio key={rule} value={rule}>
+							{WORK_RULE_LABELS[rule]}
+						</Radio>
+					))}
+				</RadioGroup>
+				<p>
+					Pre-approval is asked for on Time off and decided like leave. A short-notice request needs
+					a one-line reason, and its approver sees it marked.
+				</p>
+				<RadioGroup
+					label="Short-notice leave requests"
+					name="shortNotice"
+					defaultValue={rules.shortNotice}
+					isRequired
+				>
+					{SHORT_NOTICE_RULES.map((rule) => (
+						<Radio key={rule} value={rule}>
+							{SHORT_NOTICE_LABELS[rule]}
+						</Radio>
+					))}
+				</RadioGroup>
+			</FormSheet>
+		</Section>
 	);
 }
 

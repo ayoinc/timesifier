@@ -518,7 +518,7 @@ describe("the Week view (TS-013, TS-052)", () => {
 		// gives them empty cells (test/timesheet/sheets.test.ts).
 	});
 
-	it("shows Not submitted in its header, and Submit week at its foot", async () => {
+	it("shows Not submitted and Submit week in its header", async () => {
 		clockAt(T0);
 		const text = await textAt(WEEK);
 		expect(text).toContain("Status: Not submitted");

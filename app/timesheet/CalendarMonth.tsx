@@ -7,6 +7,7 @@ import { finishRunningTransition } from "~/shell/transitions";
 import type { Day } from "~/time/calendar";
 import { focusItem, useRovingFocus } from "./calendar-focus";
 import type { MonthSheet } from "./calendar-sheets";
+import { ruleWords } from "./DayRules";
 import { formatDuration } from "./durations";
 import { useDayFormat } from "./format";
 import type { CalendarData } from "./timesheet.server";
@@ -17,6 +18,8 @@ import { calendarPath, dayPath } from "./views";
  * start, each day with its total and a bar of its share of the busiest day,
  * today marked, the days of other months muted, and each week's total at the
  * row's end. A day opens the Day view; a week's total opens the week calendar.
+ * A day of the month with a limit says what is left of it, one that takes no
+ * time says "Closed" and why, and one over its limit by how much (TS-090).
  *
  * For assistive technology it is a grid of weeks by days; arrow keys move
  * between days, Home and End to a week's ends, and Enter opens.
@@ -54,7 +57,7 @@ export function CalendarMonth({
 	/** The month, as its heading reads: `November 2026`. */
 	title: string;
 }) {
-	const { today, lockedDays, statuses } = data;
+	const { today, lockedDays, statuses, rules } = data;
 	const formatLong = useDayFormat();
 	const weekdayShort = useDateFormatter({ weekday: "short", timeZone: "UTC" });
 	const weekdayNarrow = useDateFormatter({ weekday: "narrow", timeZone: "UTC" });
@@ -150,6 +153,8 @@ export function CalendarMonth({
 								const status = statuses[day];
 								const muted = !inMonth || status?.quiet;
 								const share = sheet.busiest === 0 ? 0 : Math.round((total / sheet.busiest) * 12);
+								const rule = inMonth && !locked ? rules.find((r) => r.day === day) : undefined;
+								const words = ruleWords(rule);
 								return (
 									<td
 										key={day}
@@ -197,6 +202,18 @@ export function CalendarMonth({
 											>
 												{total > 0 ? formatDuration(total) : ""}
 											</span>
+											{words && (
+												<span
+													aria-hidden="true"
+													title={rule?.closedReason ?? undefined}
+													className={cx(
+														"truncate text-label-small",
+														words.over ? "text-error" : "text-on-surface-variant",
+													)}
+												>
+													{words.text}
+												</span>
+											)}
 											<span
 												aria-hidden="true"
 												className={cx(
@@ -218,6 +235,8 @@ export function CalendarMonth({
 													formatDuration(total),
 													status?.label,
 													locked ? "submitted" : null,
+													words?.text,
+													rule?.closedReason,
 												]
 													.filter(Boolean)
 													.join(", ")}

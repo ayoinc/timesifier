@@ -2,6 +2,7 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
+import { startRefusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
 
@@ -36,26 +37,26 @@ export interface StartTimer {
 	now: number;
 }
 
-/** Why a timer was not started: no active project of this organisation by that id, or a locked day. */
-export type NotStarted = "no-project" | "locked";
-
 /**
  * Starts a timer for `userId` on an active project of the organisation. A
  * running entry is stopped at the same instant in the same batch. Refused when
  * the project is archived or not the organisation's, or when the day the new
  * entry starts on or the day the running one started on is in a submitted or
- * approved period.
+ * approved period, and when today takes no more time: a public holiday,
+ * whole-day leave, or nothing left of its limit (`startRefusalOf`).
  */
 export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const { userId, projectId, description, zone, now } = start;
 	if (!(await findActiveProject(scope, projectId))) {
-		return { ok: false as const, reason: "no-project" as NotStarted };
+		return { ok: false as const, reason: "no-project" as const };
 	}
 	const running = await runningEntry(scope, userId);
 	const days = [dayOf(now, zone), ...(running ? [dayOf(running.startedAt, zone)] : [])];
 	if ((await lockedDays(scope, userId, days)).size > 0) {
-		return { ok: false as const, reason: "locked" as NotStarted };
+		return { ok: false as const, reason: "locked" as const };
 	}
+	const over = await startRefusalOf(scope, userId, zone, now);
+	if (over) return { ok: false as const, reason: "limit" as const, message: over };
 	const at = new Date(now);
 	const id = uuidv7();
 	const entry = { type: "time_entry", ownerId: userId } as const;

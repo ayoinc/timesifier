@@ -4,6 +4,8 @@ import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
 import { type Filter, type OrganisationScope, organisationScope, type ScopedAccessor } from "~/db";
 import { type DayKind, dayLabel } from "~/leave/days";
 import { daysOf } from "~/leave/leave.server";
+import type { DayRule } from "~/leave/rules";
+import { dayRulesOf } from "~/leave/rules.server";
 import type { Membership } from "~/organisations/membership.server";
 import { lockedDays } from "~/periods/locks.server";
 import {
@@ -125,7 +127,7 @@ export interface TimesheetBase {
 	running: SheetEntry | null;
 }
 
-/** Where a period stands, and what its one submission action reads (TS-046): the Week view's and the Day view's. */
+/** Where a period stands, and what its one submission action reads (TS-046): the Day, Week and Calendar views'. */
 export interface PeriodSubmission {
 	period: PeriodDays;
 	state: PeriodState;
@@ -136,6 +138,8 @@ export interface PeriodSubmission {
 	runsInWeek: boolean;
 	/** Whether the week has begun: a week to come cannot be submitted. */
 	started: boolean;
+	/** The days of the week over their limit: the week cannot be submitted until each is corrected (TS-090). */
+	over: DayRule[];
 }
 
 /** One day of the person's week as leave sees it (TS-061). */
@@ -182,12 +186,14 @@ export interface DayData extends TimesheetBase {
 	locked: boolean;
 	/** The seven days of the period the day is in, each with its total, and the period's: the Week view's sums (TS-056). */
 	week: Pick<WeekSheet, "days" | "total">;
-	/** The period the day is in, for the submission at the view's foot (TS-056). */
+	/** The period the day is in, for the submission in the view's header row (TS-056, W29). */
 	submission: PeriodSubmission;
 	/** The steps of getting started and whether each is done, or null when the list is not shown (TS-056). */
 	gettingStarted: GettingStarted | null;
 	/** The days of the period as leave sees them, and the time expected over it (TS-061). */
 	away: WeekAway;
+	/** Each day of the period with its limit, what is left and what is over (TS-090). */
+	rules: DayRule[];
 }
 
 export interface WeekData extends TimesheetBase, PeriodSubmission {
@@ -200,6 +206,8 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	lockedDays: Day[];
 	/** The days of the week as leave sees them, and the time expected over it (TS-061). */
 	away: WeekAway;
+	/** Each day of the week with its limit, what is left and what is over (TS-090). */
+	rules: DayRule[];
 }
 
 export interface HistoryData extends TimesheetBase {
@@ -229,6 +237,10 @@ export interface CalendarData extends TimesheetBase {
 	away: WeekAway;
 	/** What each day is besides its time: leave, a public holiday or a day not worked, muted when nothing is expected on it. */
 	statuses: Partial<Record<Day, DayStatus>>;
+	/** Each day shown with its limit, what is left and what is over (TS-090). */
+	rules: DayRule[];
+	/** The period shown and its submission, on the week's scale; null on the month's, which shows several. */
+	submission: PeriodSubmission | null;
 }
 
 export type TimesheetData = DayData | WeekData | CalendarData | HistoryData;
@@ -278,6 +290,11 @@ export async function timesheetData(
 				lockedDays(scope, user.id, days),
 				weekAway(scope, user.id, { startsOn: first, endsOn: last }),
 			]);
+			const period = month === null ? { startsOn: first, endsOn: last } : null;
+			const [rules, row] = await Promise.all([
+				dayRulesOf(scope, user.id, days, entries, zone, now),
+				period ? periodOf(scope, user.id, period.startsOn) : null,
+			]);
 			return {
 				...base,
 				view: "calendar",
@@ -294,6 +311,8 @@ export async function timesheetData(
 						label === null ? [] : [[day, { label, quiet: expectedMinutes === 0 }]],
 					),
 				),
+				rules,
+				submission: period ? submissionOf(period, row, entries, rules, zone, now) : null,
 			};
 		}
 		case "history": {
@@ -304,9 +323,9 @@ export async function timesheetData(
 }
 
 /**
- * The entries of `userId` in `period`, and where the period stands. The Week
- * view and the Day view read both from here, so the totals and the
- * submission each shows are the same.
+ * The entries of `userId` in `period`, each of its days with its limit, and
+ * where the period stands. The Week view and the Day view read all three from
+ * here, so the totals, the limits and the submission each shows are the same.
  */
 async function periodWithEntries(
 	scope: OrganisationScope,
@@ -314,22 +333,37 @@ async function periodWithEntries(
 	period: PeriodDays,
 	zone: string,
 	now: number,
-): Promise<{ entries: SheetEntry[]; submission: PeriodSubmission }> {
+): Promise<{ entries: SheetEntry[]; rules: DayRule[]; submission: PeriodSubmission }> {
+	const days = daysFrom(period.startsOn, period.endsOn);
 	const [entries, row] = await Promise.all([
 		entriesStartingIn(scope, userId, periodBounds(period, zone)),
 		periodOf(scope, userId, period.startsOn),
 	]);
+	const rules = await dayRulesOf(scope, userId, days, entries, zone, now);
+	return { entries, rules, submission: submissionOf(period, row, entries, rules, zone, now) };
+}
+
+/** Where `period` stands, given its row of `periods` (null before it is submitted), the entries read around it and its days' limits. */
+function submissionOf(
+	period: PeriodDays,
+	row: { status: PeriodStatus; comment: string | null } | null,
+	entries: readonly SheetEntry[],
+	rules: readonly DayRule[],
+	zone: string,
+	now: number,
+): PeriodSubmission {
 	const status = row?.status ?? null;
+	const inPeriod = (day: Day) => period.startsOn <= day && day <= period.endsOn;
 	return {
-		entries,
-		submission: {
-			period,
-			state: periodState(status),
-			status,
-			comment: row?.status === "returned" ? row.comment : null,
-			runsInWeek: entries.some((entry) => entry.endedAt === null),
-			started: period.startsOn <= dayOf(now, zone),
-		},
+		period,
+		state: periodState(status),
+		status,
+		comment: row?.status === "returned" ? row.comment : null,
+		runsInWeek: entries.some(
+			(entry) => entry.endedAt === null && inPeriod(dayOf(entry.startedAt, zone)),
+		),
+		started: period.startsOn <= dayOf(now, zone),
+		over: rules.filter((rule) => rule.overMinutes > 0 && inPeriod(rule.day)),
 	};
 }
 
@@ -341,7 +375,7 @@ async function dayData(
 	zone: string,
 	now: number,
 ): Promise<Omit<DayData, keyof TimesheetBase | "gettingStarted">> {
-	const [{ entries: ofPeriod, submission }, locked, away] = await Promise.all([
+	const [{ entries: ofPeriod, rules, submission }, locked, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
 		lockedDays(scope, userId, [day]),
 		weekAway(scope, userId, period),
@@ -357,6 +391,7 @@ async function dayData(
 		week: { days, total },
 		submission,
 		away,
+		rules,
 	};
 }
 
@@ -370,7 +405,7 @@ async function weekData(
 ): Promise<Omit<WeekData, keyof TimesheetBase>> {
 	const days = daysFrom(period.startsOn, period.endsOn);
 	const before = periodAfter(period, -1);
-	const [{ entries, submission }, previous, locked, away] = await Promise.all([
+	const [{ entries, rules, submission }, previous, locked, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
 		entriesStartingIn(scope, userId, periodBounds(before, zone)),
 		lockedDays(scope, userId, days),
@@ -385,6 +420,7 @@ async function weekData(
 		lastWeekProjects: [...new Set(previous.map((e) => e.projectId))].filter((id) => active.has(id)),
 		lockedDays: days.filter((day) => locked.has(day)),
 		away,
+		rules,
 	};
 }
 

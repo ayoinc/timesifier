@@ -62,6 +62,7 @@ import {
 	timeEntries,
 	webhooks,
 	workingDays,
+	workRequests,
 } from "./schema";
 
 /** A table whose rows belong to one organisation. A table without the column is rejected by the compiler. */
@@ -258,6 +259,7 @@ export const tenantTables = {
 	webhooks,
 	importJobs,
 	calendarFeeds,
+	workRequests,
 } as const;
 
 type Accessors = {

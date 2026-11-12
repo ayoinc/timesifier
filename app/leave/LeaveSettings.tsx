@@ -7,7 +7,8 @@ import { TextField } from "~/components/TextField";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { Section } from "~/shell/PageHeading";
 
-import { halfDaysLabel, LEAVE_NAME_MAX_LENGTH } from "./kinds";
+import { halfDaysLabel, type KindKey, LEAVE_NAME_MAX_LENGTH } from "./kinds";
+import { heldToNotice, LONGEST_NOTICE_DAYS, noticeLabel } from "./rules";
 import { minutesLabel, spanLabel, WEEKDAY_NAMES, workingWeekLabel } from "./words";
 
 // Workspace settings for leave (TS-061): the working week everyone is
@@ -19,11 +20,13 @@ export interface LeaveSettingsData {
 	week: number[];
 	kinds: {
 		id: string;
-		key: string;
+		key: KindKey;
 		name: string;
 		enabled: boolean;
 		needsApproval: boolean;
 		allowanceHalfDays: number | null;
+		/** Days of notice a request should give (TS-090); always 0 for sick leave and public holidays. */
+		noticeDays: number;
 	}[];
 	holidays: { id: string; day: string; name: string }[];
 }
@@ -32,6 +35,14 @@ type Task = "week" | "kind" | "add-holiday" | "remove-holiday";
 
 /** Hours as the working week's fields show them: 450 is "7:30", none is empty. */
 const hoursText = (minutes: number) => (minutes > 0 ? minutesLabel(minutes) : "");
+
+/** The notice a kind asks for, as its row reads: "14 days' notice", "No notice", "Never needs notice". */
+const noticeText = (kind: { key: KindKey; noticeDays: number }) => {
+	if (!heldToNotice(kind)) return "Never needs notice";
+	return kind.noticeDays > 0
+		? noticeLabel({ noticeDays: kind.noticeDays, shortNotice: false })
+		: "No notice";
+};
 
 export function LeaveSettings({
 	data,
@@ -75,7 +86,7 @@ export function LeaveSettings({
 			<Section
 				id="leave-kinds"
 				heading="Leave kinds"
-				lead="The kinds of leave people ask for. Rename one, switch it off, set its yearly allowance and whether it waits for a manager's approval."
+				lead="The kinds of leave people ask for. Rename one, switch it off, set its yearly allowance, the notice it needs and whether it waits for a manager's approval."
 				className="max-w-200"
 			>
 				<Ledger heading="Kinds">
@@ -93,6 +104,7 @@ export function LeaveSettings({
 												k.allowanceHalfDays === null
 													? "No allowance"
 													: `${halfDaysLabel(k.allowanceHalfDays)} a year`,
+												noticeText(k),
 											].join(" · ")
 								}
 								action={
@@ -220,6 +232,19 @@ export function LeaveSettings({
 									maxLength={5}
 									description="In whole or half days, as 25 or 12.5. Empty is no allowance: nothing is counted against it."
 								/>
+								{heldToNotice(kind) ? (
+									<TextField
+										label="Notice (days)"
+										name="noticeDays"
+										defaultValue={kind.noticeDays > 0 ? `${kind.noticeDays}` : ""}
+										inputMode="numeric"
+										autoComplete="off"
+										maxLength={3}
+										description={`Whole days between asking and the first day off, at most ${LONGEST_NOTICE_DAYS}. Empty or 0 is none. Asking later needs a reason, or is refused, as Timesheet rules say.`}
+									/>
+								) : (
+									<p>Never needs notice: people ask for it when they are ill.</p>
+								)}
 							</>
 						)}
 					</>

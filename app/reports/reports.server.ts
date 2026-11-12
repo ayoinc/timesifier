@@ -6,7 +6,7 @@ import { data } from "react-router";
 
 import { type OrganisationScope, organisationScope, users } from "~/db";
 import { expectedMinutes, leaveHalfDays, leaveMinutes } from "~/leave/days";
-import { calendarOf, leaveContext } from "~/leave/leave.server";
+import { calendarOf, leaveContext, shortNoticeCounts } from "~/leave/leave.server";
 import { type Access, type TimeScope, timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { type Membership, notFound } from "~/organisations/membership.server";
@@ -225,6 +225,8 @@ export interface PersonLine {
 	/** Minutes of approved leave in the range, and the half days they make. */
 	leaveMinutes: number;
 	leaveHalfDays: number;
+	/** Requests for leave starting in the range that were made at short notice (TS-090). */
+	shortNotice: number;
 }
 
 /**
@@ -240,12 +242,11 @@ export async function peopleOfReport(
 	const { people, choices, days, scope } = request;
 	const listed = people.everyone ? choices : choices.filter((c) => people.people.includes(c.id));
 	if (listed.length === 0) return [];
-	const context = await leaveContext(
-		scope,
-		listed.map((p) => p.id),
-		days.first,
-		days.last,
-	);
+	const ids = listed.map((p) => p.id);
+	const [context, shortNotice] = await Promise.all([
+		leaveContext(scope, ids, days.first, days.last),
+		shortNoticeCounts(scope, ids, days.first, days.last),
+	]);
 	const range = daysFrom(days.first, days.last);
 	const worked = new Map<string, number>();
 	for (const row of rows) {
@@ -260,6 +261,7 @@ export async function peopleOfReport(
 			expectedMinutes: expectedMinutes(calendar, range),
 			leaveMinutes: leaveMinutes(calendar, range),
 			leaveHalfDays: leaveHalfDays(calendar, range),
+			shortNotice: shortNotice.get(person.id) ?? 0,
 		};
 	});
 }

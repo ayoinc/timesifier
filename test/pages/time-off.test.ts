@@ -68,7 +68,12 @@ async function ask(who: Person, fields: Record<string, string>, path = TIME_OFF)
 	return { status: response.status, said: await response.text() };
 }
 
-/** Asks for leave of `key` as `who`, and returns the answer and the id of the request made, if any. */
+/**
+ * Asks for leave of `key` as `who`, and returns the answer and the id of the
+ * request made, if any. Most of these ask a few days ahead, which is short
+ * notice for annual, study, parental and unpaid leave (TS-090), so a reason
+ * is sent unless `more` says otherwise; sick leave ignores it.
+ */
 async function requestLeave(
 	who: Person,
 	key: "annual" | "sick" | "study" | "parental" | "unpaid" | "holiday",
@@ -82,6 +87,7 @@ async function requestLeave(
 		kindId: await kindOf(acme.id, key),
 		startsOn,
 		endsOn,
+		noticeReason: "Arranged with the team",
 		...more,
 	});
 	const made = (await value<number>("select count(*) from leave_requests")) !== before;
@@ -527,9 +533,13 @@ describe("the Requests tab", () => {
 			expect(text).toContain("Your balance, 2026");
 			expect(text).not.toContain("Waiting for you");
 			expect(text).toContain("Study leave · Waiting for approval");
-			for (const other of ["grace@example.com", "linus@example.com", "Sick leave · Approved"]) {
+			for (const other of ["grace@example.com", "Sick leave · Approved"]) {
 				expect(text).not.toContain(other);
 			}
+			// Linus's sick leave is among the upcoming leave of the people Bob
+			// works with (TS-090), but as "On leave", never by its kind.
+			expect(text).toContain("linus@example.com · On leave");
+			expect(text).not.toMatch(/linus@example\.com · Sick/);
 		}
 	});
 
@@ -546,8 +556,9 @@ describe("the Requests tab", () => {
 
 		const html = await pageBody(await open(`${TIME_OFF}?show=requests`, mona));
 		const text = textOf(html);
+		// Short notice and its reason (TS-090) come between the days and the note.
 		expect(text).toMatch(
-			/grace@example\.com · Annual leave 16–20 November 2026 · 5 days “Wedding”/,
+			/grace@example\.com · Annual leave 16–20 November 2026 · 5 days .*“Wedding”/,
 		);
 		expect(text).toMatch(
 			/Approved, to come .*grace@example\.com · Sick leave 25 November 2026 · 1 day/,

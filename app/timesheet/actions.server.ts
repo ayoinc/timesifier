@@ -3,6 +3,9 @@ import { data } from "react-router";
 import * as z from "zod";
 
 import { organisationScope } from "~/db";
+import { overLabel } from "~/leave/rules";
+import { daysOver } from "~/leave/rules.server";
+import { shortDay } from "~/leave/words";
 import { parseRequest } from "~/lib/validate";
 import type { Membership } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -73,8 +76,8 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("put-away") }),
 ]);
 
-/** What each refusal says to the person, and the status it is answered with. */
-const REFUSALS: Record<NotWritten, [string, number]> = {
+/** What each refusal says to the person, and the status it is answered with. A day's limit says its own. */
+const REFUSALS: Record<Exclude<NotWritten, "limit">, [string, number]> = {
 	"no-project": ["Choose an active project of this organisation.", 400],
 	locked: [
 		"That week is submitted or approved, so its entries cannot be changed. Withdraw it first.",
@@ -89,7 +92,19 @@ const REFUSALS: Record<NotWritten, [string, number]> = {
 	],
 };
 
-const refusal = (reason: NotWritten) => declined(...REFUSALS[reason]);
+/**
+ * A refused change in words. A day's limit says what it has left (TS-090),
+ * and so does a day with no room left before its end or now (TS-091, W08).
+ */
+const refusal = (
+	refused:
+		| { reason: Exclude<NotWritten, "limit"> }
+		| { reason: "limit" | "day-full"; message: string },
+) => {
+	if (refused.reason === "limit") return declined(refused.message, 409);
+	if (refused.reason === "day-full") return declined(refused.message);
+	return declined(...REFUSALS[refused.reason]);
+};
 
 /** A typed day and time as an instant in `zone`, or null when the clocks skip that time. */
 function typedInstant(date: Day, clock: string, zone: string) {
@@ -125,7 +140,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 					zone,
 					now,
 				});
-				return started.ok ? done("Timer started.") : refusal(started.reason);
+				return started.ok ? done("Timer started.") : refusal(started);
 			}
 			const hours = TypedHours.safeParse(input.hours);
 			if (!hours.success) return declined(hours.error.issues[0]?.message ?? "Type hours as 1.5.");
@@ -142,31 +157,41 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				zone,
 				now,
 			});
-			if (added.ok) return done("Entry saved.");
-			return added.reason === "day-full" ? declined(added.message) : refusal(added.reason);
+			return added.ok ? done("Entry saved.") : refusal(added);
 		}
 
+		// A timer that ran past what its day takes is kept; the day is flagged
+		// over until an entry is trimmed or moved (TS-090).
 		case "stop": {
 			const stopped = await stopTimer(scope, user.id, now);
-			return done(stopped ? "Timer stopped." : "No timer was running.");
+			if (!stopped) return done("No timer was running.");
+			const day = dayOf(stopped.startedAt, zone);
+			const [over] = await daysOver(scope, user.id, day, day, zone, now);
+			return done(
+				over
+					? `Timer stopped. ${shortDay(day)} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
+					: "Timer stopped.",
+			);
 		}
 
 		case "edit": {
 			const startedAt = typedInstant(input.date, input.start, zone);
 			const endedAt = typedInstant(input.date, input.end, zone);
 			if (startedAt === null || endedAt === null) return declined(SKIPPED);
-			const written = await editEntry(scope, user.id, zone, input.entryId, {
-				projectId: input.projectId,
-				description: input.description,
-				startedAt,
-				endedAt,
-			});
-			return written.ok ? done("Entry saved.") : refusal(written.reason);
+			const written = await editEntry(
+				scope,
+				user.id,
+				zone,
+				input.entryId,
+				{ projectId: input.projectId, description: input.description, startedAt, endedAt },
+				now,
+			);
+			return written.ok ? done("Entry saved.") : refusal(written);
 		}
 
 		case "delete": {
 			const deleted = await deleteEntry(scope, user.id, zone, input.entryId);
-			return deleted.ok ? done("Entry deleted.") : refusal(deleted.reason);
+			return deleted.ok ? done("Entry deleted.") : refusal(deleted);
 		}
 
 		case "cell": {
@@ -179,8 +204,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				zone,
 				now,
 			});
-			if (set.ok) return done("Saved.");
-			return set.reason === "day-full" ? declined(set.message) : refusal(set.reason);
+			return set.ok ? done("Saved.") : refusal(set);
 		}
 
 		case "submit": {
@@ -192,10 +216,14 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				now,
 			});
 			if (submitted.ok) return done("Week submitted. Its entries are locked until it is decided.");
+			const over = (("over" in submitted && submitted.over) || [])
+				.map((d) => `${shortDay(d.day)} ${overLabel(d.overMinutes).toLowerCase()}`)
+				.join(", ");
 			const problem: Record<NotMoved, string> = {
 				"not-yet": "A week can be submitted once it has begun.",
 				running: "Stop the timer before you submit the week.",
 				"not-from-here": "This week is already submitted or approved.",
+				over: `Correct the days over their limit before you submit the week: ${over}.`,
 			};
 			return declined(problem[submitted.reason], 409);
 		}

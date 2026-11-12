@@ -92,6 +92,16 @@ export const organisations = sqliteTable("organisations", {
 	budgetCountsNonBillable: integer("budget_counts_non_billable", { mode: "boolean" })
 		.notNull()
 		.default(true),
+	/**
+	 * Time beyond a working day's expected hours (TS-090): `free`, allowed
+	 * freely; `approval`, only with approved overtime; `none`, not allowed.
+	 * `app/leave/rules.ts` reads it.
+	 */
+	overtimeRule: text("overtime_rule").notNull().default("free"),
+	/** Time on a day the working week does not work (TS-090): `free`, `approval` or `none`. */
+	weekendRule: text("weekend_rule").notNull().default("free"),
+	/** Leave asked for at shorter notice than its kind's (TS-090): `with-reason`, allowed with a reason, or `refused`. */
+	shortNotice: text("short_notice").notNull().default("with-reason"),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
 });
@@ -548,6 +558,12 @@ export const leaveRequests = sqliteTable(
 		decidedBy: text("decided_by").references(() => users.id),
 		decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
 		comment: text("comment"),
+		/** Days from the day it was made, in the person's zone, to its first day (TS-090); negative for leave already begun. */
+		noticeDays: integer("notice_days").notNull().default(0),
+		/** Whether it gave less notice than its kind asked for when it was made (TS-090). */
+		shortNotice: integer("short_notice", { mode: "boolean" }).notNull().default(false),
+		/** Why it was asked for at short notice: one line, the person's own. */
+		noticeReason: text("notice_reason"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
@@ -2012,6 +2028,64 @@ export const calendarFeeds = sqliteTable(
 			"calendar_feeds_team_for_team_kind",
 			sql`(${table.kind} = 'team') = (${table.teamId} IS NOT NULL)`,
 		),
+	],
+);
+
+/**
+ * A request to work beyond what the organisation allows freely (TS-090):
+ * `overtime`, more than a working day's expected hours, or `weekend`, time on
+ * a day the working week does not work. It covers a first to a last local
+ * day, both included, at up to `minutesPerDay` on each day it applies to. It
+ * is decided as leave is: `status` and the columns of the decision mean what
+ * they mean on `leave_requests`, and it goes with its person's membership.
+ */
+export const workRequests = sqliteTable(
+	"work_requests",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		/** `overtime` or `weekend`. */
+		kind: text("kind").notNull(),
+		startsOn: text("starts_on").notNull(),
+		endsOn: text("ends_on").notNull(),
+		minutesPerDay: integer("minutes_per_day").notNull(),
+		/** Why, in the person's words. */
+		reason: text("reason"),
+		/** `pending`, `approved`, `refused`, `withdrawn` or `cancelled`. */
+		status: text("status").notNull(),
+		decidedBy: text("decided_by").references(() => users.id),
+		decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+		comment: text("comment"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("work_requests_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("work_requests_organisation_id_user_id_starts_on_idx").on(
+			table.organisationId,
+			table.userId,
+			table.startsOn,
+		),
+		index("work_requests_organisation_id_status_starts_on_idx").on(
+			table.organisationId,
+			table.status,
+			table.startsOn,
+		),
+		foreignKey({
+			name: "work_requests_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
+		check("work_requests_kind_known", sql`${table.kind} IN ('overtime', 'weekend')`),
+		check(
+			"work_requests_status_known",
+			sql`${table.status} IN ('pending', 'approved', 'refused', 'withdrawn', 'cancelled')`,
+		),
+		check("work_requests_ends_on_or_after_start", sql`${table.endsOn} >= ${table.startsOn}`),
+		check("work_requests_minutes_in_range", sql`${table.minutesPerDay} BETWEEN 1 AND 1440`),
 	],
 );
 
