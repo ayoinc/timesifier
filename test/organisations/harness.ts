@@ -101,10 +101,11 @@ export function fullOrganisation(cookie: string, organizationId: string): Promis
 export async function seedOrganisation(name = "Acme", slug = "acme") {
 	const id = uuidv7();
 	const now = Date.now();
+	// Without the plan's columns: some tests seed a database migrated only part way.
 	await env.DB.prepare(
-		"insert into organisations (id, name, slug, seats, created_at, updated_at) values (?, ?, ?, ?, ?, ?)",
+		"insert into organisations (id, name, slug, created_at, updated_at) values (?, ?, ?, ?, ?)",
 	)
-		.bind(id, name, slug, ROOM_FOR_EVERYONE, now, now)
+		.bind(id, name, slug, now, now)
 		.run();
 	return { id, name, slug };
 }

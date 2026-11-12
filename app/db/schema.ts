@@ -56,7 +56,7 @@ export const users = sqliteTable("users", {
 	timeZone: text("time_zone"),
 	/**
 	 * Whether the person gets the newsletter (TS-099): off until they ask for it,
-	 * on My account or as they sign up. Every newsletter carries a link that turns it off.
+	 * on My account or on the sign-in page, as their account is made. Every newsletter carries a link that turns it off.
 	 */
 	newsletter: integer("newsletter", { mode: "boolean" }).notNull().default(false),
 	/**
