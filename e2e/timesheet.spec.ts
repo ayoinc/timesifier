@@ -200,14 +200,18 @@ test.describe("the timer", () => {
 		// One row of 56px straight above the 64px bar, and nothing else fixed across the page.
 		expect(drawn.height).toBe(56);
 		expect(drawn.y + drawn.height).toBe(bar.y);
-		const fixed = await page.evaluate(() =>
-			[...document.querySelectorAll<HTMLElement>("body *")]
-				.filter((element) => getComputedStyle(element).position === "fixed")
-				.map((element) => element.getBoundingClientRect())
-				.filter(({ width, height }) => height > 0 && width >= window.innerWidth * 0.9)
-				.reduce((sum, { height }) => sum + height, 0),
-		);
-		expect(fixed).toBe(120);
+		// Polled: the pending bar is a fixed row too, for as long as a load runs.
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					[...document.querySelectorAll<HTMLElement>("body *")]
+						.filter((element) => getComputedStyle(element).position === "fixed")
+						.map((element) => element.getBoundingClientRect())
+						.filter(({ width, height }) => height > 0 && width >= window.innerWidth * 0.9)
+						.reduce((sum, { height }) => sum + height, 0),
+				),
+			)
+			.toBe(120);
 		await expect(
 			navigation(page).getByRole("button", { name: "Track time", exact: true }),
 		).toHaveCount(0);
