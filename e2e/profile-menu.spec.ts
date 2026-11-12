@@ -74,7 +74,9 @@ test("opens by a click and holds Account settings, My time report and Sign out, 
 		"My time report",
 		"Sign out",
 	]);
-	await expect(menu.getByText(organisation.name, { exact: true })).toBeVisible();
+	await expect(
+		page.locator("[data-trigger=MenuTrigger]").getByText(organisation.name, { exact: true }),
+	).toBeVisible();
 	await expect(page.getByText("Ada King Lovelace", { exact: true })).toBeVisible();
 	await expect(page.getByText(person.email, { exact: true })).toBeVisible();
 
