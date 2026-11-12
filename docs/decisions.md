@@ -475,6 +475,25 @@ An organisation keeps named work schedules. Each says, for every weekday it work
 
 **What it costs.** Every reader of expected hours resolves the person's schedule day by day, which reads the organisation's schedules and assignments once a request. A person assignment carries `source_kind` (`manual` now) and `source_id`, so that a contract (TS-098) can own it later without a second way of giving a person hours. `working_days` is no longer read; it is dropped by a later migration that ships alone.
 
+### 36. The platform console: owners by secret, a step-up per session, metadata only
+
+Decided by the owner on 2026-11-12 (TS-099).
+
+- **Who.** The platform's owners are the addresses in the deployment secret `PLATFORM_OWNERS` (comma-separated), required in production by `scripts/deploy-config.ts`; a preview without it has the console closed. Being one gives no role in any organisation. Anyone else, signed in or not, gets the console's 404.
+- **Step-up.** `/platform` asks each session for a fresh code emailed to the owner's address (`app/platform/step-up.server.ts`): a keyed hash bound to the session, five minutes, three wrong tries, five codes a session; a proved session keeps the console open for twelve hours at most and ends with the session (`platform_step_ups`, cascading from `sessions`).
+- **Metadata only.** The console reads organisations, plans and seats, member and invitation counts, sign-ups, last activity (from sessions) and row counts of entries, projects and invoices (`app/db/platform.ts`), never an organisation's content. Its own log is `platform_events`.
+- **Support access.** An organisation's owner grants 24 or 72 hours, revocable; one grant at a time (`support_grants`, a tenant table). While it lasts a stepped-up platform owner reads the organisation's people, projects, latest entries and invoices through `organisationScope`, read-only. Granting, revoking and every reading are recorded in the organisation's activity log and the platform's.
+- **Mail.** Product announcements go to every open account until turned off; the newsletter only to those who opted in (on the sign-in page, read only when the account is created, or on My account), default off. Every message carries a signed one-click unsubscribe link and `List-Unsubscribe`/`List-Unsubscribe-Post` headers; deliveries are queued and sent by the minute cron, at most 1,000 a day.
+- **Plans.** Free (5 seats), Team (25), Business (100); a platform owner may set another number of seats and a trial end, after which the organisation is on Free. Members and pending invitations each take a seat; owners are warned at the limit and an invitation past it is refused (`SEATS_FULL`). Nothing is paid yet.
+- **Deleting an account on request.** The person's own data goes: name and address (the `users` row stays as "Deleted person" at `<id>@deleted.invalid`), sessions, sign-in history, mail choices, memberships and what hangs on them, invitations they sent; an organisation they were alone in goes with them. The organisations' records stay: time entries and expenses keep their `user_id` and amounts so reports, invoices and payroll still add up. Receipts of the person's expenses are deleted from R2 and from the expense unless the expense is on an issued (non-draft) invoice. Refused while the person is the only owner of an organisation with other members. A person's data export is a ZIP of JSON and CSV the person downloads themselves; the platform can only send them the link.
+- **Wellbeing.** Two anonymised shares per organisation, shown to its owners only and never to the platform: people over the working week in 3 of the last 4 weeks, and people with no approved leave in 182 days; rounded to 10%, hidden below 5 people.
+
+| Option                                      | Evidence                                                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Allowlist secret plus step-up (chosen)      | Nothing the application or a copy of the database does makes somebody an owner; a stolen session alone does not open the console. |
+| A `platform_role` column on `users`         | One write to the database makes an owner; an injection or a support slip escalates to every organisation.                        |
+| Platform owners read organisations directly | Simplest, and what the owner refused: an organisation's data is its own unless it grants access.                                 |
+
 ### 38. The brand everywhere: images attached to the message, documents in the organisation's name
 
 Decided by the owner on 2026-11-12 (TS-100).
