@@ -4,7 +4,14 @@ import { organisationPath } from "~/shell/destinations";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, value } from "../organisations/harness";
-import { allRoutes, isMoved, isNotFound, routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
+import {
+	addressFor,
+	allRoutes,
+	isMoved,
+	isNotFound,
+	routesAtOrUnder,
+	STAND_IN_ORGANISATION,
+} from "../routes";
 import { open, openData, type Person, pageBody, person, submit } from "./harness";
 
 // Criterion 4 of card TS-009: a member of one organisation receives 404 for
@@ -65,11 +72,12 @@ afterEach(() => {
 /** Ada owns Acme, at /app/acme. Grace owns Initech and asks for Acme's pages. */
 async function twoOrganisations() {
 	const ada = await person(mailbox, "ada@example.com");
-	expect((await createOrganisation(ada.cookie, "Acme")).slug).toBe(THEIRS);
+	const acme = await createOrganisation(ada.cookie, "Acme");
+	expect(acme.slug).toBe(THEIRS);
 	grace = await person(mailbox, "grace@example.com");
 	await createOrganisation(grace.cookie, "Initech");
 	expect(await value("select count(*) from organisations where slug = ?", NOBODYS)).toBe(0);
-	return { ada };
+	return { ada, acme };
 }
 
 describe("the list of an organisation's routes", () => {
@@ -81,7 +89,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, the exports of Reports, the Expenses view, a receipt, the Contractors report and its export, the export of the Activity log, an entry's history, My account, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the Contractors report and its export, the export of the Activity log, an entry's history, My account, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -89,6 +97,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/time-off",
 				"/app/acme/expenses",
 				"/app/acme/projects",
+				"/app/acme/projects/rates",
+				"/app/acme/projects/x",
 				"/app/acme/clients",
 				"/app/acme/tasks",
 				"/app/acme/invoices",
@@ -132,8 +142,11 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/integrations.import",
 			"routes/app/invitations",
 			"routes/app/members",
+			"routes/app/project",
 			"routes/app/projects",
+			"routes/app/rates",
 			"routes/app/settings",
+			"routes/app/tasks",
 			"routes/app/team",
 			"routes/app/time-off",
 			"routes/app/timesheet",
@@ -143,8 +156,9 @@ describe("the list of an organisation's routes", () => {
 
 describe("a member of one organisation asking for another organisation's address", () => {
 	it.each(ofAnOrganisation)("$id: the page $address is 404", async (route) => {
-		const { address } = route;
-		const { ada } = await twoOrganisations();
+		const { ada, acme } = await twoOrganisations();
+		// A page of one record, such as a project's own page, at a record of Acme's.
+		const address = await addressFor(route, acme.id);
 		// A member is answered the page, or the redirect of a moved address, or,
 		// at an address that holds no page, the 404 drawn in their own shell.
 		expect((await open(address, ada)).status).toBe(memberStatus(route));
@@ -165,8 +179,8 @@ describe("a member of one organisation asking for another organisation's address
 	});
 
 	it.each(ofAnOrganisation)("$id: the data of $address is 404", async (route) => {
-		const { address } = route;
-		const { ada } = await twoOrganisations();
+		const { ada, acme } = await twoOrganisations();
+		const address = await addressFor(route, acme.id);
 		// A redirect is answered to a data request with 202 and where to go.
 		expect((await openData(address, ada)).status).toBe(isMoved(route) ? 202 : memberStatus(route));
 
@@ -196,6 +210,15 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/integrations.import": { intent: "discard", importId: "i-acme" },
 		"routes/app/calendar-feeds": { intent: "feed-create", follow: "me" },
 		"routes/app/expenses": { intent: "delete", expenseId: "e-ada" },
+		"routes/app/tasks": { intent: "create-tag", name: "Taken over" },
+		"routes/app/project": { intent: "add-task", taskId: "t-general" },
+		"routes/app/rates": {
+			intent: "rate",
+			level: "person",
+			key: "u-ada",
+			amount: "100",
+			from: "2026-12-01",
+		},
 		"routes/app/time-off": {
 			intent: "request",
 			kindId: "k-annual",

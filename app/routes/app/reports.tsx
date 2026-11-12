@@ -9,7 +9,10 @@ import { TextField } from "~/components/TextField";
 import { expenseReportPath } from "~/expenses/paths";
 import { halfDaysLabel } from "~/leave/kinds";
 import { membershipContext } from "~/organisations/membership.server";
+import { billableSplitOf } from "~/reports/amounts.server";
+import { BillableSplit } from "~/reports/BillableSplit";
 import {
+	ANY_TAG,
 	EVERYONE,
 	GROUP_LABELS,
 	GROUPS,
@@ -31,7 +34,9 @@ import { byStart, totalsOf } from "~/reports/report";
 import { peopleOfReport, reportRequest, rowsOfReport } from "~/reports/reports.server";
 import { destination } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
+import { negotiateLocale } from "~/shell/locale";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
+import { tagOptions } from "~/tags/tags.server";
 import { dayOf } from "~/time/calendar";
 import { formatDuration, formatTimeRange } from "~/time/format";
 
@@ -78,6 +83,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		choices: others ? choices : [],
 		everyone: seesEveryone ? "Everyone" : "You and your teams",
 		expensesPath: expenseReportPath(membership.organisation.slug),
+		/** The tags a report may be filtered by (TS-085). */
+		tags: await tagOptions(report.scope),
 	};
 
 	// A custom range that makes no report: the form again, holding what was
@@ -92,6 +99,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					to: query.to ?? "",
 					group: grouping,
 					person: query.person ?? EVERYONE,
+					tag: query.tag ?? ANY_TAG,
 				},
 				problem: report.problem as RangeProblem | null,
 				range: "",
@@ -105,7 +113,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const rows = (await rowsOfReport(report)).sort(byStart);
 	const totals = totalsOf(rows, grouping);
 	const lines = await peopleOfReport(report, rows);
-	const kept = { group: grouping, person: query.person };
+	const kept = { group: grouping, person: query.person, tag: query.tag };
 	// The address of the export: the report as the page reads it, written out
 	// in full, so the file holds the rows on this page.
 	const search = reportSearch({ ...kept, range: query.range, days });
@@ -140,6 +148,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				to: days.last,
 				group: grouping,
 				person: query.person ?? EVERYONE,
+				tag: query.tag ?? ANY_TAG,
 			},
 			problem: null as RangeProblem | null,
 			range: rangeLabel(days.first, days.last),
@@ -187,6 +196,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					shortNotice: line.shortNotice === 0 ? null : `Short-notice requests: ${line.shortNotice}`,
 				})),
 				exportPath: reportExportPath(membership.organisation.slug, `?${search}`),
+				/** Billable and non-billable time, and for those who see rates its amount (TS-066, TS-067). */
+				split: await billableSplitOf(
+					report,
+					rows,
+					membership,
+					negotiateLocale(request.headers.get("Accept-Language")),
+				),
 			},
 		},
 		{ status: 200 },
@@ -245,6 +261,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 							)}
 							<LedgerTotal label="Total" value={report.total} />
 						</Ledger>
+						<BillableSplit split={report.split} range={loaderData.range} />
 						<p className="mt-2">
 							<a href={report.exportPath} download className={ACTION_LINK}>
 								Export as CSV
@@ -321,7 +338,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 
 type ChoiceProps = Pick<
 	Route.ComponentProps["loaderData"],
-	"query" | "groupings" | "choices" | "everyone" | "range" | "problem"
+	"query" | "groupings" | "choices" | "everyone" | "range" | "problem" | "tags"
 >;
 
 /**
@@ -344,7 +361,15 @@ function ReportChoice(props: ChoiceProps) {
  */
 const FIELD = "min-w-0 grow basis-44";
 
-function ReportFields({ query, groupings, choices, everyone, range: shown, problem }: ChoiceProps) {
+function ReportFields({
+	query,
+	groupings,
+	choices,
+	everyone,
+	range: shown,
+	problem,
+	tags,
+}: ChoiceProps) {
 	const apply = useApplyFilters();
 	// The hidden select and the inputs hold the new value once React has drawn it.
 	const applySoon = () => setTimeout(apply, 0);
@@ -352,6 +377,7 @@ function ReportFields({ query, groupings, choices, everyone, range: shown, probl
 	const [range, setRange] = useState<Range>(query.range);
 	const [group, setGroup] = useState<Grouping>(query.group);
 	const [person, setPerson] = useState(query.person);
+	const [tag, setTag] = useState(query.tag);
 	const [from, setFrom] = useState(query.from);
 	const [to, setTo] = useState(query.to);
 	// The address changed (applied, Back, a step): show what it holds.
@@ -359,9 +385,10 @@ function ReportFields({ query, groupings, choices, everyone, range: shown, probl
 		setRange(query.range);
 		setGroup(query.group);
 		setPerson(query.person);
+		setTag(query.tag);
 		setFrom(query.from);
 		setTo(query.to);
-	}, [query.range, query.group, query.person, query.from, query.to]);
+	}, [query.range, query.group, query.person, query.tag, query.from, query.to]);
 
 	// A week or a month the stepper moved to is offered while it is shown, by its days.
 	const stepped = (id: Range) => id === "week" || id === "month";
@@ -444,6 +471,26 @@ function ReportFields({ query, groupings, choices, everyone, range: shown, probl
 						value={person}
 						onChange={(id) => {
 							setPerson(id ?? EVERYONE);
+							applySoon();
+						}}
+					/>
+				</div>
+			)}
+			{tags.length > 0 && (
+				<div className={FIELD}>
+					<Select
+						label="Tag"
+						name="tag"
+						options={[
+							{ id: ANY_TAG, label: "Any tag" },
+							...tags.map(({ id, name, archived }) => ({
+								id,
+								label: archived ? `${name} (archived)` : name,
+							})),
+						]}
+						value={tag}
+						onChange={(id) => {
+							setTag(id ?? ANY_TAG);
 							applySoon();
 						}}
 					/>

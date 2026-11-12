@@ -31,6 +31,10 @@ export interface ReportEntry {
 	startedAt: number;
 	/** Null while it runs. */
 	endedAt: number | null;
+	/** The entry's task (TS-066); null for none. */
+	taskId: string | null;
+	task: string | null;
+	billable: boolean;
 }
 
 /** An entry as a report counts it: on the day it starts, for its whole length in minutes. */

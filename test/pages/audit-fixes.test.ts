@@ -69,12 +69,11 @@ describe("My account: leaving (W26)", () => {
 });
 
 describe("Projects and Clients: a row opens its sheet (W24, W15)", () => {
-	it("Projects: the name is a button that opens the sheet, and there is no Actions menu or Search button", async () => {
+	it("Projects: the name opens the project's page, Edit opens the sheet, and there is no Actions menu or Search button", async () => {
 		await send(`${ACME}/projects`, { intent: "create", name: "Website" });
 		const html = await main(`${ACME}/projects`);
-		expect(html).toMatch(
-			/<button[^>]*type="button"[^>]*aria-haspopup="dialog"[^>]*>Website<\/button>/,
-		);
+		expect(html).toMatch(/<a[^>]*href="\/app\/acme\/projects\/[^"]+"[^>]*>Website<\/a>/);
+		expect(html).toMatch(/<button[^>]*aria-label="Edit Website"/);
 		expect(html).not.toContain("Actions for");
 		// Only the Apply for a browser with no script, inside <noscript>, submits the filters.
 		const scripted = html.replace(/<noscript>[\s\S]*?<\/noscript>/g, "");
@@ -103,7 +102,7 @@ describe("Projects and Clients: a row opens its sheet (W24, W15)", () => {
 		).first<string>("id");
 		await send(`${ACME}/projects`, { intent: "archive", projectId: projectId ?? "" });
 		const archived = await main(`${ACME}/projects?show=archived`);
-		expect(archived).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>Website<\/button>/);
+		expect(archived).toMatch(/<button[^>]*aria-label="Edit Website"/);
 		await send(`${ACME}/projects`, { intent: "restore", projectId: projectId ?? "" });
 		const active = await main(`${ACME}/projects`);
 		expect(textOf(active)).toContain("Website");

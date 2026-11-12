@@ -61,6 +61,8 @@ interface ReportChoices {
 	choices: Person[];
 	showClients: boolean;
 	now: number;
+	/** Only the time with this tag, on the entry or on its project (TS-085). */
+	tag?: string;
 }
 
 /** Everything a report needs to be read, from the address of its page or of its export. */
@@ -109,6 +111,7 @@ export async function reportRequest(
 		choices,
 		showClients,
 		now,
+		tag: query.tag,
 	};
 	if (problem) return { ...report, problem };
 	return { ...report, days: rangeDays(query, dayOf(now, zone), organisation.weekStartsOn) };
@@ -117,6 +120,19 @@ export async function reportRequest(
 /** `column` is one of `people`, as one bound parameter however many they are. */
 function amongPeople(column: SQLiteColumn, people: readonly string[]): SQL {
 	return sql`${column} in (select value from json_each(${JSON.stringify(people)}))`;
+}
+
+/**
+ * An entry has `tagId` when it has the tag itself or its project has it
+ * (TS-085), each read from the organisation's own rows.
+ */
+function taggedWith(
+	organisationId: string,
+	entryId: SQLiteColumn,
+	projectId: SQLiteColumn,
+	tagId: string,
+): SQL {
+	return sql`(${entryId} in (select time_entry_id from entry_tags where organisation_id = ${organisationId} and tag_id = ${tagId}) or ${projectId} in (select project_id from project_tags where organisation_id = ${organisationId} and tag_id = ${tagId}))`;
 }
 
 /**
@@ -155,14 +171,19 @@ async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
  * `pageSize` entries after the last id of the one before.
  */
 export async function* entryPages(
-	request: Pick<ReportRequest, "scope" | "days" | "zone" | "people">,
+	request: Pick<ReportRequest, "scope" | "days" | "zone" | "people" | "tag">,
 	pageSize = ENTRY_PAGE_SIZE,
 ): AsyncGenerator<ReportEntry[]> {
-	const { scope, people } = request;
+	const { scope, people, tag } = request;
 	const { from, to } = bounds(request.days.first, request.days.last, request.zone);
-	const [projects, clients] = await Promise.all([scope.projects.select(), scope.clients.select()]);
+	const [projects, clients, tasks] = await Promise.all([
+		scope.projects.select(),
+		scope.clients.select(),
+		scope.tasks.select(),
+	]);
 	const projectsById = new Map(projects.map((p) => [p.id, p]));
 	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const taskNames = new Map(tasks.map((t) => [t.id, t.name]));
 	const names = new Map<string, string>();
 
 	let after: string | undefined;
@@ -174,6 +195,7 @@ export async function* entryPages(
 					gte(e.startedAt, new Date(from)),
 					lt(e.startedAt, new Date(to)),
 					people.everyone ? undefined : amongPeople(e.userId, people.people),
+					tag === undefined ? undefined : taggedWith(scope.organisationId, e.id, e.projectId, tag),
 				),
 			{ orderBy: (e) => [asc(e.id)], limit: pageSize },
 		);
@@ -194,6 +216,9 @@ export async function* entryPages(
 				description: row.description,
 				startedAt: row.startedAt.getTime(),
 				endedAt: row.endedAt?.getTime() ?? null,
+				taskId: row.taskId,
+				task: row.taskId === null ? null : (taskNames.get(row.taskId) ?? null),
+				billable: row.billable,
 			};
 		});
 		const last = rows.at(-1);

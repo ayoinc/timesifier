@@ -106,6 +106,55 @@ Builder: an AI session on branch `ts-066-fixes`. In review: the pull request aga
 - [x] **W32.** From 600 px wide, a sheet is a centred dialog with every corner rounded, clear of the window's bottom edge (`e2e/components.spec.ts`, "W32: at 1280px the sheet sits in the middle, clear of every edge" and "W32: at 390px the sheet sits along the bottom").
 - [x] `pnpm typecheck`, `pnpm lint`, `pnpm test` and the full Chromium browser run pass.
 
+### TS-066 · B4 · Tasks and billable time
+
+Depends on: TS-064, TS-011a, TS-012a, TS-012b.
+
+Builder: an AI session on branch `ts-b2b-money`, PR #48, one slice of the business features built on TS-064; finished by a second session when the first ran out of budget. In review: the pull request against `main`. Migration `0014_general_task` gives every organisation the task General, puts it on every project and gives every entry before it General. The browser spec `e2e/money.spec.ts` covers the four cards' pages: an owner, a person of their own, makes a task, opens a project's page and moves between its tabs, sets a rate and a budget, and tracks time with the task picker, the keyboard alone doing all of it; axe at 390px and 1280px in both schemes finds nothing on Tasks, Tags, a project's four tabs and its Billing and Budget sheets, the default rates and Track time with its task picker. The route tests ask a page of one record at a record made for it (`addressFor` in `test/routes.ts`), so a project's page and the default rates are back in `test/auth/guard.test.ts`, `test/pages/destinations.test.ts` and `test/pages/isolation.test.ts` with no skip.
+
+- [x] An owner or admin keeps the organisation's task list: name, billable by default, common (added to new projects); archive and restore. A manager, Finance or a member cannot change it (role table: `test/pages/money-pages.test.ts`, "Tasks and its Tags list open to owners and admins alone" and "Tasks takes a new task and a new tag from owners and admins alone", per role; `app/routes/app/tasks.tsx`).
+- [x] Each project has its tasks. For each project, a task is billable or not. A new project starts with the common tasks (`test/db/general-task.test.ts`, "gives a new project the common tasks that are not archived, billable as each says"; a project's Tasks tab adds, removes and sets billable: `test/pages/money-pages.test.ts`, the project's forms per role, and `test/pages/money-rules.test.ts`, "cannot be added to a project").
+- [x] A time entry has a task from its project's list. Entries made before this card get a task called "General", added to each existing project by the migration (`test/db/general-task.test.ts`, "are given General, on every project, billable as their project bills").
+- [x] An entry is billable when its task is billable on its project. Changing that flag re-rates past entries no invoice bills, and an invoiced entry keeps what it was billed as. Each report shows billable and non-billable hours and their sum (`test/pages/money-rules.test.ts`, "re-rating" and "billable time": "is split from the rest on a report").
+- [x] An archived task cannot be chosen for a new entry, and its past entries keep it (`test/pages/money-rules.test.ts`, "an archived task": refused with "Choose an active task of this project.", its entry edited and keeping it, offered again once restored; `app/tasks/EntryChoices.tsx` offers it only to the entries that have it).
+
+### TS-067 · B5 · Project types and billable rates
+
+Depends on: TS-064, TS-066.
+
+The same branch and pull request as TS-066. A project's Settings tab sets its type, how it bills, its rate and its currency; Projects > Default rates sets each person's and each task's.
+
+- [x] A project is Hourly (time and materials), Fixed fee (with an amount) or Non-billable. Non-billable makes all its tasks non-billable (`test/pages/money-rules.test.ts`, "of a project made non-billable and back changes the entries no invoice bills alone" and "of a fixed-fee project needs its fee").
+- [x] An hourly or fixed-fee project bills by one of: project rate, person rate (person default, or a project override) or task rate (task default, or a project override) (`test/rates/price.test.ts`, "the rate that prices time", one test per mode; `test/rates/rates.test.ts`, "the rate in force", with a brute-force property).
+- [x] Every rate (project, person default, person-on-project, task-on-project) is stored with an effective-from date. An entry is priced at the rate in force on its own local date, so a rate change never re-prices earlier entries (property tests: `test/rates/price.test.ts`, "is the one in force on the time's own day", and `test/rates/rates.test.ts`, "a rate added later never re-prices work before it starts"; a rate is set from today or later: `test/pages/money-pages.test.ts`, "refuse a rate from a day already past"; `test/pages/money-rules.test.ts`, "prices the billable hours at the rate in force on each entry's day").
+- [x] An entry's billable amount is hours × rate, rounded to the currency's minor unit only at totals. A report total equals the sum of its rows to the penny (`test/rates/price.test.ts`, "adds up to the penny however the rows are grouped (property)").
+- [x] An entry with no rate shows "Missing rate", as Harvest does, and counts 0 in totals. The project page lists those entries (`test/rates/price.test.ts`, "is a missing rate for billable time with no rate, which counts 0"; `test/pages/money-rules.test.ts`, "with no rate is listed on its project's page as Missing rate, and counts 0", on Reports too).
+- [x] The organisation has a currency. A client may override it, and a project may override its client. All amounts carry their currency, and totals are never summed across currencies; a report shows one total per currency (`test/pages/money-rules.test.ts`, "is in the organisation's currency, or its client's, or its project's own, the nearest one", and the report with a GBP and a EUR total).
+- [x] Only owners, admins and Finance see rates and amounts, and set rates (`maySeeRates`, `mayManageRates`); a manager never does (role table: `test/pages/money-pages.test.ts`, a project's page, its forms and the default rates per role; a manager's report holds no amount; `docs/security.md`, "Rates and money").
+
+### TS-069 · B7 · Project budgets and alerts
+
+Depends on: TS-064, TS-066, TS-067, TS-049.
+
+The same branch and pull request as TS-066. A project's Settings tab sets the budget; Overview shows it.
+
+- [x] A project has no budget, or a budget in total hours, hours per task, hours per person, total fees or fees per task, optionally resetting each calendar month in the organisation's time zone (`test/pages/money-rules.test.ts`, "a budget", one test per kind, and "a monthly budget": "starts again at the organisation's own midnight on the first of the month", in Auckland; `test/budgets/budget.test.ts`).
+- [x] The project page shows spent, remaining and % for the budget's current period. Spent is the sum of entries (hours, or billable amount per TS-067) in that period (`test/pages/money-rules.test.ts`, "a budget's spent, for random entries (property)", over four zones, monthly and whole-project). A budget in fees is shown only to those who see rates ("a project's budget on its page"). A budget in hours is shown to those who see rates and to managers; a member is only warned.
+- [x] The organisation chooses whether non-billable hours count against hour budgets (Workspace settings; `test/pages/money-rules.test.ts`, "non-billable counts against hour budgets until an owner or admin says not" and "of total hours counts every hour, the non-billable too unless the organisation says not").
+- [ ] When spent first crosses the project's alert % (default 80) in a period, each manager of the project and each owner and admin gets one notification (TS-049) and at most one email. Crossing again in the same period sends nothing. The email is built and tested: once a period, to owners, admins and, for a budget in hours, the managers of those who tracked; a fees budget's to owners and admins (`test/pages/money-rules.test.ts`, "a budget's alert"). The in-app notification waits for TS-049, which is not built.
+- [x] When "warn when over" is on, a person tracking to an over-budget project sees "This project is over budget" on the Track time sheet, and the entry still saves (`test/pages/money-rules.test.ts`, "the over-budget warning"; `e2e/money.spec.ts`, the keyboard test, which tracks to it after).
+
+### TS-085 · Tags
+
+Depends on: TS-064, TS-014a, TS-070. Asked for by the owner; not in the research.
+
+The same branch and pull request as TS-066. Tasks has a second list, Tags (`?list=tags`).
+
+- [x] An owner or admin keeps the organisation's tags: create, rename, archive, restore; names unique in the organisation (`test/pages/money-rules.test.ts`, "has a name no other tag of the organisation has, in any case"; `test/pages/money-pages.test.ts`, a tag made by owners and admins alone).
+- [ ] A person puts tags on their own entries and expenses; an owner or admin puts them on projects. Entries and projects are built and tested (`test/pages/money-rules.test.ts`, tags put on an entry from Track time and its sheet; `test/pages/money-pages.test.ts`, a project's Tags form 403 to anybody but owners and admins). Expenses take their tags with TS-070, on its own branch.
+- [x] Reports filter by tag, in the address, and a project's tags count for its entries (`test/pages/money-rules.test.ts`, "filters a report, and its export, to the time with it on the entry or on its project": the filtered total is the tagged rows' sum, and the CSV holds those rows alone).
+- [x] An archived tag cannot be added, and stays on what has it (`test/pages/money-rules.test.ts`, "archived, is put on nothing new, and stays on what has it", on an entry and on a project).
+
 ### Waiting on the owner's screenshots · the heading features and their Harvest parity
 
 Merged and deployed on 2026-11-11: the Timesheet slice (TS-012a, TS-013, TS-012b, TS-046, TS-051, TS-052) in pull request #34, and TS-056 to TS-059 (`docs/harvest-comparison.md`, observed in Harvest's application with rea) in pull requests #38, #36 and #37, with the cards below. Each card's criteria and evidence stay on it; what is left for each is the owner's acceptance of its screenshots at 390px and 1280px in both schemes. Two departures from the Timesheet cards' texts, both from `docs/navigation.md`: the views are `?view=week` and `?view=history` on Timesheet's own address, not `/week`; the person's zone is set on My account, not Settings.
@@ -702,44 +751,12 @@ Depends on: TS-064, TS-046, TS-047.
 - [x] Optional auto-lock: N days after each deadline, the lock date moves forward to the deadline. It never moves backward (test with a fake clock). `deadline.ts` with the hourly Cron Trigger in `workers/scheduled.ts` (`test/locks/deadline.test.ts`, "auto-lock"; `test/pages/lock-date.test.ts`, "auto-locks N days after each deadline, never backward, and submits as the system when asked").
 - [x] Optional auto-submit at lock: every unsubmitted period up to the lock date becomes submitted, recorded as "submitted by the system" (test). Its `period_events` row has a null actor (migration `0013_lock_date`) and its activity record source `system` (`test/pages/lock-date.test.ts`, "submits every unsubmitted week up to the new lock date, as the system").
 
-### TS-066 · B4 · Tasks and billable time
-
-Depends on: TS-064, TS-011a, TS-012a, TS-012b.
-
-- [ ] An owner or admin keeps the organisation's task list: name, billable by default, common (added to new projects); archive and restore. A manager, Finance or a member cannot change it (role table).
-- [ ] Each project has its tasks. For each project, a task is billable or not. A new project starts with the common tasks (test).
-- [ ] A time entry has a task from its project's list. Entries made before this card get a task called "General", added to each existing project by the migration (migration test).
-- [ ] An entry is billable when its task is billable on its project. Changing that flag re-rates past entries, as Harvest's bulk action "Set tasks billable" says. Each report shows billable and non-billable hours and their sum (tests).
-- [ ] An archived task cannot be chosen for a new entry, and its past entries keep it (test).
-
-### TS-067 · B5 · Project types and billable rates
-
-Depends on: TS-064, TS-066.
-
-- [ ] A project is Hourly (time and materials), Fixed fee (with an amount) or Non-billable. Non-billable makes all its tasks non-billable (test).
-- [ ] An hourly or fixed-fee project bills by one of: project rate, person rate (person default, or a project override) or task rate (task default, or a project override) (test per mode).
-- [ ] Every rate (project, person default, person-on-project, task-on-project) is stored with an effective-from date. An entry is priced at the rate in force on its own local date, so a rate change never re-prices earlier entries (property test; better than Harvest).
-- [ ] An entry's billable amount is hours × rate, rounded to the currency's minor unit only at totals. A report total equals the sum of its rows to the penny (property test).
-- [ ] An entry with no rate shows "Missing rate", as Harvest does, and counts 0 in totals. The project page lists those entries (test).
-- [ ] The organisation has a currency. A client may override it, and a project may override its client. All amounts carry their currency, and totals are never summed across currencies; a report shows one total per currency (test).
-- [ ] Only owners, admins and Finance see rates and amounts, and set rates (`maySeeRates`, `mayManageRates`); a manager never does (owner's decision; role table).
-
 ### TS-068 · B8 · Utilisation report
 
 Depends on: TS-064, TS-061 (B1), TS-066, TS-014a.
 
 - [ ] Reports shows, per person and per team for a range: capacity, logged, billable logged, utilisation and billable utilisation (billable ÷ capacity) (test with known fixtures).
 - [ ] Leave reduces capacity as in TS-084. Utilisation for a person on leave all week shows "—" (test).
-
-### TS-069 · B7 · Project budgets and alerts
-
-Depends on: TS-064, TS-066, TS-067, TS-049.
-
-- [ ] A project has no budget, or a budget in total hours, hours per task, hours per person, total fees or fees per task, optionally resetting each calendar month in the organisation's time zone (test per kind, including a reset at midnight local).
-- [ ] The project page shows spent, remaining and % for the budget's current period. Spent is the sum of entries (hours, or billable amount per TS-067) in that period (property test). A budget in fees is shown only to those who see rates.
-- [ ] The organisation chooses whether non-billable hours count against hour budgets (test).
-- [ ] When spent first crosses the project's alert % (default 80) in a period, each manager of the project and each owner and admin gets one notification (TS-049) and at most one email. Crossing again in the same period sends nothing (test).
-- [ ] When "warn when over" is on, a person tracking to an over-budget project sees "This project is over budget" on the Track time sheet, and the entry still saves (test).
 
 ### TS-070 · B9 · Expenses
 
@@ -881,15 +898,6 @@ Depends on: TS-064, TS-061 (TS-042, B1), TS-014a.
 - [ ] Reports has a Leave view: allowance, taken, booked, pending and remaining per person and type for the leave year, with a CSV export of one row per person per type (test that the CSV totals equal the screen).
 - [ ] A person's expected hours for a week are their capacity (B1) less approved leave and holidays in that week. Team's week (TS-045) shows "Expected", "Leave" and "Logged" (test with a 3-day leave in a 5-day week giving 2/5 of capacity).
 - [ ] The research's ICS feed of approved leave is built by TS-089, which also carries entries.
-
-### TS-085 · Tags
-
-Depends on: TS-064, TS-014a, TS-070. Asked for by the owner; not in the research.
-
-- [ ] An owner or admin keeps the organisation's tags: create, rename, archive, restore; names unique in the organisation (test).
-- [ ] A person puts tags on their own entries and expenses; an owner or admin puts them on projects (role table).
-- [ ] Reports filter by tag, in the address, and a project's tags count for its entries (test that a filtered total equals the sum of the tagged rows).
-- [ ] An archived tag cannot be added, and stays on what has it (test).
 
 ### TS-086 · Dashboards
 

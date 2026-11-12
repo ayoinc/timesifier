@@ -5,6 +5,8 @@ import { type OrganisationScope, uuidv7 } from "~/db";
 import { startRefusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
+import { entryTagStatements, tagsAllowed } from "~/tags/tags.server";
+import { entryTaskOf } from "~/tasks/tasks.server";
 
 import { dayOf } from "./calendar";
 
@@ -35,6 +37,10 @@ export interface StartTimer {
 	zone: string;
 	/** The server's clock. */
 	now: number;
+	/** The task chosen; left out, the project's first active task (TS-066). */
+	taskId?: string;
+	/** The entry's tags (TS-085). */
+	tagIds?: readonly string[];
 }
 
 /**
@@ -43,7 +49,8 @@ export interface StartTimer {
  * the project is archived or not the organisation's, or when the day the new
  * entry starts on or the day the running one started on is in a submitted or
  * approved period, and when today takes no more time: a public holiday,
- * whole-day leave, or nothing left of its limit (`startRefusalOf`).
+ * whole-day leave, or nothing left of its limit (`startRefusalOf`), and when
+ * the task is not on the project's list or a tag is not active.
  */
 export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const { userId, projectId, description, zone, now } = start;
@@ -57,6 +64,11 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	}
 	const over = await startRefusalOf(scope, userId, zone, now);
 	if (over) return { ok: false as const, reason: "limit" as const, message: over };
+	const task = await entryTaskOf(scope, projectId, start.taskId);
+	if (!task.ok) return { ok: false as const, reason: "no-task" as const };
+	if (start.tagIds && !(await tagsAllowed(scope, [], start.tagIds))) {
+		return { ok: false as const, reason: "no-tag" as const };
+	}
 	const at = new Date(now);
 	const id = uuidv7();
 	const entry = { type: "time_entry", ownerId: userId } as const;
@@ -68,20 +80,23 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 			id,
 			userId,
 			projectId,
+			taskId: task.taskId,
+			billable: task.billable,
 			description,
 			startedAt: at,
 			endedAt: null,
 		}),
+		...entryTagStatements(scope, id, [], start.tagIds ?? []),
 		recordStatement(
 			scope,
 			userId,
 			"time_entry.started",
 			{ ...entry, id },
-			changes(null, { projectId, description, startedAt: at }, [
-				"projectId",
-				"description",
-				"startedAt",
-			]),
+			changes(
+				null,
+				{ projectId, taskId: task.taskId, billable: task.billable, description, startedAt: at },
+				["projectId", "taskId", "billable", "description", "startedAt"],
+			),
 		),
 		...(running
 			? [

@@ -7,7 +7,6 @@ import { Digits } from "~/components/Digits";
 import { AddIcon } from "~/components/icons/AddIcon";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
-import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { type DayRule, overLabel } from "~/leave/rules";
 import { LOCK_LABELS, lockSentence } from "~/locks/locks";
@@ -16,6 +15,7 @@ import { FormSheet } from "~/routes/app/FormSheet";
 import { destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { TRANSITION, useTravel } from "~/shell/transitions";
+import { EntryChoices } from "~/tasks/EntryChoices";
 import { addDays } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 
@@ -296,13 +296,7 @@ export function TrackTime({
 				</p>
 			)}
 			<input type="hidden" name="day" value={data.day} />
-			<Select
-				label="Project"
-				name="projectId"
-				options={active.map((p) => ({ id: p.id, label: p.name }))}
-				defaultValue={active[0]?.id ?? null}
-				isRequired
-			/>
+			<EntryChoices projects={active} defaultProjectId={active[0]?.id ?? null} />
 			<TextField label="Description" name="description" maxLength={ENTRY_DESCRIPTION_MAX_LENGTH} />
 			{start !== undefined && (
 				<TextField
@@ -351,13 +345,7 @@ export function EntryFields({
 	const offered = data.projects.filter((p) => !p.archived || p.id === entry.projectId);
 	return (
 		<>
-			<Select
-				label="Project"
-				name="projectId"
-				options={offered.map((p) => ({ id: p.id, label: p.name }))}
-				defaultValue={entry.projectId}
-				isRequired
-			/>
+			<EntryChoices projects={offered} defaultProjectId={entry.projectId} entryId={entry.id} />
 			<TextField label="Date" name="date" type="date" defaultValue={data.day} isRequired />
 			<div className="grid grid-cols-2 gap-4">
 				<TextField

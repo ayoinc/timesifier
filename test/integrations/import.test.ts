@@ -181,8 +181,10 @@ describe("importing Harvest's export of all time", () => {
 				"select c.name from projects p join clients c on c.id = p.client_id where p.name = 'Website Redesign'",
 			),
 		).toBe("Example Client");
-		expect(await value("select count(*) from tasks")).toBe(4);
-		expect(await value("select count(*) from project_tasks")).toBe(4);
+		// General, which every organisation has (TS-066), Programming and the three added.
+		expect(await value("select count(*) from tasks")).toBe(5);
+		// Each of the three projects has General; Apollo Programming, and the two added theirs.
+		expect(await value("select count(*) from project_tasks")).toBe(7);
 		expect(
 			await row("select status, imported_count, skipped_count, source from import_jobs"),
 		).toEqual({

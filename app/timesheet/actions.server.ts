@@ -10,6 +10,7 @@ import type { Membership } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import type { Outcome } from "~/organisations/problems";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
+import { TagIds } from "~/tags/tags";
 import { Day, dayOf, exactInstantAt } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { startTimer, stopTimer } from "~/time/entries.server";
@@ -58,6 +59,8 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		hours: Hours.default(""),
 		/** When the entry starts, where a slot of the calendar was chosen (TS-062). */
 		start: Clock.optional(),
+		taskId: Id.optional(),
+		tagIds: TagIds,
 	}),
 	z.object({ intent: z.literal("stop") }),
 	z.object({
@@ -68,6 +71,8 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		start: Clock,
 		end: Clock,
 		description: Description.default(""),
+		taskId: Id.optional(),
+		tagIds: TagIds,
 	}),
 	z.object({ intent: z.literal("delete"), entryId: Id }),
 	z.object({ intent: z.literal("cell"), projectId: Id, day: Day, hours: Hours }),
@@ -91,6 +96,8 @@ const REFUSALS: Record<Exclude<NotWritten, "limit">, [string, number]> = {
 		"That day holds more than one entry of this project. Change it in the Day view.",
 		409,
 	],
+	"no-task": ["Choose an active task of this project.", 400],
+	"no-tag": ["Choose active tags only.", 400],
 };
 
 /**
@@ -140,6 +147,8 @@ export async function timesheetAction(request: Request, membership: Membership) 
 					description: input.description,
 					zone,
 					now,
+					taskId: input.taskId,
+					tagIds: input.tagIds,
 				});
 				return started.ok ? done("Timer started.") : refusal(started);
 			}
@@ -157,6 +166,8 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				startedAt,
 				zone,
 				now,
+				taskId: input.taskId,
+				tagIds: input.tagIds,
 			});
 			return added.ok ? done("Entry saved.") : refusal(added);
 		}
@@ -184,7 +195,14 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				user.id,
 				zone,
 				input.entryId,
-				{ projectId: input.projectId, description: input.description, startedAt, endedAt },
+				{
+					projectId: input.projectId,
+					description: input.description,
+					startedAt,
+					endedAt,
+					taskId: input.taskId,
+					tagIds: input.tagIds,
+				},
 				now,
 			);
 			return written.ok ? done("Entry saved.") : refusal(written);

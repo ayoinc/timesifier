@@ -35,6 +35,8 @@ export async function listClients(scope: OrganisationScope, query: string) {
 		id: client.id,
 		name: client.name,
 		archived: client.archivedAt !== null,
+		/** Its own currency, or null for the organisation's (TS-067). */
+		currency: client.currency,
 		projects: projects
 			.filter((project) => project.clientId === client.id)
 			.map((project) => ({ name: project.name, archived: project.archivedAt !== null })),
@@ -144,4 +146,30 @@ export async function setClientArchived(
 		id,
 	});
 	return { ok: true, name: changed.name };
+}
+
+/**
+ * Gives a client its own currency, or (`currency` null) the organisation's
+ * (TS-067). Its projects bill in it unless a project has its own; a rate set
+ * already keeps its currency.
+ */
+export async function setClientCurrency(
+	scope: OrganisationScope,
+	actor: string,
+	id: string,
+	currency: string | null,
+): Promise<ClientResult> {
+	const [client] = await scope.clients.select((c) => eq(c.id, id), { limit: 1 });
+	if (!client) return null;
+	await scope.batch([
+		scope.clients.statements.update({ currency }, (c) => eq(c.id, id)),
+		recordStatement(
+			scope,
+			actor,
+			"client.updated",
+			{ type: "client", id },
+			changes(client, { currency }, ["currency"]),
+		),
+	]);
+	return { ok: true, name: client.name };
 }

@@ -7,6 +7,8 @@ import { refusalOf } from "~/leave/rules.server";
 import { invoicedIds } from "~/locks/locks.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
+import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
+import { entryTaskOf } from "~/tasks/tasks.server";
 
 import { bounds, type Day, dayOf } from "./calendar";
 import { formatDuration } from "./format";
@@ -34,13 +36,19 @@ export type NotWritten =
 	| "ends-before-start"
 	| "in-day-view"
 	| "limit"
-	| "invoiced";
+	| "invoiced"
+	| "no-task"
+	| "no-tag";
 
 export interface Span {
 	projectId: string;
 	description: string | null;
 	startedAt: number;
 	endedAt: number;
+	/** The task chosen; left out, the entry keeps its own, or a new project's first (TS-066). */
+	taskId?: string;
+	/** The entry's tags; left out, they stay as they are (TS-085). */
+	tagIds?: readonly string[];
 }
 
 const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, reason });
@@ -48,7 +56,14 @@ const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, 
 const limited = (message: string) => ({ ok: false as const, reason: "limit" as const, message });
 
 /** What the activity log records of an entry. */
-const ENTRY_FIELDS = ["projectId", "description", "startedAt", "endedAt"] as const;
+const ENTRY_FIELDS = [
+	"projectId",
+	"taskId",
+	"billable",
+	"description",
+	"startedAt",
+	"endedAt",
+] as const;
 
 /** The entry `id` of `userId`, as the activity log names it. */
 const subject = (userId: string, id: string) =>
@@ -94,14 +109,26 @@ export async function editEntry(
 		afterMs: span.endedAt - span.startedAt,
 	});
 	if (over) return limited(over);
+	const task = await entryTaskOf(
+		scope,
+		span.projectId,
+		span.taskId,
+		span.projectId === entry.projectId ? entry.taskId : null,
+	);
+	if (!task.ok) return refuse("no-task");
+	const currentTags = (await tagsOfEntries(scope, [id])).get(id) ?? [];
+	if (span.tagIds && !(await tagsAllowed(scope, currentTags, span.tagIds))) return refuse("no-tag");
 	const changed = {
 		projectId: span.projectId,
+		taskId: task.taskId,
+		billable: task.billable,
 		description: span.description,
 		startedAt: new Date(span.startedAt),
 		endedAt: new Date(span.endedAt),
 	};
 	await scope.batch([
 		scope.timeEntries.statements.update(changed, (e) => and(eq(e.id, id), eq(e.userId, userId))),
+		...(span.tagIds ? entryTagStatements(scope, id, currentTags, span.tagIds) : []),
 		recordStatement(
 			scope,
 			userId,
@@ -162,6 +189,10 @@ export interface DayHours {
 	zone: string;
 	/** The server's clock. */
 	now: number;
+	/** The task chosen; left out, the project's first active task (TS-066). */
+	taskId?: string;
+	/** The entry's tags (TS-085). */
+	tagIds?: readonly string[];
 }
 
 /** The refusal of hours a day has no room for, saying what it has left (TS-091, W08). */
@@ -193,6 +224,9 @@ export async function addHours(
 		afterMs: minutes * 60_000,
 	});
 	if (over) return limited(over);
+	const task = await entryTaskOf(scope, projectId, hours.taskId);
+	if (!task.ok) return refuse("no-task");
+	if (hours.tagIds && !(await tagsAllowed(scope, [], hours.tagIds))) return refuse("no-tag");
 	const wanted =
 		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
 	const placed = placeOnDay(day, zone, wanted, minutes, now, {
@@ -203,12 +237,15 @@ export async function addHours(
 		id: uuidv7(),
 		userId,
 		projectId,
+		taskId: task.taskId,
+		billable: task.billable,
 		description,
 		startedAt: new Date(placed.start),
 		endedAt: new Date(placed.start + minutes * 60_000),
 	};
 	const [[entry]] = await scope.batch([
 		scope.timeEntries.statements.insert(added),
+		...entryTagStatements(scope, added.id, [], hours.tagIds ?? []),
 		recordStatement(
 			scope,
 			userId,
@@ -298,7 +335,18 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 			),
 		]);
 	} else {
-		const added = { id: uuidv7(), userId, projectId, description: null, ...span };
+		// A cell's entry has the project's first active task, as Track time gives one by default.
+		const task = await entryTaskOf(scope, projectId, undefined);
+		if (!task.ok) return refuse("no-task");
+		const added = {
+			id: uuidv7(),
+			userId,
+			projectId,
+			taskId: task.taskId,
+			billable: task.billable,
+			description: null,
+			...span,
+		};
 		await scope.batch([
 			scope.timeEntries.statements.insert(added),
 			recordStatement(

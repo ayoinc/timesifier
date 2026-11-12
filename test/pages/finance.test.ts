@@ -306,7 +306,48 @@ const ROLE_TABLE: Record<string, Row> = {
 			post: by<Post>("done", "done", 403, 403, 403),
 		},
 	},
-	"routes/app/tasks": { page: by(200, 200, 404, 404, 404) },
+	// Tasks and Tags (TS-066, TS-085): owners and admins alone keep them.
+	"routes/app/tasks": {
+		page: by(200, 200, 404, 404, 404),
+		form: {
+			fields: () => ({ intent: "create", name: "Research" }),
+			made: async () => (await count("select count(*) from tasks where name = 'Research'")) === 1,
+			post: by<Post>("done", "done", 404, 404, 404),
+		},
+	},
+	// The default rates (TS-067): below Projects, but seen and set only by those who see rates.
+	"routes/app/rates": {
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: (w) => ({
+				intent: "rate",
+				level: "person",
+				key: w.grace.userId,
+				amount: "85",
+				from: "2030-01-01",
+			}),
+			made: async (w) =>
+				(await count(
+					"select count(*) from rates where user_id = ? and project_id is null",
+					w.grace.userId,
+				)) === 1,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	// A project's own page (TS-066): whoever may see the project; its rates are money.
+	"routes/app/project": {
+		address: (w) => `/app/acme/projects/${w.project}`,
+		page: every(200),
+		form: {
+			fields: () => ({ intent: "rate", level: "project", amount: "90", from: "2030-01-01" }),
+			made: async (w) =>
+				(await count(
+					"select count(*) from rates where project_id = ? and user_id is null and task_id is null",
+					w.project,
+				)) === 1,
+			post: by<Post>("done", "done", "done", 403, 403),
+		},
+	},
 	"routes/app/invoices": { page: by(200, 200, 200, 404, 404) },
 	"routes/app/estimates": { page: by(200, 200, 200, 404, 404) },
 	"routes/app/approvals": {
@@ -452,7 +493,8 @@ describe("the role table", () => {
 				const form = ROLE_TABLE[id]?.form;
 				if (!form) throw new Error(`Add a form for ${id} to ROLE_TABLE.`);
 				const w = await world(column);
-				const at = isIndex ? `${address}?index` : address;
+				const own = ROLE_TABLE[id]?.address?.(w) ?? address;
+				const at = isIndex ? `${own}?index` : own;
 				const expected = form.post[column];
 
 				const response = await submit(at, form.fields(w), w.who, { byScript: true });

@@ -10,21 +10,25 @@ import {
 	listClients,
 	renameClient,
 	setClientArchived,
+	setClientCurrency,
 } from "~/clients/clients.server";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
+import { isCurrencyCode } from "~/money/money";
 import { mayManageClients, mayManageIntegrations } from "~/organisations/access";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
+import { CURRENCIES, INHERITED } from "~/projects/billing";
 import { keptTab, onlyTabChanged, SEARCH_PARAM, searchIn } from "~/projects/projects";
 import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
@@ -83,6 +87,7 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("rename"), clientId: Id, name: Name }),
 	z.object({ intent: z.literal("archive"), clientId: Id }),
 	z.object({ intent: z.literal("restore"), clientId: Id }),
+	z.object({ intent: z.literal("currency"), clientId: Id, currency: z.string().max(8) }),
 ]);
 
 /**
@@ -116,6 +121,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 				await setClientArchived(scope, user.id, input.clientId, false),
 				(name) => `${name} is restored. Projects can be given it again.`,
 			);
+		case "currency": {
+			const own = input.currency === INHERITED ? null : input.currency;
+			if (own !== null && !isCurrencyCode(own)) return declined("Choose a currency.");
+			return answer(
+				await setClientCurrency(scope, user.id, input.clientId, own),
+				(name) => `${name} is billed in ${own ?? "the organisation's currency"}.`,
+			);
+		}
 	}
 }
 
@@ -128,7 +141,7 @@ function answer(result: ClientResult, said: (name: string) => string) {
 type Client = Route.ComponentProps["loaderData"]["clients"][number];
 
 /** The sheets of this page. One is open at a time. */
-type Task = "create" | "rename" | "archive" | "restore";
+type Task = "create" | "rename" | "archive" | "restore" | "currency";
 
 export default function Clients({ loaderData }: Route.ComponentProps) {
 	const { clients, query, canManage } = loaderData;
@@ -283,6 +296,28 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
+				title={`Currency of ${client?.name ?? "this client"}`}
+				intent="currency"
+				submitLabel="Save"
+				isOpen={task === "currency"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="clientId" value={client?.id ?? ""} />
+				<p>Its projects bill in it unless a project has its own. Rates already set keep theirs.</p>
+				<Select
+					key={`currency-${client?.id}`}
+					label="Currency"
+					name="currency"
+					options={[
+						{ id: INHERITED, label: "The organisation's" },
+						...CURRENCIES.map((code) => ({ id: code, label: code })),
+					]}
+					defaultValue={client?.currency ?? INHERITED}
+				/>
+			</FormSheet>
+
+			<FormSheet
 				title={`Rename ${client?.name ?? "this client"}`}
 				intent="rename"
 				submitLabel="Save"
@@ -302,6 +337,17 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
 				/>
+				{/* The currency it bills in has its own sheet, as archiving does (TS-067). */}
+				<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
+					<p className="text-body-medium text-on-surface-variant">
+						{client?.currency
+							? `Billed in ${client.currency}.`
+							: "Billed in the organisation's currency."}
+					</p>
+					<Button variant="outlined" onPress={() => setTask("currency")}>
+						Change currency
+					</Button>
+				</div>
 				{/* Archiving is not renaming: it opens its own sheet, which says what it does. */}
 				<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
 					<p className="text-body-medium text-on-surface-variant">

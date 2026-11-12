@@ -32,3 +32,6 @@ export const GROUP_LABELS: Record<Grouping, string> = {
 
 /** The value of the person field that chooses nobody in particular: every person the viewer may see. */
 export const EVERYONE = "everyone";
+
+/** The tag filter's value that filters nothing: every tag and none (TS-085). No tag's id is this word. */
+export const ANY_TAG = "any";

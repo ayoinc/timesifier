@@ -15,6 +15,7 @@ import {
 import { freshDatabase } from "../db/database";
 import { createOrganisation } from "../organisations/harness";
 import {
+	addressFor,
 	isMoved,
 	isNotFound,
 	namesARecord,
@@ -155,8 +156,10 @@ describe("with a session", () => {
 	// An address that has moved answers with a redirect to its new place;
 	// test/pages/destinations.test.ts follows it. A resource route, a file to
 	// download, is served as that file. The organisation's catch-all answers 404
-	// to everyone; test/pages/errors.test.ts follows it. A route that names a
-	// record, such as a receipt, is followed by its own test.
+	// to everyone; test/pages/errors.test.ts follows it. A page of one record,
+	// such as a project's own page, is asked for at a record made for it; any
+	// other route that names a record, such as a receipt, is followed by its
+	// own test.
 	const served = underApp.filter(
 		(route) =>
 			route.address !== APP_PATH && !isMoved(route) && !isNotFound(route) && !namesARecord(route),
@@ -164,9 +167,11 @@ describe("with a session", () => {
 	const pages = served.filter((route) => route.hasPage);
 	const files = served.filter((route) => !route.hasPage);
 
-	it.each(pages)("$id: $address is served", async ({ address }) => {
+	it.each(pages)("$id: $address is served", async (route) => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");
-		expect((await createOrganisation(cookie, "Acme")).slug).toBe(ORGANISATION);
+		const acme = await createOrganisation(cookie, "Acme");
+		expect(acme.slug).toBe(ORGANISATION);
+		const address = await addressFor(route, acme.id);
 
 		const page = await ask(address, {}, cookie);
 		expect(page.status).toBe(200);

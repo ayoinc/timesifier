@@ -48,8 +48,8 @@ jobs:
     # @playwright/test's in package.json, and its digest is pinned.
     container:
       image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
-    # About 190 tests in two engines.
-    timeout-minutes: 25
+    # About 300 tests in two engines, which took 25 minutes by TS-066.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
