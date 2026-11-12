@@ -198,7 +198,8 @@ test("the export downloads the rows on screen as a UTF-8 CSV named for the range
 	expect(rows.join("\n")).toContain(
 		",Internal,,'=SUM(A1:A9),2026-10-08T14:00:00Z,2026-10-08T14:45:00Z,2700,no",
 	);
-	const seconds = rows.reduce((sum, row) => sum + Number(row.split(",").at(-1)), 0);
+	// The duration is the column before `overtime` (TS-095), the last one.
+	const seconds = rows.reduce((sum, row) => sum + Number(row.split(",").at(-2)), 0);
 	expect(seconds).toBe(4 * 3600 + 15 * 60);
 });
 
