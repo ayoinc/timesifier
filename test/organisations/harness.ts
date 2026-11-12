@@ -42,11 +42,28 @@ export async function value<T = number>(sql: string, ...values: unknown[]): Prom
 
 const Created = z.object({ id: z.string(), name: z.string(), slug: z.string() });
 
-/** Creates an organisation the way a page will: a name, and nothing else. */
+/**
+ * Creates an organisation the way a page will: a name, and nothing else. It
+ * then gets seats for everyone the test invites: these tests are about other
+ * rules, and the plan's seats (TS-099) have tests of their own, which call
+ * `setSeats` with the number they need.
+ */
 export async function createOrganisation(cookie: string, name: string) {
 	const response = await post("/organization/create", { name }, { cookie });
 	expect(response.status).toBe(200);
-	return Created.parse(await response.json());
+	const created = Created.parse(await response.json());
+	await setSeats(created.id, ROOM_FOR_EVERYONE);
+	return created;
+}
+
+/** Seats enough for any test of a rule other than the seats. */
+export const ROOM_FOR_EVERYONE = 1000;
+
+/** Gives an organisation `seats` on its plan. */
+export async function setSeats(organisationId: string, seats: number | null) {
+	await env.DB.prepare("update organisations set seats = ? where id = ?")
+		.bind(seats, organisationId)
+		.run();
 }
 
 const Invited = z.object({ id: z.string(), email: z.string(), role: z.string() });
@@ -85,9 +102,9 @@ export async function seedOrganisation(name = "Acme", slug = "acme") {
 	const id = uuidv7();
 	const now = Date.now();
 	await env.DB.prepare(
-		"insert into organisations (id, name, slug, created_at, updated_at) values (?, ?, ?, ?, ?)",
+		"insert into organisations (id, name, slug, seats, created_at, updated_at) values (?, ?, ?, ?, ?, ?)",
 	)
-		.bind(id, name, slug, now, now)
+		.bind(id, name, slug, ROOM_FOR_EVERYONE, now, now)
 		.run();
 	return { id, name, slug };
 }
