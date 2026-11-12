@@ -75,8 +75,11 @@ export interface ProfitTotals {
 
 /** The days `range` and the project's dates share. */
 function sharedDays(project: { startsOn: Day; endsOn: Day }, range: ReportDays): number {
-	const first = Math.max(project.startsOn, range.first);
-	const last = Math.min(project.endsOn, range.last);
+	// Days are "YYYY-MM-DD" text, which compares in date order; Math.max would make them numbers.
+	// biome-ignore lint/complexity/useMathMinMax: text, not numbers.
+	const first = project.startsOn > range.first ? project.startsOn : range.first;
+	// biome-ignore lint/complexity/useMathMinMax: text, not numbers.
+	const last = project.endsOn < range.last ? project.endsOn : range.last;
 	return first > last ? 0 : daysFrom(first, last).length;
 }
 

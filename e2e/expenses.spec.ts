@@ -310,7 +310,10 @@ for (const viewport of [
 
 				await page.getByRole("button", { name: "Record expense" }).click();
 				await sheet.getByLabel(/^Quantity \(mile\)/).fill("4");
-				await sheet.getByRole("checkbox", { name: "Retainer" }).check();
+				const tag = sheet.getByRole("checkbox", { name: "Retainer" });
+				await tag.focus();
+				await page.keyboard.press("Space");
+				await expect(tag).toBeChecked();
 				await sheet.getByRole("button", { name: "Record" }).click();
 				await expect(sheet).toBeHidden();
 				await expect(page.getByRole("status")).toHaveText("Expense recorded.");
@@ -319,7 +322,7 @@ for (const viewport of [
 
 				await openShell(page, `${destinationPath(slug, "reports")}/expenses`);
 				const tabs = page.getByRole("group", { name: "Report views" });
-				// At 390px the six tabs scroll sideways; every one is still in the page.
+				// At 390px the six tabs wrap into rows of three, every one in view.
 				for (const name of ["Time", "Expenses", "Contractors"]) {
 					await expect(tabs.getByRole("link", { name })).toHaveCount(1);
 				}
