@@ -38,10 +38,12 @@ export function useArrival(organisation: string | undefined, pathname: string): 
 			? navigation.location
 			: undefined;
 	const next = organisation && to ? destinationIndex(organisation, to.pathname) : -1;
-	const moving = to && next >= 0 && next !== here ? to.key : null;
+	// The move itself, not its location's key: Back and Forward return to a history
+	// entry with the key it had, and a move that ended may not count as late again.
+	const moving = to && next >= 0 && next !== here ? to : null;
 
 	// Which move has waited long enough to show its destination's shape.
-	const [late, setLate] = useState<string | null>(null);
+	const [late, setLate] = useState<typeof to | null>(null);
 	useEffect(() => {
 		if (moving === null) return;
 		// A transition, so the shape slides in the direction of travel and the
