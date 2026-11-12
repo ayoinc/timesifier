@@ -152,6 +152,12 @@ test.describe("while a move waits for the server", () => {
 	}) => {
 		await openShell(page, homePath("timesheet"));
 		await slowServer(context, baseURL, 900);
+		// Animations run at a twentieth of their speed: an animated change of shape
+		// would take several seconds to play out, and React would hold the page's
+		// arrival behind it.
+		const devtools = await context.newCDPSession(page);
+		await devtools.send("Animation.enable");
+		await devtools.send("Animation.setPlaybackRate", { playbackRate: 0.05 });
 
 		await nav(page).getByRole("link", { name: projects.label, exact: true }).click();
 		await expect(page.locator('[data-skeleton="projects"]')).toBeVisible();
@@ -162,6 +168,8 @@ test.describe("while a move waits for the server", () => {
 		expect(Date.now() - pressed).toBeLessThan(500);
 		await expect(page).toHaveURL(homePath("reports"));
 		await expect(main(page).getByRole("heading", { level: 1 })).toBeFocused();
+		// The page arrives with its answer (900ms), not after an animation.
+		expect(Date.now() - pressed).toBeLessThan(2500);
 	});
 
 	test("with reduced motion requested, the shape and the page that replaces it do not move", async ({

@@ -672,10 +672,15 @@ body {
  * waited slides in whole instead (the transitions above), and a page loaded or
  * reloaded whole is simply there. With reduced motion the sections fade in
  * together and nothing moves.
+ *
+ * The fill is `backwards` and not `both`: each section is hidden through its
+ * delay, and once its animation ends it lets go. A filled animation would hold
+ * the section as a stacking context and a containing block for anything fixed
+ * inside it, for as long as the page stays.
  */
 [data-reveal] > * > * {
 	animation: shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
-		both;
+		backwards;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -683,9 +688,9 @@ body {
 		--reveal-step: 0;
 		animation:
 			shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
-			calc(var(--reveal-step) * 40ms) both,
+			calc(var(--reveal-step) * 40ms) backwards,
 			reveal-rise var(--md-sys-motion-duration-medium2)
-			var(--md-sys-motion-easing-emphasized-decelerate) calc(var(--reveal-step) * 40ms) both;
+			var(--md-sys-motion-easing-emphasized-decelerate) calc(var(--reveal-step) * 40ms) backwards;
 	}
 
 	[data-reveal] > * > :nth-child(2) {

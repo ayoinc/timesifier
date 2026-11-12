@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useLayoutEffect, useState } from "react";
 import { useNavigation } from "react-router";
 
 import { type DestinationId, destinationIndex, destinations } from "./destinations";
@@ -49,18 +49,28 @@ export function useArrival(organisation: string | undefined, pathname: string): 
 		const timer = setTimeout(() => startTransition(() => setLate(moving)), SKELETON_DELAY_MS);
 		return () => clearTimeout(timer);
 	}, [moving]);
+	// The destination whose shape is on screen, from the first frame it shows to
+	// the frame its page takes its place.
+	const [shape, setShape] = useState<number | null>(null);
+	// The shape that has waited long enough slides in with the indicator. Set
+	// while rendering, in the transition that brought the timer's answer.
+	if (moving !== null && late === moving && shape === null) setShape(next);
+	// A press on another destination while a shape is shown swaps it for that
+	// one's at once (design rule 8). Not in the navigation's transition: a view
+	// transition started for the swap would hold back the page's own arrival until
+	// it had played. An update from a layout effect is not a transition, so React
+	// draws it before the frame is painted and animates nothing.
+	useLayoutEffect(() => {
+		if (moving !== null && shape !== null && shape !== next) setShape(next);
+	}, [moving, shape, next]);
 	// The page that arrives after its shape was shown reveals its sections. Worked
 	// out while rendering, so the sections are hidden on the very frame they arrive.
-	const [shapeShown, setShapeShown] = useState(false);
 	const [revealing, setRevealing] = useState<string | null>(null);
-	// Once a shape is shown, a press on another destination swaps it for that
-	// one's at once: the page that was left never comes back in between.
-	const waiting = moving !== null && (late === moving || shapeShown) ? next : null;
-	if (waiting !== null && !shapeShown) setShapeShown(true);
-	if (waiting === null && shapeShown && navigation.state === "idle") {
-		setShapeShown(false);
+	if (moving === null && shape !== null && navigation.state === "idle") {
+		setShape(null);
 		setRevealing(pathname);
 	}
+	const waiting = moving === null ? null : shape;
 
 	return {
 		index: waiting ?? here,
