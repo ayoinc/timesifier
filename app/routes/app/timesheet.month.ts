@@ -9,5 +9,9 @@ import type { Route } from "./+types/timesheet.month";
 
 export async function loader({ url, context }: Route.LoaderArgs) {
 	const date = Day.safeParse(url.searchParams.get("date"));
-	return pickerMonthData(context.get(membershipContext), date.success ? date.data : null, Date.now());
+	return pickerMonthData(
+		context.get(membershipContext),
+		date.success ? date.data : null,
+		Date.now(),
+	);
 }

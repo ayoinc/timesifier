@@ -43,8 +43,13 @@ export interface FormSheetProps {
 	isOpen: boolean;
 	/** Called when the sheet closes, whether the task was done or given up. */
 	onClose: () => void;
-	/** Called with what the server said when the task was done, before the sheet closes. */
-	onDone?: (said: string) => void;
+	/**
+	 * Called with what the server said when the task was done, before the sheet
+	 * closes, and with the whole answer: the entries it wrote, a token to undo it.
+	 */
+	onDone?: (said: string, answer: Extract<Outcome, { ok: true }>) => void;
+	/** Where the form is sent, when it is not the page's own action: the Timesheet's, from any page. */
+	action?: string;
 	/** What the person reads and fills in. Fields are part of the form. */
 	children: ReactNode;
 	/** `multipart/form-data` for a form with a file field. */
@@ -71,6 +76,7 @@ export function FormSheet({
 	onDone,
 	children,
 	encType,
+	action,
 }: FormSheetProps) {
 	const form = useId();
 	const fetcher = useFetcher<Outcome>();
@@ -82,7 +88,7 @@ export function FormSheet({
 		if (!answer || handled.current === answer) return;
 		handled.current = answer;
 		if (!answer.ok) return;
-		onDone?.(answer.said);
+		onDone?.(answer.said, answer);
 		onClose();
 		focusHeadingIfLost();
 	}, [answer, onDone, onClose]);
@@ -114,6 +120,7 @@ export function FormSheet({
 			<fetcher.Form
 				id={form}
 				method="post"
+				action={action}
 				encType={encType}
 				className="flex flex-col gap-4"
 				onSubmit={(event) => {

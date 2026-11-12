@@ -180,7 +180,7 @@ export function CalendarMonth({
 													aria-hidden="true"
 													className={cx(
 														"flex size-6 shrink-0 items-center justify-center rounded-full text-label-large tabular-nums",
-														isToday && "bg-on-surface text-surface",
+														isToday && "bg-primary-container text-on-primary-fixed",
 													)}
 												>
 													{Number(day.slice(8))}

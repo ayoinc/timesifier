@@ -25,9 +25,8 @@ import {
 	setCellHours,
 } from "~/time/manual.server";
 import { zoneOfMember } from "~/time/zones.server";
-
-import { TypedHours } from "./durations";
 import { copyDay, copyWeek } from "./copy.server";
+import { TypedHours } from "./durations";
 import { markCookie } from "./getting-started.server";
 import { entryOfUndo, undoToken } from "./undo.server";
 
@@ -180,9 +179,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				taskId: input.taskId,
 				tagIds: input.tagIds,
 			});
-			return added.ok
-				? { ...done("Entry saved."), changed: [added.entry.id] }
-				: refusal(added);
+			return added.ok ? { ...done("Entry saved."), changed: [added.entry.id] } : refusal(added);
 		}
 
 		// A timer that ran past what its day takes is kept; the day is flagged
@@ -218,9 +215,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				},
 				now,
 			);
-			return written.ok
-				? { ...done("Entry saved."), changed: [input.entryId] }
-				: refusal(written);
+			return written.ok ? { ...done("Entry saved."), changed: [input.entryId] } : refusal(written);
 		}
 
 		case "delete": {
@@ -238,9 +233,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			const entry = await entryOfUndo(env.BETTER_AUTH_SECRET, input.token, who, now);
 			if (!entry) return declined("That deletion can no longer be undone.", 409);
 			const restored = await restoreEntry(scope, user.id, zone, entry, now);
-			return restored.ok
-				? { ...done("Entry restored."), changed: [entry.id] }
-				: refusal(restored);
+			return restored.ok ? { ...done("Entry restored."), changed: [entry.id] } : refusal(restored);
 		}
 
 		case "copy-day": {

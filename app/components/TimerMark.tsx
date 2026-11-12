@@ -50,3 +50,20 @@ export function TimerMark({ running, tone = "outlined", size = "small" }: TimerM
 		</span>
 	);
 }
+
+/**
+ * The mark's arrowhead alone, in the text colour, for the inside of an icon
+ * button that starts a timer: "Start again" on an entry (taste HT-A).
+ */
+export function StartArrowhead({ className = "size-4" }: { className?: string }) {
+	return (
+		<svg
+			viewBox={ARROWHEAD_BOX}
+			aria-hidden="true"
+			focusable="false"
+			className={cx("shrink-0 fill-current", className)}
+		>
+			<path d={MARK_ARROW} />
+		</svg>
+	);
+}

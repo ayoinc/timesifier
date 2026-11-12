@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { IconButton } from "~/components/IconButton";
 import { AddIcon } from "~/components/icons/AddIcon";
 import { RemoveIcon } from "~/components/icons/RemoveIcon";
+import { PeriodStepper } from "~/components/PeriodStepper";
 import { Tooltip } from "~/components/Tooltip";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TRANSITION, useTravel } from "~/shell/transitions";
@@ -20,15 +21,17 @@ import {
 	zoomPath,
 	zoomStep,
 } from "./calendar-sheets";
-import { EntryFields, TrackTime } from "./DayView";
+import { EntryFields } from "./DayView";
 import { formatDuration } from "./durations";
+import { useReport, useReported } from "./feedback";
 import { dayNumber, useClockFormat, usePeriodFormat } from "./format";
 import { useNow } from "./live";
-import { PeriodLinks } from "./PeriodLinks";
 import { PeriodHeader } from "./Submission";
 import { type SheetEntry, weekSheet } from "./sheets";
+import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
+import { useTrackTime } from "./TrackTime";
 import type { CalendarData } from "./timesheet.server";
-import { calendarPath } from "./views";
+import { calendarPath, timerAction } from "./views";
 
 /**
  * The Calendar view of Timesheet (TS-062): the person's own time as a week on
@@ -59,10 +62,13 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 	const canTrack = projects.some((p) => !p.archived);
 
 	const [said, setSaid] = useState<string | null>(null);
-	const [task, setTask] = useState<"track" | "edit" | null>(null);
 	const [entry, setEntry] = useState<SheetEntry | null>(null);
-	const [slot, setSlot] = useState<{ day: Day; start: string }>({ day: today, start: "09:00" });
-	const close = () => setTask(null);
+	const openTrackTime = useTrackTime();
+	const report = useReport();
+	const reported = useReported();
+	useEffect(() => {
+		if (reported) setSaid(reported.said);
+	}, [reported]);
 
 	// The zoom: out to the month, in to the week, the week in detail and the
 	// day that the calendar is on, or today where today is in view.
@@ -96,31 +102,39 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 	const title = isMonth
 		? formatMonth.format(new Date(`${month}T00:00:00Z`))
 		: formatPeriod(first, last);
+	const previous = isMonth
+		? calendarPath(slug, { scale, date: monthAfter(month, -1) })
+		: calendarPath(slug, { date: addDays(first, -7), zoom });
+	const next = isMonth
+		? calendarPath(slug, { scale, date: monthAfter(month, 1) })
+		: calendarPath(slug, { date: addDays(first, 7), zoom });
+	const keys = useTimesheetKeys({
+		onNew: canTrack ? () => openTrackTime({ day: thisOne ? today : date }) : undefined,
+		previous,
+		next,
+		today: calendarPath(slug, { scale, zoom }),
+	});
 	const week = weekSheet(data.entries, days, zone, live);
 	const ofMonth = isMonth ? monthSheet(data.entries, days, month, zone, live) : null;
 
 	return (
 		<>
-			<PeriodLinks
-				label={isMonth ? "Months" : "Weeks"}
-				previous={{
-					to: isMonth
-						? calendarPath(slug, { scale, date: monthAfter(month, -1) })
-						: calendarPath(slug, { date: addDays(first, -7), zoom }),
-					label: isMonth ? "Previous month" : "Previous week",
-				}}
-				current={{
-					to: calendarPath(slug, { scale, zoom }),
-					label: "Today",
-					isCurrent: thisOne,
-				}}
-				next={{
-					to: isMonth
-						? calendarPath(slug, { scale, date: monthAfter(month, 1) })
-						: calendarPath(slug, { date: addDays(first, 7), zoom }),
-					label: isMonth ? "Next month" : "Next week",
-				}}
-			/>
+			<div className="mt-6">
+				<PeriodStepper
+					label={isMonth ? "Months" : "Weeks"}
+					period={title}
+					previous={{ to: previous, label: isMonth ? "Previous month" : "Previous week" }}
+					next={{ to: next, label: isMonth ? "Next month" : "Next week" }}
+					current={
+						thisOne
+							? undefined
+							: {
+									to: calendarPath(slug, { scale, zoom }),
+									label: isMonth ? "Back to this month" : "Back to this week",
+								}
+					}
+				/>
+			</div>
 
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
 				<div className="mt-6">
@@ -161,34 +175,21 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 							statuses={data.statuses}
 							canTrack={canTrack}
 							projectName={projectName}
-							onEdit={(chosen) => {
-								setEntry(chosen);
-								setTask("edit");
-							}}
-							onTrack={(day, start) => {
-								setSlot({ day, start });
-								setTask("track");
-							}}
+							onEdit={setEntry}
+							onTrack={(day, start) => openTrackTime({ day, start })}
 						/>
 					)}
 				</div>
 			</ViewTransition>
 
-			<TrackTime
-				data={{ day: slot.day, today, projects, rules: data.rules }}
-				start={slot.start}
-				isOpen={task === "track"}
-				onClose={close}
-				onDone={setSaid}
-			/>
-
 			<FormSheet
 				title="Edit entry"
 				intent="edit"
 				submitLabel="Save"
-				isOpen={task === "edit"}
-				onClose={close}
-				onDone={setSaid}
+				action={timerAction(slug)}
+				isOpen={entry !== null}
+				onClose={() => setEntry(null)}
+				onDone={(_said, answer) => report(answer)}
 			>
 				<input type="hidden" name="entryId" value={entry?.id ?? ""} />
 				{entry && (
@@ -200,6 +201,8 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 					/>
 				)}
 			</FormSheet>
+
+			<ShortcutsSheet isOpen={keys.helpOpen} onOpenChange={keys.setHelpOpen} />
 		</>
 	);
 }

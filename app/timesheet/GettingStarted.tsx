@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Button as AriaButton } from "react-aria-components";
 import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/Button";
@@ -8,7 +9,8 @@ import type { Outcome } from "~/organisations/problems";
 import { destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 
-import { dayPath, TIMER_ANCHOR, weekPath } from "./views";
+import { useTrackTime } from "./TrackTime";
+import { weekPath } from "./views";
 
 /** The steps of getting started on Timesheet, and whether each is done (TS-056). */
 export interface GettingStarted {
@@ -60,9 +62,10 @@ export function GettingStartedList({ steps, slug }: { steps: GettingStarted; slu
 	const fetcher = useFetcher<Outcome>({ key: PUT_AWAY });
 	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
 
-	const targets: Record<keyof GettingStarted, string> = {
+	const openTrackTime = useTrackTime();
+	// Tracking an entry is done here: the step opens the Track time sheet (taste HT-C).
+	const targets: Record<Exclude<keyof GettingStarted, "entry">, string> = {
 		project: destinationPath(slug, "projects"),
-		entry: `${dayPath(slug)}#${TIMER_ANCHOR}`,
 		week: weekPath(slug),
 	};
 	const doneCount = STEPS.filter((step) => steps[step]).length;
@@ -99,6 +102,13 @@ export function GettingStartedList({ steps, slug }: { steps: GettingStarted; slu
 								{LABELS[step]}
 								<span className="sr-only"> (done)</span>
 							</span>
+						) : step === "entry" ? (
+							<AriaButton
+								onPress={() => openTrackTime()}
+								className={cx(TEXT_LINK, "cursor-pointer text-start")}
+							>
+								{LABELS[step]}
+							</AriaButton>
 						) : (
 							<Link to={targets[step]} className={TEXT_LINK}>
 								{LABELS[step]}

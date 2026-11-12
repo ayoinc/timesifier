@@ -222,8 +222,11 @@ export function CalendarWeek({
 											{...itemProps(headId(day))}
 											className={cx(
 												"flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-medium px-1 py-2 outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator-inner",
-												isToday && "border-2 border-on-surface",
-												status?.quiet ? "text-on-surface-variant" : "text-on-surface",
+												isToday
+													? "bg-primary-container text-on-primary-fixed"
+													: status?.quiet
+														? "text-on-surface-variant"
+														: "text-on-surface",
 											)}
 										>
 											<span className="text-label-large">

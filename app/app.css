@@ -595,3 +595,34 @@ body {
 		translate: 250% 0;
 	}
 }
+
+/*
+ * A row an action has just written (taste HT-A, app/timesheet/feedback.tsx): a
+ * 2px ink outline over it that fades over 1.2 seconds, by its opacity alone.
+ * With reduced motion nothing is drawn: the snackbar and the status line say it.
+ */
+.changed-mark {
+	display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.changed-mark {
+		display: block;
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		border: 2px solid var(--md-sys-color-on-surface);
+		border-radius: var(--md-sys-shape-corner-small);
+		opacity: 0;
+		animation: changed-fade 1.2s var(--md-sys-motion-easing-standard);
+	}
+}
+
+@keyframes changed-fade {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}

@@ -1,4 +1,4 @@
-import { isNull } from "drizzle-orm";
+import { and, eq, gte, isNull, lt } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
@@ -13,7 +13,6 @@ import { gridEntryStart, placeOnDay } from "~/time/grid";
 import { ENTRY_FIELDS, entriesOfDay, subject } from "~/time/manual.server";
 
 import { formatDuration } from "./durations";
-import { startingIn } from "./timesheet.server";
 
 /**
  * Copying time forward (taste HT-F): an empty day takes the entries of the
@@ -48,7 +47,13 @@ async function sourcesIn(
 	span: { from: number; to: number },
 ): Promise<CopySource[]> {
 	const [rows, active] = await Promise.all([
-		scope.timeEntries.select(startingIn(userId, span)),
+		scope.timeEntries.select((e) =>
+			and(
+				eq(e.userId, userId),
+				gte(e.startedAt, new Date(span.from)),
+				lt(e.startedAt, new Date(span.to)),
+			),
+		),
 		scope.projects.select((p) => isNull(p.archivedAt)),
 	]);
 	const live = new Set(active.map((p) => p.id));
@@ -245,7 +250,8 @@ export async function copyWeek(
 	if (statements.length === 0) {
 		return {
 			ok: false,
-			problem: "Nothing was copied: every day with time last week has time, is locked or takes none.",
+			problem:
+				"Nothing was copied: every day with time last week has time, is locked or takes none.",
 		};
 	}
 	await scope.batch(statements as [Statement, ...Statement[]]);

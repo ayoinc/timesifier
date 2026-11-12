@@ -35,14 +35,14 @@ export const DIALOG_MOTION =
 	"data-exiting:duration-short4 data-exiting:ease-emphasized-accelerate";
 
 /**
- * A sheet. Under the `medium` breakpoint it is a bottom sheet and slides up from
- * the bottom edge and back down; from `medium` it is a dialog in the middle of
+ * A sheet. Under the `expanded` breakpoint it is a bottom sheet and slides up from
+ * the bottom edge and back down; from `expanded` it is a dialog in the middle of
  * the window and fades in growing from 95%.
  */
 export const SHEET_MOTION =
 	"transition duration-medium4 ease-emphasized-decelerate motion-reduce:transition-opacity motion-reduce:duration-short4 " +
-	"max-medium:motion-safe:data-entering:translate-y-full max-medium:motion-safe:data-exiting:translate-y-full " +
+	"max-expanded:motion-safe:data-entering:translate-y-full max-expanded:motion-safe:data-exiting:translate-y-full " +
 	"motion-reduce:data-entering:opacity-0 motion-reduce:data-exiting:opacity-0 " +
-	"medium:data-entering:opacity-0 medium:data-exiting:opacity-0 " +
-	"medium:motion-safe:data-entering:scale-95 medium:motion-safe:data-exiting:scale-95 " +
+	"expanded:data-entering:opacity-0 expanded:data-exiting:opacity-0 " +
+	"expanded:motion-safe:data-entering:scale-95 expanded:motion-safe:data-exiting:scale-95 " +
 	"data-exiting:duration-short4 data-exiting:ease-emphasized-accelerate";

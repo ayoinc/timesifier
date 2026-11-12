@@ -22,16 +22,17 @@ import { runningEntry } from "~/time/entries.server";
 import { zoneOfMember } from "~/time/zones.server";
 
 import { calendarDays, type DayStatus } from "./calendar-sheets";
+import { copySourceDay, copySourceWeek } from "./copy.server";
 import type { GettingStarted } from "./GettingStarted";
 import { gettingStarted, type Marks } from "./getting-started.server";
 
 import {
+	durationOf,
 	HISTORY_LENGTH,
 	type HistoryRow,
 	historyRows,
 	type PeriodState,
 	periodState,
-	durationOf,
 	type SheetEntry,
 	totalOf,
 	type WeekSheet,
@@ -201,6 +202,12 @@ export interface DayData extends TimesheetBase {
 	away: WeekAway;
 	/** Each day of the period with its limit, what is left and what is over (TS-090). */
 	rules: DayRule[];
+	/**
+	 * The day an empty, open day copies its entries from (taste HT-F): the last
+	 * working day with time in the three weeks before; null when the day has
+	 * time, is locked or takes none, or there is nothing to copy.
+	 */
+	copyFrom: Day | null;
 }
 
 export interface WeekData extends TimesheetBase, PeriodSubmission {
@@ -209,6 +216,8 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	sheet: WeekSheet;
 	/** The active projects with time in the week before, which "Copy last week's rows" adds (TS-052). */
 	lastWeekProjects: string[];
+	/** Whether a week of the three before has time to copy with its hours (taste HT-F). */
+	canCopyWeek: boolean;
 	/** The days of the week in a submitted or approved period, or on or before the lock date. */
 	lockedDays: Day[];
 	/** The organisation's lock date and its reason, or null when it has none (TS-065). */
@@ -392,7 +401,16 @@ async function dayData(
 	]);
 	const entries = ofPeriod.filter((entry) => dayOf(entry.startedAt, zone) === day);
 	const { days, total } = weekSheet(ofPeriod, daysFrom(period.startsOn, period.endsOn), zone, now);
+	const rule = rules.find((r) => r.day === day);
+	const open =
+		entries.length === 0 &&
+		!reasons.has(day) &&
+		rule?.closedReason == null &&
+		rule?.leftMinutes !== 0 &&
+		day <= dayOf(now, zone);
+	const source = open ? await copySourceDay(scope, userId, day, zone) : null;
 	return {
+		copyFrom: source?.day ?? null,
 		view: "day" as const,
 		day,
 		entries,
@@ -425,8 +443,11 @@ async function weekData(
 		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
+	const open = days.some((day) => !locked.has(day) && day <= dayOf(now, zone));
+	const source = open ? await copySourceWeek(scope, userId, period, zone) : null;
 	return {
 		view: "week" as const,
+		canCopyWeek: source !== null,
 		...submission,
 		days,
 		sheet: weekSheet(entries, days, zone, now, { projectOrder: projects.map((p) => p.id) }),
