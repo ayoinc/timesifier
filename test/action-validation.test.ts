@@ -86,6 +86,12 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			body: '{"project_id": ',
 		});
 	},
+	// An expense's day is a date the calendar has; 31 February is not.
+	"routes/app/expenses": () =>
+		formFromAMember(
+			"/app/acme/expenses",
+			"intent=record&spentOn=2026-02-31&projectId=p1&categoryId=c1&amount=1",
+		),
 	// An invitation is joined or declined; this asks for neither. The invitation
 	// is one the person could join, so only the input is wrong.
 	"routes/invitations.$id": async () => {

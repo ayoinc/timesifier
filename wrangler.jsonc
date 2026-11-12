@@ -72,6 +72,10 @@
 				"database_name": "timesifier-preview",
 				"database_id": "00000000-0000-0000-0000-000000000000"
 			}
+		],
+		// The previews' receipts, apart from production's (TS-070).
+		"r2_buckets": [
+			{ "binding": "RECEIPTS", "bucket_name": "timesifier-receipts-preview", "jurisdiction": "eu" }
 		]
 	},
 	"observability": {
@@ -92,6 +96,13 @@
 			"database_id": "00000000-0000-0000-0000-000000000000",
 			"migrations_dir": "migrations"
 		}
+	],
+	// Expense receipts (TS-070), under `org/<organisation id>/receipts/<expense id>`.
+	// app/expenses/receipts.server.ts is the only code that uses the binding. Both
+	// buckets are created once with `wrangler r2 bucket create <name> --jurisdiction
+	// eu`; locally and in the tests Wrangler keeps the files on disk.
+	"r2_buckets": [
+		{ "binding": "RECEIPTS", "bucket_name": "timesifier-receipts", "jurisdiction": "eu" }
 	],
 	// Set with `wrangler secret put`; locally they are read from .dev.vars. A deploy
 	// fails while either is missing. See docs/security.md, "Secrets".

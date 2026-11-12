@@ -1028,6 +1028,46 @@ export const expenseCategories = sqliteTable(
 );
 
 /**
+ * The unit price of a unit-priced expense category from a local date on
+ * (TS-070, B9). An expense takes the price in force on its `spent_on`: the
+ * row with the latest `effective_from` on or before it, or the earliest row
+ * for a day before them all. A price change is a new row, so expenses dated
+ * before it keep the old price. The category's own `unit_price_minor` is the
+ * price most recently set, for showing.
+ */
+export const expenseCategoryPrices = sqliteTable(
+	"expense_category_prices",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		categoryId: text("category_id").notNull(),
+		effectiveFrom: text("effective_from").notNull(),
+		/** In minor units of the organisation's currency. */
+		unitPriceMinor: integer("unit_price_minor").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("expense_category_prices_organisation_id_id_unique").on(
+			table.organisationId,
+			table.id,
+		),
+		uniqueIndex("expense_category_prices_category_id_effective_from_unique").on(
+			table.organisationId,
+			table.categoryId,
+			table.effectiveFrom,
+		),
+		foreignKey({
+			name: "expense_category_prices_category_fk",
+			columns: [table.organisationId, table.categoryId],
+			foreignColumns: [expenseCategories.organisationId, expenseCategories.id],
+		}).onDelete("cascade"),
+		check("expense_category_prices_not_negative", sql`${table.unitPriceMinor} >= 0`),
+	],
+);
+
+/**
  * Money one person spent on a project (B9). A unit-priced expense keeps its
  * quantity and the unit price copied from the category when it was recorded,
  * so a later price change leaves it alone. The receipt is a file in R2 under

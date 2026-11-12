@@ -14,7 +14,7 @@ import {
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, seedTeam, value } from "../organisations/harness";
-import { allRoutes, isMoved, STAND_IN_ORGANISATION } from "../routes";
+import { allRoutes, isMoved, namesARecord, STAND_IN_ORGANISATION } from "../routes";
 import { open, openData, type Person, pageBody, person, submit, textOf } from "./harness";
 
 // The navigation by heading and role (docs/navigation.md, "The navigation, top
@@ -32,6 +32,8 @@ const destinationPages = allRoutes
 	.filter((route) => !isMoved(route))
 	.map((route) => ({ ...route, index: destinationIndex(ACME, route.address) }))
 	.filter(({ index }) => index >= 0)
+	// A record's address, such as a receipt's, is 404 to a member too: its own test follows it.
+	.filter((route) => !namesARecord(route))
 	.map(({ id, address, index }) => ({
 		id,
 		address,

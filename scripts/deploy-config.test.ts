@@ -186,6 +186,7 @@ describe("scripts/deploy-config.ts --write", () => {
 						database_id: "22222222-2222-4222-8222-222222222222",
 					},
 				],
+				r2_buckets: committed.previews.r2_buckets,
 			},
 		});
 		// Still what stops a deploy whose Worker has no secrets.

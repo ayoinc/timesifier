@@ -745,13 +745,15 @@ Depends on: TS-064, TS-066, TS-067, TS-049.
 
 Depends on: TS-064, TS-011a, TS-046, TS-047.
 
-- [ ] An owner or admin keeps expense categories (name, optional unit price and unit); archive and restore. Changing a unit price applies to expenses dated from the change (test).
-- [ ] A person records an expense: date, project, category, amount or quantity, note, billable (defaulting from the project), "reimburse me". Amounts are stored in minor units of the project's currency (test).
-- [ ] A receipt (PDF, PNG or JPEG, up to 10 MB) is stored in R2 under an organisation-scoped key. It is served only to people who may see the expense; anyone else gets 404, including people in another organisation (test).
-- [ ] Expenses in a period are submitted, withdrawn, approved and returned with the period's time, and are locked with it and by the lock date (test).
-- [ ] A person sees and changes their own expenses; a manager sees their teams' people's, an owner, admin or Finance everyone's, and only the person changes them (`maySeeExpensesOf`, `mayChangeExpensesOf`; role table).
-- [ ] Reports include an Expenses view and CSV by person, project and category, with billable and reimbursable totals (test).
-- [ ] Out of scope, said on the card: paying reimbursements.
+Builder: an AI session on branch `ts-b2b-expenses`, migration `0009_expense_category_prices` (a unit price from a date). Receipts need the R2 buckets `timesifier-receipts` and `timesifier-receipts-preview`, created with `--jurisdiction eu`, before it deploys.
+
+- [x] An owner or admin keeps expense categories (name, optional unit price and unit); archive and restore. Changing a unit price applies to expenses dated from the change (test). (`test/pages/expenses.test.ts`, "expense categories in Workspace settings")
+- [x] A person records an expense: date, project, category, amount or quantity, note, billable (defaulting from the project), "reimburse me". Amounts are stored in minor units of the project's currency (test). (`test/pages/expenses.test.ts`, "recording an expense"; `test/expenses/expenses.test.ts`)
+- [x] A receipt (PDF, PNG or JPEG, up to 10 MB) is stored in R2 under an organisation-scoped key. It is served only to people who may see the expense; anyone else gets 404, including people in another organisation (test). (`test/pages/expenses.test.ts`, "receipts")
+- [x] Expenses in a period are submitted, withdrawn, approved and returned with the period's time, and are locked with it and by the lock date (test). (`test/pages/expenses.test.ts`, "locks", with an invoice too; Approvals shows them, "Approvals")
+- [x] A person sees and changes their own expenses; a manager sees their teams' people's, an owner, admin or Finance everyone's, and only the person changes them (`maySeeExpensesOf`, `mayChangeExpensesOf`; role table). (`test/pages/expenses.test.ts`, "who sees whose expenses")
+- [x] Reports include an Expenses view and CSV by person, project and category, with billable and reimbursable totals (test). (`test/pages/expenses.test.ts`, "the Expenses view of Reports"; `e2e/expenses.spec.ts`)
+- [x] Out of scope, said on the card: paying reimbursements.
 
 ### TS-071 · B6 · Cost rates and profitability
 
