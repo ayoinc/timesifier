@@ -12,6 +12,7 @@ import { Checkbox } from "~/components/Checkbox";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { LinkTabs } from "~/components/LinkTabs";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { PeriodStepper } from "~/components/PeriodStepper";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
@@ -33,7 +34,7 @@ import {
 	RATE_MODE_LABELS,
 	RATE_MODES,
 } from "~/projects/billing";
-import { projectCurrencies, projectPage } from "~/projects/project.server";
+import { projectCurrencies, projectPage, projectProfit } from "~/projects/project.server";
 import {
 	defaultRatesPath,
 	PROJECT_PARAM,
@@ -65,9 +66,10 @@ import { FormSheet } from "./FormSheet";
 import { useOrganisation } from "./useOrganisation";
 
 // A project's own page (harvest-taste.md item 11): Overview, with its hours,
-// what they are worth and its budget; Tasks, its list and each task's hours;
-// Team, the people who tracked time to it; and Settings, how it bills, its
-// budget and its tags. Every member opens it, as every member sees Projects;
+// what they are worth, its profit over a range (TS-071) and its budget; Tasks,
+// its list and each task's hours; Team, the people who tracked time to it; and
+// Settings, how it bills, its budget and its tags. Every member opens it, as
+// every member sees Projects;
 // the hours are those of the people whose time the viewer may see. Amounts,
 // rates and a budget in fees are shown only to owners, admins and Finance
 // (`maySeeRates`), who also set them (`mayManageRates`); owners and admins
@@ -102,14 +104,18 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 	const managesRates = mayManageRates(membership.role);
 	const managesTasks = mayManageTasks(membership.role);
 	const tabs = PROJECT_TABS.filter((tab) => tab !== "settings" || managesRates || managesTasks);
-	const asked = projectTabIn(new URL(request.url).searchParams);
+	const url = new URL(request.url);
+	const asked = projectTabIn(url.searchParams);
+	const tab = tabs.includes(asked) ? asked : "overview";
 	return {
 		page,
-		tab: tabs.includes(asked) ? asked : "overview",
+		tab,
 		tabs,
 		managesRates,
 		managesTasks,
 		showsClients: membership.organisation.clientsEnabled,
+		// Read only for Overview, where it is shown, and only for those who see rates.
+		profit: tab === "overview" ? await projectProfit(membership, page.project.id, url, now) : null,
 	};
 }
 
@@ -485,6 +491,8 @@ function Overview({ data }: { data: Data }) {
 				<LedgerTotal label="Total hours" value={page.hours.total} />
 			</Ledger>
 
+			{data.profit && <Profit profit={data.profit} />}
+
 			{budget && (
 				<Section
 					id="budget"
@@ -580,6 +588,73 @@ function Overview({ data }: { data: Data }) {
 				</Section>
 			)}
 		</>
+	);
+}
+
+/**
+ * The project's revenue, cost, profit and margin over a range, for those who
+ * see rates: its row of the Profitability report over the same range, which
+ * it links to (TS-071).
+ */
+function Profit({ profit }: { profit: NonNullable<Data["profit"]> }) {
+	const { figures } = profit;
+	return (
+		<Section
+			id="profit"
+			heading="Profit"
+			lead="Revenue less the cost of the time and the expenses, as the Profitability report counts them."
+		>
+			{profit.steps && (
+				<div className="mb-4">
+					<PeriodStepper
+						label="Profit range"
+						period={profit.range}
+						previous={profit.steps.previous}
+						next={profit.steps.next}
+						current={profit.steps.current}
+					/>
+				</div>
+			)}
+			<Ledger heading={profit.range}>
+				{figures ? (
+					<>
+						<LedgerRows label="Profit over the range">
+							<LedgerRow
+								title="Revenue"
+								detail={figures.otherCurrency && `Billed in ${figures.otherCurrency}`}
+								value={figures.revenue ?? "—"}
+							/>
+							<LedgerRow title="Cost" value={figures.cost} />
+							<LedgerRow title="Margin" value={figures.margin} />
+						</LedgerRows>
+						<LedgerTotal label="Profit" value={figures.profit} />
+					</>
+				) : (
+					<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
+						No time, expenses or fee on this project in this range.
+					</p>
+				)}
+			</Ledger>
+			{figures && (
+				<div className="mt-4 flex flex-col gap-1 text-body-medium text-on-surface-variant empty:hidden">
+					{figures.missingFeeOrDates && (
+						<p>Revenue unknown: the fee or the dates are missing.</p>
+					)}
+					{figures.otherCurrency && (
+						<p>Billed in {figures.otherCurrency}: no profit without a conversion.</p>
+					)}
+					{figures.missingRate && <p>{figures.missingRate} billable with no rate.</p>}
+					{figures.missingCost && (
+						<p>{figures.missingCost} with no cost rate counts as costing nothing.</p>
+					)}
+				</div>
+			)}
+			<p className="mt-4 text-body-large">
+				<Link to={profit.report} className={TEXT_LINK}>
+					Open profitability
+				</Link>
+			</p>
+		</Section>
 	);
 }
 

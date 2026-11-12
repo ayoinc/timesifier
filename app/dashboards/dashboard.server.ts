@@ -1,4 +1,6 @@
 import { budgetKindOf, projectBudgets } from "~/budgets/budget.server";
+import { type Receivable, receivablesOf } from "~/invoices/receivables.server";
+import { type UninvoicedTotal, uninvoicedTotalsOf } from "~/invoices/uninvoiced.server";
 import { maySeeRates } from "~/organisations/access";
 import type { Membership } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
@@ -11,6 +13,7 @@ import {
 	type UtilisationReport,
 	utilisationReport,
 } from "~/reports/utilisation.server";
+import { dayOf } from "~/time/calendar";
 
 /**
  * Dashboards (TS-086): one page of figures for a range, each read by the
@@ -50,6 +53,16 @@ export interface Dashboard {
 	onLeave: { id: string; name: string; leaveMinutes: number; halfDays: number }[];
 	/** Null for a viewer who does not see rates. */
 	money: ProfitabilityReport | null;
+	/**
+	 * What clients owe today in the organisation's zone, one row per currency,
+	 * as the Receivables report reads it; null for a viewer who does not see rates.
+	 */
+	receivables: Receivable[] | null;
+	/**
+	 * What is waiting to be invoiced until today, one total per currency, as
+	 * the Uninvoiced view reads it; null for a viewer who does not see rates.
+	 */
+	uninvoiced: UninvoicedTotal[] | null;
 }
 
 export async function dashboardOf(
@@ -60,11 +73,27 @@ export async function dashboardOf(
 	const rows = await rowsOfReport(report);
 	const lines = await peopleOfReport(report, rows);
 	const seesMoney = maySeeRates(membership.role);
-	const [utilisation, nonBillable, money, budgets] = await Promise.all([
+	const { organisation } = membership;
+	const [utilisation, nonBillable, money, budgets, receivables, uninvoiced] = await Promise.all([
 		utilisationReport(report, rows, lines),
 		nonBillableProjects(scope),
 		seesMoney ? profitabilityReport(report, rows) : Promise.resolve(null),
 		budgetsNearLimit(report, rows, seesMoney),
+		// Invoices count days in the organisation's zone, so the panels read them
+		// as Invoices' pages do (`billingOf`): their figures are those pages' totals.
+		seesMoney
+			? receivablesOf(scope, dayOf(report.now, organisation.timeZone))
+			: Promise.resolve(null),
+		seesMoney
+			? organisationMoney(organisation.id).then(({ currency }) =>
+					uninvoicedTotalsOf(
+						scope,
+						{ timeZone: organisation.timeZone, currency },
+						null,
+						report.now,
+					),
+				)
+			: Promise.resolve(null),
 	]);
 	const byProject = totalsOf(rows, "project");
 	return {
@@ -89,6 +118,8 @@ export async function dashboardOf(
 				halfDays: line.leaveHalfDays,
 			})),
 		money,
+		receivables,
+		uninvoiced,
 	};
 }
 

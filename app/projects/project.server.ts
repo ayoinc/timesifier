@@ -12,6 +12,13 @@ import { nameOrEmail } from "~/organisations/people";
 import { priceTime, wholeMinutes } from "~/rates/price";
 import { type RateView, ratesForProject } from "~/rates/rates.server";
 import { hoursAndMinutes } from "~/reports/format";
+import { profitabilityReport } from "~/reports/profitability.server";
+import { parseReportQuery, reportSearch } from "~/reports/query";
+import { reportRequest } from "~/reports/reports.server";
+import { percentLabel } from "~/reports/utilisation";
+import { viewFrame } from "~/reports/view.server";
+import { reportViewPath } from "~/reports/views";
+import { DEFAULT_LOCALE } from "~/shell/locale";
 import { tagOptions, tagsOfProject } from "~/tags/tags.server";
 import { activeTasks, tasksOfProjects } from "~/tasks/tasks.server";
 import { type Day, dayOf } from "~/time/calendar";
@@ -309,6 +316,64 @@ export async function projectPage(
 		projectRate,
 		tags,
 		tagIds,
+	};
+}
+
+/** The range the project's profit is shown for when the address names none. */
+const PROFIT_RANGE = "this-month";
+
+/**
+ * The project's revenue, cost, profit and margin over a range (TS-071 on the
+ * project's page), for those who see rates; null for anyone else. It is the
+ * Profitability report's row for the project, read by the same function
+ * (`profitabilityReport`) over the same range, written as that report writes
+ * it, so the two agree. The range is the Reports one in the address
+ * (`range`, `from`, `to`), this month when it names none or one that makes no
+ * report; the steps beside it lead to the ranges before and after.
+ */
+export async function projectProfit(
+	membership: Membership,
+	projectId: string,
+	url: URL,
+	now: number,
+) {
+	if (!maySeeRates(membership.role)) return null;
+	const asked = new URLSearchParams();
+	for (const key of ["range", "from", "to"]) {
+		const value = url.searchParams.get(key);
+		if (value !== null) asked.set(key, value);
+	}
+	const parsed = asked.has("range") ? parseReportQuery(asked) : null;
+	const search =
+		parsed && parsed.problem === null ? asked : new URLSearchParams({ range: PROFIT_RANGE });
+	const report = await reportRequest(membership, new URL(`?${search}`, url), now);
+	// The address was read above, so the range always makes a report.
+	if ("problem" in report) return null;
+	const { lines, currency } = await profitabilityReport(report);
+	const line = lines.find((l) => l.projectId === projectId) ?? null;
+	const frame = viewFrame(report, { grouped: false });
+	return {
+		range: frame.range,
+		steps: frame.steps,
+		report: reportViewPath(
+			membership.organisation.slug,
+			"profitability",
+			`?${reportSearch({ range: report.query.range, days: report.days, group: "project" })}`,
+		),
+		figures: line && {
+			revenue:
+				line.revenueMinor === null
+					? null
+					: formatMoney(line.revenueMinor, line.currency, DEFAULT_LOCALE),
+			cost: formatMoney(line.costMinor, currency, DEFAULT_LOCALE),
+			profit:
+				line.profitMinor === null ? "—" : formatMoney(line.profitMinor, currency, DEFAULT_LOCALE),
+			margin: percentLabel(line.margin),
+			missingFeeOrDates: line.missingFeeOrDates,
+			otherCurrency: line.currency !== currency ? line.currency : null,
+			missingRate: line.missingRateSeconds > 0 ? hoursAndMinutes(line.missingRateSeconds) : null,
+			missingCost: line.missingCostSeconds > 0 ? hoursAndMinutes(line.missingCostSeconds) : null,
+		},
 	};
 }
 

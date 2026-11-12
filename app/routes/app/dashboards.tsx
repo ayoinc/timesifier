@@ -2,6 +2,7 @@ import { data, Link } from "react-router";
 
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { dashboardOf } from "~/dashboards/dashboard.server";
+import { newInvoicePath, receivablesPath, uninvoicedPath } from "~/invoices/paths";
 import { halfDaysLabel } from "~/leave/kinds";
 import { formatMoney } from "~/money/money";
 import { membershipContext } from "~/organisations/membership.server";
@@ -25,7 +26,10 @@ import type { Route } from "./+types/dashboards";
 // function its report reads and linking to it, so a panel's figure is the
 // report's. Owners, admins, Finance and team managers are shown it (the
 // destination's audience); time panels hold the people the viewer may see
-// (`timeScopeOf`), and money panels only reach those who see rates.
+// (`timeScopeOf`), and money panels only reach those who see rates. What is
+// owed and what is waiting to be invoiced are as of today, whatever the range,
+// as their pages are, with one figure per currency: amounts in different
+// currencies are never added.
 
 const { label } = destination("dashboards");
 
@@ -76,12 +80,26 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			profit: formatMoney(board.money.totals.profitMinor, board.money.currency, DEFAULT_LOCALE),
 			margin: percentLabel(board.money.totals.margin),
 		},
+		receivables: board.receivables && {
+			outstanding: board.receivables.map((r) =>
+				formatMoney(r.outstandingMinor, r.currency, DEFAULT_LOCALE),
+			),
+			overdue: board.receivables
+				.filter((r) => r.overdueMinor > 0)
+				.map((r) => formatMoney(r.overdueMinor, r.currency, DEFAULT_LOCALE)),
+		},
+		uninvoiced:
+			board.uninvoiced &&
+			board.uninvoiced.map((u) => formatMoney(u.amountMinor, u.currency, DEFAULT_LOCALE)),
 		links: {
 			time: reportViewPath(slug, "time", search),
 			utilisation: reportViewPath(slug, "utilisation", search),
 			profitability: reportViewPath(slug, "profitability", search),
 			leave: reportViewPath(slug, "leave"),
 			projects: destinationPath(slug, "projects"),
+			receivables: receivablesPath(slug),
+			uninvoiced: uninvoicedPath(slug),
+			newInvoice: newInvoicePath(slug),
 		},
 	};
 	return data({ ...frame, board: shown }, { status: 200 });
@@ -129,10 +147,7 @@ export default function Dashboards({ loaderData: d }: Route.ComponentProps) {
 
 type Shown = NonNullable<Route.ComponentProps["loaderData"]["board"]>;
 
-/**
- * The panels. Outstanding invoices and uninvoiced work are not among them
- * yet: they read Bill's receivables (TS-086), which arrive with that slice.
- */
+/** The panels. */
 function Board(d: Shown) {
 	return (
 		<>
@@ -229,6 +244,43 @@ function Board(d: Shown) {
 					>
 						<p className="mb-2 text-body-medium text-on-surface-variant">
 							Revenue {d.money.revenue} · cost {d.money.cost} · margin {d.money.margin}.
+						</p>
+					</Panel>
+				)}
+				{d.uninvoiced && (
+					<Panel
+						heading="Uninvoiced"
+						value={d.uninvoiced.join(" · ")}
+						href={d.links.uninvoiced}
+						linkLabel="Open uninvoiced"
+					>
+						<p className="mb-2 text-body-medium text-on-surface-variant">
+							{d.uninvoiced.length > 0
+								? "Billable time, expenses and fees on no invoice yet, until today."
+								: "Nothing billable is waiting to be invoiced."}
+						</p>
+					</Panel>
+				)}
+				{d.receivables && (
+					<Panel
+						heading="Outstanding"
+						value={d.receivables.outstanding.join(" · ")}
+						href={d.links.receivables}
+						linkLabel="Open receivables"
+					>
+						<p className="mb-2 text-body-medium text-on-surface-variant">
+							{d.receivables.outstanding.length === 0 ? (
+								<>
+									Nothing is owed: every issued invoice is paid.{" "}
+									<Link to={d.links.newInvoice} className={TEXT_LINK}>
+										Create an invoice
+									</Link>
+								</>
+							) : d.receivables.overdue.length > 0 ? (
+								`Overdue ${d.receivables.overdue.join(" · ")}.`
+							) : (
+								"Nothing is overdue."
+							)}
 						</p>
 					</Panel>
 				)}
