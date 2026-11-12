@@ -101,7 +101,7 @@ describe("the week's sheet", () => {
 		const start = Date.parse("2026-03-29T00:30:00Z");
 		const sheet = weekSheet([entry(start, start + HOUR)], sunday, LONDON, start + 2 * HOUR);
 
-		expect(sheet.days.at(-1)).toEqual({ day: "2026-03-29", total: HOUR });
+		expect(sheet.days.at(-1)).toEqual({ day: "2026-03-29", total: HOUR, overtime: 0 });
 		// The day after the period starts at 00:00 on 30 March, 23 hours after the Sunday began.
 		expect(instantAt("2026-03-30", 0, LONDON) - instantAt("2026-03-29", 0, LONDON)).toBe(23 * HOUR);
 	});
@@ -146,6 +146,31 @@ describe("the week's sheet", () => {
 		expect(isTypable(monday("two"), false)).toBe(false);
 		expect(monday("two").total).toBe(2 * HOUR);
 		expect(isTypable(monday("running"), false)).toBe(false);
+	});
+
+	it("gives a project's overtime a row of its own after its regular time, and counts each day's overtime (TS-095)", () => {
+		const start = instantAt("2026-11-09", 9 * 60, LONDON);
+		const overtime = { ...entry(start + 8 * HOUR, start + 9 * HOUR, "a"), overtime: true };
+		const sheet = weekSheet(
+			[entry(start, start + 7 * HOUR, "a"), overtime, entry(start, start + HOUR, "b")],
+			days,
+			LONDON,
+			start + 10 * HOUR,
+			{ projectOrder: ["a", "b"] },
+		);
+
+		expect(sheet.rows.map((row) => [row.projectId, row.overtime])).toEqual([
+			["a", false],
+			["a", true],
+			["b", false],
+		]);
+		expect(sheet.rows[1]?.cells[0]).toMatchObject({
+			total: HOUR,
+			entries: 1,
+			entryId: overtime.id,
+		});
+		expect(sheet.days[0]).toEqual({ day: "2026-11-09", total: 9 * HOUR, overtime: HOUR });
+		expect(sheet.total).toBe(9 * HOUR);
 	});
 });
 

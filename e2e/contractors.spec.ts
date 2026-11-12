@@ -11,7 +11,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation, openMembers } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // Contractors (TS-079) in the browser: a person who owns an organisation marks
 // themselves a contractor on Team › Members with the keyboard alone, tracks
@@ -46,6 +46,8 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	({ slug } = await createOrganisation(page));
 	await setName(page, NAME);
 	await createProject(page, slug, "Site");
+	// Time is tracked today before it is moved: every day is worked, so it is regular time (TS-095).
+	await workEveryDay(page, slug);
 	await context.storageState({ path: OWN_SESSION });
 	await context.close();
 });

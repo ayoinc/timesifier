@@ -6,14 +6,14 @@ import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, pastWeekday } from "./timesheet";
 
 // The views of Reports beside Time and Dashboards in a browser (TS-068, TS-071,
 // TS-080, TS-084, TS-086): the tabs, the shared filter bar and stepper,
 // saving a report and opening it from Saved, the money panels of Dashboards
 // and a project's profit, the keyboard alone, and axe at 390px and 1280px in
 // both schemes. Each test is a new person, the owner of an organisation of
-// their own, with two hours tracked yesterday.
+// their own, with two hours tracked on the latest weekday before today.
 
 const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
@@ -25,14 +25,12 @@ test.beforeEach(async ({ context, baseURL }) => {
 	await ownAddress(context, baseURL);
 });
 
-/** Signs a new owner in with a project, Site, and two hours on it yesterday. */
+/** Signs a new owner in with a project, Site, and two hours on it on the latest weekday before today, a working day (TS-095). */
 async function ownerWithTime(page: Page) {
 	await signIn(page, newPerson().email);
 	const organisation = await createOrganisation(page);
 	await createProject(page, organisation.slug, "Site");
-	const day = await page.evaluate(() =>
-		new Date(Date.now() - 86_400_000).toLocaleDateString("en-CA"),
-	);
+	const day = await pastWeekday(page);
 	await openShell(page, `${organisationPath(organisation.slug)}?day=${day}`);
 	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	const sheet = page.getByRole("dialog", { name: "Track time" });
@@ -91,12 +89,12 @@ test("an owner moves between the views, saves a report and opens it again", asyn
 	await openShell(page, `${reports}/utilisation${range}`);
 	await page.getByRole("button", { name: "Save report" }).click();
 	const dialog = page.getByRole("dialog");
-	await dialog.getByRole("textbox", { name: "Name" }).fill("Yesterday's utilisation");
+	await dialog.getByRole("textbox", { name: "Name" }).fill("One day's utilisation");
 	await dialog.getByRole("button", { name: "Save" }).click();
 	await expect(dialog).toBeHidden();
 
 	await page.getByRole("link", { name: "Saved reports" }).click();
-	await page.getByRole("link", { name: "Yesterday's utilisation" }).click();
+	await page.getByRole("link", { name: "One day's utilisation" }).click();
 	await expect(page).toHaveURL(/\/reports\/utilisation\?/);
 	await expect(page.getByText("Utilisation: ")).toBeAttached();
 });
@@ -138,7 +136,7 @@ test("an owner reads the money panels of Dashboards and a project's profit, and 
 	await expect(page).toHaveURL(/\/invoices\/reports\?report=receivables$/);
 	await expect(page.getByRole("heading", { level: 1, name: "Invoice reports" })).toBeVisible();
 
-	// The project's profit over yesterday is its row of the Profitability report.
+	// The project's profit over that day is its row of the Profitability report.
 	const site = await siteAddress(page, organisation.slug);
 	await openShell(page, `${site}?range=custom&from=${day}&to=${day}`);
 	const profit = page.getByRole("region", { name: "Profit" });

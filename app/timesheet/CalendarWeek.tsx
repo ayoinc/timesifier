@@ -68,7 +68,7 @@ export function CalendarWeek({
 	/** The clock a running entry grows by. */
 	now: number;
 	/** Each day's total and the week's: `weekSheet`'s. */
-	totals: { days: { day: Day; total: number }[]; total: number };
+	totals: { days: { day: Day; total: number; overtime: number }[]; total: number };
 	statuses: CalendarData["statuses"];
 	/** Whether there is an active project to track time on. */
 	canTrack: boolean;
@@ -203,7 +203,9 @@ export function CalendarWeek({
 								</span>
 							</th>
 							{columns.map(({ day, locked, status, rule }, col) => {
-								const total = totals.days.find((each) => each.day === day)?.total ?? 0;
+								const ofDay = totals.days.find((each) => each.day === day);
+								const total = ofDay?.total ?? 0;
+								const overtime = ofDay?.overtime ?? 0;
 								const isToday = day === today;
 								return (
 									<th
@@ -240,6 +242,17 @@ export function CalendarWeek({
 												{formatDuration(total)}
 												<span className="sr-only"> tracked</span>
 											</span>
+											{overtime > 0 && (
+												<span
+													className={cx(
+														"max-w-full truncate text-label-small tabular-nums",
+														!isToday && "text-on-surface-variant",
+													)}
+												>
+													<span className="sr-only">, of which </span>
+													{formatDuration(overtime)} overtime
+												</span>
+											)}
 											{status && (
 												<span
 													className={cx(
@@ -410,6 +423,7 @@ function Block({
 		project,
 		times,
 		length,
+		entry.overtime ? "overtime" : null,
 		part.continued ? `continued from the day before` : null,
 		part.goesOn ? "goes on the next day" : null,
 		locked ? "submitted, open the day" : running ? "running, open the day to stop it" : "edit",
@@ -434,6 +448,11 @@ function Block({
 			<span aria-hidden="true" className="truncate text-label-medium">
 				{name}
 			</span>
+			{entry.overtime && (
+				<span aria-hidden="true" className="truncate text-label-small">
+					Overtime
+				</span>
+			)}
 			{(zoom === "detailed" ? rows >= 6 : rows >= 18) && (
 				<span aria-hidden="true" className="truncate text-label-small">
 					{times}

@@ -6,7 +6,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // Leave and time together in a browser (TS-090), on the person's own time:
 // an owner nobody else decides for sets the timesheet rules with the keyboard,
@@ -50,14 +50,7 @@ async function ownerWithWeek(page: Page) {
 	await signIn(page, newPerson().email);
 	const { slug } = await createOrganisation(page);
 	await createProject(page, slug, "Site");
-	await openShell(page, destinationPath(slug, "settings"));
-	await page.getByRole("button", { name: "Change working week" }).click();
-	const week = page.getByRole("dialog", { name: "Change the working week" });
-	await week.getByLabel("Saturday").fill("7:30");
-	await week.getByLabel("Sunday").fill("7:30");
-	await week.getByRole("button", { name: "Save" }).click();
-	await expect(week).toBeHidden();
-	await expect(status(page)).toHaveText("The working week is saved.");
+	await workEveryDay(page, slug);
 	return { slug };
 }
 

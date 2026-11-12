@@ -12,7 +12,7 @@ import {
 } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // Timesheet in a browser: the timer on the Day view and in the navigation
 // (TS-012a, TS-051), the Day and Week views and their links (TS-013), an entry
@@ -34,12 +34,14 @@ test.beforeEach(async ({ context, baseURL }) => {
 
 /**
  * Signs a new person in, who creates an organisation and, on Projects, one
- * project, Site. The Day view is open.
+ * project, Site, and works every day of the week: the timer runs today,
+ * whatever day the test runs (TS-095). The Day view is open.
  */
 async function trackingOrganisation(page: Page) {
 	await signIn(page, newPerson().email);
 	const organisation = await createOrganisation(page);
 	await createProject(page, organisation.slug, "Site");
+	await workEveryDay(page, organisation.slug);
 	await openShell(page, organisationPath(organisation.slug));
 	return organisation;
 }

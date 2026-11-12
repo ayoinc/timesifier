@@ -452,6 +452,7 @@ describe("the rules of each day as the Timesheet shows them", () => {
 				overtimeOpen: false,
 				overtimeLeftMinutes: 0,
 				noOvertimeReason: null,
+				fullReason: null,
 				overMinutes: 0,
 				approvedMinutes: 0,
 			},
@@ -466,6 +467,7 @@ describe("the rules of each day as the Timesheet shows them", () => {
 				overtimeOpen: true,
 				overtimeLeftMinutes: 0,
 				noOvertimeReason: null,
+				fullReason: "This day has 0:00 left. Track more as overtime.",
 				overMinutes: 30,
 				approvedMinutes: 60,
 			},
@@ -480,6 +482,8 @@ describe("the rules of each day as the Timesheet shows them", () => {
 				overtimeOpen: false,
 				overtimeLeftMinutes: 0,
 				noOvertimeReason: "Overtime on this day needs pre-approval. Request it on Time off.",
+				fullReason:
+					"This day has 0:00 left. Overtime on this day needs pre-approval. Request it on Time off.",
 				overMinutes: 0,
 				approvedMinutes: 0,
 			},
@@ -494,6 +498,8 @@ describe("the rules of each day as the Timesheet shows them", () => {
 				overtimeOpen: false,
 				overtimeLeftMinutes: 0,
 				noOvertimeReason:
+					"Saturday is not a working day: time on it needs approved weekend work. Request it on Time off.",
+				fullReason:
 					"Saturday is not a working day: time on it needs approved weekend work. Request it on Time off.",
 				overMinutes: 30,
 				approvedMinutes: 0,

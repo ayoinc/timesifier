@@ -22,7 +22,7 @@ import {
 	INVITATION_LINK,
 	openInvitations,
 } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // The Finance role in the browser (TS-075): a new owner makes an organisation,
 // a project, an hour and a half of time and a client through the pages, and
@@ -64,6 +64,8 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	({ slug, name: organisationName } = await createOrganisation(page));
 	await setName(page, owner.name);
 	await createProject(page, slug, "Website");
+	// Time is tracked today: every day is worked, so it is regular time whatever day the run is on (TS-095).
+	await workEveryDay(page, slug);
 
 	await openShell(page, organisationPath(slug));
 	await page.getByRole("button", { name: "Track time", exact: true }).click();

@@ -504,6 +504,12 @@ export interface DayRule {
 	overtimeLeftMinutes: number | null;
 	/** Why the day takes no overtime, as a sentence; null when it takes some, or is closed. */
 	noOvertimeReason: string | null;
+	/**
+	 * What the day says once its regular time is used, as a refusal of more
+	 * regular time does: where more goes, or why none can (`regularRefusal`);
+	 * null for a closed day, which says `closedReason`.
+	 */
+	fullReason: string | null;
 	/** The whole minutes it is over its limits; 0 when it is not. */
 	overMinutes: number;
 	/** Minutes of approved overtime or weekend work on it. */
@@ -537,6 +543,7 @@ export function dayRules(
 			overtimeOpen: !limit.closed && !limit.noOvertime,
 			overtimeLeftMinutes: allowance === null ? null : Math.max(0, allowance - overtime),
 			noOvertimeReason: limit.noOvertime ? noOvertimeReason(limit.noOvertime, day) : null,
+			fullReason: limit.closed ? null : regularRefusal(limit, 0),
 			overMinutes: minutesOver(limit, ms, allowance),
 			approvedMinutes: limit.approvedMinutes,
 		};

@@ -45,14 +45,20 @@ export interface GridCell {
 
 export interface GridRow {
 	projectId: string;
+	/** Whether the row is the project's overtime, rather than its regular time (TS-095). */
+	overtime: boolean;
 	cells: GridCell[];
 	/** The project's total for the week: the sum of its cells. */
 	total: number;
 }
 
 export interface WeekSheet {
-	days: { day: Day; total: number }[];
-	/** One row per project with time in the week, then each added row, in the order given. */
+	/** Each day's time, and how much of it is overtime. */
+	days: { day: Day; total: number; overtime: number }[];
+	/**
+	 * One row per project and kind with time in the week, a project's overtime
+	 * after its regular time, then each added row, in the order given.
+	 */
 	rows: GridRow[];
 	total: number;
 }
@@ -60,8 +66,9 @@ export interface WeekSheet {
 /**
  * The week's grid: a row for each project with time on `days`, in the order
  * of `projectOrder` (projects it does not name come last), then a row for
- * each of `addedRows` that has no time yet. A day's total and the week's are
- * sums of the cells.
+ * each of `addedRows` that has no time yet. A project with overtime has a
+ * second row of it, after its regular time (TS-095): a cell is one project and
+ * one kind. A day's total and the week's are sums of the cells.
  */
 export function weekSheet(
 	entries: readonly SheetEntry[],
@@ -73,29 +80,41 @@ export function weekSheet(
 		addedRows = [],
 	}: { projectOrder?: readonly string[]; addedRows?: readonly string[] } = {},
 ): WeekSheet {
-	const byProject = new Map<string, Map<Day, SheetEntry[]>>();
+	const byRow = new Map<string, Map<Day, SheetEntry[]>>();
+	const projectIds: string[] = [];
 	for (const entry of entries) {
 		const day = dayOf(entry.startedAt, zone);
 		if (!days.includes(day)) continue;
-		let ofProject = byProject.get(entry.projectId);
-		if (!ofProject) {
-			ofProject = new Map();
-			byProject.set(entry.projectId, ofProject);
+		const key = rowKey(entry.projectId, entry.overtime);
+		let ofRow = byRow.get(key);
+		if (!ofRow) {
+			ofRow = new Map();
+			byRow.set(key, ofRow);
 		}
-		ofProject.set(day, [...(ofProject.get(day) ?? []), entry]);
+		ofRow.set(day, [...(ofRow.get(day) ?? []), entry]);
+		if (!projectIds.includes(entry.projectId)) projectIds.push(entry.projectId);
 	}
 
 	const rank = (id: string) => {
 		const at = projectOrder.indexOf(id);
 		return at === -1 ? Number.MAX_SAFE_INTEGER : at;
 	};
-	const projectIds = [...byProject.keys()].sort((a, b) => rank(a) - rank(b));
-	for (const id of addedRows) if (!projectIds.includes(id)) projectIds.push(id);
+	projectIds.sort((a, b) => rank(a) - rank(b));
+	// Each project's regular time, then its overtime, where it has each; an added row is regular time.
+	const ordered: { projectId: string; overtime: boolean }[] = [];
+	for (const projectId of projectIds) {
+		for (const overtime of [false, true]) {
+			if (byRow.has(rowKey(projectId, overtime))) ordered.push({ projectId, overtime });
+		}
+	}
+	for (const projectId of addedRows) {
+		if (!projectIds.includes(projectId)) ordered.push({ projectId, overtime: false });
+	}
 
-	const rows = projectIds.map((projectId): GridRow => {
-		const ofProject = byProject.get(projectId);
+	const rows = ordered.map((row): GridRow => {
+		const ofRow = byRow.get(rowKey(row.projectId, row.overtime));
 		const cells = days.map((day): GridCell => {
-			const inCell = ofProject?.get(day) ?? [];
+			const inCell = ofRow?.get(day) ?? [];
 			return {
 				day,
 				total: totalOf(inCell, now),
@@ -104,14 +123,30 @@ export function weekSheet(
 				entryId: inCell.length === 1 ? (inCell[0]?.id ?? null) : null,
 			};
 		});
-		return { projectId, cells, total: cells.reduce((sum, cell) => sum + cell.total, 0) };
+		return {
+			projectId: row.projectId,
+			overtime: row.overtime,
+			cells,
+			total: cells.reduce((sum, cell) => sum + cell.total, 0),
+		};
 	});
 
-	const dayTotals = days.map((day, index) => ({
-		day,
-		total: rows.reduce((sum, row) => sum + (row.cells[index]?.total ?? 0), 0),
-	}));
+	const dayTotals = days.map((day, index) => {
+		let total = 0;
+		let overtime = 0;
+		for (const row of rows) {
+			const ms = row.cells[index]?.total ?? 0;
+			total += ms;
+			if (row.overtime) overtime += ms;
+		}
+		return { day, total, overtime };
+	});
 	return { days: dayTotals, rows, total: dayTotals.reduce((sum, each) => sum + each.total, 0) };
+}
+
+/** A row of the grid by its project and kind, as `data-row` names it. */
+export function rowKey(projectId: string, overtime: boolean): string {
+	return overtime ? `${projectId}:overtime` : projectId;
 }
 
 /** Whether a cell of the grid takes typed hours: one entry or none, not running, on a day not locked. */

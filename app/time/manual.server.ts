@@ -163,6 +163,8 @@ export interface DeletedEntry {
 	startedAt: number;
 	endedAt: number;
 	tagIds: string[];
+	/** Whether it was overtime (TS-095): it is put back as the same kind. */
+	overtime: boolean;
 }
 
 /** Deletes an entry of `userId` that has ended, and answers what it was, so it can be put back. */
@@ -201,6 +203,7 @@ export async function deleteEntry(
 		startedAt: entry.startedAt.getTime(),
 		endedAt: entry.endedAt.getTime(),
 		tagIds,
+		overtime: entry.overtime,
 	};
 	return { ok: true as const, deleted };
 }
@@ -227,6 +230,7 @@ export async function restoreEntry(
 		day,
 		replaces: null,
 		afterMs: entry.endedAt - entry.startedAt,
+		overtime: entry.overtime,
 	});
 	if (over) return limited(over);
 	const restored = {
@@ -238,6 +242,7 @@ export async function restoreEntry(
 		description: entry.description,
 		startedAt: new Date(entry.startedAt),
 		endedAt: new Date(entry.endedAt),
+		overtime: entry.overtime,
 	};
 	const kept = entry.tagIds.length > 0 && (await tagsAllowed(scope, [], entry.tagIds));
 	await scope.batch([

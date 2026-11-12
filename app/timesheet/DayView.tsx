@@ -27,7 +27,7 @@ import { addDays, type Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 
 import { DayPicker } from "./DayPicker";
-import { refusalOfDay } from "./DayRules";
+import { OvertimeTag, refusalOfDay } from "./DayRules";
 import { formatDuration, formatElapsed } from "./durations";
 import { ChangedMark, useReport, useReportAnswer, useReported } from "./feedback";
 import { dayNumber, useClockFormat, useDayFormat, usePeriodFormat } from "./format";
@@ -88,6 +88,10 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 	// The day as leave sees it: its name and the time expected on it (TS-061).
 	const shownDay = data.away.days.find((d) => d.day === day);
 	const over = rule?.overMinutes ?? 0;
+	// Of the day's time, how much is overtime: the total reads "7:30 + 1:00 overtime" (TS-095).
+	const overtimeTotal = entries
+		.filter((each) => each.overtime)
+		.reduce((sum, each) => sum + durationOf(each, now), 0);
 	const [entry, setEntry] = useState<SheetEntry | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	usePutAwayAnswer(setSaid);
@@ -233,6 +237,12 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 													<>
 														<ChangedMark id={each.id} reported={reported} />
 														<span className="wrap-anywhere">{what}</span>
+														{each.overtime && (
+															<>
+																<span className="sr-only">, </span>{" "}
+																<OvertimeTag onAmber={isRunning} />
+															</>
+														)}
 													</>
 												}
 												detail={
@@ -287,7 +297,14 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 									})}
 								</LedgerRows>
 							)}
-							<LedgerTotal label="Day total" value={formatDuration(total)} />
+							<LedgerTotal
+								label="Day total"
+								value={
+									overtimeTotal > 0
+										? `${formatDuration(total - overtimeTotal)} + ${formatDuration(overtimeTotal)} overtime`
+										: formatDuration(total)
+								}
+							/>
 						</Ledger>
 						{lockReason && (
 							<p className="mt-4 text-body-medium text-on-surface-variant">

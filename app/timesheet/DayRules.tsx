@@ -1,4 +1,5 @@
-import { type DayRule, leftMessage, overLabel } from "~/leave/rules";
+import { cx } from "~/components/cx";
+import { type DayRule, overLabel } from "~/leave/rules";
 import { formatDuration } from "~/time/format";
 
 import { useDayFormat } from "./format";
@@ -9,10 +10,39 @@ import { useDayFormat } from "./format";
  * or is over it. Words always, never colour alone.
  */
 
-/** Why nothing more can be added to the day: it takes no time, or has none left. Null when something can. */
+/**
+ * Why nothing more can be added to the day: it takes no time, or has no
+ * regular time left and no overtime to be had (TS-095). Null when something
+ * can: a day with its regular time used that takes overtime takes it as such.
+ */
 export function refusalOfDay(rule: DayRule | undefined): string | null {
 	if (!rule) return null;
-	return rule.closedReason ?? (rule.leftMinutes === 0 ? leftMessage(0) : null);
+	if (rule.closedReason !== null) return rule.closedReason;
+	if (rule.leftMinutes !== 0) return null;
+	if (!rule.overtimeOpen) return rule.fullReason;
+	return rule.overtimeLeftMinutes === 0 ? "This day has 0:00 of overtime left." : null;
+}
+
+/**
+ * Whether new time on the day is overtime: its regular time is used and it
+ * takes overtime. The Track time sheet then asks for overtime (TS-095).
+ */
+export function takesOvertimeOnly(rule: DayRule | undefined): boolean {
+	return refusalOfDay(rule) === null && rule?.leftMinutes === 0 && rule.overtimeOpen;
+}
+
+/** The word that marks overtime wherever time is shown (TS-095): words, never colour alone. */
+export function OvertimeTag({ onAmber = false }: { onAmber?: boolean }) {
+	return (
+		<span
+			className={cx(
+				"inline-flex shrink-0 items-center rounded-extra-small border px-1.5 text-label-small",
+				onAmber ? "border-on-primary-fixed" : "border-outline text-on-surface-variant",
+			)}
+		>
+			Overtime
+		</span>
+	);
 }
 
 /**

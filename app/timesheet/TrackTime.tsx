@@ -11,7 +11,7 @@ import { EntryChoices } from "~/tasks/EntryChoices";
 import { TrackChoicesContext } from "~/tasks/track";
 import type { Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
-import { refusalOfDay } from "./DayRules";
+import { refusalOfDay, takesOvertimeOnly } from "./DayRules";
 import { formatDuration } from "./durations";
 import { useReport } from "./feedback";
 import { useDayFormat } from "./format";
@@ -32,7 +32,10 @@ import { timerAction, trackDayPath } from "./views";
  * The rules of the date chosen are read with it (`timesheet.day.ts`): a locked
  * day, a day that takes no time (a public holiday, whole-day leave) and a day
  * with none left say why and hold the action back; a day with a limit says
- * what it has left (TS-090). The server refuses the same, whatever is sent.
+ * what it has left (TS-090). A day whose regular time is used and that takes
+ * overtime asks for Overtime instead of Hours, and its time is sent as
+ * overtime; a timer started on it runs as overtime (TS-095). The server
+ * refuses the same, whatever is sent.
  */
 
 /** What the sheet is opened with: the day to start at, and a start from a calendar slot. */
@@ -112,6 +115,7 @@ function TrackTimeSheet({
 	const rule = current?.rule ?? undefined;
 	const lockReason = current?.lockReason ?? null;
 	const closed = lockReason ? null : refusalOfDay(rule);
+	const overtime = lockReason === null && takesOvertimeOnly(rule);
 	const recent = data?.track.recent ?? [];
 	const firstChoice = recent.find((id) => active.some((p) => p.id === id)) ?? active[0]?.id ?? null;
 	const loading = data === undefined;
@@ -147,7 +151,7 @@ function TrackTimeSheet({
 						maxLength={ENTRY_DESCRIPTION_MAX_LENGTH}
 					/>
 					<TextField
-						label="Hours"
+						label={overtime ? "Overtime" : "Hours"}
 						name="hours"
 						value={hours}
 						onChange={setHours}
@@ -157,10 +161,11 @@ function TrackTimeSheet({
 						isRequired={!timerAllowed}
 						description={
 							timerAllowed
-								? "As 1.5, 1,5 or 1:30. Leave it empty to start a timer."
+								? `As 1.5, 1,5 or 1:30. Leave it empty to start a timer${overtime ? " of overtime" : ""}.`
 								: "As 1.5, 1,5 or 1:30. A timer runs today only."
 						}
 					/>
+					{overtime && <input type="hidden" name="overtime" value="true" />}
 					<div className="grid grid-cols-2 gap-4">
 						<TextField
 							label="Date"
@@ -188,15 +193,30 @@ function TrackTimeSheet({
 						lockLabel={lockReason ? LOCK_LABELS[lockReason] : null}
 						closed={closed}
 						left={
-							rule && rule.limitMinutes !== null && rule.closedReason === null && closed === null
-								? `This day has ${formatDuration((rule.leftMinutes ?? 0) * 60_000)} left of ${formatDuration(rule.limitMinutes * 60_000)}.`
-								: null
+							rule && overtime
+								? overtimeNote(rule.limitMinutes ?? 0, rule.overtimeLeftMinutes)
+								: rule &&
+										rule.limitMinutes !== null &&
+										rule.closedReason === null &&
+										closed === null
+									? `This day has ${formatDuration((rule.leftMinutes ?? 0) * 60_000)} left of ${formatDuration(rule.limitMinutes * 60_000)}.`
+									: null
 						}
 					/>
 				</TrackChoicesContext>
 			)}
 		</FormSheet>
 	);
+}
+
+/** What the sheet says of a day whose time is overtime: why, and how much of it is left. */
+function overtimeNote(limitMinutes: number, leftMinutes: number | null): string {
+	const why =
+		limitMinutes === 0
+			? "No regular time is expected on this day"
+			: `This day's ${formatDuration(limitMinutes * 60_000)} of regular time is tracked`;
+	const left = leftMinutes === null ? "" : `, ${formatDuration(leftMinutes * 60_000)} of it left`;
+	return `${why}: more is overtime${left}.`;
 }
 
 /** What the sheet says of the date chosen: which day it is, and why it takes nothing or how much. */
