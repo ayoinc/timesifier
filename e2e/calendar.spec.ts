@@ -278,9 +278,9 @@ test("with the keyboard alone: arrows move between days, Enter opens a day, a sl
 	await page.keyboard.press("Escape");
 	await expect(trackSheet(page)).toBeHidden();
 
-	// Home leads back to the first day's head.
+	// Home leads back to the first day's head, which says what is left of a working day (TS-095).
 	await page.keyboard.press("Home");
-	await expect(focused(page)).toHaveAccessibleName(/, \d+:\d{2} tracked$/);
+	await expect(focused(page)).toHaveAccessibleName(/, \d+:\d{2} tracked\b/);
 	await page.keyboard.press("ArrowRight");
 	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL(/\?day=\d{4}-\d{2}-\d{2}$/);
