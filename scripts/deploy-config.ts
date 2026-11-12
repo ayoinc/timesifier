@@ -153,6 +153,9 @@ function deploymentConfig(base: z.infer<typeof Config>, values: Values) {
 	};
 	database.database_id = values.D1_DATABASE_ID;
 	email.allowed_sender_addresses = [values.EMAIL_FROM];
+	// Production must name its platform owners (TS-099); a preview, which shares
+	// the committed list, may not, and its console is then closed.
+	config.secrets = { required: ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY", "PLATFORM_OWNERS"] };
 
 	// A preview is `<its name>-<worker>.<subdomain>.workers.dev`.
 	const hostSuffix = `-${config.name}.${values.WORKERS_DEV_SUBDOMAIN}.workers.dev`;

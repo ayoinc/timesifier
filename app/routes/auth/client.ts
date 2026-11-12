@@ -9,6 +9,8 @@
 import { createAuthClient } from "better-auth/client";
 import { emailOTPClient } from "better-auth/client/plugins";
 
+import { NEWSLETTER_HEADER } from "~/platform/paths";
+
 /** What went wrong, in the terms the pages have words for. */
 export type Problem =
 	/** The rate limit turned the request away. */
@@ -21,7 +23,9 @@ export type Problem =
 	| "expired-code"
 	/** Three wrong codes: the code no longer works. */
 	| "spent-code"
-	| "failed";
+	| "failed"
+	/** The account was closed by Timesifier (TS-099). */
+	| "closed";
 
 export type Outcome = { ok: true } | { ok: false; problem: Problem };
 
@@ -45,6 +49,7 @@ const CODE_PROBLEMS: Record<string, Problem> = {
 	INVALID_OTP: "wrong-code",
 	OTP_EXPIRED: "expired-code",
 	TOO_MANY_ATTEMPTS: "spent-code",
+	ACCOUNT_CLOSED: "closed",
 };
 
 /** Why a request for a code was refused. The first two are the Turnstile check's. */
@@ -84,10 +89,17 @@ export function sendCode(email: string, token: string): Promise<Outcome> {
 	});
 }
 
-/** Signs in with an emailed code. The first time an address does, this creates its account. */
-export function signInWithCode(email: string, code: string): Promise<Outcome> {
+/**
+ * Signs in with an emailed code. The first time an address does, this creates
+ * its account, with the newsletter on where `newsletter` asks for it (TS-099).
+ */
+export function signInWithCode(email: string, code: string, newsletter = false): Promise<Outcome> {
 	return attempt(async () => {
-		const { error } = await auth().signIn.emailOtp({ email, otp: code });
+		const { error } = await auth().signIn.emailOtp({
+			email,
+			otp: code,
+			...(newsletter ? { fetchOptions: { headers: { [NEWSLETTER_HEADER]: "yes" } } } : {}),
+		});
 		return outcome(error, CODE_PROBLEMS);
 	});
 }

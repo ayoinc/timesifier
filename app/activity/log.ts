@@ -36,4 +36,5 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	api_token: "API tokens",
 	webhook: "Webhooks",
 	import: "Imports",
+	support_access: "Support access",
 };

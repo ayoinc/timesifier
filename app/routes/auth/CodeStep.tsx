@@ -31,6 +31,8 @@ export interface CodeStepProps {
 	onSignedIn: () => void;
 	/** The person wants to give a different address. */
 	onChangeEmail: () => void;
+	/** Whether the person asked for the newsletter, which a new account starts with (TS-099). */
+	newsletter?: boolean;
 }
 
 /**
@@ -39,7 +41,14 @@ export interface CodeStepProps {
  * will not work. Nothing here says whether the address has an account: the
  * same view follows any address.
  */
-export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: CodeStepProps) {
+export function CodeStep({
+	email,
+	siteKey,
+	onSent,
+	onSignedIn,
+	onChangeEmail,
+	newsletter = false,
+}: CodeStepProps) {
 	const [code, setCode] = useState("");
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const check = useRef<RobotCheckHandle>(null);
@@ -49,7 +58,7 @@ export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: 
 		event.preventDefault();
 		once(async () => {
 			setNotice(progress("Checking the code…"));
-			const outcome = await signInWithCode(email, code);
+			const outcome = await signInWithCode(email, code, newsletter);
 			if (outcome.ok) return onSignedIn();
 			setNotice(problem(outcome.problem));
 		});
