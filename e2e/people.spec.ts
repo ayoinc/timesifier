@@ -132,12 +132,24 @@ for (const viewport of [
 			await openShell(page, `${team}?week=${WEEK}`);
 			// The filter field is empty: its text's contrast is measured once it has some.
 			await expectNoProblems(page, "Team", [EMPTY_INPUT]);
-			await expect(page.getByText("5 to 11 January 2026").first()).toBeVisible();
-			// The week's total stands above the people.
-			await expect(page.getByText(/^Week's total\s*7:30$/)).toBeVisible();
+			await expect(page.getByText("5–11 January 2026").first()).toBeVisible();
+			// The tabs sit under the heading and its sentence (TS-091, W20).
+			const headingBox = await page.getByRole("heading", { level: 1, name: "Team" }).boundingBox();
+			const tabsBox = await page.getByRole("group", { name: "Team pages" }).boundingBox();
+			expect(tabsBox?.y ?? 0).toBeGreaterThan((headingBox?.y ?? 0) + (headingBox?.height ?? 0));
+			// The week is stepped by named arrows, and "This week" leads back (W23).
+			await expect(page.getByRole("link", { name: "Previous week" })).toBeVisible();
+			await expect(page.getByRole("link", { name: "Next week" })).toBeVisible();
+			await expect(page.getByRole("link", { name: "This week", exact: true }).last()).toBeVisible();
+			// The week's total is the sheet's footer, under the people (W30).
+			const total = page.getByText(/^Week's total\s*7:30$/);
+			await expect(total).toBeVisible();
+			const peopleBox = await page.getByRole("list", { name: "People" }).boundingBox();
+			expect((await total.boundingBox())?.y ?? 0).toBeGreaterThan(peopleBox?.y ?? 0);
 
 			// A filter by name, kept in the address, narrows the people and the total.
-			const filter = page.getByRole("searchbox", { name: "Filter by name" });
+			const filter = page.getByRole("searchbox", { name: "Search people" });
+			await expect(page.getByRole("button", { name: "Filter", exact: true })).toHaveCount(0);
 			await filter.focus();
 			await page.keyboard.type("nobody");
 			await page.keyboard.press("Enter");
@@ -207,7 +219,7 @@ for (const viewport of [
 			};
 			await expectApprovalsLink(" 1 pending");
 			await expectNoProblems(page, "Approvals");
-			await expect(page.getByText("5 to 11 January 2026").first()).toBeVisible();
+			await expect(page.getByText("5–11 January 2026").first()).toBeVisible();
 
 			await focusOn(page, "button", `Return ${member.name}'s timesheet`);
 			await page.keyboard.press("Enter");

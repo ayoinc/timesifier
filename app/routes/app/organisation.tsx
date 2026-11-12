@@ -1,4 +1,4 @@
-import { Outlet } from "react-router";
+import { Link, Outlet, useParams } from "react-router";
 
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
 import { pendingLeaveOf } from "~/leave/leave.server";
@@ -12,10 +12,15 @@ import { signedInContext } from "~/routes/auth/session.server";
 import {
 	canSee,
 	destinationIndex,
+	destinationPath,
 	destinations,
 	ORGANISATION_PARAM,
 	visibleDestinations,
 } from "~/shell/destinations";
+import { errorWords } from "~/shell/error-words";
+import { TEXT_LINK } from "~/shell/links";
+import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { finishRunningTransition } from "~/shell/transitions";
 import { navigationTimer } from "~/timesheet/navigation.server";
 
 import type { Route } from "./+types/organisation";
@@ -51,15 +56,24 @@ const PATTERN_SLUG = `:${ORGANISATION_PARAM}`;
  * or at any page below it, gets the same 404 as a person who is not a member.
  * The destination is read from the pattern of the route that matched, which
  * comes from the route configuration and not from what was typed, so no way of
- * spelling an address reaches a page by another route.
+ * spelling an address reaches a page by another route. The catch-all
+ * (`routes/app/not-found.tsx`) reaches no page; for it the address typed is
+ * read, so an address below a hidden destination that holds no page gets the
+ * stranger's 404 too, and not the one drawn in the person's own shell.
  */
-const requireDestination: Route.MiddlewareFunction = ({ pattern, context }) => {
-	const path = pattern.startsWith("/") ? pattern : `/${pattern}`;
+const requireDestination: Route.MiddlewareFunction = ({ pattern, params, context }) => {
+	const matched = pattern.endsWith("/*") ? `${pattern.slice(0, -1)}${params["*"] ?? ""}` : pattern;
+	const path = matched.startsWith("/") ? matched : `/${matched}`;
 	const at = destinations[destinationIndex(PATTERN_SLUG, path)];
 	if (at && !canSee(viewerOf(context.get(membershipContext)), at.id)) throw notFound();
 };
 
 export const middleware: Route.MiddlewareFunction[] = [requireOrganisation, requireDestination];
+
+/** The title of the organisation's error page: its heading. Each page below names itself. */
+export function meta({ error }: Route.MetaArgs) {
+	return error ? [{ title: `${errorWords(error, "organisation").heading} · Timesifier` }] : [];
+}
 
 /**
  * What every page of the organisation may show: its name, its slug, the
@@ -91,4 +105,32 @@ export async function loader({ context }: Route.LoaderArgs) {
 
 export default function Organisation() {
 	return <Outlet />;
+}
+
+/**
+ * What a page of the organisation says when it cannot be shown (audit W14): an
+ * address under the organisation that holds no page (`routes/app/not-found.tsx`),
+ * an address that asks for something that is not valid, or a page that failed.
+ * It is drawn where the page would have been, so the band, the organisation's
+ * name and the navigation stay. A refusal by the checks above happens before
+ * the organisation is known to be the person's, and is the root's error page.
+ */
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+	const slug = useParams()[ORGANISATION_PARAM] ?? "";
+	const { heading, details } = errorWords(error, "organisation");
+	return (
+		<>
+			<PageHeading>{heading}</PageHeading>
+			<PageLead>{details}</PageLead>
+			<p className="mt-10">
+				<Link
+					to={destinationPath(slug, "timesheet")}
+					onClick={finishRunningTransition}
+					className={TEXT_LINK}
+				>
+					Go to the Timesheet
+				</Link>
+			</p>
+		</>
+	);
 }

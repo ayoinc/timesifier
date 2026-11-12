@@ -33,5 +33,5 @@ export const ROLE_MEANINGS: Record<Role, string> = {
 	admin: "Admins can rename the organisation, invite people and manage members.",
 	finance:
 		"Finance can see everyone's time and expenses, every rate and report, and run invoices and estimates, but manages nobody.",
-	member: "Members can see the organisation and who is in it.",
+	member: "Tracks their own time and submits their timesheet.",
 };

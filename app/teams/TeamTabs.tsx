@@ -1,12 +1,10 @@
-import { Link } from "react-router";
-
-import { cx } from "~/components/cx";
+import { LinkTabs } from "~/components/LinkTabs";
 import { destinationPath, invitationsPath, membersPath } from "~/shell/destinations";
 
 // The pages of Team as a row of tabs (TS-045): This week, Teams, Members and
-// Invitations. Each is an address of its own, so a tab is a link and the one on
-// screen is marked by `aria-current`, drawn as the Tabs component draws a
-// selected tab: the label in primary over a 3px rule.
+// Invitations. Each is an address of its own, so a tab is a link. The row sits
+// under the page's heading and the sentence under it, as every page's tabs do,
+// and is drawn as every row of tabs is (TS-091, W20).
 
 export type TeamTab = "week" | "teams" | "members" | "invitations";
 
@@ -32,30 +30,12 @@ const TABS: { id: TeamTab; label: string }[] = [
 
 export function TeamTabs({ slug, current }: { slug: string; current: TeamTab }) {
 	return (
-		<ul aria-label="Team pages" className="flex max-w-200 border-outline-variant border-b">
-			{TABS.map(({ id, label }) => {
-				const isCurrent = id === current;
-				return (
-					<li key={id} className="flex-1">
-						<Link
-							to={teamTabPath(slug, id)}
-							aria-current={isCurrent ? "page" : undefined}
-							className={cx(
-								"relative flex h-12 items-center justify-center px-2 text-center text-title-small outline-none hover:text-on-surface focus-visible:focus-indicator-inner",
-								isCurrent ? "text-primary" : "text-on-surface-variant",
-							)}
-						>
-							{label}
-							{isCurrent && (
-								<span
-									aria-hidden="true"
-									className="absolute inset-x-2 bottom-0 h-0.75 rounded-t-full bg-primary"
-								/>
-							)}
-						</Link>
-					</li>
-				);
-			})}
-		</ul>
+		<div className="mt-6 max-w-200">
+			<LinkTabs
+				label="Team pages"
+				tabs={TABS.map(({ id, label }) => ({ id, to: teamTabPath(slug, id), label }))}
+				current={current}
+			/>
+		</div>
 	);
 }

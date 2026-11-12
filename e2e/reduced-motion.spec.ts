@@ -114,7 +114,7 @@ test.describe("with motion allowed", () => {
 
 		const seen = await movement(page);
 		for (const moved of [
-			/^transition of translate on <div> "Edit note/, // the sheet slides
+			/^transition of scale on <div> "Edit note/, // from 600px the sheet grows in the middle
 			/^transition of scale on <div> "Delete this entry\?/, // the dialog grows
 			/^transition of scale on <div role=dialog> "AtlasBorealis/, // the select's list grows
 			/^transition of scale on <div role=dialog> "EditDuplicate/, // the menu grows

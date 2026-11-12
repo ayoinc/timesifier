@@ -143,9 +143,9 @@ for (const viewport of [
 
 			await openShell(page, `${projects}?q=initech`);
 			await expect(groups).toHaveText(["Initech"]);
-			await expect(
-				page.getByRole("searchbox", { name: "Search by project or client name" }),
-			).toHaveValue("initech");
+			await expect(page.getByRole("searchbox", { name: "Search projects or clients" })).toHaveValue(
+				"initech",
+			);
 			await expectNoProblems(page, "Projects", "searched");
 
 			await openShell(page, `${projects}?q=nothing`);
@@ -168,8 +168,8 @@ test("Projects and Clients are searched with the keyboard alone, in the address"
 	await openShell(page, projects);
 	const heading = page.getByRole("heading", { level: 1, name: "Projects" });
 
-	// The field, from the heading, by Tab; Enter sends the search in the address.
-	const field = page.getByRole("searchbox", { name: "Search by project or client name" });
+	// The field, from the heading, by Tab; Enter applies the search at once, in the address.
+	const field = page.getByRole("searchbox", { name: "Search projects or clients" });
 	await tabUntil(page, heading, field);
 	await page.keyboard.type("GLOB");
 	await page.keyboard.press("Enter");
@@ -189,24 +189,23 @@ test("Projects and Clients are searched with the keyboard alone, in the address"
 	await expect(page).toHaveURL(/\?q=GLOB$/);
 
 	// Clear search, by Tab from the field, brings every project back.
-	const clear = page.getByRole("link", { name: "Clear search" });
+	const clear = page.getByRole("button", { name: "Clear search" });
 	await tabUntil(page, field, clear);
 	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL(new RegExp(`${projects}$`));
 	await expect(groups).toHaveText(["Globex", "Initech", "No client"]);
 	await expect(field).toHaveValue("");
 
-	// The back button returns to the search, its words back in the field.
-	await page.goBack();
-	await expect(page).toHaveURL(/\?q=GLOB$/);
-	await expect(field).toHaveValue("GLOB");
+	// No Search, Filter or Apply button is on the page (TS-091, W15).
+	for (const word of ["Search", "Filter", "Apply"]) {
+		await expect(page.getByRole("button", { name: word, exact: true })).toHaveCount(0);
+	}
 
-	// Clients: the filter, the same way.
+	// Clients: the filter applies as it is typed, with no key and no button (W28).
 	await openShell(page, destinationPath(slug, "clients"));
-	const filter = page.getByRole("searchbox", { name: "Filter by client name" });
+	const filter = page.getByRole("searchbox", { name: "Search clients" });
 	await tabUntil(page, page.getByRole("heading", { level: 1, name: "Clients" }), filter);
 	await page.keyboard.type("init");
-	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL(/\?q=init$/);
 	const clients = page.getByRole("list", { name: "Active clients" });
 	await expect(clients).toContainText("Initech");

@@ -104,9 +104,13 @@ test.describe("the timer", () => {
 		await expect(sheet).toBeHidden();
 		await expect(navTimer(page)).toBeVisible();
 		await page.clock.runFor(3_000);
-		await expect(elapsed(dayTimer(page))).toHaveText(await elapsed(navTimer(page)).innerText());
+		await expect(elapsed(dayTimer(page))).toHaveText(
+			(await elapsed(navTimer(page)).textContent()) ?? "",
+		);
 		await page.clock.runFor(61_000);
-		await expect(elapsed(dayTimer(page))).toHaveText(await elapsed(navTimer(page)).innerText());
+		await expect(elapsed(dayTimer(page))).toHaveText(
+			(await elapsed(navTimer(page)).textContent()) ?? "",
+		);
 		// A timer is never announced: no live region holds it.
 		for (const timer of [navTimer(page), dayTimer(page)]) {
 			await expect(
@@ -217,7 +221,7 @@ test.describe("the timer", () => {
 		const one = await open();
 		const two = await open();
 		await expect(elapsed(navTimer(one.other))).toHaveText(/^\d+:\d\d:\d\d$/);
-		const shown = await elapsed(navTimer(one.other)).innerText();
+		const shown = (await elapsed(navTimer(one.other)).textContent()) ?? "";
 		await expect(elapsed(navTimer(two.other))).toHaveText(shown);
 		await expect(elapsed(dayTimer(two.other))).toHaveText(shown);
 

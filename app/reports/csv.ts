@@ -1,12 +1,14 @@
 import type { Day } from "~/time/calendar";
 
-import type { Piece } from "./report";
+import type { Row } from "./report";
 
 /**
  * The export of a report as CSV (TS-014b): RFC 4180, UTF-8, lines ended by
- * CRLF. Its rows are the report's pieces: one for each entry on each day of the
- * range it covers, so the durations add up to the report's total. Times are
- * UTC, in ISO 8601 with `Z`, to the second.
+ * CRLF. Its rows are the report's rows: one for each entry that starts in the
+ * range, the rows the page lists (docs/decisions.md entry 26). Times are UTC,
+ * in ISO 8601 with `Z`, to the second. The duration is the entry's whole
+ * minutes, in seconds, as the page counts it, so the durations add up to the
+ * page's total.
  */
 
 /** The columns, in their order. */
@@ -55,21 +57,20 @@ export function isoInstant(instant: number): string {
 }
 
 /**
- * The cells of one piece, in the order of `CSV_COLUMNS`. A piece that ends at
- * the time of the export because its entry is still running has no end. The
- * client is left empty while the organisation has Clients turned off.
+ * The cells of one row, in the order of `CSV_COLUMNS`. A running entry has no
+ * end. The client is left empty while the organisation has Clients turned off.
  */
-export function pieceCells(piece: Piece, showClients: boolean): string[] {
-	const { entry } = piece;
+export function rowCells(row: Row, showClients: boolean): string[] {
+	const { entry } = row;
 	return [
 		entry.id,
 		entry.person,
 		entry.project,
 		(showClients && entry.client) || "",
 		entry.description ?? "",
-		isoInstant(piece.start),
-		piece.running ? "" : isoInstant(piece.end),
-		String(piece.seconds),
+		isoInstant(row.start),
+		row.running ? "" : isoInstant(row.end),
+		String(row.minutes * 60),
 	];
 }
 

@@ -1,12 +1,14 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
-import type { ShouldRevalidateFunctionArgs } from "react-router";
+import { Button as AriaButton } from "react-aria-components";
+import { type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
 import * as z from "zod";
 
 import { activeClients } from "~/clients/clients.server";
 import { Button } from "~/components/Button";
+import { cx } from "~/components/cx";
+import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
-import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
@@ -18,7 +20,14 @@ import { membershipContext, notFound, viewerOf } from "~/organisations/membershi
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
-import { groupedByClient, NO_CLIENT, onlyTabChanged, searchIn } from "~/projects/projects";
+import {
+	groupedByClient,
+	keptTab,
+	NO_CLIENT,
+	onlyTabChanged,
+	SEARCH_PARAM,
+	searchIn,
+} from "~/projects/projects";
 import {
 	changeProject,
 	createProject,
@@ -27,9 +36,9 @@ import {
 	projectHours,
 	setProjectArchived,
 } from "~/projects/projects.server";
-import { SearchForm } from "~/projects/SearchForm";
 import { hoursAndMinutes } from "~/reports/format";
 import { canSee, destination } from "~/shell/destinations";
+import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/projects";
@@ -188,38 +197,32 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 	const [project, setProject] = useState<Project | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
-	// A person who gives clients edits a project's name and client together.
-	const editWord = givesClients ? "Edit" : "Rename";
+	const [search] = useSearchParams();
 
 	const create = <Button onPress={() => setTask("create")}>Create project</Button>;
 
-	const list = (shown: Project[], archived: boolean, label: string) => (
+	// A project's name opens its sheet, which edits it and holds Archive or
+	// Restore: two things, so no menu (docs/design-direction.md, rule 2).
+	const list = (shown: Project[], label: string) => (
 		<LedgerRows label={label}>
 			{shown.map((each) => (
 				<LedgerRow
 					key={each.id}
-					title={<span className="wrap-anywhere">{each.name}</span>}
-					value={each.hours}
-					action={
-						<MenuTrigger>
-							<Button variant="text" aria-label={`Actions for ${each.name}`}>
-								Actions
-							</Button>
-							<Menu
-								onAction={(chosen) => {
-									setProject(each);
-									setTask(chosen === "rename" ? "rename" : archived ? "restore" : "archive");
-								}}
-							>
-								<MenuItem id="rename">{editWord}</MenuItem>
-								{archived ? (
-									<MenuItem id="restore">Restore</MenuItem>
-								) : (
-									<MenuItem id="archive">Archive</MenuItem>
-								)}
-							</Menu>
-						</MenuTrigger>
+					title={
+						// React Aria's button presses on key up, as every button that opens a
+						// sheet here does, so the sheet's field keeps the focus it is given.
+						<AriaButton
+							aria-haspopup="dialog"
+							className={cx(ACTION_LINK, "cursor-pointer text-start wrap-anywhere")}
+							onPress={() => {
+								setProject(each);
+								setTask("rename");
+							}}
+						>
+							{each.name}
+						</AriaButton>
 					}
+					value={each.hours}
 				/>
 			))}
 		</LedgerRows>
@@ -239,7 +242,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			);
 		}
 		// While Clients is off no project shows a client, so there are no groups.
-		if (!showsClients) return list(shown, archived, listName);
+		if (!showsClients) return list(shown, listName);
 		return groupedByClient(shown).map(({ client, projects: inGroup }) => {
 			const name = client
 				? `${client.name}${client.archived ? " (archived client)" : ""}`
@@ -249,7 +252,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 					<h2 className="wrap-anywhere px-4 pt-3 text-title-small text-on-surface-variant @sm:px-5">
 						{name}
 					</h2>
-					{list(inGroup, archived, `${listName}: ${name}`)}
+					{list(inGroup, `${listName}: ${name}`)}
 				</section>
 			);
 		});
@@ -296,11 +299,12 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 					<>
 						{create}
 						<div className="mt-6">
-							<SearchForm
-								name="Search projects"
-								label={showsClients ? "Search by project or client name" : "Search by project name"}
-								submitLabel="Search"
-							/>
+							<FilterBar name="Filter projects" keep={keptTab(search)}>
+								<FilterField
+									label={showsClients ? "Search projects or clients" : "Search projects"}
+									param={SEARCH_PARAM}
+								/>
+							</FilterBar>
 						</div>
 						<div className="mt-6">
 							<ArchiveTabs
@@ -351,7 +355,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
-				title={`${editWord} ${project?.name ?? "this project"}`}
+				title={`Edit ${project?.name ?? "this project"}`}
 				intent="rename"
 				submitLabel="Save"
 				isOpen={task === "rename"}
@@ -380,6 +384,20 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 						defaultValue={project?.client?.id ?? NO_CLIENT}
 					/>
 				)}
+				{/* Archiving is not saving: it opens its own sheet, which says what it does. */}
+				<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
+					<p className="text-body-medium text-on-surface-variant">
+						{project?.archived
+							? "Archived. Restore it and the timer offers it again."
+							: "Done with it? Archive it and the timer stops offering it; its time stays."}
+					</p>
+					<Button
+						variant="outlined"
+						onPress={() => setTask(project?.archived ? "restore" : "archive")}
+					>
+						{project?.archived ? "Restore project" : "Archive project"}
+					</Button>
+				</div>
 			</FormSheet>
 
 			<FormSheet

@@ -180,7 +180,7 @@ test.describe("a person who has just signed in for the first time", () => {
 		await expect(listed).toContainText([`${ada.name} (you)`]);
 		await expect(page.getByText("You are the only one here.")).toBeVisible();
 		await page
-			.getByRole("list", { name: "Team pages" })
+			.getByRole("group", { name: "Team pages" })
 			.getByRole("link", { name: "Invitations" })
 			.click();
 		await expect(page).toHaveURL(invitations);
@@ -305,31 +305,34 @@ test.describe("a person who has just signed in for the first time", () => {
 		}
 		await bobs.close();
 
-		// The last owner cannot leave, and is told why.
+		// The last owner is not offered to leave, and is told what to do instead (TS-091, W26).
 		await chooseAccountSettings(page);
 		await expect(page).toHaveURL(account);
-		expectRefusal(refusals, `${account}.data`, 400);
-		await page.getByRole("button", { name: "Leave organisation" }).click();
-		const leave = page.getByRole("dialog", { name: `Leave ${name}?` });
-		await leave.getByRole("button", { name: "Leave", exact: true }).click();
-		await expect(leave.getByRole("alert")).toHaveText(
-			"You are the only owner of this organisation. Make another member an owner before you leave.",
-		);
-		await expect(leave).toBeVisible();
-		await leave.getByRole("button", { name: "Cancel" }).click();
-		await expect(leave).toBeHidden();
+		await expect(page.getByRole("button", { name: "Leave organisation" })).toHaveCount(0);
+		await expect(
+			page.getByText(
+				`You are the only owner of ${name}. Make someone else an owner on Members, or delete the organisation in Workspace settings.`,
+			),
+		).toBeVisible();
 
-		// Deleting is behind its own control in Workspace settings, and asks for the name.
-		await page.getByRole("navigation").getByRole("link", { name: "Workspace settings" }).click();
+		// Deleting is behind its own control in Workspace settings, and asks for the name:
+		// the confirmation waits until it is typed exactly (W27).
+		await page
+			.getByRole("main")
+			.getByRole("link", { name: "Workspace settings", exact: true })
+			.click();
 		await expect(page).toHaveURL(settings);
 		await page.getByRole("button", { name: "Delete organisation" }).click();
 		const deleting = page.getByRole("dialog", { name: `Delete ${name}?` });
+		const confirm = deleting.getByRole("button", { name: "Delete organisation" });
+		await expect(confirm).toBeDisabled();
 		await deleting.getByLabel("Organisation name").fill(firstName);
-		await deleting.getByRole("button", { name: "Delete organisation" }).click();
-		await expect(deleting.getByText("Type the name exactly as it is shown.")).toBeVisible();
-		await expect(page).toHaveURL(settings);
+		await expect(confirm).toBeDisabled();
+		await deleting.getByLabel("Organisation name").fill(`${name} `);
+		await expect(confirm).toBeDisabled();
 		await deleting.getByLabel("Organisation name").fill(name);
-		await deleting.getByRole("button", { name: "Delete organisation" }).click();
+		await expect(confirm).toBeEnabled();
+		await confirm.click();
 
 		// With no organisation left, she is where a new person starts.
 		await expect(page).toHaveURL(ARRIVAL);

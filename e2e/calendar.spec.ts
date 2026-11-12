@@ -31,18 +31,29 @@ test.beforeEach(async ({ context, baseURL }) => {
 	await ownAddress(context, baseURL);
 });
 
-/** Signs a new person in, with an organisation and a project, Site, and two hours tracked today from 09:00. */
+/** Yesterday in the browser's zone, which the person's becomes: `2026-11-11`. */
+const yesterdayIn = (page: Page) =>
+	page.evaluate(() => new Date(Date.now() - 86_400_000).toLocaleDateString("en-CA"));
+
+/**
+ * Signs a new person in, with an organisation and a project, Site, and two
+ * hours tracked yesterday from 09:00: on a day that has passed, so the time
+ * never runs past now whatever the hour of the run (TS-091, W08). `day` is
+ * yesterday, which the week and month are opened at.
+ */
 async function personWithTime(page: Page) {
 	await signIn(page, newPerson().email);
 	const organisation = await createOrganisation(page);
 	await createProject(page, organisation.slug, "Site");
 	await openShell(page, organisationPath(organisation.slug));
+	const day = await yesterdayIn(page);
+	await openShell(page, `${organisationPath(organisation.slug)}?day=${day}`);
 	await page.getByRole("button", { name: "Track time" }).click();
 	const sheet = trackSheet(page);
 	await sheet.getByRole("textbox", { name: "Hours" }).fill("2");
 	await sheet.getByRole("button", { name: "Save entry" }).click();
 	await expect(sheet).toBeHidden();
-	return organisation;
+	return { ...organisation, day };
 }
 
 const trackSheet = (page: Page) => page.getByRole("dialog", { name: "Track time" });
@@ -53,6 +64,8 @@ const monthGrid = (page: Page) => page.getByRole("table", { name: /^Month calend
 const zoom = (page: Page) => page.getByRole("group", { name: "Zoom" });
 /** Today's head in the week calendar, or today in the month: the link marked as today's date. */
 const todayLink = (grid: Locator) => grid.locator('a[aria-current="date"]');
+/** The head of `day` in the week calendar, or `day` in the month: the link that opens its Day view. */
+const dayLink = (grid: Locator, day: string) => grid.locator(`a[href$="?day=${day}"]`);
 const focused = (page: Page) => page.locator(":focus");
 /** Waits for the focus to be in `container`, or on it: a sheet takes Escape once it is. */
 async function focusIn(container: Locator) {
@@ -61,9 +74,9 @@ async function focusIn(container: Locator) {
 		.toBe(true);
 }
 
-/** Today's date as the calendar writes it for assistive technology: `Wednesday 11 November`. */
-async function todayInWords(page: Page) {
-	const text = (await todayLink(weekGrid(page)).locator(".sr-only").first().textContent()) ?? "";
+/** A day's date as the calendar writes it for assistive technology: `Wednesday 11 November`. */
+async function dayInWords(link: Locator) {
+	const text = (await link.locator(".sr-only").first().textContent()) ?? "";
 	return text
 		.trim()
 		.replace(/^Today, /, "")
@@ -82,14 +95,16 @@ async function tabTo(page: Page, target: Locator, most = 80) {
 test("the week calendar shows each entry as a block with the Week view's totals; a block opens Edit entry, and a slot tracks time from its start", async ({
 	page,
 }) => {
-	const { slug } = await personWithTime(page);
+	const { slug, day } = await personWithTime(page);
 	await views(page).getByRole("link", { name: "Calendar" }).click();
 	await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}\\?view=calendar$`));
+	// Yesterday's week, which is this week but on a Monday.
+	await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 
 	const grid = weekGrid(page);
 	await expect(grid.getByRole("columnheader", { name: "Week total 2:00" })).toBeVisible();
-	await expect(todayLink(grid)).toContainText("2:00");
-	const today = await todayInWords(page);
+	await expect(dayLink(grid, day)).toContainText("2:00");
+	const yesterday = await dayInWords(dayLink(grid, day));
 
 	// The block, from 09:00 to 11:00, opens its entry; the edit moves its end.
 	await grid.getByRole("button", { name: "Site, 09:00–11:00, 2:00, edit" }).click();
@@ -101,7 +116,7 @@ test("the week calendar shows each entry as a block with the Week view's totals;
 	await expect(grid.getByRole("columnheader", { name: "Week total 2:30" })).toBeVisible();
 
 	// The slot at 14:00 opens Track time from 14:00.
-	await grid.getByRole("button", { name: `New entry, ${today}, from 14:00` }).click();
+	await grid.getByRole("button", { name: `New entry, ${yesterday}, from 14:00` }).click();
 	const sheet = trackSheet(page);
 	await expect(sheet.getByLabel("Start")).toHaveValue("14:00");
 	await expect(sheet.getByRole("button", { name: "Save entry" })).toBeVisible();
@@ -109,10 +124,12 @@ test("the week calendar shows each entry as a block with the Week view's totals;
 	await sheet.getByRole("button", { name: "Save entry" }).click();
 	await expect(sheet).toBeHidden();
 	await expect(grid.getByRole("button", { name: "Site, 14:00–15:00, 1:00, edit" })).toBeVisible();
-	await expect(todayLink(grid)).toContainText("3:30");
+	await expect(dayLink(grid, day)).toContainText("3:30");
 
-	// The Week view adds up the same.
+	// The Week view of that week adds up the same.
+	await openShell(page, `${organisationPath(slug)}?day=${day}`);
 	await views(page).getByRole("link", { name: "Week" }).click();
+	await expect(page).toHaveURL(/view=week/);
 	await expect(page.getByRole("table").getByText("3:30").last()).toBeVisible();
 });
 
@@ -150,8 +167,8 @@ test("zooms from the week in detail out to the week and the month, and in to the
 });
 
 test("the week opens at the working hours; compact, the whole day is in view", async ({ page }) => {
-	const { slug } = await personWithTime(page);
-	await openShell(page, `${organisationPath(slug)}?view=calendar`);
+	const { slug, day } = await personWithTime(page);
+	await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 	const scroller = weekGrid(page).locator("..");
 	expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 	await expect(weekGrid(page).getByRole("button", { name: /^Site, 09:00–11:00/ })).toBeInViewport();
@@ -165,10 +182,10 @@ test("the week opens at the working hours; compact, the whole day is in view", a
 test("the month shows each day's total, today marked and the month's total; Previous, Next and Today step by month; a day opens the Day view and a week the week calendar", async ({
 	page,
 }) => {
-	const { slug } = await personWithTime(page);
-	await openShell(page, `${organisationPath(slug)}?view=calendar&scale=month`);
+	const { slug, day } = await personWithTime(page);
+	await openShell(page, `${organisationPath(slug)}?view=calendar&scale=month&date=${day}`);
 	const grid = monthGrid(page);
-	await expect(todayLink(grid)).toContainText("2:00");
+	await expect(dayLink(grid, day)).toContainText("2:00");
 	await expect(page.getByText(/^Month total/)).toContainText("2:00");
 	await expect(grid.getByRole("link", { name: /^Week of .*, 2:00$/ })).toHaveCount(1);
 
@@ -183,13 +200,16 @@ test("the month shows each day's total, today marked and the month's total; Prev
 	await expect(page).toHaveURL(
 		new RegExp(`${organisationPath(slug)}\\?view=calendar&scale=month$`),
 	);
+	await expect(todayLink(grid)).toBeVisible();
 
+	// Yesterday's month, which is this month but on the first.
+	await openShell(page, `${organisationPath(slug)}?view=calendar&scale=month&date=${day}`);
 	await grid.getByRole("link", { name: /^Week of .*, 2:00$/ }).click();
 	await expect(page).toHaveURL(/view=calendar&date=\d{4}-\d{2}-\d{2}$/);
 	await expect(weekGrid(page)).toBeVisible();
 	await page.goBack();
-	await todayLink(monthGrid(page)).click();
-	await expect(page).toHaveURL(/\?day=\d{4}-\d{2}-\d{2}$/);
+	await dayLink(monthGrid(page), day).click();
+	await expect(page).toHaveURL(new RegExp(`\\?day=${day}$`));
 });
 
 test("the week steps by week, and Today returns", async ({ page }) => {
@@ -208,7 +228,7 @@ test("the week steps by week, and Today returns", async ({ page }) => {
 test("with the keyboard alone: arrows move between days, Enter opens a day, a slot and an entry", async ({
 	page,
 }) => {
-	const { slug } = await personWithTime(page);
+	const { slug, day } = await personWithTime(page);
 	await openShell(page, `${organisationPath(slug)}?view=calendar&scale=month`);
 
 	// The month takes one stop of Tab, on today.
@@ -227,10 +247,17 @@ test("with the keyboard alone: arrows move between days, Enter opens a day, a sl
 	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL(new RegExp(`${first?.replace("?", "\\?")}$`));
 
-	// The week: from today's head, along the heads and down into the day.
-	await openShell(page, `${organisationPath(slug)}?view=calendar`);
+	// The week: from yesterday's head, along the heads and down into the day.
+	await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 	const week = weekGrid(page);
-	await tabTo(page, todayLink(week));
+	// The week takes one stop of Tab, on today's head or its first day's; the
+	// arrows lead along the heads to yesterday's.
+	await tabTo(page, week.locator('a[tabindex="0"]').first());
+	for (let step = 0; step < 7; step++) {
+		if ((await focused(page).getAttribute("href"))?.endsWith(`?day=${day}`)) break;
+		await page.keyboard.press("ArrowLeft");
+	}
+	await expect(dayLink(week, day)).toBeFocused();
 	await page.keyboard.press("ArrowDown");
 	await expect(focused(page)).toHaveAccessibleName(/^New entry, .*, from 08:00$|^Site, 09:00/);
 	for (let step = 0; step < 6; step++) {

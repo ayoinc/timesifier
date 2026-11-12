@@ -62,3 +62,11 @@ export function routesAtOrUnder(path: string): RouteUnderTest[] {
 export function isMoved(route: RouteUnderTest): boolean {
 	return route.id.startsWith("routes/app/moved/");
 }
+
+/** The organisation's catch-all, which answers every address under it that holds no page with 404 (app/routes/app/not-found.tsx). */
+export const NOT_FOUND_ROUTE = "routes/app/not-found";
+
+/** Whether the route is the organisation's catch-all: a member is answered 404 there, not the page. */
+export function isNotFound(route: RouteUnderTest): boolean {
+	return route.id === NOT_FOUND_ROUTE;
+}

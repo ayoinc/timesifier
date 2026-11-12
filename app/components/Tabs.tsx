@@ -8,10 +8,21 @@ import {
 	SelectionIndicator,
 } from "react-aria-components";
 
-// Material 3 primary tabs: a 48px row on the surface with a 1px divider under it.
-// Labels are title-small. The selected tab's label is the primary colour, with a
-// 3px indicator under it as wide as the label; the indicator slides to the tab
-// that becomes selected. The focus indicator sits inside the tab.
+// Material 3 primary tabs: a 48px row of equal-width tabs on the surface with a
+// 1px divider under it. Labels are title-small. The selected tab's label is the
+// primary colour, over a 3px rule across the tab, 16px in from either side; the
+// rule slides to the tab that becomes selected. The focus indicator sits inside
+// the tab. `LinkTabs` draws the same row with links, from the classes below.
+
+/** The row: equal-width tabs over a 1px divider. */
+export const TAB_ROW = "flex border-outline-variant border-b";
+
+/** One tab, drawn the same whether it is a React Aria tab or a link. */
+export const TAB =
+	"relative flex h-12 flex-1 cursor-pointer select-none items-center justify-center px-4 text-title-small outline-none state-layer transition-control";
+
+/** The 3px rule under the selected tab. */
+export const TAB_INDICATOR = "absolute inset-x-4 bottom-0 h-0.75 rounded-t-full bg-primary";
 
 export interface TabsProps
 	extends Pick<AriaTabsProps, "selectedKey" | "defaultSelectedKey" | "onSelectionChange"> {
@@ -37,7 +48,7 @@ export interface TabListProps {
 /** The row of tabs. */
 export function TabList({ label, children }: TabListProps) {
 	return (
-		<AriaTabList aria-label={label} className="flex border-outline-variant border-b">
+		<AriaTabList aria-label={label} className={TAB_ROW}>
 			{children}
 		</AriaTabList>
 	);
@@ -59,15 +70,15 @@ export function Tab({ id, children, isDisabled }: TabProps) {
 			id={id}
 			isDisabled={isDisabled}
 			className={
-				"flex h-12 flex-1 cursor-pointer select-none justify-center px-4 text-on-surface-variant text-title-small outline-none state-layer transition-control " +
+				`${TAB} text-on-surface-variant ` +
 				"data-hovered:not-data-selected:text-on-surface data-hovered:state-hover data-focus-visible:state-focus data-focus-visible:focus-indicator-inner data-pressed:state-pressed " +
 				"data-selected:text-primary data-disabled:cursor-not-allowed data-disabled:text-disabled"
 			}
 		>
-			<span className="relative flex h-full items-center">
-				{children}
-				<SelectionIndicator className="absolute inset-x-0 bottom-0 h-0.75 rounded-t-full bg-primary transition-indicator duration-spring ease-spring motion-reduce:transition-none" />
-			</span>
+			{children}
+			<SelectionIndicator
+				className={`${TAB_INDICATOR} transition-indicator duration-spring ease-spring motion-reduce:transition-none`}
+			/>
 		</AriaTab>
 	);
 }
@@ -79,12 +90,15 @@ export interface TabPanelProps {
 	children: ReactNode;
 }
 
-/** The content one tab shows. */
+/**
+ * The content one tab shows. It has space above and below but none at the
+ * sides, so a list in it lines up with the tabs and the page's column.
+ */
 export function TabPanel({ id, children }: TabPanelProps) {
 	return (
 		<AriaTabPanel
 			id={id}
-			className="p-4 text-body-medium text-on-surface outline-none data-focus-visible:focus-indicator-inner"
+			className="py-4 text-body-medium text-on-surface outline-none data-focus-visible:focus-indicator-inner"
 		>
 			{children}
 		</AriaTabPanel>

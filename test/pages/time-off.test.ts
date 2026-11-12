@@ -134,7 +134,7 @@ describe("asking for leave", () => {
 		).toBe(1);
 
 		const text = await textAt(TIME_OFF, grace);
-		expect(text).toMatch(/Annual leave · Waiting for approval 16 to 20 November 2026 · 5 days/);
+		expect(text).toMatch(/Annual leave · Waiting for approval 16–20 November 2026 · 5 days/);
 		expect(text).toContain("Your note: “Family visit”");
 		expect(text).toMatch(/Sick leave · Approved 10 November 2026 · 1 day/);
 	});
@@ -159,7 +159,7 @@ describe("asking for leave", () => {
 		});
 		const text = await textAt(TIME_OFF, grace);
 		expect(text).toContain("16 November 2026, half day · half a day");
-		expect(text).toContain("23 to 27 November 2026, half days at the start and the end · 4 days");
+		expect(text).toContain("23–27 November 2026, half days at the start and the end · 4 days");
 	});
 
 	it("refuses a kind switched off and the public holidays, which nobody asks for", async () => {
@@ -200,7 +200,7 @@ describe("asking for leave", () => {
 		}
 		// Over them, it takes the working days alone: the 24th and the 29th.
 		await requestLeave(grace, "annual", "2026-12-24", "2026-12-29");
-		expect(await textAt(TIME_OFF, grace)).toContain("24 to 29 December 2026 · 2 days");
+		expect(await textAt(TIME_OFF, grace)).toContain("24–29 December 2026 · 2 days");
 	});
 
 	it("refuses a last day before the first, and a day that is not one", async () => {
@@ -296,7 +296,7 @@ describe("the balance", () => {
 			"Annual leave 25 days a year. Taken: 2 days; waiting: 1.5 days. 21.5 days left",
 		);
 		expect(text).toContain("Sick leave No allowance. Taken: 1 day.");
-		expect(text).toMatch(/Annual leave · Refused 1 to 4 December 2026 · 4 days “Not that week.”/);
+		expect(text).toMatch(/Annual leave · Refused 1–4 December 2026 · 4 days “Not that week.”/);
 		expect(text).toContain("Annual leave · Withdrawn");
 	});
 
@@ -468,7 +468,7 @@ describe("cancelling approved leave", () => {
 			await row("select status, decided_by, comment from leave_requests where id = ?", people.id),
 		).toEqual({ status: "cancelled", decided_by: canceller.user.id, comment: "The launch moved." });
 		expect(await textAt(TIME_OFF, people.grace)).toMatch(
-			/Annual leave · Cancelled 14 to 18 December 2026 · 5 days “The launch moved\.”/,
+			/Annual leave · Cancelled 14–18 December 2026 · 5 days “The launch moved\.”/,
 		);
 		// The days are hers to ask for again.
 		expect((await requestLeave(people.grace, "annual", "2026-12-14", "2026-12-14")).status).toBe(
@@ -547,7 +547,7 @@ describe("the Requests tab", () => {
 		const html = await pageBody(await open(`${TIME_OFF}?show=requests`, mona));
 		const text = textOf(html);
 		expect(text).toMatch(
-			/grace@example\.com · Annual leave 16 to 20 November 2026 · 5 days “Wedding”/,
+			/grace@example\.com · Annual leave 16–20 November 2026 · 5 days “Wedding”/,
 		);
 		expect(text).toMatch(
 			/Approved, to come .*grace@example\.com · Sick leave 25 November 2026 · 1 day/,

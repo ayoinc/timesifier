@@ -142,7 +142,8 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				zone,
 				now,
 			});
-			return added.ok ? done("Entry saved.") : refusal(added.reason);
+			if (added.ok) return done("Entry saved.");
+			return added.reason === "day-full" ? declined(added.message) : refusal(added.reason);
 		}
 
 		case "stop": {
@@ -178,7 +179,8 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				zone,
 				now,
 			});
-			return set.ok ? done("Saved.") : refusal(set.reason);
+			if (set.ok) return done("Saved.");
+			return set.reason === "day-full" ? declined(set.message) : refusal(set.reason);
 		}
 
 		case "submit": {

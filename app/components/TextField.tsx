@@ -24,6 +24,7 @@ export interface TextFieldProps
 		| "value"
 		| "defaultValue"
 		| "onChange"
+		| "onKeyDown"
 		| "type"
 		| "inputMode"
 		| "autoComplete"
@@ -41,6 +42,10 @@ export interface TextFieldProps
 	label: string;
 	/** Supporting text under the field: a hint about what to enter. */
 	description?: string;
+	/** The earliest value, for a date, a time or a number. */
+	min?: string;
+	/** The latest value, for a date, a time or a number. */
+	max?: string;
 	/**
 	 * Error text under the field, shown while the field is invalid. Leave it out
 	 * to show the browser's own message for `isRequired`, `type` and `pattern`.
@@ -52,7 +57,14 @@ export interface TextFieldProps
  * A single-line text input in the Material 3 filled style, with its label,
  * supporting text and error text. A required field is marked with an asterisk.
  */
-export function TextField({ label, description, errorMessage, ...props }: TextFieldProps) {
+export function TextField({
+	label,
+	description,
+	errorMessage,
+	min,
+	max,
+	...props
+}: TextFieldProps) {
 	return (
 		<AriaTextField {...props} className="flex flex-col gap-1">
 			{(field) => (
@@ -61,6 +73,8 @@ export function TextField({ label, description, errorMessage, ...props }: TextFi
 						{/* The one-space placeholder lets the label tell an empty input from a filled one. */}
 						<Input
 							placeholder=" "
+							min={min}
+							max={max}
 							className={cx(
 								FIELD_CONTROL,
 								"px-4 pt-6 pb-2 text-body-large",

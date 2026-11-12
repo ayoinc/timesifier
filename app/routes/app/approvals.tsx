@@ -50,6 +50,7 @@ import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
 import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
+import { formatDayAndTime } from "~/time/format";
 
 import type { Route } from "./+types/approvals";
 import { FormSheet } from "./FormSheet";
@@ -125,14 +126,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		approvals.notSubmitted?.filter(
 			(person) => !nothingExpected(calendarOf(leave, person.id), periodDays),
 		) ?? null;
-	const date = new Intl.DateTimeFormat("en-GB", {
-		day: "numeric",
-		month: "long",
-		hour: "2-digit",
-		minute: "2-digit",
-		hourCycle: "h23",
-		timeZone: viewed.zone,
-	});
+	// When a timesheet was submitted or decided, in the form every page uses.
+	const date = { format: (instant: number) => formatDayAndTime(instant, viewed.zone) };
 	const secondsOf = (personId: string) =>
 		time.reduce((sum, each) => (each.userId === personId ? sum + each.seconds : sum), 0);
 	const approved = approvals.decided.filter((p) => p.status === "approved");

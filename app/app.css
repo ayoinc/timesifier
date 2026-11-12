@@ -568,3 +568,30 @@ body {
 		transform: translateY(40%);
 	}
 }
+
+/*
+ * The bar that shows the page is waiting for the server (app/shell/PendingBar.tsx).
+ * A segment two fifths of the width runs across the top edge, again and again,
+ * until the answer arrives. With reduced motion it stands still across the whole
+ * width: the same sign, with nothing moving.
+ */
+.pending-bar {
+	width: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.pending-bar {
+		width: 40%;
+		animation: pending-bar var(--md-sys-motion-duration-extra-long4)
+			var(--md-sys-motion-easing-standard) infinite;
+	}
+}
+
+@keyframes pending-bar {
+	from {
+		translate: -100% 0;
+	}
+	to {
+		translate: 250% 0;
+	}
+}

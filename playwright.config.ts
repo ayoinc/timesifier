@@ -12,22 +12,23 @@ import { SIGNED_IN } from "./e2e/auth-state";
 const PORT = Number(process.env.E2E_PORT) || 5385;
 const ORIGIN = `http://localhost:${PORT}`;
 
-// React Aria locks page scrolling differently on iOS; these tests run in WebKit only.
-const IOS_ONLY = /overlays-ios\.spec\.ts/;
+// React Aria locks page scrolling differently on iOS; these tests run in WebKit
+// only. So does the test that WebKit applies React Aria's own <style> (W19).
+const IOS_ONLY = /(?:overlays-ios|react-aria-style)\.spec\.ts/;
 // The component tests run in Chromium and again in WebKit: the two have styled
 // the same page differently (docs/design-system.md, "State from another
 // element"). So do the tests of the public pages, which are plain HTML and CSS
 // that anybody may arrive on, in any browser. These are the tests that need no
 // session; see the project below.
 const IN_WEBKIT_TOO =
-	/[\\/](?:accessibility|components|design|field-label|reduced-motion|landing|documents|public-links|identity)\.spec\.ts$/;
+	/[\\/](?:accessibility|components|design|field-label|reduced-motion|landing|documents|public-links|identity|react-aria-style)\.spec\.ts$/;
 // Signs one person up and saves their session; every Chromium test starts with it.
 const SETUP = /auth\.setup\.ts/;
 // These write to the local database with `wrangler d1 execute` while the server
 // runs. A write from outside can hold the database's lock while the server
 // writes for another test, which then fails with a 500. They run after every
 // other Chromium test, one at a time.
-const SEEDS_THE_DATABASE = /[\\/](?:people|projects-search|reports)\.spec\.ts$/;
+const SEEDS_THE_DATABASE = /[\\/](?:people|projects-search|reports|zz-fixes-shots)\.spec\.ts$/;
 // What the server under test is given. None of it is a secret: the first signs
 // cookies for this run only, and the second is Cloudflare's published Turnstile
 // test secret, which passes every check.

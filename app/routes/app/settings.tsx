@@ -234,6 +234,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 	const { organisation, zones, leave } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
+	// The name typed to confirm a deletion. The confirmation waits until it is the name exactly.
+	const [typedName, setTypedName] = useState("");
 	const close = () => setTask(null);
 	const change = (to: Task, what: string) =>
 		organisation.canChange && (
@@ -307,7 +309,13 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 					}
 					className="max-w-200"
 				>
-					<Button variant="outlined" onPress={() => setTask("delete")}>
+					<Button
+						variant="outlined-danger"
+						onPress={() => {
+							setTypedName("");
+							setTask("delete");
+						}}
+					>
 						Delete organisation
 					</Button>
 				</Section>
@@ -380,6 +388,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 				title={`Delete ${organisation.name}?`}
 				intent="delete"
 				submitLabel="Delete organisation"
+				submitVariant="danger"
+				isSubmitDisabled={typedName !== organisation.name}
 				isOpen={task === "delete"}
 				onClose={close}
 			>
@@ -392,6 +402,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 					label="Organisation name"
 					name="confirmation"
 					autoComplete="off"
+					value={typedName}
+					onChange={setTypedName}
 					autoFocus
 					isRequired
 					validate={(typed) =>

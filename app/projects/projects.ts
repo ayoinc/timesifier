@@ -34,6 +34,14 @@ export function searchIn(search: URLSearchParams): string {
 }
 
 /**
+ * What a list's filters keep of the address when they apply: the tab, when it
+ * is Archived, so a search does not move the person back to Active.
+ */
+export function keptTab(search: URLSearchParams): Record<string, string> | undefined {
+	return shownIn(search) === ARCHIVED ? { [SHOW_PARAM]: ARCHIVED } : undefined;
+}
+
+/**
  * Whether a route's data must be read again for a move from `current` to
  * `next`: not when only the tab in the address changed, because the loader
  * already sent both lists. A form sent to the page always reads it again.

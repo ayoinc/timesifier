@@ -22,11 +22,11 @@ declare const process: { env: Record<string, string | undefined> };
 const designRoute = import.meta.env.MODE === "development" || process.env.DESIGN_ROUTE === "1";
 
 // One organisation's pages: its destinations, in the order of the one list that
-// names them, the pages below a destination, My account, and the addresses
-// that have moved. The layout in front of them answers 404 to a person who is
-// not a member, and to a member at a destination their role is not shown
-// (docs/security.md, "Organisations and roles"), so a route added here is
-// covered by being here.
+// names them, the pages below a destination, My account, the addresses that
+// have moved, and a 404 for every other address. The layout in front of them
+// answers 404 to a person who is not a member, and to a member at a destination
+// their role is not shown (docs/security.md, "Organisations and roles"), so a
+// route added here is covered by being here.
 const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.tsx", [
 	...destinations.map(({ id, segment }) => {
 		const file = `routes/app/${id}.tsx`;
@@ -39,6 +39,8 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	...Object.keys(MOVED).map((segment) =>
 		route(segment, "routes/app/moved.tsx", { id: `routes/app/moved/${segment}` }),
 	),
+	// Any other address under the organisation: a 404 drawn inside the shell.
+	route("*", "routes/app/not-found.tsx"),
 ]);
 
 // Everything that needs a session. The layout holds the guard and the shell.

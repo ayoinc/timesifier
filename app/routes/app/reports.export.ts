@@ -1,6 +1,8 @@
+import { data } from "react-router";
+
 import { membershipContext } from "~/organisations/membership.server";
-import { BYTE_ORDER_MARK, CSV_COLUMNS, csvFilename, csvLine, pieceCells } from "~/reports/csv";
-import { piecesOf } from "~/reports/report";
+import { BYTE_ORDER_MARK, CSV_COLUMNS, csvFilename, csvLine, rowCells } from "~/reports/csv";
+import { rowOf } from "~/reports/report";
 import { entryPages, type ReportRequest, reportRequest } from "~/reports/reports.server";
 
 import type { Route } from "./+types/reports.export";
@@ -19,9 +21,8 @@ async function* csvChunks(report: ReportRequest): AsyncGenerator<string> {
 	for await (const page of entryPages(report)) {
 		let chunk = "";
 		for (const entry of page) {
-			for (const piece of piecesOf(entry, report.days, report.zone, report.now)) {
-				chunk += csvLine(pieceCells(piece, report.showClients));
-			}
+			const row = rowOf(entry, report.days, report.zone, report.now);
+			if (row) chunk += csvLine(rowCells(row, report.showClients));
 		}
 		if (chunk) yield chunk;
 	}
@@ -30,6 +31,8 @@ async function* csvChunks(report: ReportRequest): AsyncGenerator<string> {
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const report = await reportRequest(membership, new URL(request.url), Date.now());
+	// A custom range the page would refuse with a field error is no file.
+	if ("problem" in report) throw data("Bad Request", { status: 400 });
 	const chunks = csvChunks(report);
 	const encoder = new TextEncoder();
 	const body = new ReadableStream<Uint8Array>({

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, gt, gte, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, gt, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
@@ -12,10 +12,17 @@ import { accessOf } from "~/organisations/access.server";
 import { type Membership, notFound } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
 import { bounds, dayOf, daysFrom } from "~/time/calendar";
+import { zoneOfMember } from "~/time/zones.server";
 
 import type { Grouping } from "./choices";
-import { parseReportQuery, type ReportDays, type ReportQuery, rangeDays } from "./query";
-import { type Piece, piecesOf, type ReportEntry } from "./report";
+import {
+	parseReportQuery,
+	type RangeProblem,
+	type ReportDays,
+	type ReportQuery,
+	rangeDays,
+} from "./query";
+import { type ReportEntry, type Row, rowOf } from "./report";
 
 /**
  * A report read from the database (TS-014a, TS-014b). Whose time it holds is
@@ -37,14 +44,14 @@ export interface Person {
 	name: string;
 }
 
-/** Everything a report needs to be read, from the address of its page or of its export. */
-export interface ReportRequest {
+/** What a report's page needs whether or not its range makes a report. */
+interface ReportChoices {
 	scope: OrganisationScope;
+	/** What the address asks for, its days as typed. */
 	query: ReportQuery;
 	/** The grouping used: by project when Clients is turned off and the address asks for client. */
 	grouping: Grouping;
-	days: ReportDays;
-	/** The organisation's zone, which the days are counted in. */
+	/** The viewer's zone, which the days are counted in (docs/decisions.md entry 26). */
 	zone: string;
 	/** Whose entries the report reads. */
 	people: TimeScope;
@@ -56,18 +63,30 @@ export interface ReportRequest {
 	now: number;
 }
 
+/** Everything a report needs to be read, from the address of its page or of its export. */
+export interface ReportRequest extends ReportChoices {
+	days: ReportDays;
+}
+
+/** A custom range that makes no report: the page shows the form again with `problem` under its field. */
+export interface RefusedReport extends ReportChoices {
+	problem: RangeProblem;
+}
+
 /**
- * Reads the report the address asks for. An address that asks for no report
- * that can be made is answered 400; one that names a person the viewer may not
- * see, or who is not a member, 404, as a stranger's address is.
+ * Reads the report the address asks for. An address the form did not write
+ * is answered 400; one that names a person the viewer may not see, or who is
+ * not a member, 404, as a stranger's address is. A custom range that cannot be
+ * reported on is a `RefusedReport`, for the page to say why (TS-091, W05).
  */
 export async function reportRequest(
 	membership: Membership,
 	url: URL,
 	now: number,
-): Promise<ReportRequest> {
-	const query = parseReportQuery(url.searchParams);
-	if (!query) throw data("Bad Request", { status: 400 });
+): Promise<ReportRequest | RefusedReport> {
+	const parsed = parseReportQuery(url.searchParams);
+	if (!parsed) throw data("Bad Request", { status: 400 });
+	const { query, problem } = parsed;
 
 	const { organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
@@ -78,13 +97,12 @@ export async function reportRequest(
 		throw notFound();
 	}
 
-	const zone = organisation.timeZone;
+	const zone = await zoneOfMember(membership);
 	const showClients = organisation.clientsEnabled;
-	return {
+	const report: ReportChoices = {
 		scope,
 		query,
 		grouping: query.group === "client" && !showClients ? "project" : query.group,
-		days: rangeDays(query, dayOf(now, zone), organisation.weekStartsOn),
 		zone,
 		people: query.person === undefined ? whose : { everyone: false, people: [query.person] },
 		seesEveryone: whose.everyone,
@@ -92,6 +110,8 @@ export async function reportRequest(
 		showClients,
 		now,
 	};
+	if (problem) return { ...report, problem };
+	return { ...report, days: rangeDays(query, dayOf(now, zone), organisation.weekStartsOn) };
 }
 
 /** `column` is one of `people`, as one bound parameter however many they are. */
@@ -130,10 +150,9 @@ async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
 }
 
 /**
- * The entries of `request` that have time in its days, page by page in the
- * order of their ids: an entry that starts before the last day ends and ends
- * after the first begins, or is still running. Each page is one query of at
- * most `pageSize` entries after the last id of the one before.
+ * The entries of `request` that start in its days, page by page in the order
+ * of their ids (docs/decisions.md entry 26). Each page is one query of at most
+ * `pageSize` entries after the last id of the one before.
  */
 export async function* entryPages(
 	request: Pick<ReportRequest, "scope" | "days" | "zone" | "people">,
@@ -152,8 +171,8 @@ export async function* entryPages(
 			(e) =>
 				and(
 					after === undefined ? undefined : gt(e.id, after),
+					gte(e.startedAt, new Date(from)),
 					lt(e.startedAt, new Date(to)),
-					or(isNull(e.endedAt), gt(e.endedAt, new Date(from)), gte(e.startedAt, new Date(from))),
 					people.everyone ? undefined : amongPeople(e.userId, people.people),
 				),
 			{ orderBy: (e) => [asc(e.id)], limit: pageSize },
@@ -183,14 +202,16 @@ export async function* entryPages(
 	}
 }
 
-/** Every piece of the report, in the order of the entries' ids. */
-export async function piecesOfReport(request: ReportRequest): Promise<Piece[]> {
-	const pieces: Piece[] = [];
+/** Every row of the report, in the order of the entries' ids. */
+export async function rowsOfReport(request: ReportRequest): Promise<Row[]> {
+	const rows: Row[] = [];
 	for await (const page of entryPages(request)) {
-		for (const entry of page)
-			pieces.push(...piecesOf(entry, request.days, request.zone, request.now));
+		for (const entry of page) {
+			const row = rowOf(entry, request.days, request.zone, request.now);
+			if (row) rows.push(row);
+		}
 	}
-	return pieces;
+	return rows;
 }
 
 /** One person's line in a report: the time they worked, the time expected of them, and their leave (TS-061). */
@@ -208,12 +229,13 @@ export interface PersonLine {
 
 /**
  * Each person the report holds, with what they worked, what was expected of
- * them and their leave over its days. Worked time comes from `pieces`; leave
- * is read beside it and never added to it.
+ * them and their leave over its days. Worked time comes from `rows`, each its
+ * whole minutes, so it adds up as the report's totals do; leave is read beside
+ * it and never added to it.
  */
 export async function peopleOfReport(
 	request: ReportRequest,
-	pieces: readonly Piece[],
+	rows: readonly Row[],
 ): Promise<PersonLine[]> {
 	const { people, choices, days, scope } = request;
 	const listed = people.everyone ? choices : choices.filter((c) => people.people.includes(c.id));
@@ -226,8 +248,8 @@ export async function peopleOfReport(
 	);
 	const range = daysFrom(days.first, days.last);
 	const worked = new Map<string, number>();
-	for (const piece of pieces) {
-		worked.set(piece.entry.userId, (worked.get(piece.entry.userId) ?? 0) + piece.seconds);
+	for (const row of rows) {
+		worked.set(row.entry.userId, (worked.get(row.entry.userId) ?? 0) + row.minutes * 60);
 	}
 	return listed.map((person) => {
 		const calendar = calendarOf(context, person.id);

@@ -1,12 +1,14 @@
 import { env } from "cloudflare:workers";
 import { useEffect, useState } from "react";
-import { Form, Link, useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
+import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
@@ -21,7 +23,7 @@ import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { destination, destinationPath } from "~/shell/destinations";
-import { TEXT_LINK } from "~/shell/links";
+import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
 import { peopleOf, teamPeopleOf } from "~/teams/people.server";
 import { TeamTabs } from "~/teams/TeamTabs";
@@ -39,6 +41,7 @@ import {
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { personWeek, teamWeek } from "~/teams/week.server";
 import { dayLabel, hours, periodLabel, statusLabel, WEEK_PARAM } from "~/teams/words";
+import { formatTimeRange } from "~/time/format";
 
 import type { Route } from "./+types/team";
 import { FormSheet } from "./FormSheet";
@@ -117,12 +120,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			leaveOfPeople(scope, access, [person], viewed.period.startsOn, viewed.period.endsOn, now),
 		]);
 		const theirs = leave.get(person.id);
-		const time = new Intl.DateTimeFormat("en-GB", {
-			hour: "2-digit",
-			minute: "2-digit",
-			hourCycle: "h23",
-			timeZone: person.timeZone,
-		});
 		return {
 			view: "person" as const,
 			week,
@@ -141,7 +138,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					id: e.id,
 					project: e.project,
 					description: e.description,
-					times: `${time.format(e.startedAt)} to ${e.endedAt === null ? "now" : time.format(e.endedAt)}`,
+					times: formatTimeRange(e.startedAt, e.endedAt, person.timeZone),
 					seconds: e.seconds,
 				})),
 			})),
@@ -280,21 +277,26 @@ type WeekData = Extract<Loaded, { view: "week" }>;
 type PersonData = Extract<Loaded, { view: "person" }>;
 type TeamsData = Extract<Loaded, { view: "teams" }>;
 
-/** The arrows between periods: always to an earlier one, and to a later one up to the current. */
-function PeriodArrows({ week, extra = "" }: { week: WeekData["week"]; extra?: string }) {
+/**
+ * The steps between periods: always to an earlier one, to a later one up to
+ * the current, and back to the current while away from it. `extra` is the rest
+ * of the address to keep, as `&q=…`.
+ */
+function WeekStepper({ week, extra = "" }: { week: WeekData["week"]; extra?: string }) {
 	return (
-		<p className="mt-6 flex max-w-200 items-center justify-between gap-4 text-body-large">
-			<Link to={`?${WEEK_PARAM}=${week.previous}${extra}`} className={TEXT_LINK}>
-				← Earlier week
-			</Link>
-			{week.next ? (
-				<Link to={`?${WEEK_PARAM}=${week.next}${extra}`} className={TEXT_LINK}>
-					Later week →
-				</Link>
-			) : (
-				<span className="text-on-surface-variant">This is the current week</span>
-			)}
-		</p>
+		<div className="mt-6 max-w-200">
+			<PeriodStepper
+				label="Weeks"
+				period={week.label}
+				previous={{ to: `?${WEEK_PARAM}=${week.previous}${extra}`, label: "Previous week" }}
+				next={week.next ? { to: `?${WEEK_PARAM}=${week.next}${extra}`, label: "Next week" } : null}
+				current={
+					week.next
+						? { to: `?${WEEK_PARAM}=${week.current.startsOn}${extra}`, label: "This week" }
+						: undefined
+				}
+			/>
+		</div>
 	);
 }
 
@@ -305,12 +307,10 @@ function ThisWeek({ data }: { data: WeekData }) {
 	const thisWeek = `?${WEEK_PARAM}=${week.period.startsOn}`;
 	return (
 		<>
-			<TeamTabs slug={organisation.slug} current="week" />
-			<div className="mt-10">
-				<PageHeading>{label}</PageHeading>
-			</div>
+			<PageHeading>{label}</PageHeading>
 			<PageLead>Each person's time for the week of {week.label}.</PageLead>
-			<PeriodArrows
+			<TeamTabs slug={organisation.slug} current="week" />
+			<WeekStepper
 				week={week}
 				extra={filter === "" ? "" : `&${FILTER_PARAM}=${encodeURIComponent(filter)}`}
 			/>
@@ -321,35 +321,11 @@ function ThisWeek({ data }: { data: WeekData }) {
 				</EmptySheet>
 			) : (
 				<>
-					{/* Keyed by the filter, so going back or forward shows the address's own. */}
-					<Form
-						key={filter}
-						method="get"
-						role="search"
-						aria-label="People"
-						className="mt-6 flex max-w-200 flex-wrap items-center gap-4"
-					>
-						<input type="hidden" name={WEEK_PARAM} value={week.period.startsOn} />
-						<div className="min-w-0 flex-1 basis-60">
-							<TextField
-								label="Filter by name"
-								name={FILTER_PARAM}
-								type="search"
-								defaultValue={filter}
-								maxLength={RECORD_NAME_MAX_LENGTH}
-							/>
-						</div>
-						<Button type="submit" variant="tonal">
-							Filter
-						</Button>
-					</Form>
-					{/* The week's total, of the people listed under it. */}
-					<p className="mt-6 flex max-w-200 items-baseline justify-between gap-4">
-						<span className="text-label-large">
-							{filter === "" ? "Week's total" : `Total for “${filter}”`}
-						</span>
-						<span className="text-headline-medium tabular-nums">{hours(total)}</span>
-					</p>
+					<div className="mt-6 max-w-200">
+						<FilterBar name="Filter people" keep={{ [WEEK_PARAM]: week.period.startsOn }}>
+							<FilterField label="Search people" param={FILTER_PARAM} />
+						</FilterBar>
+					</div>
 					{people.length === 0 ? (
 						<EmptySheet heading={week.label}>
 							Nobody's name or address holds “{filter}”.{" "}
@@ -358,7 +334,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 							</Link>
 						</EmptySheet>
 					) : (
-						<div className="mt-4 max-w-200">
+						<div className="mt-6 max-w-200">
 							<Ledger
 								heading={week.label}
 								note={
@@ -374,7 +350,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 											title={
 												<Link
 													to={`${thisWeek}&${PERSON_PARAM}=${p.id}`}
-													className={`${TEXT_LINK} wrap-anywhere`}
+													className={`${ACTION_LINK} wrap-anywhere`}
 												>
 													{p.name}
 												</Link>
@@ -401,6 +377,11 @@ function ThisWeek({ data }: { data: WeekData }) {
 										/>
 									))}
 								</LedgerRows>
+								{/* The week's total, of the people listed above it. */}
+								<LedgerTotal
+									label={filter === "" ? "Week's total" : `Total for “${filter}”`}
+									value={hours(total)}
+								/>
 							</Ledger>
 						</div>
 					)}
@@ -415,11 +396,10 @@ function PersonWeek({ data }: { data: PersonData }) {
 	const { week, person, days, seconds, status, comment, expected } = data;
 	return (
 		<>
-			<TeamTabs slug={organisation.slug} current="week" />
-			<p className="mt-6">
+			<p>
 				<Link
 					to={`${destinationPath(organisation.slug, "team")}?${WEEK_PARAM}=${week.period.startsOn}`}
-					className={TEXT_LINK}
+					className={ACTION_LINK}
 				>
 					← Everyone's week
 				</Link>
@@ -436,7 +416,8 @@ function PersonWeek({ data }: { data: PersonData }) {
 					Returned: {comment}
 				</p>
 			)}
-			<PeriodArrows week={week} extra={`&${PERSON_PARAM}=${person.id}`} />
+			<TeamTabs slug={organisation.slug} current="week" />
+			<WeekStepper week={week} extra={`&${PERSON_PARAM}=${person.id}`} />
 			<div className="mt-6 flex max-w-200 flex-col gap-6">
 				{days.map((d) => (
 					<Ledger
@@ -501,15 +482,13 @@ function Teams({ data }: { data: TeamsData }) {
 
 	return (
 		<>
-			<TeamTabs slug={organisation.slug} current="teams" />
-			<div className="mt-10">
-				<PageHeading>Teams</PageHeading>
-			</div>
+			<PageHeading>Teams</PageHeading>
 			<PageLead>
 				{canManage
 					? "A team's managers see its members' time and decide their timesheets. Owners and admins make the teams."
 					: "The teams you manage. Owners and admins change them."}
 			</PageLead>
+			<TeamTabs slug={organisation.slug} current="teams" />
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
 			</p>

@@ -87,13 +87,10 @@ for (const viewport of [
 
 					await page.getByRole("button", { name: "Delete organisation" }).click();
 					const deleting = page.getByRole("dialog", { name: `Delete ${name}?` });
+					// The confirmation waits for the name, exactly (TS-091, W27).
+					const confirm = deleting.getByRole("button", { name: "Delete organisation" });
 					await deleting.getByLabel("Organisation name").fill("another name");
-					await deleting.getByRole("button", { name: "Delete organisation" }).click();
-					const refused = deleting.getByText("Type the name exactly as it is shown.");
-					await expect(refused).toBeVisible();
-					expect(await contrast(refused), "contrast of the field's error").toBeGreaterThanOrEqual(
-						4.5,
-					);
+					await expect(confirm).toBeDisabled();
 					await expectNoProblemsInSheet(
 						page,
 						deleting,
@@ -105,10 +102,8 @@ for (const viewport of [
 					await page.getByRole("button", { name: "Change name" }).click();
 					const own = page.getByRole("dialog", { name: "Your name" });
 					await expectNoProblemsInSheet(page, own, own.getByText("Shown to the people"));
-
-					await page.getByRole("button", { name: "Leave organisation" }).click();
-					const leave = page.getByRole("dialog", { name: `Leave ${name}?` });
-					await expectNoProblemsInSheet(page, leave, leave.getByText("You will no longer"));
+					// The only owner is not offered to leave (W26).
+					await expect(page.getByRole("button", { name: "Leave organisation" })).toHaveCount(0);
 				});
 
 				test("the members and invitations pages, the menu and each of their sheets", async ({
@@ -254,7 +249,8 @@ test.describe("with motion allowed", () => {
 		for (const moved of [
 			/^transition of scale on <span>/, // the mark of the moment grows in
 			/^animation of translate on <html>/, // a destination arrives from the side it lies on
-			/^transition of translate on <div/, // a sheet slides up, and back down
+			// A sheet slides up and back down under 600px, and grows in the middle from 600px.
+			/^transition of (translate|scale) on <div/,
 		]) {
 			expect(seen).toContainEqual(expect.stringMatching(moved));
 		}

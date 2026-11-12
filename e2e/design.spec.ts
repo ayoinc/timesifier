@@ -17,11 +17,16 @@ const COMPONENTS = [
 	"Dialog",
 	"Sheet",
 	"Tabs",
+	"LinkTabs",
+	"FilterBar",
+	"PeriodStepper",
+	"Links",
 	"Snackbar",
 	"Tooltip",
 	"Digits",
 	"TimerMark",
 	"Ledger",
+	"Dates",
 ];
 
 async function style(element: Locator, property: string): Promise<string> {
@@ -104,9 +109,9 @@ for (const [scheme, colorScheme] of [
 	test(`${scheme}: disabled, invalid and selected states are shown`, async ({ page }) => {
 		const gallery = page.getByRole("region", { name: scheme });
 
-		// One for each variant of Button and of IconButton, and the Select.
+		// One for each variant of Button (six) and of IconButton (four), and the Select.
 		const disabled = gallery.getByRole("button", { name: /disabled$/i });
-		await expect(disabled).toHaveCount(9);
+		await expect(disabled).toHaveCount(11);
 		for (const button of await disabled.all()) await expect(button).toBeDisabled();
 		await expect(gallery.getByRole("textbox", { name: "Disabled" })).toBeDisabled();
 		await expect(gallery.getByRole("checkbox", { name: "Disabled and selected" })).toBeDisabled();
@@ -140,3 +145,29 @@ for (const [scheme, colorScheme] of [
 		);
 	});
 }
+
+// Every kind of date, written by app/time/format.ts as the gallery renders. The
+// server and the browser write each the same, whatever the engine: WebKit once
+// wrote "Mon 9" where the server wrote "9 Mon", and the page failed to hydrate
+// (audit W06). The fixtures fail a test on that error too.
+test("Dates: each kind is written one way, the server's, in this browser", async ({ page }) => {
+	for (const scheme of ["Light scheme", "Dark scheme"]) {
+		const dates = page
+			.getByRole("region", { name: scheme })
+			.locator("section")
+			.filter({ has: page.getByRole("heading", { name: "Dates", exact: true }) });
+		await expect(dates.locator("dd")).toHaveText([
+			"Wednesday 11 November",
+			"Mon 9",
+			"Wednesday 11 November 2026",
+			"9–15 November 2026",
+			"30 November – 6 December 2026",
+			"28 December 2026 – 3 January 2027",
+			"November 2026",
+			"09:30",
+			"21:33–02:33",
+			"Wednesday 11 November at 09:30",
+			"0:07",
+		]);
+	}
+});
