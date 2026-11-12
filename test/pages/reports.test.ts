@@ -121,8 +121,12 @@ const secondsOf = (rows: Record<string, string | undefined>[]) =>
 async function pageTotal(who: Person, query: string): Promise<string> {
 	const response = await open(`${REPORTS}?${query}`, who);
 	expect(response.status).toBe(200);
-	const total = /Total (\d+:\d\d)/.exec(textOf(await pageBody(response)))?.[1];
+	const text = textOf(await pageBody(response));
+	// The headline, the largest figure, read first; the sheet's total under the heavy rule ends the "By" sheet.
+	const total = /Total: (\d+:\d\d)/.exec(text)?.[1];
 	if (total === undefined) throw new Error("The page shows no total.");
+	const sheet = /By [a-z]+ .*? Total (\d+:\d\d) Billable /.exec(text)?.[1];
+	expect(sheet).toBe(total);
 	return total;
 }
 

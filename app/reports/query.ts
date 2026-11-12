@@ -117,6 +117,9 @@ export function rangeDays(query: ReportQuery, today: Day, weekStartsOn: number):
 		}
 		case "this-month":
 			return monthOf(today);
+		case "last-month":
+			// The day before the first of this month is in the month before it.
+			return monthOf(addDays(monthOf(today).first, -1));
 		case "month":
 			return monthOf(query.from ?? today);
 		case "custom":
@@ -162,6 +165,7 @@ export function steppedRange(range: Range, days: ReportDays, step: Step): Steppe
 				days: { first: addDays(days.first, 7 * step), last: addDays(days.last, 7 * step) },
 			};
 		case "this-month":
+		case "last-month":
 		case "month": {
 			// Month 0 of a year is its January; a month past December is the next year's.
 			const month = new Date(

@@ -1,43 +1,30 @@
-import { useEffect, useState } from "react";
 import { data, Link } from "react-router";
 
-import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
-import { PeriodStepper } from "~/components/PeriodStepper";
-import { Select } from "~/components/Select";
-import { TextField } from "~/components/TextField";
 import { expenseReportPath } from "~/expenses/paths";
 import { halfDaysLabel } from "~/leave/kinds";
 import { membershipContext } from "~/organisations/membership.server";
 import { billableSplitOf } from "~/reports/amounts.server";
 import { BillableSplit } from "~/reports/BillableSplit";
-import {
-	ANY_TAG,
-	EVERYONE,
-	GROUP_LABELS,
-	GROUPS,
-	type Grouping,
-	RANGE_LABELS,
-	RANGES,
-	type Range,
-} from "~/reports/choices";
-import { dayLabel, hoursAndMinutes, rangeLabel, stepUnit } from "~/reports/format";
+import { GROUP_LABELS, GROUPS } from "~/reports/choices";
+import { dayLabel, hoursAndMinutes } from "~/reports/format";
 import { reportExportPath } from "~/reports/paths";
-import {
-	type RangeProblem,
-	rangeDays,
-	reportSearch,
-	type Step,
-	steppedRange,
-} from "~/reports/query";
+import { reportSearch } from "~/reports/query";
+import { Headline, RangeSteps } from "~/reports/RangeSteps";
+import { ReportChoice } from "~/reports/ReportChoice";
+import { ReportTabs } from "~/reports/ReportTabs";
 import { byStart, totalsOf } from "~/reports/report";
 import { peopleOfReport, reportRequest, rowsOfReport } from "~/reports/reports.server";
+import { SaveReport } from "~/reports/SaveReport";
+import { timetableOf } from "~/reports/timetable";
+import { openedFrom, viewAction, viewFrame, viewsFor } from "~/reports/view.server";
+import { WeekTimetable as Timetable } from "~/reports/WeekTimetable";
 import { destination } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { negotiateLocale } from "~/shell/locale";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { tagOptions } from "~/tags/tags.server";
-import { dayOf } from "~/time/calendar";
+import { daysFrom, isoWeekday } from "~/time/calendar";
 import { formatDuration, formatTimeRange } from "~/time/format";
 
 import type { Route } from "./+types/reports";
@@ -48,29 +35,47 @@ import type { Route } from "./+types/reports";
 // everyone's as an owner or admin (app/reports/reports.server.ts). An entry
 // counts whole on the day it starts in the viewer's zone, as on the Timesheet
 // (docs/decisions.md entry 26). The filters apply as they change; the stepper
-// moves the range by its own length (TS-059, TS-091).
+// moves the range by its own length (TS-059, TS-091). The range's total is the
+// largest figure, and a week is drawn as a timetable of projects by days
+// (harvest-taste item 10). It is the Time view; the others are pages beside it
+// (app/reports/views.ts), and any can be saved (TS-080).
 
 const { label } = destination("reports");
 
 /** The most entries the page lists. The export holds all of them. */
 const ENTRIES_SHOWN = 200;
 
-/** A date field's value once a whole date is in it. */
-const WHOLE_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const WEEKDAYS = [
+	["Mon", "Monday"],
+	["Tue", "Tuesday"],
+	["Wed", "Wednesday"],
+	["Thu", "Thursday"],
+	["Fri", "Friday"],
+	["Sat", "Saturday"],
+	["Sun", "Sunday"],
+] as const;
 
 export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
+export async function action({ request, context }: Route.ActionArgs) {
+	return viewAction(request, context.get(membershipContext), "time");
+}
+
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
-	const report = await reportRequest(membership, new URL(request.url), Date.now());
+	const url = new URL(request.url);
+	const report = await reportRequest(membership, url, Date.now());
 	const { query, grouping, zone, choices, showClients, seesEveryone } = report;
 	// Whether the viewer may see anybody's time but their own.
 	const others = choices.length > 1;
 	const chosen = choices.find(({ id }) => id === query.person);
 
 	const page = {
+		...viewFrame(report, { grouped: true, tags: await tagOptions(report.scope) }),
+		views: viewsFor(membership.role),
+		slug: membership.organisation.slug,
 		whose: chosen
 			? `The time of ${chosen.name}.`
 			: seesEveryone
@@ -80,90 +85,63 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					: "Your time.",
 		zone,
 		groupings: showClients ? [...GROUPS] : GROUPS.filter((each) => each !== "client"),
-		choices: others ? choices : [],
-		everyone: seesEveryone ? "Everyone" : "You and your teams",
 		expensesPath: expenseReportPath(membership.organisation.slug),
-		/** The tags a report may be filtered by (TS-085). */
-		tags: await tagOptions(report.scope),
 	};
 
 	// A custom range that makes no report: the form again, holding what was
 	// typed, with the reason under its field (TS-091, W05).
 	if ("problem" in report) {
-		return data(
-			{
-				...page,
-				query: {
-					range: query.range,
-					from: query.from ?? "",
-					to: query.to ?? "",
-					group: grouping,
-					person: query.person ?? EVERYONE,
-					tag: query.tag ?? ANY_TAG,
-				},
-				problem: report.problem as RangeProblem | null,
-				range: "",
-				report: null,
-			},
-			{ status: 400 },
-		);
+		return data({ ...page, opened: null, report: null }, { status: 400 });
 	}
 
-	const { days } = report;
+	const { days, today } = report;
 	const rows = (await rowsOfReport(report)).sort(byStart);
 	const totals = totalsOf(rows, grouping);
-	const lines = await peopleOfReport(report, rows);
-	const kept = { group: grouping, person: query.person, tag: query.tag };
+	const [lines, opened] = await Promise.all([
+		peopleOfReport(report, rows),
+		openedFrom(membership, url),
+	]);
 	// The address of the export: the report as the page reads it, written out
 	// in full, so the file holds the rows on this page.
-	const search = reportSearch({ ...kept, range: query.range, days });
-	// The ranges before and after, as links that keep the grouping and the person.
-	const step = (by: Step) =>
-		`?${reportSearch({ ...kept, ...steppedRange(query.range, days, by) })}`;
-	const unit = stepUnit(query.range, days);
-
-	// The way back to the week or month holding today, while the range is another.
-	const kind = steppedRange(query.range, days, 1).range;
-	const today = dayOf(report.now, zone);
-	const weekStartsOn = membership.organisation.weekStartsOn;
-	const back =
-		kind === "custom"
-			? null
-			: ({ range: kind === "week" ? "this-week" : "this-month", group: grouping } as const);
-	const holdingToday = back && rangeDays(back, today, weekStartsOn);
-	const current =
-		back && holdingToday && holdingToday.first !== days.first
-			? {
-					to: `?${reportSearch({ ...kept, range: back.range, days: holdingToday })}`,
-					label: RANGE_LABELS[back.range],
-				}
-			: undefined;
+	const search = reportSearch({
+		group: grouping,
+		person: query.person,
+		tag: query.tag,
+		range: query.range,
+		days,
+	});
+	// A week is drawn as a timetable of projects by days.
+	const isWeek = ["this-week", "last-week", "week"].includes(query.range);
+	const week = isWeek ? timetableOf(rows, daysFrom(days.first, days.last)) : null;
+	const expected = lines.reduce((sum, line) => sum + line.expectedMinutes, 0);
 
 	return data(
 		{
 			...page,
-			query: {
-				range: query.range,
-				from: days.first,
-				to: days.last,
-				group: grouping,
-				person: query.person ?? EVERYONE,
-				tag: query.tag ?? ANY_TAG,
-			},
-			problem: null as RangeProblem | null,
-			range: rangeLabel(days.first, days.last),
+			opened,
 			report: {
-				steps: {
-					previous: { to: step(-1), label: `Previous ${unit}` },
-					next: { to: step(1), label: `Next ${unit}` },
-					current,
-				},
 				groups: totals.groups.map((group) => ({
 					key: group.key,
 					label: grouping === "day" ? dayLabel(group.key) : (group.label ?? "No client"),
 					duration: hoursAndMinutes(group.minutes * 60),
 				})),
 				total: hoursAndMinutes(totals.minutes * 60),
+				expected: lines.length > 0 ? `of ${formatDuration(expected * 60)} expected` : undefined,
+				week: week && {
+					days: week.days.map((day) => {
+						const [short, name] = WEEKDAYS[isoWeekday(day) - 1] ?? ["", ""];
+						return { day, short, name: `${name} ${dayLabel(day)}`, isToday: day === today };
+					}),
+					rows: week.rows.map((row) => ({
+						key: row.key,
+						label: row.label,
+						cells: row.cells.map(hoursAndMinutes),
+						empty: row.cells.map((seconds) => seconds === 0),
+						total: hoursAndMinutes(row.total),
+					})),
+					dayTotals: week.dayTotals.map(hoursAndMinutes),
+					total: hoursAndMinutes(week.total),
+				},
 				entries: rows.slice(0, ENTRIES_SHOWN).map((row) => {
 					const { entry } = row;
 					return {
@@ -186,6 +164,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				people: lines.map((line) => ({
 					id: line.id,
 					name: line.name,
+					address: line.address,
 					worked: hoursAndMinutes(line.worked),
 					expected: formatDuration(line.expectedMinutes * 60),
 					leave:
@@ -223,23 +202,30 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 				</Link>
 			</PageLead>
 
-			<div className="mt-8">
-				<ReportChoice {...loaderData} />
-			</div>
+			<ReportTabs
+				slug={loaderData.slug}
+				current="time"
+				views={loaderData.views}
+				search={loaderData.tabSearch}
+			/>
+			<ReportChoice {...loaderData} />
+			<RangeSteps range={loaderData.range} steps={loaderData.steps} />
 
 			{report && (
 				<>
-					<div className="mt-8">
-						<PeriodStepper
-							label="Report range"
-							period={loaderData.range}
-							previous={report.steps.previous}
-							next={report.steps.next}
-							current={report.steps.current}
-						/>
-					</div>
+					<Headline label="Total" value={report.total} beside={report.expected} />
+					<SaveReport opened={loaderData.opened} />
 
-					<div className="mt-4">
+					{report.week && (
+						<div className="mt-10 max-w-200">
+							<Timetable
+								caption="The week in hours and minutes, by project and day."
+								{...report.week}
+							/>
+						</div>
+					)}
+
+					<div className="mt-10 max-w-200">
 						<Ledger
 							heading={`By ${GROUP_LABELS[query.group].toLowerCase()}`}
 							note={loaderData.range}
@@ -283,6 +269,9 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 											title={<span className="wrap-anywhere">{person.name}</span>}
 											detail={
 												<>
+													{person.address && (
+														<span className="block wrap-anywhere">{person.address}</span>
+													)}
 													{`${person.expected} expected · ${person.leave}`}
 													{person.shortNotice && (
 														<span className="block">{person.shortNotice}</span>
@@ -331,170 +320,6 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 						</Section>
 					)}
 				</>
-			)}
-		</>
-	);
-}
-
-type ChoiceProps = Pick<
-	Route.ComponentProps["loaderData"],
-	"query" | "groupings" | "choices" | "everyone" | "range" | "problem" | "tags"
->;
-
-/**
- * The fields that choose a report, sent in the address, so a report is a
- * link. Range, Group by and Person apply as soon as they change; the days of a
- * custom range apply once both hold a whole date, or on Enter (TS-091, W15 and
- * W28).
- */
-function ReportChoice(props: ChoiceProps) {
-	return (
-		<FilterBar name="Choose a report">
-			<ReportFields {...props} />
-		</FilterBar>
-	);
-}
-
-/**
- * Each field of the choice grows to share its row, so every row of fields runs
- * the width of the column and their edges line up (audit W21, W22).
- */
-const FIELD = "min-w-0 grow basis-44";
-
-function ReportFields({
-	query,
-	groupings,
-	choices,
-	everyone,
-	range: shown,
-	problem,
-	tags,
-}: ChoiceProps) {
-	const apply = useApplyFilters();
-	// The hidden select and the inputs hold the new value once React has drawn it.
-	const applySoon = () => setTimeout(apply, 0);
-
-	const [range, setRange] = useState<Range>(query.range);
-	const [group, setGroup] = useState<Grouping>(query.group);
-	const [person, setPerson] = useState(query.person);
-	const [tag, setTag] = useState(query.tag);
-	const [from, setFrom] = useState(query.from);
-	const [to, setTo] = useState(query.to);
-	// The address changed (applied, Back, a step): show what it holds.
-	useEffect(() => {
-		setRange(query.range);
-		setGroup(query.group);
-		setPerson(query.person);
-		setTag(query.tag);
-		setFrom(query.from);
-		setTo(query.to);
-	}, [query.range, query.group, query.person, query.tag, query.from, query.to]);
-
-	// A week or a month the stepper moved to is offered while it is shown, by its days.
-	const stepped = (id: Range) => id === "week" || id === "month";
-	const ranges = RANGES.filter((id) => !stepped(id) || id === query.range);
-	const applyDays = (first: string, last: string) => {
-		if (WHOLE_DATE.test(first) && WHOLE_DATE.test(last)) applySoon();
-	};
-	const fieldError = (field: RangeProblem["field"]) =>
-		problem?.field === field ? { isInvalid: true, errorMessage: problem.message } : {};
-
-	return (
-		<>
-			<div className={FIELD}>
-				<Select
-					label="Range"
-					name="range"
-					options={ranges.map((id) => ({ id, label: stepped(id) ? shown : RANGE_LABELS[id] }))}
-					value={range}
-					onChange={(id) => {
-						const next = RANGES.find((each) => each === id) ?? range;
-						setRange(next);
-						// A custom range waits for its days.
-						if (next !== "custom") applySoon();
-					}}
-				/>
-			</div>
-			<div className={FIELD}>
-				<Select
-					label="Group by"
-					name="group"
-					options={groupings.map((id) => ({ id, label: GROUP_LABELS[id] }))}
-					value={group}
-					onChange={(id) => {
-						setGroup(GROUPS.find((each) => each === id) ?? group);
-						applySoon();
-					}}
-				/>
-			</div>
-			{range === "custom" && (
-				<>
-					<div className={FIELD}>
-						<TextField
-							label="First day"
-							name="from"
-							type="date"
-							value={from}
-							onChange={(value) => {
-								setFrom(value);
-								applyDays(value, to);
-							}}
-							{...fieldError("from")}
-						/>
-					</div>
-					<div className={FIELD}>
-						<TextField
-							label="Last day"
-							name="to"
-							type="date"
-							value={to}
-							min={WHOLE_DATE.test(from) ? from : undefined}
-							onChange={(value) => {
-								setTo(value);
-								applyDays(from, value);
-							}}
-							{...fieldError("to")}
-						/>
-					</div>
-				</>
-			)}
-			{stepped(range) && <input type="hidden" name="from" value={query.from} />}
-			{choices.length > 0 && (
-				<div className={FIELD}>
-					<Select
-						label="Person"
-						name="person"
-						options={[
-							{ id: EVERYONE, label: everyone },
-							...choices.map(({ id, name }) => ({ id, label: name })),
-						]}
-						value={person}
-						onChange={(id) => {
-							setPerson(id ?? EVERYONE);
-							applySoon();
-						}}
-					/>
-				</div>
-			)}
-			{tags.length > 0 && (
-				<div className={FIELD}>
-					<Select
-						label="Tag"
-						name="tag"
-						options={[
-							{ id: ANY_TAG, label: "Any tag" },
-							...tags.map(({ id, name, archived }) => ({
-								id,
-								label: archived ? `${name} (archived)` : name,
-							})),
-						]}
-						value={tag}
-						onChange={(id) => {
-							setTag(id ?? ANY_TAG);
-							applySoon();
-						}}
-					/>
-				</div>
 			)}
 		</>
 	);

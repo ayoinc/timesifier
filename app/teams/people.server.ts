@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { type OrganisationScope, users } from "~/db";
 import { type Access, timeScopeOf } from "~/organisations/access";
-import { nameOrEmail } from "~/organisations/people";
+import { addressLine, nameOrEmail } from "~/organisations/people";
 import { zoneOf } from "~/time/zones";
 
 /**
@@ -16,8 +16,11 @@ import { zoneOf } from "~/time/zones";
 
 export interface Person {
 	id: string;
+	/** Their name, or their address when they have given none (`nameOrEmail`). */
 	name: string;
 	email: string;
+	/** Their address, shown under `name` when they have given no name; null when they have. */
+	address: string | null;
 	/** The zone their days and periods are counted in. */
 	timeZone: string;
 }
@@ -47,6 +50,7 @@ export async function peopleOf(
 			id: account.id,
 			name: nameOrEmail(account),
 			email: account.email,
+			address: addressLine(account),
 			timeZone: zoneOf(account, organisation),
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name, "en") || a.email.localeCompare(b.email));

@@ -233,6 +233,12 @@ export const projects = sqliteTable(
 		rateMode: text("rate_mode").notNull().default("project"),
 		/** A fixed-fee project's fee, in minor units of the project's currency. */
 		feeMinor: integer("fee_minor"),
+		/**
+		 * The project's first and last local day, both included, or null when not
+		 * set (B6). A fixed fee is spread evenly over them for profitability.
+		 */
+		startsOn: text("starts_on"),
+		endsOn: text("ends_on"),
 		/** The project's currency, ISO 4217. Null means the client's, then the organisation's. */
 		currency: text("currency"),
 		/**

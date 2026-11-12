@@ -15,6 +15,7 @@ import {
 } from "./integrations/paths";
 import { DEFAULT_RATES_SEGMENT, PROJECT_PARAM } from "./projects/projects";
 import { REPORT_EXPORT_SEGMENT } from "./reports/paths";
+import { LEAVE_EXPORT_SEGMENT, REPORT_VIEW_ROUTES } from "./reports/views";
 import {
 	ACCOUNT_SEGMENT,
 	APP_PATH,
@@ -62,6 +63,8 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(HISTORY_SEGMENT, "routes/app/history.tsx"),
 	route(`${destination("projects").segment}/${DEFAULT_RATES_SEGMENT}`, "routes/app/rates.tsx"),
 	route(`${destination("projects").segment}/:${PROJECT_PARAM}`, "routes/app/project.tsx"),
+	...REPORT_VIEW_ROUTES.map(({ path, file }) => route(path, file)),
+	route(LEAVE_EXPORT_SEGMENT, "routes/app/reports.leave.export.ts"),
 	route(ACCOUNT_SEGMENT, "routes/app/account.tsx"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	...Object.keys(MOVED).map((segment) =>

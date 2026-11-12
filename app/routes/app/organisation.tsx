@@ -2,6 +2,7 @@ import { Link, Outlet, useParams } from "react-router";
 
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
 import { pendingLeaveOf } from "~/leave/leave.server";
+import { maySeeRates } from "~/organisations/access";
 import {
 	membershipContext,
 	notFound,
@@ -15,6 +16,7 @@ import {
 	destinationPath,
 	destinations,
 	ORGANISATION_PARAM,
+	organisationPath,
 	visibleDestinations,
 } from "~/shell/destinations";
 import { errorWords } from "~/shell/error-words";
@@ -65,8 +67,17 @@ const requireDestination: Route.MiddlewareFunction = ({ pattern, params, context
 	const matched = pattern.endsWith("/*") ? `${pattern.slice(0, -1)}${params["*"] ?? ""}` : pattern;
 	const path = matched.startsWith("/") ? matched : `/${matched}`;
 	const at = destinations[destinationIndex(PATTERN_SLUG, path)];
-	if (at && !canSee(viewerOf(context.get(membershipContext)), at.id)) throw notFound();
+	const membership = context.get(membershipContext);
+	if (at && !canSee(viewerOf(membership), at.id)) throw notFound();
+	// A page of a destination that shows money is refused the same way to anyone who does not see rates.
+	const rest = path.slice(organisationPath(PATTERN_SLUG).length);
+	if (RATES_ONLY.some((page) => rest.startsWith(page)) && !maySeeRates(membership.role)) {
+		throw notFound();
+	}
 };
+
+/** The pages, below their organisation, that only those who see rates are shown (TS-071). */
+const RATES_ONLY = ["/reports/profitability"];
 
 export const middleware: Route.MiddlewareFunction[] = [requireOrganisation, requireDestination];
 

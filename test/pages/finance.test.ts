@@ -26,6 +26,7 @@ import {
 	timeScopeOf,
 } from "~/organisations/access";
 import type { Role } from "~/organisations/roles";
+import { saveReport } from "~/reports/saved.server";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -91,6 +92,8 @@ interface World {
 	expense: string;
 	/** A previewed import of clients, Ada's. */
 	importJob: string;
+	/** A saved report of the column's own, Mine. */
+	saved: string;
 }
 
 let mailbox: Mailbox;
@@ -180,6 +183,12 @@ async function world(column: Column): Promise<World> {
 		category: category.id,
 		expense: expense.id,
 		importJob: started.id,
+		saved: await saveReport(
+			organisationScope(env.DB, acme.id),
+			who.user.id,
+			"Mine",
+			"view=time&range=this-week",
+		),
 	};
 }
 
@@ -214,6 +223,24 @@ const count = (sql: string, ...values: unknown[]) => value<number>(sql, ...value
  * The role table of every route of an organisation (docs/security.md,
  * "Destinations by role" and "Whose time"), with its Finance column.
  */
+/** Reports, and the range a view is asked with, so it can be saved. */
+const REPORTS_AT = "/app/acme/reports";
+const RANGE = "?range=this-week";
+
+/** A view of Reports saved as Ours: everyone shown the view may save it. */
+function savesItsReport(view: string): NonNullable<Row["form"]> {
+	return {
+		fields: () => ({ intent: "save-report", name: "Ours" }),
+		made: async (w) =>
+			(await count(
+				"select count(*) from saved_reports where owner_id = ? and name = 'Ours' and query like ?",
+				w.who.user.id,
+				`view=${view}&%`,
+			)) === 1,
+		post: every<Post>("done"),
+	};
+}
+
 const ROLE_TABLE: Record<string, Row> = {
 	[LAYOUT]: { page: every(200) },
 	"routes/app/timesheet": {
@@ -359,10 +386,54 @@ const ROLE_TABLE: Record<string, Row> = {
 			post: by<Post>("done", "done", 404, "done", 404),
 		},
 	},
-	"routes/app/reports": { page: every(200) },
+	// Each view of Reports saves what it shows, for whoever is shown it (TS-084).
+	"routes/app/reports": {
+		address: () => `${REPORTS_AT}${RANGE}`,
+		page: every(200),
+		form: savesItsReport("time"),
+	},
 	"routes/app/reports.export": { page: every(200) },
 	"routes/app/reports.expenses": { page: every(200) },
 	"routes/app/reports.expenses.export": { page: every(200) },
+	"routes/app/reports.utilisation": {
+		address: () => `${REPORTS_AT}/utilisation${RANGE}`,
+		page: every(200),
+		form: savesItsReport("utilisation"),
+	},
+	"routes/app/reports.leave": {
+		address: () => `${REPORTS_AT}/leave${RANGE}`,
+		page: every(200),
+		form: savesItsReport("leave"),
+	},
+	"routes/app/reports.leave.export": { page: every(200) },
+	// Profitability (TS-071) is money: owners, admins and Finance only, though it is below Reports.
+	"routes/app/reports.profitability": {
+		page: by(200, 200, 200, 404, 404),
+		form: {
+			fields: (w) => ({
+				intent: "cost-rate",
+				userId: w.grace.userId,
+				amount: "45.00",
+				effectiveFrom: "2030-01-01",
+			}),
+			made: async (w) =>
+				(await count(
+					"select count(*) from rates where kind = 'cost' and user_id = ?",
+					w.grace.userId,
+				)) === 1,
+			post: by<Post>("done", "done", "done", 404, 404),
+		},
+	},
+	// Saved reports: each person's own, whatever their role.
+	"routes/app/reports.saved": {
+		page: every(200),
+		form: {
+			fields: (w) => ({ intent: "rename", reportId: w.saved, name: "Renamed" }),
+			made: async (w) =>
+				(await value<string>("select name from saved_reports where id = ?", w.saved)) === "Renamed",
+			post: every<Post>("done"),
+		},
+	},
 	// Contractors (TS-079): owners, admins and Finance only, though it is below Reports.
 	"routes/app/contractors": { page: by(200, 200, 200, 404, 404) },
 	"routes/app/contractors.export": { page: by(200, 200, 200, 404, 404) },

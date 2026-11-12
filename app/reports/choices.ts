@@ -7,15 +7,26 @@
 
 /**
  * `week` and `month` are the week or the calendar month holding the day in
- * `from`: where Previous and Next take a report (TS-059).
+ * `from`: where Previous and Next take a report (TS-059). The others are
+ * relative to today, so a saved report that names one moves with the date
+ * (TS-080).
  */
-export const RANGES = ["this-week", "last-week", "this-month", "week", "month", "custom"] as const;
+export const RANGES = [
+	"this-week",
+	"last-week",
+	"this-month",
+	"last-month",
+	"week",
+	"month",
+	"custom",
+] as const;
 export type Range = (typeof RANGES)[number];
 
 export const RANGE_LABELS: Record<Range, string> = {
 	"this-week": "This week",
 	"last-week": "Last week",
 	"this-month": "This month",
+	"last-month": "Last month",
 	week: "Week",
 	month: "Month",
 	custom: "Custom range",

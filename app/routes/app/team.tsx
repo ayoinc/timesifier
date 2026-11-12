@@ -20,6 +20,7 @@ import { isAdministrator } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
+import { shownName } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { destination, destinationPath } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
@@ -162,6 +163,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		new Set(listed.filter((p) => p.running).map((p) => p.id)),
 	);
 	const isCurrent = viewed.period.startsOn === viewed.current.startsOn;
+	const addresses = new Map(shown.map((p) => [p.id, p.address]));
 	return {
 		view: "week" as const,
 		week,
@@ -169,11 +171,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		everyone: people.length,
 		people: listed.map((p) => {
 			const theirs = leave.get(p.id);
+			const address = addresses.get(p.id) ?? null;
 			return {
 				...p,
+				// The name, or the start of the address with the whole of it under (harvest-taste item 9).
+				name: address ? shownName({ email: address }) : p.name,
+				address,
 				// Where they stand now, shown on the current week alone.
 				now: isCurrent && theirs ? personStatusLabel(theirs.now) : null,
 				expected: formatDuration((theirs?.expectedMinutes ?? 0) * 60),
+				leave: theirs && theirs.leaveMinutes > 0 ? formatDuration(theirs.leaveMinutes * 60) : null,
 				leaveDays:
 					theirs?.days
 						.filter((d) => d.is.kind === "leave")
@@ -356,6 +363,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 											}
 											detail={
 												<>
+													{p.address && <span className="block wrap-anywhere">{p.address}</span>}
 													{p.now && <span className="block text-on-surface">{p.now}</span>}
 													{statusLabel(p.status)}
 													{p.running && " · Timer running"}
@@ -367,9 +375,10 @@ function ThisWeek({ data }: { data: WeekData }) {
 											value={
 												<>
 													{hours(p.seconds)}
-													<span className="text-body-medium text-on-surface-variant">
-														{" "}
-														of {p.expected} expected
+													<span className="sr-only"> logged</span>
+													<span className="block text-body-medium text-on-surface-variant">
+														{p.expected} expected
+														{p.leave && ` · ${p.leave} leave`}
 													</span>
 												</>
 											}
