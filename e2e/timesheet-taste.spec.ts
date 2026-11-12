@@ -217,7 +217,8 @@ test.describe("at 1280px", () => {
 		const { slug } = await trackingOrganisation(page);
 		await createProject(page, slug, "Archive survey");
 		await openShell(page, organisationPath(slug));
-		const today = await dayFrom(page, 0);
+		// A past weekday, not today: a weekend day may count as overtime (TS-095).
+		const { target: day } = await pastWorkingPair(page);
 
 		await pageTrackTime(page).click();
 		const sheet = trackSheet(page);
@@ -229,7 +230,7 @@ test.describe("at 1280px", () => {
 		await page.keyboard.press("Enter");
 		await expect(project).toHaveValue("Archive survey");
 		await sheet.getByRole("textbox", { name: "Hours" }).fill("1");
-		await sheet.getByLabel("Date").fill(today);
+		await sheet.getByLabel("Date").fill(day);
 		await sheet.getByRole("button", { name: "Save entry" }).click();
 		await expect(sheet).toBeHidden();
 

@@ -1,10 +1,9 @@
 import { type KeyboardEvent, useRef } from "react";
-import { useDateFormatter } from "react-aria";
 import { Link } from "react-router";
-
 import { cx } from "~/components/cx";
 import { finishRunningTransition } from "~/shell/transitions";
 import type { Day } from "~/time/calendar";
+import { formatDayOfMonth, formatWeekday } from "~/time/format";
 import { focusItem, useRovingFocus } from "./calendar-focus";
 import type { MonthSheet } from "./calendar-sheets";
 import { ruleWords } from "./DayRules";
@@ -59,11 +58,6 @@ export function CalendarMonth({
 }) {
 	const { today, lockedDays, statuses, rules } = data;
 	const formatLong = useDayFormat();
-	const weekdayShort = useDateFormatter({ weekday: "short", timeZone: "UTC" });
-	const weekdayNarrow = useDateFormatter({ weekday: "narrow", timeZone: "UTC" });
-	const weekdayLong = useDateFormatter({ weekday: "long", timeZone: "UTC" });
-	const monthDay = useDateFormatter({ day: "numeric", month: "long", timeZone: "UTC" });
-	const asDate = (day: Day) => new Date(`${day}T00:00:00Z`);
 
 	const ids = new Set(
 		sheet.weeks.flatMap((week) => [...week.days.map((d) => d.day), weekId(week)]),
@@ -128,12 +122,12 @@ export function CalendarMonth({
 								className="px-1 py-3 text-center text-label-large font-normal text-on-surface-variant medium:px-2 medium:text-start"
 							>
 								<span aria-hidden="true" className="medium:hidden">
-									{weekdayNarrow.format(asDate(day))}
+									{formatWeekday(day, "narrow")}
 								</span>
 								<span aria-hidden="true" className="max-medium:hidden">
-									{weekdayShort.format(asDate(day))}
+									{formatWeekday(day, "short")}
 								</span>
-								<span className="sr-only">{weekdayLong.format(asDate(day))}</span>
+								<span className="sr-only">{formatWeekday(day, "long")}</span>
 							</th>
 						))}
 						<th
@@ -261,7 +255,7 @@ export function CalendarMonth({
 										{formatDuration(week.total)}
 									</span>
 									<span className="sr-only">
-										Week of {monthDay.format(asDate(week.days[0]?.day as Day))},{" "}
+										Week of {formatDayOfMonth(week.days[0]?.day as Day)},{" "}
 										{formatDuration(week.total)}
 									</span>
 								</Link>

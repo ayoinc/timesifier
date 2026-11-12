@@ -1,5 +1,4 @@
 import { useEffect, useState, ViewTransition } from "react";
-import { useDateFormatter } from "react-aria";
 import { useNavigate } from "react-router";
 import { IconButton } from "~/components/IconButton";
 import { AddIcon } from "~/components/icons/AddIcon";
@@ -9,6 +8,7 @@ import { Tooltip } from "~/components/Tooltip";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { addDays, type Day, dayOf } from "~/time/calendar";
+import { formatMonth } from "~/time/format";
 
 import { CalendarMonth } from "./CalendarMonth";
 import { CalendarWeek } from "./CalendarWeek";
@@ -55,7 +55,6 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 	);
 	const travel = useTravel(dayNumber(first));
 	const formatPeriod = usePeriodFormat();
-	const formatMonth = useDateFormatter({ month: "long", year: "numeric", timeZone: "UTC" });
 	const clock = useClockFormat(zone);
 	const navigate = useNavigate();
 	const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
@@ -99,9 +98,7 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 		return () => document.removeEventListener("keydown", onKey);
 	}, [navigate, zoomIn, zoomOut]);
 
-	const title = isMonth
-		? formatMonth.format(new Date(`${month}T00:00:00Z`))
-		: formatPeriod(first, last);
+	const title = isMonth ? formatMonth(month) : formatPeriod(first, last);
 	const previous = isMonth
 		? calendarPath(slug, { scale, date: monthAfter(month, -1) })
 		: calendarPath(slug, { date: addDays(first, -7), zoom });

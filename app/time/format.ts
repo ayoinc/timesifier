@@ -95,6 +95,24 @@ export function formatMonth(day: Day): string {
 	return `${parts.month} ${parts.year}`;
 }
 
+const weekdays = new Map<string, Intl.DateTimeFormat>();
+
+/** The name of `day`'s weekday: "W", "Wed" or "Wednesday", for the heads of a calendar's columns. */
+export function formatWeekday(day: Day, style: "narrow" | "short" | "long"): string {
+	let format = weekdays.get(style);
+	if (!format) {
+		format = new Intl.DateTimeFormat(LOCALE, { weekday: style, timeZone: "UTC" });
+		weekdays.set(style, format);
+	}
+	return partsOf(format, midnightOf(day)).weekday ?? "";
+}
+
+/** A day of a month without its weekday or year: "11 November". */
+export function formatDayOfMonth(day: Day): string {
+	const parts = dayParts(day);
+	return `${parts.day} ${parts.month}`;
+}
+
 /** The time of day at `instant` on the clock in `zone`, 24-hour: "09:30", and midnight "00:00". */
 export function formatTime(instant: number, zone: string): string {
 	let clock = clocks.get(zone);

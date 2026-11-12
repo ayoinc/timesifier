@@ -53,6 +53,20 @@ Builder: an AI session on branch `ts-wave3-wiring`. In review: the pull request 
 - [x] Profit on the project page (TS-071's criterion, ticked there).
 - [x] The budget alert in-app, where TS-069 left it: not built, because there is no in-app notification surface to put it on (TS-069's criterion says why; it comes with TS-049).
 
+### TS-093 · Taste: the timesheet as Harvest makes it feel
+
+Builder: an AI session on branch `ts-wave3-taste` (PR #55), integrated by the merge queue. No migration.
+
+- [x] Start again on every finished entry outside a submitted or locked week, starting a timer with its project, task, tags and description; the row's Actions menu holds Edit entry, Delete entry and History (`test/pages/timesheet-taste.test.ts`; `e2e/timesheet-taste.spec.ts`, "Start again, delete with Undo, and the row that changed is marked").
+- [x] Amber marks the running timer and today: the running bar and row, the navigation's timer, today's chip, column and calendar day, this week in History; the elapsed time is the Day view's largest text (`e2e/timesheet-taste.spec.ts`, the axe tests at 390px and 1280px in both schemes).
+- [x] Track time opens one sheet over any page, with a Date field, keeping the address and returning focus; the chosen day's rules come from `timesheet/day` and a closed day says why (audit W01; `test/pages/timesheet-taste.test.ts`; `e2e/timesheet-taste.spec.ts`, "Track time opens over Projects with a date").
+- [x] A searchable project picker grouped by client, recent projects first, in Track time, Edit entry and Expenses (`test/projects/`; `e2e/timesheet-taste.spec.ts`, "the project picker finds a project by typing").
+- [x] One snackbar with Undo for start, stop, save, copy and delete; delete asks nothing and Undo restores the entry unless its day has since been locked (decision 32; `test/pages/timesheet-taste.test.ts`).
+- [x] Empty day with Track time and Copy from the last working day; Copy last week on the Week view; neither touches a day with time, locked or closed (`test/pages/timesheet-taste.test.ts`).
+- [x] Keys N, `[`, `]`, T and `?`; the day title opens a month picker with each day's total, and Back to today (`e2e/timesheet-taste.spec.ts`, "the day title opens the month").
+- [x] Audit W02, W10, W12 (the Calendar writes its weekdays, months and weeks through `app/time/format.ts`), W16, W23 (PeriodStepper on Day, Week and Calendar).
+- [ ] typecheck, lint, tests and browser tests pass in the pipeline.
+
 ### TS-090 · Leave and time together: limits, notice, overtime and weekend work
 
 Builder: an AI session on branch `ts-090-leave-rules`. Asked for by the owner on 2026-11-12, after TS-061 and TS-062 merged: leave and tracked time follow one set of rules, and leave is booked in good time. Migrations `0009_leave_notice` (each kind's notice and the trigger made again, merged alone first as a migration that drops must, branch `ts-090-leave-schema`) and `0010_timesheet_rules`.
