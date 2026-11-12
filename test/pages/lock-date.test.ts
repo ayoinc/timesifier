@@ -343,7 +343,14 @@ describe("the lock date binds everyone", () => {
 		expect(
 			await post(
 				timeOff,
-				{ intent: "request", kindId: annual, startsOn: "2026-11-16", endsOn: "2026-11-16" },
+				{
+					intent: "request",
+					kindId: annual,
+					startsOn: "2026-11-16",
+					endsOn: "2026-11-16",
+					// Less than annual leave's notice (TS-090), so it says why.
+					noticeReason: "A family wedding",
+				},
 				grace,
 			),
 		).toBe(200);

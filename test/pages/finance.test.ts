@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { record } from "~/activity/activity.server";
 import { organisationScope } from "~/db";
+import { recordExpense } from "~/expenses/expenses.server";
+import { startImport } from "~/import/import.server";
 import {
 	type Access,
 	activityScopeOf,
@@ -83,6 +85,12 @@ interface World {
 	leave: string;
 	/** A client, Initech. */
 	client: string;
+	/** An expense category, Travel. */
+	category: string;
+	/** Grace's expense, with a receipt. */
+	expense: string;
+	/** A previewed import of clients, Ada's. */
+	importJob: string;
 }
 
 let mailbox: Mailbox;
@@ -115,6 +123,32 @@ async function world(column: Column): Promise<World> {
 		nameKey: "initech",
 	});
 	if (!client) throw new Error("seed failed");
+	const [category] = await organisationScope(env.DB, acme.id).expenseCategories.insert({
+		name: "Travel",
+		nameKey: "travel",
+	});
+	if (!category) throw new Error("seed failed");
+	const expense = await recordExpense(organisationScope(env.DB, acme.id), grace.userId, {
+		spentOn: "2026-10-13",
+		projectId: project,
+		categoryId: category.id,
+		amount: "12.50",
+		quantity: "",
+		notes: "Train",
+		billable: false,
+		reimbursable: true,
+		receipt: new File(["%PDF-1.4"], "ticket.pdf", { type: "application/pdf" }),
+		removeReceipt: false,
+	});
+	if (!expense.ok) throw new Error("seed failed");
+	const started = await startImport(
+		organisationScope(env.DB, acme.id),
+		ada.user.id,
+		"clients",
+		"clients.csv",
+		"Client\nGlobex\n",
+	);
+	if (!started.ok) throw new Error("seed failed");
 	const entry = await seedEntry(
 		acme.id,
 		grace.userId,
@@ -143,6 +177,9 @@ async function world(column: Column): Promise<World> {
 			status: "pending",
 		}),
 		client: client.id,
+		category: category.id,
+		expense: expense.id,
+		importJob: started.id,
 	};
 }
 
@@ -162,6 +199,8 @@ interface Row {
 		/** Whether what the form asks for was done. */
 		made: (w: World) => Promise<boolean>;
 		post: Record<Column, Post>;
+		/** What a done form answers a script: 202 where the action redirects. */
+		doneStatus?: 200 | 202;
 	};
 }
 
@@ -197,7 +236,31 @@ const ROLE_TABLE: Record<string, Row> = {
 			post: by<Post>("done", "done", 403, "done", 403),
 		},
 	},
-	"routes/app/expenses": { page: every(200) },
+	"routes/app/expenses": {
+		page: every(200),
+		form: {
+			// Everyone records their own expenses.
+			fields: (w) => ({
+				intent: "record",
+				spentOn: "2026-10-14",
+				projectId: w.project,
+				categoryId: w.category,
+				amount: "9.00",
+				notes: "Lunch",
+			}),
+			made: async (w) =>
+				(await count(
+					"select count(*) from expenses where user_id = ? and notes = 'Lunch'",
+					w.who.user.id,
+				)) === 1,
+			post: every<Post>("done"),
+		},
+	},
+	// Grace's receipt: whoever may see her expenses, Finance and her manager included.
+	"routes/app/expenses.receipt": {
+		address: (w) => `/app/acme/expenses/${w.expense}/receipt`,
+		page: by(200, 200, 200, 200, 404),
+	},
 	"routes/app/team": {
 		page: by(200, 200, 404, 200, 404),
 		form: {
@@ -257,6 +320,8 @@ const ROLE_TABLE: Record<string, Row> = {
 	},
 	"routes/app/reports": { page: every(200) },
 	"routes/app/reports.export": { page: every(200) },
+	"routes/app/reports.expenses": { page: every(200) },
+	"routes/app/reports.expenses.export": { page: every(200) },
 	// Contractors (TS-079): owners, admins and Finance only, though it is below Reports.
 	"routes/app/contractors": { page: by(200, 200, 200, 404, 404) },
 	"routes/app/contractors.export": { page: by(200, 200, 200, 404, 404) },
@@ -268,7 +333,28 @@ const ROLE_TABLE: Record<string, Row> = {
 		address: (w) => `/app/acme/history?entry=${w.entry}`,
 		page: by(200, 200, 200, 200, 404),
 	},
-	"routes/app/integrations": { page: by(200, 200, 404, 404, 404) },
+	"routes/app/integrations": {
+		page: by(200, 200, 404, 404, 404),
+		form: {
+			fields: () => ({ intent: "token-create", name: "Sync", scopes: "time:read" }),
+			made: async () => (await count("select count(*) from api_tokens where name = 'Sync'")) === 1,
+			post: by<Post>("done", "done", 404, 404, 404),
+		},
+	},
+	"routes/app/integrations.import": {
+		page: by(200, 200, 404, 404, 404),
+		form: {
+			fields: (w) => ({ intent: "discard", importId: w.importJob }),
+			doneStatus: 202,
+			made: async (w) =>
+				(await count(
+					"select count(*) from import_jobs where id = ? and status = 'previewed'",
+					w.importJob,
+				)) === 0,
+			post: by<Post>("done", "done", 404, 404, 404),
+		},
+	},
+	"routes/app/integrations.export": { page: by(200, 200, 404, 404, 404) },
 	"routes/app/settings": {
 		page: by(200, 200, 404, 404, 404),
 		form: {
@@ -289,8 +375,17 @@ const ROLE_TABLE: Record<string, Row> = {
 			post: every("done"),
 		},
 	},
-	// The members' old address sends everyone on; the new one decides.
 	"routes/app/moved/settings/members": { page: every(301) },
+	// Each person's own calendar feeds, whatever their role.
+	"routes/app/calendar-feeds": {
+		page: every(200),
+		form: {
+			fields: () => ({ intent: "feed-create", follow: "me" }),
+			made: async (w) =>
+				(await count("select count(*) from calendar_feeds where user_id = ?", w.who.user.id)) === 1,
+			post: every<Post>("done"),
+		},
+	},
 	// Any other address under an organisation (TS-091): its 404 page, to everyone.
 	"routes/app/not-found": { address: () => "/app/acme/x", page: every(404) },
 };
@@ -364,7 +459,7 @@ describe("the role table", () => {
 				await response.arrayBuffer();
 
 				if (expected === "done") {
-					expect(response.status).toBe(200);
+					expect(response.status).toBe(form.doneStatus ?? 200);
 					expect(await form.made(w)).toBe(true);
 				} else {
 					expect(response.status).toBe(expected);
