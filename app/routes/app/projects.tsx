@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
+import { Link, type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
 import * as z from "zod";
 
 import { activeClients } from "~/clients/clients.server";
@@ -12,9 +12,10 @@ import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { importPath } from "~/integrations/paths";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
-import { timeScopeOf } from "~/organisations/access";
+import { mayManageIntegrations, timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound, viewerOf } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -298,6 +299,14 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 				) : (
 					<>
 						{create}
+						{mayManageIntegrations(organisation.role) && (
+							<Link
+								className={`ml-4 ${ACTION_LINK}`}
+								to={importPath(organisation.slug, "projects")}
+							>
+								Import projects from a CSV
+							</Link>
+						)}
 						<div className="mt-6">
 							<FilterBar name="Filter projects" keep={keptTab(search)}>
 								<FilterField

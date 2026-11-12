@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
+import { Link, type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
 import * as z from "zod";
 
 import {
@@ -17,8 +17,10 @@ import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { importPath } from "~/integrations/paths";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
+import { mayManageIntegrations } from "~/organisations/access";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
@@ -29,6 +31,7 @@ import { PageHeading, PageLead } from "~/shell/PageHeading";
 
 import type { Route } from "./+types/clients";
 import { FormSheet } from "./FormSheet";
+import { useOrganisation } from "./useOrganisation";
 
 // Clients: the companies the organisation's projects are for (TS-011b). Its owners and
 // admins are shown it while the organisation has Clients turned on, and
@@ -121,6 +124,7 @@ type Task = "create" | "rename" | "archive" | "restore";
 
 export default function Clients({ loaderData }: Route.ComponentProps) {
 	const { clients, query } = loaderData;
+	const organisation = useOrganisation();
 	const [task, setTask] = useState<Task | null>(null);
 	// Which client the open sheet is about. Kept after it closes, so the sheet
 	// goes on saying the same thing while it leaves.
@@ -207,6 +211,11 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 				) : (
 					<>
 						{create}
+						{mayManageIntegrations(organisation.role) && (
+							<Link className={`ml-4 ${ACTION_LINK}`} to={importPath(organisation.slug, "clients")}>
+								Import clients from a CSV
+							</Link>
+						)}
 						<div className="mt-6">
 							<FilterBar name="Filter clients" keep={keptTab(search)}>
 								<FilterField label="Search clients" param={SEARCH_PARAM} />

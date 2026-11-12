@@ -1,5 +1,6 @@
 import { and, eq, gte, lt } from "drizzle-orm";
 
+import type { ActivitySource } from "~/activity/actions";
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
 import { refusalOf } from "~/leave/rules.server";
@@ -73,6 +74,7 @@ export async function editEntry(
 	id: string,
 	span: Span,
 	now: number,
+	source: ActivitySource = "web",
 ) {
 	const entry = await ownEntry(scope, userId, id);
 	if (!entry) return refuse("not-found");
@@ -103,6 +105,7 @@ export async function editEntry(
 			"time_entry.updated",
 			subject(userId, id),
 			changes(entry, changed, ENTRY_FIELDS),
+			source,
 		),
 	]);
 	return { ok: true as const };
@@ -114,6 +117,7 @@ export async function deleteEntry(
 	userId: string,
 	zone: string,
 	id: string,
+	source: ActivitySource = "web",
 ) {
 	const entry = await ownEntry(scope, userId, id);
 	if (!entry) return refuse("not-found");
@@ -129,6 +133,7 @@ export async function deleteEntry(
 			"time_entry.deleted",
 			subject(userId, id),
 			changes(entry, null, ENTRY_FIELDS),
+			source,
 		),
 	]);
 	return { ok: true as const };
@@ -169,7 +174,12 @@ const dayFull = (minutesLeft: number) => ({
  * lasts the time typed. It is placed within its day by `placeOnDay` (TS-091,
  * W08); a start the person chose is kept, so the hours must fit after it.
  */
-export async function addHours(scope: OrganisationScope, userId: string, hours: DayHours) {
+export async function addHours(
+	scope: OrganisationScope,
+	userId: string,
+	hours: DayHours,
+	source: ActivitySource = "web",
+) {
 	const { projectId, description, day, minutes, zone, now } = hours;
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
@@ -201,6 +211,7 @@ export async function addHours(scope: OrganisationScope, userId: string, hours: 
 			"time_entry.created",
 			subject(userId, added.id),
 			changes(null, added, ENTRY_FIELDS),
+			source,
 		),
 	]);
 	return { ok: true as const, entry };

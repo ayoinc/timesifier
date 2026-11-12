@@ -1,0 +1,254 @@
+openapi: 3.1.0
+info:
+  title: Timesifier API
+  version: "1"
+  description: >
+    The public API (TS-081). A token acts as the person who made it, with
+    their role as it is, within its scopes. See docs/api.md.
+servers:
+  - url: https://timesifier.com/api/v1
+security:
+  - token: []
+components:
+  securitySchemes:
+    token:
+      type: http
+      scheme: bearer
+      description: An API token, `tsf_` and 43 characters, made on Integrations.
+  parameters:
+    From: { name: from, in: query, schema: { type: string, format: date } }
+    To: { name: to, in: query, schema: { type: string, format: date } }
+    UserId: { name: user_id, in: query, schema: { type: string } }
+    ProjectId: { name: project_id, in: query, schema: { type: string } }
+    PerPage:
+      {
+        name: per_page,
+        in: query,
+        schema: { type: integer, minimum: 1, maximum: 100, default: 100 },
+      }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+  headers:
+    RetryAfter:
+      description: Seconds to wait before the next request.
+      schema: { type: integer }
+  schemas:
+    Ref:
+      type: [object, "null"]
+      properties:
+        id: { type: string }
+        name: { type: [string, "null"] }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: string } }
+    TimeEntry:
+      type: object
+      properties:
+        id: { type: string }
+        user: { $ref: "#/components/schemas/Ref" }
+        project: { $ref: "#/components/schemas/Ref" }
+        client: { $ref: "#/components/schemas/Ref" }
+        task: { $ref: "#/components/schemas/Ref" }
+        spent_date: { type: string, format: date }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+        running: { type: boolean }
+        hours: { type: number }
+        billable: { type: boolean }
+        description: { type: [string, "null"], description: Only with descriptions:read. }
+        import_id: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NewTimeEntry:
+      type: object
+      additionalProperties: false
+      required: [project_id, hours]
+      properties:
+        user_id: { type: string, description: The maker's own id, if sent. }
+        project_id: { type: string }
+        task_id: { type: string }
+        spent_date: { type: string, format: date }
+        started_at: { type: string, format: date-time }
+        hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
+        description: { type: [string, "null"], maxLength: 2000 }
+    TimeEntryChange:
+      type: object
+      additionalProperties: false
+      properties:
+        project_id: { type: string }
+        task_id: { type: string }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
+        description: { type: [string, "null"], maxLength: 2000 }
+    Page:
+      type: object
+      properties:
+        data: { type: array, items: {} }
+        next_cursor: { type: [string, "null"] }
+  responses:
+    Error:
+      description: See docs/api.md for the codes.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After: { $ref: "#/components/headers/RetryAfter" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+paths:
+  /me:
+    get:
+      summary: The token's maker, organisation, role and scopes
+      description: Scope time:read.
+      responses:
+        "200": { description: The caller. }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /users:
+    get:
+      summary: The people the maker may see
+      description: Scope people:read. Email only for owners and admins.
+      responses:
+        "200": { description: "`{ data }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /clients:
+    get:
+      summary: Clients
+      description: Scope projects:read; for owners, admins and Finance while Clients is on.
+      responses:
+        "200": { description: "`{ data }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /projects:
+    get:
+      summary: Projects
+      description: Scope projects:read. Money fields only for those who see money.
+      responses:
+        "200": { description: "`{ data }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /tasks:
+    get:
+      summary: Tasks, and the projects each is on
+      description: Scope projects:read.
+      responses:
+        "200": { description: "`{ data }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /time_entries:
+    get:
+      summary: Time entries the maker may see, newest first
+      description: Scope time:read.
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of entries.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/TimeEntry" } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      summary: Adds an entry of the maker's
+      description: Scope time:write. Recorded in the activity log via API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewTimeEntry" }
+      responses:
+        "201":
+          description: The entry.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TimeEntry" }
+        default: { $ref: "#/components/responses/Error" }
+  /time_entries/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: One entry
+      description: Scope time:read.
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TimeEntry" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      summary: Changes an entry of the maker's that has ended
+      description: Scope time:write.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TimeEntryChange" }
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TimeEntry" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Deletes an entry of the maker's that has ended
+      description: Scope time:write.
+      responses:
+        "204": { description: Deleted. }
+        default: { $ref: "#/components/responses/Error" }
+  /leave:
+    get:
+      summary: Approved leave of everyone, and the maker's own requests
+      description: Scope people:read. The kind only where the role sees it.
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200": { description: "`{ data }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /expenses:
+    get:
+      summary: Expenses the maker may see, newest first
+      description: Scope expenses:read. Notes with descriptions:read.
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: "`{ data, next_cursor }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /invoices:
+    get:
+      summary: Invoices, newest first
+      description: Scope invoices:read; owners, admins and Finance.
+      parameters:
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200": { description: "`{ data, next_cursor }`" }
+        default: { $ref: "#/components/responses/Error" }

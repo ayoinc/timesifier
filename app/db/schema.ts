@@ -1935,6 +1935,20 @@ export const webhooks = sqliteTable(
 		/** The HTTP status of the last delivery. */
 		lastStatus: integer("last_status"),
 		failures: integer("failures").notNull().default(0),
+		/**
+		 * Whether a delivery about an entry carries its description (TS-087). Off
+		 * unless chosen when the webhook is added: a description is a person's own
+		 * words.
+		 */
+		includeDescriptions: integer("include_descriptions", { mode: "boolean" })
+			.notNull()
+			.default(false),
+		/**
+		 * The id of the last activity record the webhook was considered for
+		 * (TS-087). Records are UUIDv7, so a later one has a greater id; the
+		 * dispatcher reads those after it.
+		 */
+		cursor: text("cursor"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
@@ -1942,6 +1956,64 @@ export const webhooks = sqliteTable(
 		uniqueIndex("webhooks_organisation_id_id_unique").on(table.organisationId, table.id),
 		check("webhooks_secret_version_positive", sql`${table.secretVersion} >= 1`),
 		check("webhooks_failures_not_negative", sql`${table.failures} >= 0`),
+	],
+);
+
+/**
+ * One event sent, or to be sent, to a webhook (TS-087): the body exactly as it
+ * is posted, how many times it was tried, when it is tried next and what the
+ * receiver last answered. `pending` until a 2xx answer makes it `delivered`;
+ * `failed` once every attempt has been used. One per webhook and activity
+ * record, so a dispatcher that runs twice sends nothing twice.
+ */
+export const webhookDeliveries = sqliteTable(
+	"webhook_deliveries",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		webhookId: text("webhook_id").notNull(),
+		/** The event, such as `time_entry.created`, or `ping` for a test delivery. */
+		event: text("event").notNull(),
+		/** The activity record it reports; null for a test delivery. */
+		activityId: text("activity_id"),
+		payload: text("payload").notNull(),
+		/** `pending`, `delivered` or `failed`. */
+		status: text("status").notNull().default("pending"),
+		attempts: integer("attempts").notNull().default(0),
+		/** When it is tried next; null once delivered or failed. */
+		nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }),
+		/** The receiver's HTTP status at the last attempt; null when none answered. */
+		lastStatus: integer("last_status"),
+		/** Why the last attempt failed without a status: `timeout` or `network`. */
+		lastError: text("last_error"),
+		deliveredAt: integer("delivered_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("webhook_deliveries_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("webhook_deliveries_webhook_id_activity_id_unique").on(
+			table.webhookId,
+			table.activityId,
+		),
+		index("webhook_deliveries_status_next_attempt_at_idx").on(table.status, table.nextAttemptAt),
+		index("webhook_deliveries_organisation_id_webhook_id_created_at_idx").on(
+			table.organisationId,
+			table.webhookId,
+			table.createdAt,
+		),
+		foreignKey({
+			name: "webhook_deliveries_webhook_fk",
+			columns: [table.organisationId, table.webhookId],
+			foreignColumns: [webhooks.organisationId, webhooks.id],
+		}).onDelete("cascade"),
+		check(
+			"webhook_deliveries_status_known",
+			sql`${table.status} IN ('pending', 'delivered', 'failed')`,
+		),
+		check("webhook_deliveries_attempts_not_negative", sql`${table.attempts} >= 0`),
 	],
 );
 
@@ -1964,6 +2036,16 @@ export const importJobs = sqliteTable(
 		rowCount: integer("row_count").notNull().default(0),
 		importedCount: integer("imported_count").notNull().default(0),
 		skippedCount: integer("skipped_count").notNull().default(0),
+		/**
+		 * The uploaded file's text while the import is previewed (TS-076), so the
+		 * mapping and the preview are worked out from the one file. Emptied once
+		 * it is imported: the entries hold what it said.
+		 */
+		source: text("source"),
+		/** Which column of the file holds each field, by the field's name. */
+		mapping: text("mapping", { mode: "json" }).$type<Record<string, string>>(),
+		/** The rows that were not imported, by line, with why; never their notes. */
+		skipped: text("skipped", { mode: "json" }).$type<{ line: number; reason: string }[]>(),
 		createdBy: text("created_by")
 			.notNull()
 			.references(() => users.id),
@@ -2005,6 +2087,8 @@ export const calendarFeeds = sqliteTable(
 		/** `person` or `team`. */
 		kind: text("kind").notNull(),
 		teamId: text("team_id"),
+		/** Whether a person's own feed carries their entries as well as their approved leave (TS-089). */
+		includeEntries: integer("include_entries", { mode: "boolean" }).notNull().default(false),
 		tokenHash: text("token_hash").notNull(),
 		revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
 		createdAt: createdAt(),

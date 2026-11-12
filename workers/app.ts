@@ -1,5 +1,7 @@
 import { createRequestHandler, RouterContextProvider } from "react-router";
 
+import { dispatchWebhooks } from "~/integrations/webhooks.server";
+
 import { canonicalHost } from "./canonical-host";
 import { formerSignUp } from "./former-sign-up";
 import { keepNoCopy } from "./no-copy";
@@ -28,5 +30,9 @@ export default {
 			formerSignUp(request) ??
 			(await handleWithFramework(request, nonce));
 		return withSecurityHeaders(keepNoCopy(request, response), nonce);
+	},
+	// The cron trigger in wrangler.jsonc: the webhooks' deliveries that are due.
+	async scheduled(controller, _env, context) {
+		context.waitUntil(dispatchWebhooks({ now: controller.scheduledTime }));
 	},
 } satisfies ExportedHandler<Env>;

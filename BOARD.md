@@ -809,12 +809,12 @@ Depends on: TS-064, TS-073. The role itself exists from TS-064 (owner's decision
 
 Depends on: TS-064, TS-066, TS-014b. After invoicing, by the owner's decision.
 
-- [ ] An owner or admin uploads a CSV with Harvest's 8 columns (Harvest's own "Export all time" is accepted as is). Each row is matched to a member by email or name. Missing clients, projects and tasks are created. Unmatched people are listed with their rows and nothing from them is imported (test with a fixture of Harvest's export).
-- [ ] A preview shows the rows to import and the rows to skip, with reasons, before anything is written (test).
-- [ ] Each import has an id. "Revert" deletes exactly that import's entries unless one is in an approved, locked or invoiced period, in which case it refuses and names those entries (test).
-- [ ] Rows already present (same person, date, project, task, hours and notes) are skipped (test).
-- [ ] Clients and projects import from a CSV on their own pages (test).
-- [ ] TS-014b, amended: an owner or admin can export all of the organisation's time, and with TS-073 all invoices as one ZIP of PDFs (test).
+- [x] An owner or admin uploads a CSV with Harvest's 8 columns (Harvest's own "Export all time" is accepted as is). Each row is matched to a member by email or name. Missing clients, projects and tasks are created. Unmatched people are listed with their rows and nothing from them is imported (test with a fixture of Harvest's export: `test/integrations/import.test.ts`, `test/integrations/fixtures/harvest-time-export.csv`). The Harvest preset chooses the columns by Harvest's headings; others are chosen on the preview.
+- [x] A preview shows the rows to import and the rows to skip, with reasons, before anything is written (`test/integrations/import.test.ts`, `e2e/integrations.spec.ts`).
+- [x] Each import has an id. "Revert" deletes exactly that import's entries unless one is in an approved, locked or invoiced period, in which case it refuses and names those entries (`test/integrations/import.test.ts`; locks by `app/locks`, which also holds a submitted period).
+- [x] Rows already present (same person, date, project, task, hours and notes) are skipped (`test/integrations/import.test.ts`).
+- [x] Clients and projects import from a CSV, linked from their own pages for owners and admins (`test/integrations/import.test.ts`).
+- [ ] TS-014b, amended: an owner or admin can export all of the organisation's time (done: Integrations › Export all time, `test/integrations/import.test.ts`), and with TS-073 all invoices as one ZIP of PDFs (not done: it needs TS-073's invoice PDFs, built on another branch).
 
 ### TS-077 · B12 · Estimates
 
@@ -850,9 +850,9 @@ Depends on: TS-064, TS-014a, TS-014b.
 
 Depends on: TS-064, TS-020, TS-072 (for "via API").
 
-- [ ] An owner or admin creates and revokes API tokens on Integrations. A token is shown once, starts `tsf_`, is stored as a keyed hash, carries the scopes chosen at creation and shows when it was last used (test).
-- [ ] Read endpoints for projects, clients, tasks, time entries and leave, and write endpoints for time entries, obey the same role rules as the pages (shared role-table test). Writes appear in the activity log "via API" (test).
-- [ ] A rate limit per token. Exceeding it returns 429 with Retry-After (test).
+- [x] An owner or admin creates and revokes API tokens on Integrations. A token is shown once, starts `tsf_`, is stored as a keyed hash, carries the scopes chosen at creation and shows when it was last used (`test/integrations/api.test.ts`, `e2e/integrations.spec.ts`).
+- [x] Read endpoints for projects, clients, tasks, time entries and leave, and write endpoints for time entries, obey the same role rules as the pages (shared role-table test). Writes appear in the activity log "via API" (`test/integrations/api.test.ts`: owner, admin, Finance, manager, member, contractor). Users, expenses and invoices are read too; `docs/api.md` and `docs/openapi.yaml` describe it.
+- [x] A rate limit per token. Exceeding it returns 429 with Retry-After (`test/integrations/api.test.ts`: 100 requests in any 15 seconds).
 
 ### TS-082 · B14 · Client view and online payment
 
@@ -898,10 +898,10 @@ Depends on: TS-064, TS-067, TS-068, TS-069, TS-071. Asked for by the owner; the 
 
 Depends on: TS-064, TS-081, TS-072. Asked for by the owner.
 
-- [ ] An owner or admin adds a webhook on Integrations: an `https` address and the events it receives (entries, periods, expenses, invoices, payments) (test).
-- [ ] Each delivery is signed `t=…,v1=…` with HMAC-SHA-256 under a secret derived from `BETTER_AUTH_SECRET`, the webhook's id and its version, shown once and never stored; rotating raises the version and the old secret stops working (test).
-- [ ] A failed delivery is retried with backoff; after repeated failures the webhook is switched off and its owner told; its last status and failures are shown (test with a fake clock).
-- [ ] A delivery holds what the reader's role would see through the API, and no entry description unless the scope allows it (test).
+- [x] An owner or admin adds a webhook on Integrations: an `https` address and the events it receives (entries, periods, expenses, invoices, payments) (`test/integrations/webhooks.test.ts`).
+- [x] Each delivery is signed `t=…,v1=…` with HMAC-SHA-256 under a secret derived from `BETTER_AUTH_SECRET`, the webhook's id and its version, shown once and never stored; rotating raises the version and the old secret stops working (`test/integrations/webhooks.test.ts`).
+- [x] A failed delivery is retried with backoff; after repeated failures the webhook is switched off and its owner told; its last status and failures are shown (test with a fake clock: `test/integrations/webhooks.test.ts`; the cron trigger runs the dispatcher every minute).
+- [x] A delivery holds what the reader's role would see through the API, and no entry description unless the scope allows it (`test/integrations/webhooks.test.ts`).
 
 ### TS-088 · Xero CSV export of invoices
 
@@ -914,9 +914,9 @@ Depends on: TS-064, TS-074. Asked for by the owner; before TS-083's connection.
 
 Depends on: TS-064, TS-061, TS-012a. Asked for by the owner; carries B3's ICS feed.
 
-- [ ] A person subscribes to an ICS feed of their approved time off and their entries; a manager to one per team they manage, of approved leave only (role table).
-- [ ] The feed's address is secret, stored as a keyed hash, and revocable; revoking it makes the old address answer 404 (test).
-- [ ] Entries appear on the local day they start, in the person's time zone, and descriptions only on the person's own feed (test).
+- [x] A person subscribes to an ICS feed of their approved time off and their entries; a manager to one per team they manage, of approved leave only (role table: `test/integrations/feeds.test.ts`).
+- [x] The feed's address is secret, stored as a keyed hash, and revocable; revoking it makes the old address answer 404 (`test/integrations/feeds.test.ts`, `e2e/integrations.spec.ts`).
+- [x] Entries appear on the local day they start, in the person's time zone, and descriptions only on the person's own feed (`test/integrations/feeds.test.ts`).
 
 ### TS-018 · Weekly summary
 

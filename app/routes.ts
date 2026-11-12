@@ -1,4 +1,11 @@
 import { index, type RouteConfig, route } from "@react-router/dev/routes";
+import {
+	API_PATH,
+	CALENDAR_FEEDS_SEGMENT,
+	EXPORT_SEGMENT,
+	FEED_PATH,
+	IMPORT_SEGMENT,
+} from "./integrations/paths";
 import { REPORT_EXPORT_SEGMENT } from "./reports/paths";
 import {
 	ACCOUNT_SEGMENT,
@@ -35,7 +42,10 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(MEMBERS_SEGMENT, "routes/app/members.tsx"),
 	route(INVITATIONS_SEGMENT, "routes/app/invitations.tsx"),
 	route(REPORT_EXPORT_SEGMENT, "routes/app/reports.export.ts"),
+	route(IMPORT_SEGMENT, "routes/app/integrations.import.tsx"),
+	route(EXPORT_SEGMENT, "routes/app/integrations.export.ts"),
 	route(ACCOUNT_SEGMENT, "routes/app/account.tsx"),
+	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	...Object.keys(MOVED).map((segment) =>
 		route(segment, "routes/app/moved.tsx", { id: `routes/app/moved/${segment}` }),
 	),
@@ -63,5 +73,9 @@ export default [
 	app,
 	route("invitations/:id", "routes/invitations.$id.tsx"),
 	route("api/auth/*", "routes/api.auth.$.ts"),
+	// The public API (TS-081) and calendar feeds (TS-089): a token, not a
+	// session, says whose they are, so they sit outside `/app`.
+	route(`${API_PATH.slice(1)}/*`, "routes/api.v1.$.ts"),
+	route(`${FEED_PATH.slice(1)}/:token`, "routes/calendar.$token.ts"),
 	...(designRoute ? [route("design", "routes/design.tsx")] : []),
 ] satisfies RouteConfig;

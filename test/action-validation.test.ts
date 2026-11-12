@@ -1,6 +1,8 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { organisationScope } from "~/db";
+import { makeToken } from "~/integrations/api-tokens.server";
 import { captureEmail, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
 import { createOrganisation, invite } from "./organisations/harness";
@@ -61,6 +63,29 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			"/app/acme/time-off",
 			"intent=request&kindId=k1&startsOn=2026-02-31&endsOn=2026-03-02",
 		),
+	// A token may do one of seven things; "everything" is none of them.
+	"routes/app/integrations": () =>
+		formFromAMember("/app/acme/integrations", "intent=token-create&name=Zapier&scopes=everything"),
+	// An import is of time, clients or projects; payroll is none of them.
+	"routes/app/integrations.import": () =>
+		formFromAMember("/app/acme/integrations/import", "intent=upload&kind=payroll&file=x"),
+	// A feed follows its person or a team, named by an id of at most 64 characters.
+	"routes/app/calendar-feeds": () =>
+		formFromAMember("/app/acme/account/calendar", `intent=feed-create&follow=${"x".repeat(65)}`),
+	// The API reads a JSON body; this one is cut short. The token is a real one.
+	"routes/api.v1.$": async () => {
+		await freshDatabase();
+		const ada = await signIn(captureEmail(), "ada@example.com");
+		const acme = await createOrganisation(ada.cookie, "Acme");
+		const token = await makeToken(organisationScope(env.DB, acme.id), ada.user.id, "Test", [
+			"time:write",
+		]);
+		return new Request("https://timesifier.example/api/v1/time_entries", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+			body: '{"project_id": ',
+		});
+	},
 	// An invitation is joined or declined; this asks for neither. The invitation
 	// is one the person could join, so only the input is wrong.
 	"routes/invitations.$id": async () => {
