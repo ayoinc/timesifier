@@ -8,6 +8,7 @@
 		"app/contractors/paths.ts",
 		"app/activity/paths.ts",
 		"app/projects/projects.ts",
+		"app/invoices/paths.ts",
 		"app/auth/code.ts",
 		"app/auth/person-name.ts",
 		"app/shell/color-scheme.server.ts"

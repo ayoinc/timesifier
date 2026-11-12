@@ -391,6 +391,11 @@ describe("the rules the database holds", () => {
 				}),
 			),
 		).toContain("CHECK");
+		// A payment is taken only on an issued invoice owed something (TS-074's
+		// trigger), so the CHECK on its amount is reached on one.
+		await scope.invoices.update({ status: "sent", totalMinor: 1000 }, (i) =>
+			eq(i.id, acme.invoice.id),
+		);
 		const payment = (amountMinor: number) =>
 			scope.payments.insert({
 				invoiceId: acme.invoice.id,

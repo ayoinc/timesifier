@@ -11,6 +11,8 @@ export type Email = {
 	subject: string;
 	text: string;
 	html: string;
+	/** Files sent with the message: an invoice's or an estimate's PDF (TS-074, TS-077). */
+	attachments?: EmailAttachment[];
 };
 
 /**
@@ -42,14 +44,21 @@ export function sender(): { name: string; email: string } | null {
  * It never throws, so a caller may hand the promise to `waitUntil` and answer
  * the request without waiting for the mail.
  */
-export async function sendEmail({ to, subject, text, html }: Email): Promise<void> {
+export async function sendEmail({ to, subject, text, html, attachments }: Email): Promise<void> {
 	try {
 		const from = sender();
 		if (!from) {
 			console.log("email: not sent, this environment has no EMAIL binding");
 			return;
 		}
-		await env.EMAIL.send({ from, to, subject, text, html });
+		await env.EMAIL.send({
+			from,
+			to,
+			subject,
+			text,
+			html,
+			...(attachments ? { attachments } : {}),
+		});
 	} catch (error) {
 		// Email Service puts a code such as E_SENDER_NOT_VERIFIED on the error.
 		// Its message is left out because it may quote the address.

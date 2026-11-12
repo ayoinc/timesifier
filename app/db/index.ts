@@ -30,5 +30,7 @@ export {
 	type ScopedAccessor,
 	type ScopedStatement,
 	type SelectOptions,
+	type TenantRow,
 } from "./scope";
+export { dueRecurringInvoices, estimateForLink, reminderOrganisations } from "./unscoped";
 export { uuidv7 } from "./uuidv7";

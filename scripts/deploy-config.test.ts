@@ -252,4 +252,9 @@ describe("the committed wrangler.jsonc belongs to no deployment", () => {
 		expect(config.compatibility_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 		expect(config.secrets).toEqual({ required: ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY"] });
 	});
+
+	it("runs the scheduled work in production, and never in a preview", () => {
+		expect(config.triggers).toEqual({ crons: ["* * * * *", "0 * * * *", "17 3 * * *"] });
+		expect(config.previews.triggers).toBeUndefined();
+	});
 });

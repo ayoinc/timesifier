@@ -1240,6 +1240,47 @@ export const invoiceSettings = sqliteTable(
 );
 
 /**
+ * Who receives a client's invoices and estimates (B11, B12): its billing
+ * contacts, each an address and, when given, a name. An address is held once
+ * per client, compared without case. Removing a contact removes only the row.
+ */
+export const clientContacts = sqliteTable(
+	"client_contacts",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		clientId: text("client_id").notNull(),
+		/** The person's name, at most 120 characters; null when only the address is known. */
+		name: text("name"),
+		email: text("email").notNull(),
+		/** The address in lower case, for the uniqueness check. */
+		emailKey: text("email_key").notNull(),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("client_contacts_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("client_contacts_client_email_unique").on(
+			table.organisationId,
+			table.clientId,
+			table.emailKey,
+		),
+		foreignKey({
+			name: "client_contacts_client_fk",
+			columns: [table.organisationId, table.clientId],
+			foreignColumns: [clients.organisationId, clients.id],
+		}).onDelete("cascade"),
+		check("client_contacts_email_length", sql`length(${table.email}) <= 254`),
+		check(
+			"client_contacts_name_length",
+			sql`${table.name} IS NULL OR length(${table.name}) <= 120`,
+		),
+	],
+);
+
+/**
  * A bill to a client, in one currency (B10, B11). `number` is unique in the
  * organisation and never reused. A draft's lines change freely; once sent, an
  * invoice is only paid, written off or voided. The totals are written by

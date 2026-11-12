@@ -2,6 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
+import { estimateToken } from "~/estimates/estimates.server";
 import { makeToken } from "~/integrations/api-tokens.server";
 import { captureEmail, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
@@ -122,6 +123,59 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			"/app/acme/expenses",
 			"intent=record&spentOn=2026-02-31&projectId=p1&categoryId=c1&amount=1",
 		),
+	// An id is at most 64 characters; this client's is 65.
+	"routes/app/invoices.new": () =>
+		formFromAMember("/app/acme/invoices/new", `client=${"c".repeat(65)}`),
+	// An invoice's change is one of eleven; this is none of them.
+	"routes/app/invoices.$invoice": () => formFromAMember("/app/acme/invoices/i1", "intent=explode"),
+	// Payment terms are 0 to 365 days; this is 400.
+	"routes/app/invoices.settings": () =>
+		formFromAMember(
+			"/app/acme/invoices/settings",
+			"intent=details&legalName=Acme&address=&taxNumber=&paymentTermsDays=400&defaultNotes=&lateReminderAfterDays=&lateReminderEveryDays=",
+		),
+	// An estimate's issue date is a date the calendar has; 31 February is not.
+	"routes/app/estimates": () =>
+		formFromAMember(
+			"/app/acme/estimates",
+			"intent=create&clientId=c1&currency=GBP&issuedOn=2026-02-31&subject=",
+		),
+	// An estimate's change is one of eleven; this is none of them.
+	"routes/app/estimates.$estimate": () =>
+		formFromAMember("/app/acme/estimates/e1", "intent=explode"),
+	// A frequency is one of the listed; fortnightly-ish is not.
+	"routes/app/invoices.recurring": () =>
+		formFromAMember(
+			"/app/acme/invoices/recurring",
+			"intent=create&clientId=c1&currency=GBP&startsOn=2026-12-01&frequency=sometimes&endsOn=&paymentTermsDays=30&subject=&notes=",
+		),
+	// A recurring invoice's change is one of four; this is none of them.
+	"routes/app/invoices.recurring.$recurring": () =>
+		formFromAMember("/app/acme/invoices/recurring/r1", "intent=explode"),
+	// A retainer's currency is a three-letter code; this is not.
+	"routes/app/invoices.retainers": () =>
+		formFromAMember(
+			"/app/acme/invoices/retainers",
+			"intent=open&clientId=c1&projectId=all&currency=pounds",
+		),
+	// A decision is accepted or declined; this is neither. The link is a real
+	// one to a sent estimate, so only the input is wrong.
+	"routes/estimate.$id.$token": async () => {
+		await freshDatabase();
+		const { cookie } = await signIn(captureEmail(), "ada@example.com");
+		const acme = await createOrganisation(cookie, "Acme");
+		const scope = organisationScope(env.DB, acme.id);
+		const [client] = await scope.clients.insert({ name: "Initech", nameKey: "initech" });
+		const [estimate] = await scope.estimates.insert({
+			number: "1",
+			clientId: client?.id ?? "",
+			status: "sent",
+			currency: "GBP",
+			issuedOn: "2026-11-12",
+		});
+		const id = estimate?.id ?? "";
+		return form(`/estimate/${id}/${await estimateToken(id)}`, "decision=maybe", "");
+	},
 	// An invitation is joined or declined; this asks for neither. The invitation
 	// is one the person could join, so only the input is wrong.
 	"routes/invitations.$id": async () => {

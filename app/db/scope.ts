@@ -10,9 +10,10 @@ import {
 	and,
 	eq,
 	type GetColumnData,
+	getTableColumns,
 	type InferInsertModel,
 	type InferSelectModel,
-	type SQL,
+	SQL,
 	sql,
 } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
@@ -24,6 +25,7 @@ import {
 	budgetAlerts,
 	budgetLines,
 	calendarFeeds,
+	clientContacts,
 	clients,
 	entryTags,
 	estimateLines,
@@ -80,6 +82,16 @@ type Row<T extends TenantTable> = InferSelectModel<T>;
  */
 type NewRow<T extends TenantTable> =
 	InferInsertModel<T> extends infer Insert ? Omit<Insert, "organisationId"> : never;
+/**
+ * A new row or a change whose values may be SQL computed by the database when
+ * the statement runs, for example the next invoice number read inside the
+ * batch that stores it.
+ */
+type Values<T extends TenantTable> = { [K in keyof NewRow<T>]: NewRow<T>[K] | SQL };
+/** A row of a tenant table, by its name in `tenantTables`. */
+export type TenantRow<Name extends keyof typeof tenantTables> = InferSelectModel<
+	(typeof tenantTables)[Name]
+>;
 /** Narrows a statement further within the organisation, for example `(m) => eq(m.userId, id)`. */
 export type Filter<T extends TenantTable> = (table: T) => SQL | undefined;
 
@@ -113,11 +125,18 @@ export interface ScopedAccessor<T extends TenantTable> {
 	/** Rows of this organisation, all of them or those the filter keeps. */
 	select(filter?: Filter<T>, options?: SelectOptions<T>): Promise<Row<T>[]>;
 	/** Adds rows to this organisation and returns them. */
-	insert(rows: NewRow<T> | NewRow<T>[]): Promise<Row<T>[]>;
+	insert(rows: Values<T> | Values<T>[]): Promise<Row<T>[]>;
 	/** Changes the rows of this organisation that the filter keeps, and returns them. */
-	update(changes: Partial<NewRow<T>>, filter: Filter<T>): Promise<Row<T>[]>;
+	update(changes: Partial<Values<T>>, filter: Filter<T>): Promise<Row<T>[]>;
 	/** Deletes the rows of this organisation that the filter keeps, and returns them. */
 	delete(filter: Filter<T>): Promise<Row<T>[]>;
+	/**
+	 * `exists (select 1 from T where …)` limited to this organisation, for a
+	 * condition on another table, for example "no invoice line holds this entry".
+	 */
+	exists(filter: Filter<T>): SQL<boolean>;
+	/** `(select expression from T where …)` limited to this organisation: one value, or null. */
+	value<V>(expression: (table: T) => SQL<V> | AnySQLiteColumn, filter?: Filter<T>): SQL<V>;
 	/**
 	 * Adds up `amount` over the rows of this organisation that the filter keeps,
 	 * one total for each value of `by`, in one statement:
@@ -128,10 +147,17 @@ export interface ScopedAccessor<T extends TenantTable> {
 		by: (table: T) => C,
 		filter?: Filter<T>,
 	): Promise<Sum<GetColumnData<C>>[]>;
-	/** The same three writes, built and not sent, for `OrganisationScope.batch`. */
+	/** The writes, built and not sent, for `OrganisationScope.batch`. */
 	statements: {
-		insert(rows: NewRow<T> | NewRow<T>[]): ScopedStatement<Row<T>>;
-		update(changes: Partial<NewRow<T>>, filter: Filter<T>): ScopedStatement<Row<T>>;
+		insert(rows: Values<T> | Values<T>[]): ScopedStatement<Row<T>>;
+		/** Adds the row unless one with the same unique key exists. */
+		insertIfAbsent(row: Values<T>): ScopedStatement<Row<T>>;
+		/**
+		 * Adds the row only when `condition` holds as the statement runs, so a
+		 * later statement of the same batch can depend on an earlier one.
+		 */
+		insertWhen(row: Values<T>, condition: SQL): ScopedStatement<never>;
+		update(changes: Partial<Values<T>>, filter: Filter<T>): ScopedStatement<Row<T>>;
 		delete(filter: Filter<T>): ScopedStatement<Row<T>>;
 	};
 }
@@ -165,17 +191,50 @@ export function scopedAccessor<T extends TenantTable>(
 		return within(filter);
 	};
 
+	const withOrganisation = (rows: Values<T> | Values<T>[]) =>
+		// The scope's id is spread last: values arriving from an untyped source
+		// (a form, a JSON body) cannot place a row in another organisation.
+		(Array.isArray(rows) ? rows : [rows]).map((row) => ({ ...row, organisationId }));
 	const statements = {
-		insert(rows: NewRow<T> | NewRow<T>[]) {
-			// The scope's id is spread last: values arriving from an untyped source
-			// (a form, a JSON body) cannot place a row in another organisation.
-			const values = (Array.isArray(rows) ? rows : [rows]).map((row) => ({
-				...row,
-				organisationId,
-			}));
-			return { query: db.insert(tenantTable).values(values).returning() };
+		insert(rows: Values<T> | Values<T>[]) {
+			return { query: db.insert(tenantTable).values(withOrganisation(rows)).returning() };
 		},
-		update(changes: Partial<NewRow<T>>, filter: Filter<T>) {
+		insertIfAbsent(row: Values<T>) {
+			return {
+				query: db
+					.insert(tenantTable)
+					.values(withOrganisation(row))
+					.onConflictDoNothing()
+					.returning(),
+			};
+		},
+		insertWhen(row: Values<T>, condition: SQL) {
+			// Every column, in the table's order, as `insert … select` writes
+			// them: the given value, else the column's default, else null.
+			const given = { ...row, organisationId } as Record<string, unknown>;
+			const values = Object.entries(getTableColumns(tenantTable)).map(([key, column]) => {
+				const value =
+					given[key] !== undefined
+						? given[key]
+						: column.defaultFn
+							? column.defaultFn()
+							: column.hasDefault
+								? column.default
+								: null;
+				return value instanceof SQL
+					? value
+					: value === null
+						? sql`null`
+						: sql`${column.mapToDriverValue(value)}`;
+			});
+			// A built `insert`, not `db.run`: D1's batch takes prepared statements only.
+			return {
+				query: db
+					.insert(tenantTable)
+					.select(sql`select ${sql.join(values, sql`, `)} where ${condition}`),
+			} as unknown as ScopedStatement<never>;
+		},
+		update(changes: Partial<Values<T>>, filter: Filter<T>) {
 			const { organisationId: _ignored, ...allowed } = changes as Record<string, unknown>;
 			return { query: db.update(tenantTable).set(allowed).where(narrowed(filter)).returning() };
 		},
@@ -200,6 +259,12 @@ export function scopedAccessor<T extends TenantTable>(
 		async delete(filter) {
 			return (await statements.delete(filter).query) as Row<T>[];
 		},
+		exists(filter) {
+			return sql<boolean>`exists (select 1 from ${tenantTable} where ${within(filter)})`;
+		},
+		value(expression, filter) {
+			return sql`(select ${expression(table)} from ${tenantTable} where ${within(filter)})`;
+		},
 		async sum(amount, by, filter) {
 			const key = by(table);
 			const rows = await db
@@ -221,6 +286,7 @@ export const tenantTables = {
 	memberships,
 	invitations,
 	clients,
+	clientContacts,
 	projects,
 	timeEntries,
 	periods,
