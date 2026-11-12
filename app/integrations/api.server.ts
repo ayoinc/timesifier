@@ -537,8 +537,12 @@ async function bodyOf<S extends z.ZodType>(
 		: { ok: false, response: invalid(parsed.error) };
 }
 
-/** What a refused write answers, by why the Timesheet functions refused it. */
-function refused(reason: string): Response {
+/**
+ * What a refused write answers, by why the Timesheet functions refused it;
+ * a refusal that says why itself (a day's limit, TS-090; a full day) says so here too.
+ */
+function refused(refusal: { reason: string; message?: string }): Response {
+	const { reason, message } = refusal;
 	switch (reason) {
 		case "not-found":
 			return notFound();
@@ -551,7 +555,7 @@ function refused(reason: string): Response {
 		case "no-project":
 			return problem(422, "invalid", "Choose an active project of this organisation.");
 		default:
-			return problem(422, "invalid", `The entry was not written: ${reason}.`);
+			return problem(422, "invalid", message ?? `The entry was not written: ${reason}.`);
 	}
 }
 
@@ -587,7 +591,7 @@ async function createEntry({ caller, request, now }: Call) {
 		now,
 	};
 	const written = await addHours(caller.scope, caller.user.id, dayHours, "api");
-	if (!written.ok) return refused(written.reason);
+	if (!written.ok) return refused(written);
 	await tellWebhooks(caller, now);
 	const [shown] = await entriesOut(caller, [written.entry as EntryRow], now);
 	return json(shown, 201, {
@@ -603,7 +607,7 @@ async function changeEntry({ caller, request, id, now }: Call) {
 	if (entry.userId !== caller.user.id) {
 		return forbidden("A token changes its maker's own entries, and nobody else's.");
 	}
-	if (entry.endedAt === null) return refused("running");
+	if (entry.endedAt === null) return refused({ reason: "running" });
 	const { project_id, task_id, started_at, ended_at, hours, description } = body.data;
 	const startedAt = started_at === undefined ? entry.startedAt.getTime() : Date.parse(started_at);
 	const length = entry.endedAt.getTime() - entry.startedAt.getTime();
@@ -627,9 +631,10 @@ async function changeEntry({ caller, request, id, now }: Call) {
 		zoneOfCaller(caller),
 		id,
 		span,
+		now,
 		"api",
 	);
-	if (!written.ok) return refused(written.reason);
+	if (!written.ok) return refused(written);
 	await tellWebhooks(caller, now);
 	return showEntry({ caller, request, url: new URL(request.url), id, now });
 }
@@ -641,7 +646,7 @@ async function removeEntry({ caller, id, now }: Call) {
 		return forbidden("A token deletes its maker's own entries, and nobody else's.");
 	}
 	const written = await deleteEntry(caller.scope, caller.user.id, zoneOfCaller(caller), id, "api");
-	if (!written.ok) return refused(written.reason);
+	if (!written.ok) return refused(written);
 	await tellWebhooks(caller, now);
 	return json(null, 204);
 }
