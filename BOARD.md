@@ -34,6 +34,23 @@ Builder: an AI session on branch `ts-063-profile-menu`. Harvest opens profile an
 - [x] A worker test for the initials; a browser spec for the menu; every spec that used the link or the button uses the menu (`test/auth/initials.test.ts`; `e2e/auth.ts` `signOut` and `chooseAccountSettings`; axe at 390px and 1280px in both schemes in `e2e/profile-menu.spec.ts`, and the shell's and organisations' scans with the menu in the band; the Chromium run: 338 passed).
 - [x] `docs/navigation.md` and `docs/design-system.md` say where My account and Sign out are ("Utility items"; `docs/design-system.md`, "Shell" and the Menu row; `docs/architecture.md`, `docs/security.md`).
 
+### TS-062 · The calendar
+
+Builder: an AI session on branch `ts-062-calendar`. It replaces the open parts of TS-039 (the month) and takes from TS-041 what a person's own calendar needs; the team's calendar and leave stay with TS-041 and TS-040. Asked for by the owner on 2026-11-11: "a week and … months where we can zoom in on the time", as Harvest's Timesheet has Day, Week and Calendar.
+
+- [x] Timesheet has a third view, Calendar (`?view=calendar`), beside Day and Week; the address holds the scale (`scale=month`, the week by default), the day it is on (`date=`) and the week's zoom (`zoom=compact`, detailed by default), and an address it cannot read answers 400 (`test/timesheet/calendar.test.ts`, `test/pages/timesheet.test.ts`).
+- [x] The week calendar shows the period's seven days from the organisation's week start on an hour axis, each entry a block from its start to its end, a running one growing live, each day's total at its column's head and the week's total; it opens scrolled to the working hours, an hour before the working day starts or at the earliest entry (`e2e/calendar.spec.ts`).
+- [x] Zoom moves through month, week compact (the whole day fits, 24px an hour), week detailed (96px an hour: a 15-minute entry is a line of text) and the Day view, by one control or by `-` and `+`, and the zoom is kept in the address (browser test).
+- [x] The month calendar shows the month's weeks from the organisation's week start, each day with its total and a bar of its share of the busiest day, today marked, the days outside the month muted, each week's total and the month's; a day opens the Day view and a week the week calendar (browser test). A week's total is the Week view's, the whole period, so a week that crosses the end of the month is counted whole in its row; the month's total counts its own days only.
+- [x] Previous, Today and Next step by week or by month (browser test).
+- [x] A block opens the entry's edit sheet (a running entry's, or one on a locked day, opens its Day view); an empty slot opens Track time with its start filled in, hours asked for, and the entry saved starts there (browser test; worker test of the action, a time the clocks skip refused).
+- [x] Days the person may not change are marked "Submitted" and muted, and each day has a place for a status (`DayStatus`: a label, and whether the day is quiet and muted). Since TS-061 merged, it is filled from leave's `weekAway`: leave, a public holiday or "Not a working day", muted when nothing is expected that day (worker tests).
+- [x] The calendar's day, week and month totals equal the Day and Week views' for the same days, for random sets of entries in London and Auckland and every week start (property test against `weekSheet` and `totalOf`); an entry belongs whole to the day it starts in, and one that crosses midnight is drawn in two parts, cut at midnight in the person's zone, on days of 23 and 25 hours too (property test that the parts cover each entry exactly).
+- [x] Arrow keys move between days and along a day, Home and End to the ends, and Enter opens; each calendar is a table with one stop of Tab, its heads and cells labelled with the day, its total and its marks; nothing overflows the window at 390px (the week scrolls sideways inside its frame, opened at today); axe with WCAG 2.2 AA finds nothing at 390px and 1280px in both schemes (browser tests).
+- [x] `docs/navigation.md` (the Timesheet row) describes the view.
+
+Screenshots at 390px and 1280px in both schemes: `cmux-assets/browser/timesifier/TS-062/`. What is left is the owner's acceptance of them.
+
 ### Waiting on the owner's screenshots · the heading features and their Harvest parity
 
 Merged and deployed on 2026-11-11: the Timesheet slice (TS-012a, TS-013, TS-012b, TS-046, TS-051, TS-052) in pull request #34, and TS-056 to TS-059 (`docs/harvest-comparison.md`, observed in Harvest's application with rea) in pull requests #38, #36 and #37, with the cards below. Each card's criteria and evidence stay on it; what is left for each is the owner's acceptance of its screenshots at 390px and 1280px in both schemes. Two departures from the Timesheet cards' texts, both from `docs/navigation.md`: the views are `?view=week` and `?view=history` on Timesheet's own address, not `/week`; the person's zone is set on My account, not Settings.
@@ -545,9 +562,9 @@ Depends on: TS-013.
 
 No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
 
-Open for the owner: in the month view, whether a week that crosses the end of the month shows the whole week's total or only its days in that month (proposed: only its days in the month, so that the weeks add up to the month).
+TS-062 builds the month as Timesheet's calendar: each day's total, each week's (the Week view's, so a week that crosses the end of the month shows its whole total and the weeks do not add up to the month) and the month's (its own days only). What stays here is the year, and the month's totals by project.
 
-- [ ] The month view shows one calendar month in the person's time zone: a total for each day, each week from Monday, each project, and one for the month (test).
+- [ ] The month's totals by project, in the person's time zone, and the month's (test).
 - [ ] The year view shows one calendar year: a total for each month, each project, and one for the year (test).
 - [ ] For random sets of entries, the month's total equals the sum of its day totals and the sum of its project totals; the year's total equals the sum of its month totals and the sum of its project totals; and a month's total in the year view equals the month view's total for that month (property test).
 - [ ] An entry belongs whole to the local day it starts in (decision 26): one from 23:30 on the last day of a month to 00:30 is counted in the first month only (test).
@@ -609,7 +626,7 @@ The owner, 2026-11-11: a focus rhythm in the Pomodoro manner, stretches of work 
 
 Depends on: TS-061 and TS-013. It does not need TS-016: events read from an outside calendar are that card's.
 
-No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready.
+No routes or tables are written here yet. When this card comes up it gets them, a role table and a goldfish review (`docs/ways-of-working.md`), like the cards in Ready. TS-062 builds a person's own calendar of tracked entries, by week and by month, with a place on each day for a status such as leave; this card adds the leave and the team's calendar.
 
 Settled by the owner on 2026-11-11, on TS-061: everyone may be told that a colleague is on leave; the person, the managers of their teams, owners and admins see the kind.
 

@@ -222,14 +222,19 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
  * With no hours the action is "Start timer", which runs from now; with hours,
  * `1.5`, `1,5` or `1:30`, it is "Save entry", one entry of that length on the
  * day. A timer runs today only, so on another day the hours are asked for.
+ * Opened from a slot of the calendar (TS-062) it has a start too, filled in
+ * with the slot's, and the hours are asked for from that time.
  */
-function TrackTime({
+export function TrackTime({
 	data,
+	start,
 	isOpen,
 	onClose,
 	onDone,
 }: {
-	data: DayData;
+	data: Pick<DayData, "day" | "today" | "projects" | "away">;
+	/** The time the entry starts, `09:30`, where a slot of the calendar was chosen. */
+	start?: string;
 	isOpen: boolean;
 	onClose: () => void;
 	onDone: (said: string) => void;
@@ -237,7 +242,8 @@ function TrackTime({
 	const [hours, setHours] = useState("");
 	const formatDay = useDayFormat();
 	const isToday = data.day === data.today;
-	const startsTimer = isToday && hours.trim() === "";
+	const timerAllowed = isToday && start === undefined;
+	const startsTimer = timerAllowed && hours.trim() === "";
 	const active = data.projects.filter((p) => !p.archived);
 	// A whole day of leave, or a public holiday: tracking is allowed, and said to be unusual (TS-061).
 	const away = data.away.days.find(
@@ -280,6 +286,16 @@ function TrackTime({
 				isRequired
 			/>
 			<TextField label="Description" name="description" maxLength={ENTRY_DESCRIPTION_MAX_LENGTH} />
+			{start !== undefined && (
+				<TextField
+					key={`${data.day}-${start}`}
+					label="Start"
+					name="start"
+					type="time"
+					defaultValue={start}
+					isRequired
+				/>
+			)}
 			<TextField
 				label="Hours"
 				name="hours"
@@ -288,9 +304,11 @@ function TrackTime({
 				inputMode="decimal"
 				autoComplete="off"
 				maxLength={16}
-				isRequired={!isToday}
+				isRequired={!timerAllowed}
 				description={
-					isToday ? "As 1.5, 1,5 or 1:30. Leave it empty to start a timer." : "As 1.5, 1,5 or 1:30."
+					timerAllowed
+						? "As 1.5, 1,5 or 1:30. Leave it empty to start a timer."
+						: "As 1.5, 1,5 or 1:30."
 				}
 			/>
 		</FormSheet>
@@ -300,14 +318,15 @@ function TrackTime({
 /**
  * The fields of an entry changed by hand: its project, its day and its start
  * and end, read in the person's zone, and a description. Native date and time
- * inputs, which write no `style` attribute (docs/security.md).
+ * inputs, which write no `style` attribute (docs/security.md). `day` is the
+ * day the entry starts on.
  */
-function EntryFields({
+export function EntryFields({
 	data,
 	entry,
 	clock,
 }: {
-	data: DayData;
+	data: Pick<DayData, "day" | "projects">;
 	entry: SheetEntry;
 	clock: (instant: number) => string;
 }) {

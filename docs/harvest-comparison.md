@@ -46,6 +46,6 @@ rea's `capture_browser_scenario` drove a local Chrome over the DevTools protocol
 
 - **Bill (invoices, estimates), expenses, tasks, budgets, rates, profitability, capacity and utilisation**: out of release 1 (`docs/navigation.md`, "Later").
 - **Harvest AI**, **sample data** ("Example Client", "Example Project") and the **trial banner**: Timesifier makes nothing up in a person's account, and has no paid plan.
-- **Customize sidebar** and the **Calendar view**: Later, as in `docs/navigation.md`.
+- **Customize sidebar**: Later, as in `docs/navigation.md`. (Its **Calendar view** is taken: TS-062.)
 - **The invitee's name, employee or contractor, roles and departments on the invitation**: a person gives their own name on My account (TS-008); roles beyond owner, admin, member and manager are "Deliberately not copied" in `docs/navigation.md`.
 - **A manual lock from Approvals**: approving a period locks it already (TS-046, TS-047).
