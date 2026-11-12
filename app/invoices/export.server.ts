@@ -4,7 +4,7 @@ import type { OrganisationScope } from "~/db";
 import type { ZipEntry } from "~/lib/zip";
 import type { Day } from "~/time/calendar";
 
-import { pdfFilename, pdfOf } from "./pdf";
+import { type PdfArt, pdfFilename, pdfOf } from "./pdf";
 import { invoiceViews, VIEWS_AT_ONCE } from "./view.server";
 
 // Every invoice of an organisation as the PDF its own page downloads (TS-076):
@@ -21,6 +21,7 @@ import { invoiceViews, VIEWS_AT_ONCE } from "./view.server";
 export async function* invoicePdfs(
 	scope: OrganisationScope,
 	organisationName: string,
+	art: PdfArt,
 	words: { locale: string; today: Day },
 	modified: Date,
 ): AsyncGenerator<ZipEntry> {
@@ -35,7 +36,7 @@ export async function* invoicePdfs(
 		for (const view of await invoiceViews(scope, organisationName, page, words)) {
 			yield {
 				name: uniqueName(pdfFilename("Invoice", view.invoice.number), taken),
-				bytes: pdfOf(view.printed),
+				bytes: pdfOf(view.printed, art),
 				modified,
 			};
 		}

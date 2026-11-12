@@ -18,6 +18,7 @@ export {
 	type ActivityValue,
 	accounts,
 	organisations,
+	platformBrand,
 	rateLimits,
 	sessions,
 	users,

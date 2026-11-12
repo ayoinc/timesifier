@@ -120,8 +120,53 @@ export const organisations = sqliteTable("organisations", {
 	overtimeWeekCapMinutes: integer("overtime_week_cap_minutes"),
 	/** Leave asked for at shorter notice than its kind's (TS-090): `with-reason`, allowed with a reason, or `refused`. */
 	shortNotice: text("short_notice").notNull().default("with-reason"),
+	/**
+	 * The organisation's logo (TS-100): the media type of the file stored in R2
+	 * under `org/<id>/brand/logo`, one of PNG, JPEG, WebP or SVG; null when it
+	 * has none. `app/brand/organisation-brand.server.ts` is the only reader.
+	 */
+	brandLogoType: text("brand_logo_type"),
+	/**
+	 * Whether a PNG drawn from an SVG or WebP logo is stored beside it, under
+	 * `org/<id>/brand/logo.png`, for the places that need pixels a mail program
+	 * or a PDF can show (TS-100).
+	 */
+	brandLogoRendition: integer("brand_logo_rendition", { mode: "boolean" }).notNull().default(false),
+	/** When the logo was last uploaded, in milliseconds: part of its address, so a new logo is fetched afresh. */
+	brandLogoVersion: integer("brand_logo_version"),
+	/** The organisation's colour, `#rrggbb`, dark enough for white type on it (TS-100); null for none. */
+	brandColour: text("brand_colour"),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
+});
+
+/**
+ * The platform's brand (TS-100): one row, `id` always `platform`, holding what
+ * every email and export says of Timesifier itself. Its text columns start at
+ * today's values; an image column is null while the built-in image stands.
+ * Images are PNGs as base64. `app/brand/platform-brand.server.ts` is the only
+ * code that reads or writes it.
+ */
+export const platformBrand = sqliteTable("platform_brand", {
+	id: text("id").primaryKey(),
+	/** The display name every message is from. */
+	senderName: text("sender_name").notNull(),
+	/** Where a reply to a message goes; null for no Reply-To header. */
+	replyTo: text("reply_to"),
+	tagline: text("tagline").notNull(),
+	/** The line at the foot of every message the platform sends in its own name. */
+	emailFooter: text("email_footer").notNull(),
+	/** The platform's colour, `#rrggbb`: the band at the top of its messages. */
+	colour: text("colour").notNull(),
+	/** The logo a message carries attached, a PNG; null for the built-in one. */
+	logo: text("logo"),
+	/** The mark for light grounds, a PNG; null for the built-in one. */
+	markLight: text("mark_light"),
+	/** The mark for dark grounds, a PNG; null for the built-in one. */
+	markDark: text("mark_dark"),
+	updatedAt: integer("updated_at"),
+	/** The person who last changed it, by id; null while it holds the values it started with. */
+	updatedBy: text("updated_by"),
 });
 
 export const memberships = sqliteTable(

@@ -30,6 +30,7 @@ import type { BetterAuthPlugin, DBAdapter } from "better-auth/types";
 import { and, eq, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { organisationScope, organisations } from "~/db";
 import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
 import { RECEIPTS_NOT_DELETED } from "~/organisations/problems";
@@ -362,12 +363,15 @@ export function organisationPlugins() {
 				if (!request || !isOurHost(request, env)) {
 					throw new Error("An invitation's link needs the request the invitation was made in.");
 				}
-				const message = invitationEmail({
-					link: `${new URL(request.url).origin}/invitations/${id}`,
-					organisationName: organization.name,
-					inviterEmail: inviter.user.email,
-					role: InvitedRole.parse(role),
-				});
+				const message = invitationEmail(
+					{
+						link: `${new URL(request.url).origin}/invitations/${id}`,
+						organisationName: organization.name,
+						inviterEmail: inviter.user.email,
+						role: InvitedRole.parse(role),
+					},
+					await getPlatformBrand(env),
+				);
 				// Not awaited: how long the mail takes must not show in the response.
 				waitUntil(sendEmail({ to: email, ...message }));
 			},
