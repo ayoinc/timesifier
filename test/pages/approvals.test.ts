@@ -35,9 +35,13 @@ beforeEach(async () => {
 	acme = await createOrganisation(ada.cookie, "Acme");
 }, 30_000);
 
+/** Everyone a member since before the weeks the tests look at: nobody is chased for a week before they joined. */
+const SINCE = Date.UTC(2025, 0, 1);
+
 async function memberOfAcme(role: Role, email: string): Promise<Person> {
 	const who = await person(mailbox, email);
 	await seedMembership(acme.id, who.user.id, role);
+	await row("update memberships set created_at = ?", SINCE);
 	return who;
 }
 
@@ -322,16 +326,37 @@ describe("status and grouping (TS-058)", () => {
 		);
 	});
 
-	it("keeps the status and the grouping on the arrows to other weeks", async () => {
+	it("keeps the grouping on the arrows to other weeks, each opening on its own first status", async () => {
 		const html = await page(ada, "&status=approved&group=project");
-		expect(html).toContain(
-			'href="/app/acme/approvals?week=2025-12-29&amp;status=approved&amp;group=project"',
-		);
-		expect(html).toContain(
-			'href="/app/acme/approvals?week=2026-01-12&amp;status=approved&amp;group=project"',
-		);
+		expect(html).toContain('href="/app/acme/approvals?week=2025-12-29&amp;group=project"');
+		expect(html).toContain('href="/app/acme/approvals?week=2026-01-12&amp;group=project"');
 	});
 
+	it("opens on the latest week with something pending, on its first status with somebody in it (W13)", async () => {
+		const grace = await memberOfAcme("member", "grace@example.com");
+		const linus = await memberOfAcme("member", "linus@example.com");
+		await seedPeriod(acme.id, grace.user.id, WEEK, "submitted");
+		await seedPeriod(acme.id, linus.user.id, "2026-01-12", "submitted");
+		const opened = textOf(await pageBody(await open(APPROVALS, ada)));
+		expect(opened).toContain("12–18 January 2026");
+		expect(opened).toContain("linus@example.com");
+		// A week with nothing pending opens on the first status that has somebody.
+		await row("update periods set status = 'approved' where user_id = ?", grace.user.id);
+		const approved = await pageBody(await open(`${APPROVALS}?week=${WEEK}`, ada));
+		expect(textOf(approved)).toMatch(/grace@example\.com Approved by/);
+	});
+
+	it("does not chase a week that ended before the person joined (W13)", async () => {
+		const grace = await memberOfAcme("member", "grace@example.com");
+		await row(
+			"update memberships set created_at = ? where user_id = ?",
+			Date.UTC(2026, 0, 12),
+			grace.user.id,
+		);
+		const text = textOf(await page(ada, "&status=not-submitted"));
+		expect(text).toContain("ada@example.com");
+		expect(text).not.toContain("grace@example.com");
+	});
 	it.each([
 		["an owner", () => ada],
 		["an admin", async () => memberOfAcme("admin", "hedy@example.com")],
