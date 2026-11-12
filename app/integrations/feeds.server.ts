@@ -4,9 +4,13 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { keyedHash } from "~/auth/keyed-hash.server";
 import { calendarFeedByHash, type OrganisationScope, organisationScope, users } from "~/db";
+import { halfDaysTaken, leaveMinutes } from "~/leave/days";
+import { halfDaysLabel } from "~/leave/kinds";
+import { calendarOf, leaveContext } from "~/leave/leave.server";
 import { maySeeLeaveKindOf } from "~/organisations/access";
 import { managedTeams } from "~/teams/teams.server";
-import { addDays, dayOf } from "~/time/calendar";
+import { addDays, dayOf, daysFrom } from "~/time/calendar";
+import { formatDuration } from "~/time/format";
 
 import { callerOf, zoneOfCaller } from "./caller.server";
 import { type IcsEvent, icsCalendar } from "./ics";
@@ -134,7 +138,7 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 		]);
 		const people = members.map((member) => member.userId);
 		const leave = await approvedLeave(scope, people, addDays(today, -LEAVE_DAYS_BACK));
-		const names = await namesOf(people);
+		const [names, takes] = await Promise.all([namesOf(people), leaveTaken(scope, leave)]);
 		const events: IcsEvent[] = leave.map((request) => {
 			const kind = maySeeLeaveKindOf(caller.access, request.userId)
 				? kinds.get(request.kindId)
@@ -142,6 +146,7 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 			return {
 				uid: `leave-${request.id}@timesifier`,
 				summary: `${names.get(request.userId) ?? "Someone"}: ${kind ?? "On leave"}${halfDays(request)}`,
+				description: takes(request),
 				allDay: { first: request.startsOn, last: request.endsOn },
 			};
 		});
@@ -153,11 +158,12 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 		);
 	}
 
-	const events: IcsEvent[] = (
-		await approvedLeave(scope, [caller.user.id], addDays(today, -LEAVE_DAYS_BACK))
-	).map((request) => ({
+	const own = await approvedLeave(scope, [caller.user.id], addDays(today, -LEAVE_DAYS_BACK));
+	const takes = await leaveTaken(scope, own);
+	const events: IcsEvent[] = own.map((request) => ({
 		uid: `leave-${request.id}@timesifier`,
 		summary: `${kinds.get(request.kindId) ?? "Leave"}${halfDays(request)}`,
+		description: takes(request),
 		allDay: { first: request.startsOn, last: request.endsOn },
 	}));
 	if (feed.includeEntries) {
@@ -188,6 +194,34 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 		}
 	}
 	return icsCalendar(`${caller.user.name} · ${caller.organisation.name}`, zone, events, now);
+}
+
+type LeaveRow = Awaited<ReturnType<typeof approvedLeave>>[number];
+
+/**
+ * What each request takes, as a feed's event describes it: the person's
+ * working days, counted on their own work schedule, and its hours (TS-097).
+ * "Takes 2.5 days, 18:45 of scheduled hours."
+ */
+async function leaveTaken(scope: OrganisationScope, requests: readonly LeaveRow[]) {
+	const first = requests.map((r) => r.startsOn).sort()[0];
+	const last = requests
+		.map((r) => r.endsOn)
+		.sort()
+		.at(-1);
+	if (!first || !last) return () => null;
+	const context = await leaveContext(
+		scope,
+		requests.map((r) => r.userId),
+		first,
+		last,
+	);
+	return (request: LeaveRow) => {
+		const calendar = calendarOf(context, request.userId);
+		const alone = { ...calendar, leave: context.approved.filter((r) => r.id === request.id) };
+		const minutes = leaveMinutes(alone, daysFrom(request.startsOn, request.endsOn));
+		return `Takes ${halfDaysLabel(halfDaysTaken(request, calendar))}, ${formatDuration(minutes * 60)} of scheduled hours.`;
+	};
 }
 
 function halfDays(request: { startsHalf: boolean; endsHalf: boolean }) {

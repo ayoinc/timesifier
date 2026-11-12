@@ -4,6 +4,8 @@ import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
 import { users } from "~/db";
+import { dayStatus } from "~/leave/days";
+import { calendarOf, leaveContext } from "~/leave/leave.server";
 import {
 	type Access,
 	isAdministrator,
@@ -13,8 +15,9 @@ import {
 	maySeeRates,
 	timeScopeOf,
 } from "~/organisations/access";
+import { clockTime } from "~/schedules/schedules";
 import { canSee } from "~/shell/destinations";
-import { bounds, Day, dayOf } from "~/time/calendar";
+import { bounds, Day, dayOf, daysFrom } from "~/time/calendar";
 import { addHours, deleteEntry, editEntry } from "~/time/manual.server";
 
 import { authenticate, type TokenCaller } from "./api-tokens.server";
@@ -141,6 +144,7 @@ const ROUTES: Record<string, ApiRoute> = {
 		item: { GET: showEntry, PATCH: changeEntry, DELETE: removeEntry },
 	},
 	leave: { scope: { read: "people:read" }, collection: { GET: listLeave } },
+	work_days: { scope: { read: "time:read" }, collection: { GET: listWorkDays } },
 	expenses: { scope: { read: "expenses:read" }, collection: { GET: listExpenses } },
 	invoices: { scope: { read: "invoices:read" }, collection: { GET: listInvoices } },
 };
@@ -657,6 +661,57 @@ async function removeEntry({ caller, id, now }: Call) {
 	if (!written.ok) return refused(written);
 	await tellWebhooks(caller, now);
 	return json(null, 204);
+}
+
+// ── Work days (TS-097) ───────────────────────────────────────────────────────
+
+/** Each day's work as the person's schedule sets it: required `from` and `to`, at most 62 days. */
+const WorkDaysQuery = z
+	.object({ from: Day, to: Day, user_id: z.string().min(1).max(64).optional() })
+	.refine(({ from, to }) => from <= to, "`to` is before `from`.");
+
+/** The longest range of work days one request may ask for. */
+const MAX_WORK_DAYS = 62;
+
+/**
+ * The days of the people whose time the maker may see (their own, else the
+ * user asked for): each with the schedule in force that day, its start,
+ * finish and break, and the minutes expected after public holidays and
+ * approved leave, as the Timesheet holds them. Leave is named as the live
+ * status names it, without its kind.
+ */
+async function listWorkDays({ caller, url }: Call) {
+	const query = queryOf(url, WorkDaysQuery);
+	if (!query.success) return invalid(query.error);
+	const { from, to, user_id } = query.data;
+	if (daysFrom(from, to).length > MAX_WORK_DAYS) {
+		return problem(422, "invalid", `A range of work days is at most ${MAX_WORK_DAYS} days.`);
+	}
+	const people = peopleOf(caller.access, user_id ?? caller.user.id);
+	if (people === "none" || people === null) return json({ data: [] });
+	const context = await leaveContext(caller.scope, people, from, to);
+	const days = daysFrom(from, to);
+	return json({
+		data: people.flatMap((userId) => {
+			const calendar = calendarOf(context, userId);
+			return days.map((day) => {
+				const status = dayStatus(calendar, day);
+				const scheduled = calendar.timetable(day);
+				return {
+					user_id: userId,
+					date: day,
+					schedule: { id: scheduled.scheduleId, name: scheduled.scheduleName },
+					kind: status.is.kind,
+					half_day: status.is.kind === "leave" && status.is.halves === 1,
+					start: scheduled.worked ? clockTime(scheduled.worked.start) : null,
+					finish: scheduled.worked ? clockTime(scheduled.worked.finish) : null,
+					break_minutes: scheduled.worked?.breakMinutes ?? null,
+					scheduled_minutes: scheduled.minutes,
+					expected_minutes: status.expectedMinutes,
+				};
+			});
+		}),
+	});
 }
 
 // ── Leave, expenses, invoices ────────────────────────────────────────────────
