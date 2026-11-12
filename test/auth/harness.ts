@@ -86,6 +86,19 @@ const SentEmail = z.object({
 	subject: z.string(),
 	text: z.string(),
 	html: z.string(),
+	replyTo: z.string().optional(),
+	/** The files sent with it: the images its HTML shows, inline, and any PDF (TS-100). */
+	attachments: z
+		.array(
+			z.object({
+				disposition: z.enum(["inline", "attachment"]),
+				contentId: z.string().optional(),
+				filename: z.string(),
+				type: z.string(),
+				content: z.instanceof(Uint8Array),
+			}),
+		)
+		.default([]),
 });
 
 /** What the Worker tried to send while `EMAIL.send` was replaced. */

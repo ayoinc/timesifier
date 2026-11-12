@@ -1,8 +1,7 @@
 import { env } from "cloudflare:workers";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { required } from "~/lib/deployment";
 
-/** The name every message is from. */
-const SENDER_NAME = "Timesifier";
 /** One address: no display name, no brackets, nothing a header could be split on. */
 const ADDRESS = /^[^\s@<>",;:]+@[^\s@<>",;:]+$/;
 
@@ -11,25 +10,29 @@ export type Email = {
 	subject: string;
 	text: string;
 	html: string;
-	/** Files sent with the message: an invoice's or an estimate's PDF (TS-074, TS-077). */
+	/**
+	 * Files sent with the message: an invoice's or an estimate's PDF (TS-074,
+	 * TS-077), and the images its HTML shows, attached inline (TS-100).
+	 */
 	attachments?: EmailAttachment[];
 };
 
 /**
- * Who every message the application sends is from: the product's name and the
- * one address in the deployment's `EMAIL_FROM`, which is also the only address
- * its `EMAIL` binding may send from (docs/security.md, "Secrets").
+ * The address every message the application sends is from: the one in the
+ * deployment's `EMAIL_FROM`, which is also the only address its `EMAIL`
+ * binding may send from (docs/security.md, "Secrets"). The name beside it is
+ * the platform brand's sender name, read as each message is sent.
  *
  * `null` where the Worker has no `EMAIL` binding, which is every preview: it
  * sends nothing and needs no address. Where there is a binding and no address
  * this throws. Better Auth is not built without calling it, so a deployment
  * that could not send a sign-in code answers no sign-in request either.
  */
-export function sender(): { name: string; email: string } | null {
+export function sender(): { email: string } | null {
 	// The generated type says the binding always exists; a preview has none.
 	const binding: SendEmail | undefined = env.EMAIL;
 	if (!binding) return null;
-	return { name: SENDER_NAME, email: required(env, "EMAIL_FROM", ADDRESS) };
+	return { email: required(env, "EMAIL_FROM", ADDRESS) };
 }
 
 /**
@@ -51,8 +54,10 @@ export async function sendEmail({ to, subject, text, html, attachments }: Email)
 			console.log("email: not sent, this environment has no EMAIL binding");
 			return;
 		}
+		const { senderName, replyTo } = await getPlatformBrand(env);
 		await env.EMAIL.send({
-			from,
+			from: { name: senderName, email: from.email },
+			...(replyTo ? { replyTo } : {}),
 			to,
 			subject,
 			text,

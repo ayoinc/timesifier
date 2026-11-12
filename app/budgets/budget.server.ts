@@ -2,8 +2,9 @@ import { env } from "cloudflare:workers";
 import { and, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sendEmail } from "~/auth/email.server";
-import { compose } from "~/auth/email-frame";
+import { compose, type PlatformLook } from "~/auth/email-frame";
 import { billableMinuteMinor } from "~/billing/billable";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { type OrganisationScope, users } from "~/db";
 import { roundHalfUp } from "~/money/money";
 import type { OrganisationMoney, Pricing } from "~/projects/money.server";
@@ -262,13 +263,16 @@ export async function alertIfCrossed(
 		throw error;
 	}
 	const recipients = await alertRecipients(scope, project.id, figures.hours);
-	const message = budgetAlertEmail({
-		projectName: project.name,
-		organisationName: place.organisationName,
-		percent: figures.total.percent,
-		threshold,
-		link: place.link,
-	});
+	const message = budgetAlertEmail(
+		{
+			projectName: project.name,
+			organisationName: place.organisationName,
+			percent: figures.total.percent,
+			threshold,
+			link: place.link,
+		},
+		await getPlatformBrand(env),
+	);
 	for (const to of recipients) await sendEmail({ to, ...message });
 	return true;
 }
@@ -308,28 +312,34 @@ async function alertRecipients(
 }
 
 /** The message an alert sends. Its subject and heading hold nothing anybody typed. */
-export function budgetAlertEmail(alert: {
-	projectName: string;
-	organisationName: string;
-	percent: number | null;
-	threshold: number;
-	link: string;
-}) {
+export function budgetAlertEmail(
+	alert: {
+		projectName: string;
+		organisationName: string;
+		percent: number | null;
+		threshold: number;
+		link: string;
+	},
+	platform: PlatformLook,
+) {
 	const used =
 		alert.percent === null
 			? "has spent past its budget of nothing"
 			: `has used ${alert.percent}% of its budget`;
-	return compose({
-		subject: "A project has reached its budget alert on Timesifier",
-		heading: "Budget alert",
-		parts: [
-			`The project “${alert.projectName}” in “${alert.organisationName}” ${used}, past the alert at ${alert.threshold}%.`,
-			{ action: "Open the project", link: alert.link },
-			"You are told once for each budget period. Tracking time to the project is not stopped.",
-		],
-		reason:
-			"You got this email because you are an owner or admin of this organisation on Timesifier, or manage a team with someone in it who tracked time to this project.",
-	});
+	return compose(
+		{
+			subject: "A project has reached its budget alert on Timesifier",
+			heading: "Budget alert",
+			parts: [
+				`The project “${alert.projectName}” in “${alert.organisationName}” ${used}, past the alert at ${alert.threshold}%.`,
+				{ action: "Open the project", link: alert.link },
+				"You are told once for each budget period. Tracking time to the project is not stopped.",
+			],
+			reason:
+				"You got this email because you are an owner or admin of this organisation on Timesifier, or manage a team with someone in it who tracked time to this project.",
+		},
+		platform,
+	);
 }
 
 /**

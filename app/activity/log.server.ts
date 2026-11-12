@@ -233,6 +233,7 @@ const NOUNS: Record<string, string> = {
 	import: "an import",
 	timesheet_rules: "the timesheet rules",
 	work_schedule: "work schedule",
+	brand: "the brand",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */
@@ -286,6 +287,8 @@ const FIELD_LABELS: Record<string, string> = {
 	scheduleId: "Schedule",
 	teamId: "Team",
 	organisation: "Organisation",
+	logo: "Logo",
+	colour: "Colour",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */

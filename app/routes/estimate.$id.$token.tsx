@@ -1,11 +1,10 @@
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
 import { Form, useNavigation } from "react-router";
 import * as z from "zod";
-
+import { MadeWith, OrganisationHeader } from "~/brand/OrganisationParts";
+import { organisationBrandOf } from "~/brand/organisation-brand.server";
 import { Button } from "~/components/Button";
-import { estimateForLink, organisationScope, organisations } from "~/db";
+import { estimateForLink, organisationScope } from "~/db";
 import {
 	decideByClient,
 	ESTIMATE_LABELS,
@@ -16,7 +15,6 @@ import {
 import { PrintedSheet } from "~/invoices/DocumentParts";
 import { readForm } from "~/invoices/form.server";
 import { estimateLinkPath } from "~/invoices/paths";
-import { SiteHeader } from "~/landing/Site";
 import { notFound } from "~/organisations/membership.server";
 import { negotiateLocale } from "~/shell/locale";
 import { OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
@@ -28,6 +26,8 @@ import type { Route } from "./+types/estimate.$id.$token";
 // in, and accepts or declines it once while it is sent. The link's token is
 // a keyed hash of the estimate's id; a wrong token is answered exactly as an
 // estimate that does not exist, so the link proves nothing it does not hold.
+// The page is the organisation's (TS-100): its colour, logo and name lead, and
+// the product keeps a small line at the foot.
 
 export function meta({ loaderData }: Route.MetaArgs) {
 	return [
@@ -44,15 +44,12 @@ async function proved(id: string, token: string) {
 		isEstimateToken(id, token),
 	]);
 	if (!estimate || !valid) throw notFound();
-	const [organisation] = await drizzle(env.DB)
-		.select({ name: organisations.name })
-		.from(organisations)
-		.where(eq(organisations.id, estimate.organisationId))
-		.limit(1);
-	if (!organisation) throw notFound();
+	const brand = await organisationBrandOf(estimate.organisationId);
+	if (!brand) throw notFound();
 	return {
 		estimate,
-		organisationName: organisation.name,
+		organisationName: brand.name,
+		brand,
 		scope: organisationScope(env.DB, estimate.organisationId),
 	};
 }
@@ -60,11 +57,14 @@ async function proved(id: string, token: string) {
 const Decision = z.object({ decision: z.enum(["accepted", "declined"]) });
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-	const { estimate, organisationName, scope } = await proved(params.id, params.token);
+	const { estimate, organisationName, brand, scope } = await proved(params.id, params.token);
 	const locale = negotiateLocale(request.headers.get("Accept-Language"));
 	return {
 		number: estimate.number,
 		organisationName,
+		/** Whether the organisation has a logo, at the link's own address; and its colour. */
+		hasLogo: brand.logo !== null,
+		colour: brand.colour,
 		status: estimate.status,
 		label: ESTIMATE_LABELS[EstimateStatus.parse(estimate.status)],
 		printed: await printedEstimate(scope, organisationName, estimate, locale),
@@ -89,9 +89,14 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function EstimateLink({ loaderData, actionData, params }: Route.ComponentProps) {
 	const { printed, status } = loaderData;
 	const busy = useNavigation().state !== "idle";
+	const link = estimateLinkPath(params.id, params.token);
 	return (
 		<div className={OUTSIDE_FRAME}>
-			<SiteHeader current={estimateLinkPath(params.id, params.token)} end={null} />
+			<OrganisationHeader
+				name={loaderData.organisationName}
+				logo={loaderData.hasLogo ? `${link}/logo` : null}
+				colour={loaderData.colour}
+			/>
 			<main className={OUTSIDE_MAIN}>
 				<PageHeading>Estimate {loaderData.number}</PageHeading>
 				<PageLead>
@@ -123,6 +128,7 @@ export default function EstimateLink({ loaderData, actionData, params }: Route.C
 					{actionData && !actionData.ok ? actionData.problem : null}
 				</p>
 			</main>
+			<MadeWith />
 		</div>
 	);
 }

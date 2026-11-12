@@ -22,6 +22,7 @@ import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import type { Session, User } from "better-auth/types";
 import { drizzle } from "drizzle-orm/d1";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { accounts, organisations, rateLimits, sessions, users, uuidv7, verifications } from "~/db";
 // The two tenant tables are absent from `~/db` on purpose. Better Auth is the
 // one writer that reaches them without `organisationScope`.
@@ -163,7 +164,11 @@ function createAuth(bindings: Bindings) {
 				async sendVerificationOTP({ email, otp, type }) {
 					if (type !== "sign-in") return;
 					// Not awaited: how long the mail takes must not show in the response.
-					waitUntil(sendEmail({ to: email, ...signInCodeEmail(otp) }));
+					waitUntil(
+						getPlatformBrand(env).then((brand) =>
+							sendEmail({ to: email, ...signInCodeEmail(otp, brand) }),
+						),
+					);
 				},
 			}),
 			...organisationPlugins(),

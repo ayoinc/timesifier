@@ -79,9 +79,10 @@
 				"database_id": "00000000-0000-0000-0000-000000000000"
 			}
 		],
-		// The previews' receipts, apart from production's (TS-070).
+		// The previews' receipts and organisation logos, apart from production's (TS-070, TS-100).
 		"r2_buckets": [
-			{ "binding": "RECEIPTS", "bucket_name": "timesifier-receipts-preview", "jurisdiction": "eu" }
+			{ "binding": "RECEIPTS", "bucket_name": "timesifier-receipts-preview", "jurisdiction": "eu" },
+			{ "binding": "BRAND", "bucket_name": "timesifier-brand-preview", "jurisdiction": "eu" }
 		]
 	},
 	"observability": {
@@ -103,12 +104,15 @@
 			"migrations_dir": "migrations"
 		}
 	],
-	// Expense receipts (TS-070), under `org/<organisation id>/receipts/<expense id>`.
-	// app/expenses/receipts.server.ts is the only code that uses the binding. Both
-	// buckets are created once with `wrangler r2 bucket create <name> --jurisdiction
-	// eu`; locally and in the tests Wrangler keeps the files on disk.
+	// Expense receipts (TS-070), under `org/<organisation id>/receipts/<expense id>`,
+	// and organisations' logos (TS-100), under `org/<organisation id>/brand/logo`.
+	// app/expenses/receipts.server.ts and app/brand/organisation-brand.server.ts
+	// are the only code that uses each binding. Every bucket is created once with
+	// `wrangler r2 bucket create <name> --jurisdiction eu`; locally and in the
+	// tests Wrangler keeps the files on disk.
 	"r2_buckets": [
-		{ "binding": "RECEIPTS", "bucket_name": "timesifier-receipts", "jurisdiction": "eu" }
+		{ "binding": "RECEIPTS", "bucket_name": "timesifier-receipts", "jurisdiction": "eu" },
+		{ "binding": "BRAND", "bucket_name": "timesifier-brand", "jurisdiction": "eu" }
 	],
 	// Set with `wrangler secret put`; locally they are read from .dev.vars. A deploy
 	// fails while either is missing. See docs/security.md, "Secrets".

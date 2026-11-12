@@ -438,6 +438,11 @@ const EMAIL_ROLES = [
 	["rule", "outline-variant", "The line above the footer."],
 	["action", "primary", "The ground of the one action."],
 	["onAction", "on-primary", "The words of the one action."],
+	[
+		"onBrand",
+		"on-error",
+		"White: the words of an organisation's action on its own colour, which is checked dark enough for them.",
+	],
 ] as const;
 
 /**

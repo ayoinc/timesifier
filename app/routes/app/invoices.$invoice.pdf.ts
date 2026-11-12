@@ -1,3 +1,4 @@
+import { documentBrand } from "~/brand/document-brand.server";
 import { billingOf } from "~/invoices/context.server";
 import { pdfFilename, pdfOf } from "~/invoices/pdf";
 import { invoiceView } from "~/invoices/view.server";
@@ -11,9 +12,12 @@ import type { Route } from "./+types/invoices.$invoice.pdf";
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
 	const { scope, organisation, today, locale } = await billingOf(context, request);
-	const view = await invoiceView(scope, organisation.name, params.invoice, { locale, today });
+	const [view, brand] = await Promise.all([
+		invoiceView(scope, organisation.name, params.invoice, { locale, today }),
+		documentBrand(scope.organisationId),
+	]);
 	if (!view) throw notFound();
-	return new Response(pdfOf(view.printed), {
+	return new Response(pdfOf(view.printed, brand.art), {
 		headers: {
 			"Content-Type": "application/pdf",
 			"Content-Disposition": `attachment; filename="${pdfFilename("Invoice", view.invoice.number)}"`,

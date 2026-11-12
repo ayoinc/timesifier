@@ -1,3 +1,4 @@
+import { documentBrand } from "~/brand/document-brand.server";
 import { billingOf } from "~/invoices/context.server";
 import { invoicePdfs } from "~/invoices/export.server";
 import { zip } from "~/lib/zip";
@@ -13,7 +14,8 @@ import type { Route } from "./+types/integrations.invoices-export";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const { scope, organisation, today, locale, now } = await billingOf(context, request);
-	const files = invoicePdfs(scope, organisation.name, { locale, today }, new Date(now));
+	const { art } = await documentBrand(scope.organisationId);
+	const files = invoicePdfs(scope, organisation.name, art, { locale, today }, new Date(now));
 	return new Response(zip(files), {
 		headers: {
 			"Content-Type": "application/zip",
