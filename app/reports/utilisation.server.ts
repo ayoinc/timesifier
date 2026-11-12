@@ -58,7 +58,11 @@ export async function utilisationReport(
 	const tracked = trackedByPerson(pieces, nonBillable);
 	const byPerson = new Map<string, PersonUtilisation>(
 		people.map((line) => {
-			const theirs = tracked.get(line.id) ?? { loggedSeconds: 0, billableSeconds: 0 };
+			const theirs = tracked.get(line.id) ?? {
+				loggedSeconds: 0,
+				billableSeconds: 0,
+				overtimeSeconds: 0,
+			};
 			return [
 				line.id,
 				{

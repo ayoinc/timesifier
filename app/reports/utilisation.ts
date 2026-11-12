@@ -5,8 +5,8 @@ import type { Row } from "./report";
  * over a range. Capacity is the time expected of them: their working week,
  * less public holidays and approved leave (TS-084), so a person on leave all
  * week has none, and their utilisation is "—", never a division by zero.
- * Utilisation counts all tracked time; billable utilisation counts only
- * billable time. Nothing here stops anyone tracking beyond capacity.
+ * Utilisation counts all tracked time, overtime included, and says how much
+ * of it is overtime (TS-095); billable utilisation counts only billable time.
  */
 
 /** What utilisation is worked out from, for a person, a team or everyone shown. */
@@ -17,6 +17,8 @@ export interface UtilisationFigures {
 	loggedSeconds: number;
 	/** Seconds tracked that bill: the entry is billable and its project is not non-billable. */
 	billableSeconds: number;
+	/** Of `loggedSeconds`, those of overtime (TS-095). */
+	overtimeSeconds: number;
 }
 
 /** `seconds` as a share of `capacityMinutes`, or null when there is no capacity. */
@@ -31,11 +33,12 @@ export function percentLabel(share: number | null): string {
 
 /** The figures of several people or teams added together. */
 export function sumFigures(all: Iterable<UtilisationFigures>): UtilisationFigures {
-	const sum = { capacityMinutes: 0, loggedSeconds: 0, billableSeconds: 0 };
+	const sum = { capacityMinutes: 0, loggedSeconds: 0, billableSeconds: 0, overtimeSeconds: 0 };
 	for (const each of all) {
 		sum.capacityMinutes += each.capacityMinutes;
 		sum.loggedSeconds += each.loggedSeconds;
 		sum.billableSeconds += each.billableSeconds;
+		sum.overtimeSeconds += each.overtimeSeconds;
 	}
 	return sum;
 }
@@ -45,16 +48,24 @@ export function bills(row: Row, nonBillableProjects: ReadonlySet<string>): boole
 	return row.entry.billable && !nonBillableProjects.has(row.entry.projectId);
 }
 
-/** Each person's tracked and billable seconds in `rows`. */
+/** What a person tracked: in all, what bills, and what is overtime. */
+type Tracked = Omit<UtilisationFigures, "capacityMinutes">;
+
+/** Each person's tracked, billable and overtime seconds in `rows`. */
 export function trackedByPerson(
 	rows: readonly Row[],
 	nonBillableProjects: ReadonlySet<string>,
-): Map<string, { loggedSeconds: number; billableSeconds: number }> {
-	const tracked = new Map<string, { loggedSeconds: number; billableSeconds: number }>();
+): Map<string, Tracked> {
+	const tracked = new Map<string, Tracked>();
 	for (const row of rows) {
-		const line = tracked.get(row.entry.userId) ?? { loggedSeconds: 0, billableSeconds: 0 };
+		const line = tracked.get(row.entry.userId) ?? {
+			loggedSeconds: 0,
+			billableSeconds: 0,
+			overtimeSeconds: 0,
+		};
 		line.loggedSeconds += row.minutes * 60;
 		if (bills(row, nonBillableProjects)) line.billableSeconds += row.minutes * 60;
+		if (row.entry.overtime) line.overtimeSeconds += row.minutes * 60;
 		tracked.set(row.entry.userId, line);
 	}
 	return tracked;

@@ -48,8 +48,11 @@ export const IMPORT_MAX_BYTES = 1024 * 1024;
 /** The most rows an import takes. */
 export const IMPORT_MAX_ROWS = 5000;
 
-/** Rows in one insert: D1 binds at most 100 values to a statement. */
-const ROWS_PER_INSERT = 8;
+/**
+ * Rows in one insert: D1 binds at most 100 values to a statement, and an
+ * entry binds up to 13 of them since it gained `overtime` (TS-095).
+ */
+const ROWS_PER_INSERT = 7;
 
 /** Statements in one batch. */
 const STATEMENTS_PER_BATCH = 50;

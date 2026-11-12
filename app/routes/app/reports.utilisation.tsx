@@ -41,6 +41,8 @@ interface ShownFigures {
 	billable: string;
 	utilisation: string;
 	billableUtilisation: string;
+	/** Of what was tracked, the overtime (TS-095); null for none. */
+	overtime: string | null;
 }
 
 /** The figures of a line as the page shows them. */
@@ -53,6 +55,7 @@ function shown(figures: UtilisationFigures): ShownFigures {
 		billableUtilisation: percentLabel(
 			shareOfCapacity(figures.billableSeconds, figures.capacityMinutes),
 		),
+		overtime: figures.overtimeSeconds > 0 ? hoursAndMinutes(figures.overtimeSeconds) : null,
 	};
 }
 
@@ -123,7 +126,7 @@ function Figures({
 	opened,
 }: Shown & Pick<Route.ComponentProps["loaderData"], "range" | "opened">) {
 	const detail = (line: ShownFigures) =>
-		`${line.logged} of ${line.capacity} capacity · ${line.billable} billable, ${line.billableUtilisation}`;
+		`${line.logged} of ${line.capacity} capacity${line.overtime ? `, ${line.overtime} of it overtime` : ""} · ${line.billable} billable, ${line.billableUtilisation}`;
 
 	return (
 		<>

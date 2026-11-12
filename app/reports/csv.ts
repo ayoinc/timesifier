@@ -8,7 +8,8 @@ import type { Row } from "./report";
  * range, the rows the page lists (docs/decisions.md entry 26). Times are UTC,
  * in ISO 8601 with `Z`, to the second. The duration is the entry's whole
  * minutes, in seconds, as the page counts it, so the durations add up to the
- * page's total.
+ * page's total. `overtime` is `yes` for an entry of overtime, `no` for regular
+ * time (TS-095), so a spreadsheet adds up each apart.
  */
 
 /** The columns, in their order. */
@@ -21,6 +22,7 @@ export const CSV_COLUMNS = [
 	"started_at",
 	"ended_at",
 	"duration_seconds",
+	"overtime",
 ] as const;
 
 /**
@@ -71,6 +73,7 @@ export function rowCells(row: Row, showClients: boolean): string[] {
 		isoInstant(row.start),
 		row.running ? "" : isoInstant(row.end),
 		String(row.minutes * 60),
+		entry.overtime ? "yes" : "no",
 	];
 }
 

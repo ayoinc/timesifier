@@ -186,17 +186,17 @@ test("the export downloads the rows on screen as a UTF-8 CSV named for the range
 	expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
 	const lines = bytes.subarray(3).toString("utf8").split("\r\n");
 	expect(lines[0]).toBe(
-		"entry_id,person,project,client,description,started_at,ended_at,duration_seconds",
+		"entry_id,person,project,client,description,started_at,ended_at,duration_seconds,overtime",
 	);
 	expect(lines.at(-1)).toBe("");
 	const rows = lines.slice(1, -1);
 	// One row an entry: the one across midnight too.
 	expect(rows).toHaveLength(3);
 	expect(rows.join("\n")).toContain(
-		',Website,Initech,"Release, overnight",2026-10-06T22:30:00Z,2026-10-07T00:30:00Z,7200',
+		',Website,Initech,"Release, overnight",2026-10-06T22:30:00Z,2026-10-07T00:30:00Z,7200,no',
 	);
 	expect(rows.join("\n")).toContain(
-		",Internal,,'=SUM(A1:A9),2026-10-08T14:00:00Z,2026-10-08T14:45:00Z,2700",
+		",Internal,,'=SUM(A1:A9),2026-10-08T14:00:00Z,2026-10-08T14:45:00Z,2700,no",
 	);
 	const seconds = rows.reduce((sum, row) => sum + Number(row.split(",").at(-1)), 0);
 	expect(seconds).toBe(4 * 3600 + 15 * 60);
