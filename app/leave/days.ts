@@ -1,4 +1,4 @@
-import type { Timetable } from "~/schedules/schedules";
+import type { Timetable, WorkedDay } from "~/schedules/schedules";
 import { type Day, daysFrom } from "~/time/calendar";
 
 import type { KindKey, LeaveStatus } from "./kinds";
@@ -128,6 +128,8 @@ export interface DayStatus {
 	day: Day;
 	is: DayKind;
 	expectedMinutes: number;
+	/** The start, finish and break the person's schedule sets for the day (TS-097); null on a public holiday or a day it does not work. */
+	hours: WorkedDay | null;
 }
 
 /**
@@ -138,9 +140,10 @@ export interface DayStatus {
 export function dayStatus(calendar: LeaveCalendar, day: Day): DayStatus {
 	const holiday = calendar.holidays.get(day);
 	if (holiday !== undefined)
-		return { day, is: { kind: "holiday", name: holiday }, expectedMinutes: 0 };
-	const minutes = calendar.timetable(day).minutes;
-	if (minutes === 0) return { day, is: { kind: "not-a-working-day" }, expectedMinutes: 0 };
+		return { day, is: { kind: "holiday", name: holiday }, expectedMinutes: 0, hours: null };
+	const { minutes, worked } = calendar.timetable(day);
+	if (minutes === 0 || !worked)
+		return { day, is: { kind: "not-a-working-day" }, expectedMinutes: 0, hours: null };
 	for (const request of calendar.leave) {
 		if (request.status !== "approved") continue;
 		const halves = halvesCovered(request, day);
@@ -149,10 +152,11 @@ export function dayStatus(calendar: LeaveCalendar, day: Day): DayStatus {
 				day,
 				is: { kind: "leave", halves, request },
 				expectedMinutes: halves === 2 ? 0 : minutes / 2,
+				hours: worked,
 			};
 		}
 	}
-	return { day, is: { kind: "working" }, expectedMinutes: minutes };
+	return { day, is: { kind: "working" }, expectedMinutes: minutes, hours: worked };
 }
 
 /** Each of `days` for the person, in order. */
