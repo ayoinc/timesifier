@@ -156,7 +156,7 @@ test.describe("signing out and signing in", () => {
 		await expect(page.getByLabel("Email")).toHaveCount(0);
 		await expect(page.getByRole("textbox")).toHaveCount(1);
 		await expect(
-			page.getByText("We send at most five codes an hour to one address."),
+			page.getByText("From this browser you can be sent at most five codes an hour."),
 		).toBeVisible();
 		await expect(page.getByRole("main").getByRole("button")).toHaveText([
 			"Continue",
