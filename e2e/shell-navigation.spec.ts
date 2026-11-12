@@ -305,7 +305,8 @@ test.describe("in a window 390px wide", () => {
 		expect(button.width).toBeLessThan(COMPACT.width / 2);
 		expect(button.x + button.width).toBeLessThanOrEqual(COMPACT.width - 16);
 		expect(button.y + button.height).toBeLessThanOrEqual(bar.y - 8);
-		expect(await fixedRows(page)).toEqual([64]);
+		// Polled: the pending bar is a fixed row too, for as long as a load runs.
+		await expect.poll(() => fixedRows(page)).toEqual([64]);
 		await expectContentClearOfNavigation(page);
 
 		// On the Timesheet, the page's own Track time is the one control.
@@ -318,7 +319,7 @@ test.describe("in a window 390px wide", () => {
 		).toBeLessThanOrEqual(1);
 		await expect(page.getByRole("button", { name: "Track time", exact: true })).toHaveCount(0);
 		await expect(page.getByText("Start timer", { exact: true })).toHaveCount(0);
-		expect(await fixedRows(page)).toEqual([64]);
+		await expect.poll(() => fixedRows(page)).toEqual([64]);
 	});
 });
 

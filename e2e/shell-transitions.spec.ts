@@ -113,8 +113,12 @@ async function viewTransitions(page: Page): Promise<Part[][]> {
 }
 
 /**
- * Moves to a destination, waits for its page and returns the one transition that
- * brought it. The move is a press on the destination unless `move` makes another.
+ * Moves to a destination, waits for its page and returns the transition that
+ * moved the content: the first the move started. When the answer is slow the
+ * destination's shape moves in first (app/shell/arrival.ts), and a page that has
+ * transitions of its own, as the Timesheet's views do, may start one more as it
+ * takes the shape's place. The move is a press on the destination unless `move`
+ * makes another.
  */
 async function travel(
 	page: Page,
@@ -132,8 +136,8 @@ async function travel(
 	await expect(
 		page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 	).toBeFocused();
-	await expect.poll(async () => (await viewTransitions(page)).length).toBe(before + 1);
-	const transition = (await viewTransitions(page)).at(-1) ?? [];
+	await expect.poll(async () => (await viewTransitions(page)).length).toBeGreaterThan(before);
+	const transition = (await viewTransitions(page))[before] ?? [];
 	// Let it finish, so the next press starts from a page at rest. The band's
 	// animation runs on the scroll's timeline, not in time, and never finishes.
 	await expect
