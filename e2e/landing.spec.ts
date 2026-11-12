@@ -344,16 +344,34 @@ test.describe("the clock", () => {
 	const OPENED = new Date("2026-11-11T15:02:47+01:00");
 	test.use({ timezoneId: "Europe/Amsterdam", locale: "en-GB" });
 
+	/** 15:02:57, ten and a half seconds after `OPENED`, in seconds after midnight: the time `open` holds. */
+	const HELD = 15 * 3600 + 2 * 60 + 57;
+
+	/** The time of day the sheet shows: when its timer started and how long it has run, added together. */
+	async function shownTime(page: Page): Promise<number> {
+		const status = await productVisual(page)
+			.getByText(/^Running since/)
+			.textContent();
+		return seconds(`${(status ?? "").slice(-5)}:00`) + (await shownElapsed(page));
+	}
+
 	/**
 	 * Opens the page at `OPENED` and holds its time still ten and a half seconds
 	 * later, once the clock is running: between two of its ticks, so that a tick is
 	 * never due at the very moment the time is held.
+	 *
+	 * Holding the time fires the tick that was waiting, but React draws what it
+	 * set a task or more later. Read at once, the page still shows the second of
+	 * the tick before the jump: in WebKit, which takes the page over more slowly,
+	 * about nine seconds early, which made these tests flaky. So it waits until
+	 * the page shows the held time.
 	 */
 	async function open(page: Page) {
 		await page.clock.install({ time: OPENED });
 		await page.goto("/");
 		await expect(stop(page)).toBeVisible();
 		await page.clock.pauseAt(new Date(OPENED.getTime() + 10_500));
+		await expect.poll(() => shownTime(page)).toBe(HELD);
 	}
 
 	/**
@@ -386,11 +404,7 @@ test.describe("the clock", () => {
 		const elapsed = await shownElapsed(page);
 		expect(elapsed).toBeGreaterThan(10 * 60);
 		expect(elapsed).toBeLessThan(2 * 3600);
-		const status = await productVisual(page)
-			.getByText(/^Running since/)
-			.textContent();
-		const since = (status ?? "").slice(-5);
-		expect(seconds(`${since}:00`) + elapsed).toBe(15 * 3600 + 2 * 60 + 57);
+		expect(await shownTime(page)).toBe(HELD);
 	});
 
 	test("the timer gains a second each second, and the day's total stays the entries shown added to it", async ({
