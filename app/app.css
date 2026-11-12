@@ -232,6 +232,13 @@ body {
 	@apply bg-surface text-on-surface;
 }
 
+/* The page ends where it ends: pulling past the top or the bottom does not
+   stretch it and show bare canvas above the band (the owner, 2026-11-12). A box
+   that scrolls inside the page keeps its own rule (`overscroll-contain`). */
+html {
+	overscroll-behavior: none;
+}
+
 /* Selected text takes the sheet's yellow, in both schemes. */
 ::selection {
 	background-color: var(--md-sys-color-primary-container);

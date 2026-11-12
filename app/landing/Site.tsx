@@ -4,6 +4,8 @@ import { cx } from "~/components/cx";
 import { Wordmark } from "~/components/Wordmark";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 
+import type { PhotoSource } from "./photos";
+
 // What moves on the public pages, and when it does not, is in this style sheet.
 import "./public.css";
 
@@ -193,12 +195,15 @@ const NOTICES: readonly SiteLink[] = [
 export interface SiteFooterProps {
 	/** The address of the page the footer is on. Its own link is marked as the current page. */
 	current: string;
-	/** A note of the page's own, such as who took its photographs. */
-	children?: ReactNode;
+	/** The photographs on the page, whose photographers are credited here and only here. */
+	photos?: readonly PhotoSource[];
 }
 
-/** The foot of every public page: what Timesifier is, and the way to its notices. */
-export function SiteFooter({ current, children }: SiteFooterProps) {
+/**
+ * The foot of every public page: what Timesifier is, the way to its notices,
+ * and the credits for the page's photographs, in that order.
+ */
+export function SiteFooter({ current, photos = [] }: SiteFooterProps) {
 	return (
 		<footer className={`${PAGE} site-footer grid gap-8 py-12 text-body-medium medium:grid-cols-12`}>
 			<div className="medium:col-span-5">
@@ -225,7 +230,24 @@ export function SiteFooter({ current, children }: SiteFooterProps) {
 					))}
 				</ul>
 			</nav>
-			{children && <div className="text-on-surface-variant medium:col-span-4">{children}</div>}
+			{photos.length > 0 && (
+				<section aria-labelledby="site-credits" className="medium:col-span-4">
+					<h2 id="site-credits" className="py-1 text-label-large">
+						Credits
+					</h2>
+					<ul className="flex flex-col gap-1 text-on-surface-variant">
+						{photos.map((photo) => (
+							<li key={photo.name} className="py-1">
+								{photo.place}: photograph by{" "}
+								<a href={photo.profile} className={LINK}>
+									{photo.author}
+								</a>
+							</li>
+						))}
+					</ul>
+					<p className="mt-2 text-on-surface-variant">From Unsplash, under the Unsplash License.</p>
+				</section>
+			)}
 		</footer>
 	);
 }

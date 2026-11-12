@@ -123,8 +123,10 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 					data only inside the EU.
 				</p>
 				<p>
-					The application runs on Cloudflare Workers, in the data centre nearest to you, which may
-					be outside the EU; your request is handled there and the database is read from there.
+					The application runs on Cloudflare Workers in Frankfurt, near the database. Your request
+					reaches Cloudflare at the data centre nearest to you, which may be outside the EU, and is
+					passed to Frankfurt, where it is handled and the database is read. The files a page loads
+					(its scripts, styles and fonts) are sent from the data centre nearest to you.
 				</p>
 				<p>
 					Cloudflare’s log of requests, its record of each email sent, and what Turnstile and Web

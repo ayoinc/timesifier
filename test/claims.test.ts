@@ -1,5 +1,6 @@
 import { exports } from "cloudflare:workers";
 import { expect, it } from "vitest";
+import { PHOTOS } from "~/landing/photos";
 import { PRIMARY_ACTION, PRIVACY_PATH } from "~/landing/Site";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
@@ -30,6 +31,11 @@ const readme = import.meta.glob<string>("../README.md", {
 	query: "?raw",
 	import: "default",
 })["../README.md"];
+const wrangler = import.meta.glob<string>("../wrangler.jsonc", {
+	eager: true,
+	query: "?raw",
+	import: "default",
+})["../wrangler.jsonc"];
 
 /** Every cookie the application sets, by the name a browser shows for it. */
 const COOKIES = [
@@ -69,6 +75,31 @@ it("wherever a page says the database is in the EU, it says what is not", async 
 		const text = words(await page(path));
 		expect(text, path).toContain("data centre nearest to you");
 		expect(text, path).toContain("not restricted to the EU");
+	}
+});
+
+it("the pages say requests are handled in Frankfurt because the Worker is placed there", async () => {
+	// A Placement Hint runs the Worker in the data centre with the lowest latency
+	// to the cloud region it names; aws:eu-central-1 is Frankfurt
+	// (docs/decisions.md 34). A commented-out line does not count.
+	expect(wrangler).toMatch(/^\t"placement": \{ "region": "aws:eu-central-1" \},$/m);
+	for (const path of ["/", PRIVACY_PATH]) {
+		expect(words(await page(path)), path).toContain("is passed to Frankfurt");
+	}
+});
+
+it("each photographer is named once, in the credits at the foot of the page, not under the photograph", async () => {
+	const pages = { "/": Object.values(PHOTOS), [SIGN_IN_PATH]: [PHOTOS.platform] };
+	for (const [path, photos] of Object.entries(pages)) {
+		const html = await page(path);
+		const footer = html.slice(html.lastIndexOf("<footer"));
+		expect(words(footer), path).toContain("Credits");
+		for (const photo of photos) {
+			expect(html.split(photo.author).length - 1, `${path}: ${photo.author}`).toBe(1);
+			expect(footer, `${path}: ${photo.author}`).toContain(`href="${photo.profile}"`);
+			expect(footer).toContain(photo.author);
+		}
+		expect(words(html.slice(0, html.lastIndexOf("<footer"))), path).not.toMatch(/Photograph/);
 	}
 });
 

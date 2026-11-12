@@ -12,8 +12,6 @@ export interface PhotoProps {
 	alt: string;
 	/** How wide it is drawn at each window size, as the `sizes` attribute. */
 	sizes: string;
-	/** Where it is and who took it, set under the photograph. */
-	caption: string;
 	/** Classes for the figure: its place in the layout. */
 	className?: string;
 	/** Classes for the frame the photograph is cut to, when that is not its own shape. */
@@ -21,12 +19,13 @@ export interface PhotoProps {
 }
 
 /**
- * A photograph with its caption. The width and height hold its place before the
+ * A photograph with its place as the caption; who took it is credited at the
+ * foot of the page (`SiteFooter`). The width and height hold its place before the
  * file arrives, so nothing below it moves; it is fetched when it nears the window.
  * Inside its frame it drifts a little against the page as the page is scrolled
  * (`drift` in public.css): the frame holds still and cuts off what passes its edge.
  */
-export function Photo({ photo, alt, sizes, caption, className, frame }: PhotoProps) {
+export function Photo({ photo, alt, sizes, className, frame }: PhotoProps) {
 	return (
 		<figure className={cx("flex flex-col gap-2", className)}>
 			<picture
@@ -44,7 +43,7 @@ export function Photo({ photo, alt, sizes, caption, className, frame }: PhotoPro
 					className={cx("drift w-full", frame ? "h-full object-cover" : "h-auto")}
 				/>
 			</picture>
-			<figcaption className="text-body-small text-on-surface-variant">{caption}</figcaption>
+			<figcaption className="text-body-small text-on-surface-variant">{photo.place}.</figcaption>
 		</figure>
 	);
 }
