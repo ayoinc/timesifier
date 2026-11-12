@@ -56,7 +56,7 @@ const gettingStarted = (page: Page) => page.getByRole("region", { name: "Getting
 
 /** Starts the timer through "Track time", with no hours. */
 async function startTimer(page: Page) {
-	await page.getByRole("button", { name: "Track time" }).click();
+	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	await trackSheet(page).getByRole("button", { name: "Start timer" }).click();
 	await expect(trackSheet(page)).toBeHidden();
 	// The Day view's own timer: under 600px the navigation's is not drawn here.
@@ -95,7 +95,7 @@ test.describe("the timer", () => {
 		await page.clock.install();
 		await trackingOrganisation(page);
 
-		await tabTo(page, page.getByRole("button", { name: "Track time" }));
+		await tabTo(page, page.getByRole("button", { name: "Track time", exact: true }));
 		await page.keyboard.press("Enter");
 		const sheet = trackSheet(page);
 		await expect(sheet.getByRole("button", { name: "Start timer" })).toBeVisible();
@@ -120,7 +120,11 @@ test.describe("the timer", () => {
 
 		await tabTo(page, page.getByRole("button", { name: "Stop timer", exact: true }));
 		await page.keyboard.press("Enter");
-		await expect(navigation(page).getByRole("link", { name: "Track time" })).toBeVisible();
+		// On the Timesheet the page's own Track time is the one way to track: the navigation shows only a running timer.
+		await expect(navTimer(page)).toHaveCount(0);
+		await expect(
+			navigation(page).getByRole("button", { name: "Track time", exact: true }),
+		).toHaveCount(0);
 		await expect(page.getByRole("main").getByText("Running")).toHaveCount(0);
 	});
 
@@ -134,27 +138,35 @@ test.describe("the timer", () => {
 		await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}/reports$`));
 		await navigation(page).getByRole("button", { name: "Stop timer for Site" }).click();
 
-		await expect(navigation(page).getByRole("link", { name: "Track time" })).toBeVisible();
+		await expect(
+			navigation(page).getByRole("button", { name: "Track time", exact: true }),
+		).toBeVisible();
 		await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}/reports$`));
 	});
 
-	test("Track time in the navigation opens the Day view's Track time sheet, from another page and from the Day view", async ({
+	test("Track time in the navigation opens the sheet over the page it is on, which stays where it is (taste HT-C, W01)", async ({
 		page,
 	}) => {
 		const { slug } = await trackingOrganisation(page);
 		await navigation(page).getByRole("link", { name: "Reports" }).click();
-		await navigation(page).getByRole("link", { name: "Track time" }).click();
+		const reports = new RegExp(`${organisationPath(slug)}/reports$`);
+		await expect(page).toHaveURL(reports);
+		const opener = navigation(page).getByRole("button", { name: "Track time", exact: true });
+		await opener.click();
 
-		await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}#timer$`));
 		await expect(trackSheet(page).getByRole("button", { name: "Start timer" })).toBeVisible();
+		await expect(trackSheet(page).getByRole("combobox", { name: "Project" })).toBeFocused();
+		await expect(page).toHaveURL(reports);
 		await page.keyboard.press("Escape");
 		await expect(trackSheet(page)).toBeHidden();
+		await expect(opener).toBeFocused();
 
-		await navigation(page).getByRole("link", { name: "Track time" }).click();
-		await expect(trackSheet(page)).toBeVisible();
+		await opener.click();
 		await trackSheet(page).getByRole("button", { name: "Start timer" }).click();
+		await expect(trackSheet(page)).toBeHidden();
 		await expect(navTimer(page)).toBeVisible();
-		await expect(dayTimer(page)).toBeVisible();
+		await expect(page).toHaveURL(reports);
+		await expect(page.getByRole("status").filter({ hasText: "Timer started." })).toBeAttached();
 	});
 
 	test("at 390px a running timer is one strip above the bar, and on the Timesheet only the Day view's", async ({
@@ -172,6 +184,9 @@ test.describe("the timer", () => {
 		await expect(stopIn(page.getByRole("main"))).toHaveCount(1);
 		await expect(stopIn(navigation(page))).toBeHidden();
 
+		// The snackbar that said the timer started is the one other row fixed across the page; it goes.
+		await page.getByRole("button", { name: "Dismiss" }).click();
+		await expect(page.locator("[data-snackbar]")).toHaveCount(0);
 		await navigation(page).getByRole("link", { name: "Projects", exact: true }).click();
 		await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}/projects$`));
 		await expect(strip).toBeVisible();
@@ -189,13 +204,17 @@ test.describe("the timer", () => {
 				.reduce((sum, { height }) => sum + height, 0),
 		);
 		expect(fixed).toBe(120);
-		await expect(navigation(page).getByRole("link", { name: "Track time" })).toHaveCount(0);
+		await expect(
+			navigation(page).getByRole("button", { name: "Track time", exact: true }),
+		).toHaveCount(0);
 		const stop = await stopIn(navigation(page)).boundingBox();
 		expect(stop?.height ?? 0).toBeGreaterThanOrEqual(40);
 
 		await stopIn(navigation(page)).click();
 		await expect(strip).toBeHidden();
-		await expect(navigation(page).getByRole("link", { name: "Track time" })).toBeVisible();
+		await expect(
+			navigation(page).getByRole("button", { name: "Track time", exact: true }),
+		).toBeVisible();
 	});
 
 	test("shows the same elapsed time in two browsers, and a stop in one shows in the other within 30 seconds", async ({
@@ -226,11 +245,13 @@ test.describe("the timer", () => {
 		await expect(elapsed(dayTimer(two.other))).toHaveText(shown);
 
 		await one.other.getByRole("button", { name: "Stop timer", exact: true }).click();
-		await expect(navigation(one.other).getByRole("link", { name: "Track time" })).toBeVisible();
+		// On the Timesheet the navigation shows a running timer alone.
+		await expect(navTimer(one.other)).toHaveCount(0);
 		await expect(navTimer(two.other)).toBeVisible();
 		await two.other.clock.resume();
 		await two.other.clock.runFor(30_000);
-		await expect(navigation(two.other).getByRole("link", { name: "Track time" })).toBeVisible();
+		await expect(navTimer(two.other)).toHaveCount(0);
+		await expect(dayTimer(two.other)).toHaveCount(0);
 		await one.context.close();
 		await two.context.close();
 	});
@@ -271,7 +292,7 @@ test.describe("the Day view", () => {
 	}) => {
 		await trackingOrganisation(page);
 		await expect(page.getByRole("button", { name: "Add entry" })).toHaveCount(0);
-		await tabTo(page, page.getByRole("button", { name: "Track time" }));
+		await tabTo(page, page.getByRole("button", { name: "Track time", exact: true }));
 		await page.keyboard.press("Enter");
 		const sheet = trackSheet(page);
 		await expect(sheet).toBeVisible();
@@ -285,7 +306,9 @@ test.describe("the Day view", () => {
 		await page.keyboard.press("Enter");
 
 		await expect(sheet).toBeHidden();
-		await expect(page.getByRole("status").filter({ hasText: "Entry saved." })).toBeVisible();
+		await expect(
+			page.getByRole("main").getByRole("status").filter({ hasText: "Entry saved." }),
+		).toBeVisible();
 		const main = page.getByRole("main");
 		await expect(main.getByRole("list", { name: "Entries" })).toContainText("Survey");
 		await expect(main.getByRole("list", { name: "Entries" })).toContainText("1:30");
@@ -333,7 +356,7 @@ test.describe("the Day view", () => {
 		page,
 	}) => {
 		await trackingOrganisation(page);
-		await page.getByRole("button", { name: "Track time" }).click();
+		await page.getByRole("button", { name: "Track time", exact: true }).click();
 		await trackSheet(page).getByRole("textbox", { name: "Hours" }).fill("2");
 		await trackSheet(page).getByRole("button", { name: "Save entry" }).click();
 		await expect(trackSheet(page)).toBeHidden();
@@ -345,7 +368,7 @@ test.describe("the Day view", () => {
 		await dialog.getByRole("button", { name: "Submit week" }).press("Enter");
 		await expect(page.getByRole("main")).toContainText("Status: Submitted");
 		await expect(page.getByRole("button", { name: "Withdraw submission" })).toBeVisible();
-		await expect(page.getByRole("button", { name: "Track time" })).toHaveCount(0);
+		await expect(page.getByRole("button", { name: "Track time", exact: true })).toHaveCount(0);
 
 		await views(page).getByRole("link", { name: "Week" }).click();
 		await expect(page.getByText("Status: Submitted")).toBeAttached();
@@ -357,9 +380,10 @@ test.describe("the Day view", () => {
 		const { slug } = await trackingOrganisation(page);
 		const list = gettingStarted(page);
 		await expect(list).toContainText("1 of 3");
-		await expect(list.getByRole("link")).toHaveText(["Track an entry", "Open the week"]);
+		// Tracking an entry is done on this page: its step opens the Track time sheet.
+		await expect(list.getByRole("link")).toHaveText(["Open the week"]);
 
-		await tabTo(page, list.getByRole("link", { name: "Track an entry" }));
+		await tabTo(page, list.getByRole("button", { name: "Track an entry" }));
 		await page.keyboard.press("Enter");
 		await expect(trackSheet(page)).toBeVisible();
 		await trackSheet(page).getByRole("textbox", { name: "Hours" }).fill("1");
@@ -371,7 +395,7 @@ test.describe("the Day view", () => {
 		await page.keyboard.press("Enter");
 		await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}\\?view=week$`));
 		await views(page).getByRole("link", { name: "Day" }).click();
-		await expect(page.getByRole("button", { name: "Track time" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Track time", exact: true })).toBeVisible();
 		await expect(list).toHaveCount(0);
 	});
 
@@ -388,11 +412,11 @@ test.describe("the Day view", () => {
 		await expect(page.getByRole("heading", { level: 1, name: "Timesheet" })).toBeFocused();
 
 		await openShell(page, organisationPath(slug));
-		await expect(page.getByRole("button", { name: "Track time" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Track time", exact: true })).toBeVisible();
 		await expect(gettingStarted(page)).toHaveCount(0);
 	});
 
-	test("steps by day with links, later forward and earlier back, and Today returns", async ({
+	test("steps by day with links, later forward and earlier back, and Back to today returns", async ({
 		page,
 	}) => {
 		const { slug } = await trackingOrganisation(page);
@@ -410,9 +434,10 @@ test.describe("the Day view", () => {
 		await expect(page).not.toHaveURL(new RegExp(`day=${today ?? "none"}$`));
 		const previous = new URL(page.url()).searchParams.get("day");
 		expect(previous && next && previous < next).toBe(true);
-		await days.getByRole("link", { name: "Today" }).click();
+		await days.getByRole("link", { name: "Back to today" }).click();
 		await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}$`));
-		await expect(days.getByRole("link", { name: "Today" })).toHaveAttribute("aria-current", "page");
+		// On today there is no way back to it.
+		await expect(days.getByRole("link", { name: "Back to today" })).toHaveCount(0);
 	});
 });
 
@@ -475,7 +500,7 @@ test.describe("the Week view", () => {
 		await expect(page).toHaveURL(/view=week&start=\d{4}-\d{2}-\d{2}$/);
 		await weeks.getByRole("link", { name: "Next week" }).click();
 		await weeks.getByRole("link", { name: "Next week" }).click();
-		await weeks.getByRole("link", { name: "Today" }).click();
+		await weeks.getByRole("link", { name: "Back to this week" }).click();
 		await expect(page).toHaveURL(/view=week$/);
 	});
 });
@@ -516,7 +541,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				expect(await problems(page, [EMPTY_INPUT])).toEqual([]);
 
 				// The Track time sheet, reached and left by keyboard.
-				await tabTo(page, page.getByRole("button", { name: "Track time" }));
+				await tabTo(page, page.getByRole("button", { name: "Track time", exact: true }));
 				await page.keyboard.press("Enter");
 				await expect(trackSheet(page)).toBeVisible();
 				expect(

@@ -199,7 +199,7 @@ test("a member asks for leave and records sick leave; the owner approves; both s
 		other.getByRole("group", { name: "Days of the week" }).locator('a[aria-current="date"]'),
 	).toContainText("Sick leave");
 	// A whole day of leave takes no time (TS-090): Track time is closed, and says why.
-	const track = other.getByRole("button", { name: "Track time" });
+	const track = other.getByRole("button", { name: "Track time", exact: true });
 	await expect(track).toBeDisabled();
 	await expect(track).toHaveAccessibleDescription(
 		"You are on sick leave that day: no time can be tracked on it.",

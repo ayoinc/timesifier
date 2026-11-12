@@ -187,7 +187,9 @@ function Grid({
 
 	return (
 		<>
-			<div className="mt-6 overflow-x-auto rounded-large border-2 border-on-surface">
+			{/* Relative, so the grid's visually hidden words are placed inside the
+			    scroller and clipped by it, not out past the window's edge (audit W02). */}
+			<div className="relative mt-6 overflow-x-auto rounded-large border-2 border-on-surface">
 				<table className="w-full min-w-180 border-collapse text-body-large">
 					<caption className="sr-only">Hours by project and day</caption>
 					<thead>
@@ -221,7 +223,7 @@ function Grid({
 											</span>
 										)}
 										<span className="flex justify-end font-normal">
-											<RuleLine rule={ruleOf(day)} />
+											<RuleLine rule={ruleOf(day)} onAmber={day === data.today} />
 										</span>
 									</th>
 								);
@@ -282,7 +284,12 @@ function Grid({
 									>
 										{formatDuration(each.total)}
 										{over > 0 && (
-											<span className="block text-label-small text-error">
+											<span
+												className={cx(
+													"block text-label-small",
+													each.day === data.today ? undefined : "text-error",
+												)}
+											>
 												<span className="sr-only">, </span>
 												{overLabel(over)}
 											</span>
@@ -430,7 +437,7 @@ function Cell({
 				if (event.key === "Enter") save();
 			}}
 			className={cx(
-				"h-10 w-16 rounded-extra-small border border-outline-variant bg-surface px-2 text-end tabular-nums outline-none focus-visible:focus-indicator",
+				"h-11 w-16 rounded-extra-small border border-outline-variant bg-surface px-2 text-end tabular-nums outline-none focus-visible:focus-indicator",
 				invalid && "border-error",
 			)}
 		/>

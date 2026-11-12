@@ -72,7 +72,7 @@ async function tabTo(page: Page, target: Locator, most = 80) {
 /** Tracks `hours` on `day` from the Day view of that day, with a description. */
 async function trackOn(page: Page, day: string, description: string, hours: string) {
 	await openShell(page, dayPath(day));
-	await page.getByRole("button", { name: "Track time" }).click();
+	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	const sheet = page.getByRole("dialog", { name: "Track time" });
 	await sheet.getByRole("textbox", { name: "Description" }).fill(description);
 	await sheet.getByRole("textbox", { name: "Hours" }).fill(hours);
@@ -122,7 +122,7 @@ test("an hour tracked on a past day is locked by the lock date, set with the key
 	await expect(main).toContainText("This day is on or before the lock date, Sunday 11 October");
 	await expect(main).toContainText(`The reason given: ${REASON}`);
 	await expect(main.getByRole("list", { name: "Entries" })).toContainText("Survey");
-	await expect(page.getByRole("button", { name: "Track time" })).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Track time", exact: true })).toHaveCount(0);
 	await expect(page.getByRole("button", { name: /^Actions for Survey/ })).toHaveCount(0);
 });
 

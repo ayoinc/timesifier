@@ -48,7 +48,7 @@ async function personWithTime(page: Page) {
 	await openShell(page, organisationPath(organisation.slug));
 	const day = await yesterdayIn(page);
 	await openShell(page, `${organisationPath(organisation.slug)}?day=${day}`);
-	await page.getByRole("button", { name: "Track time" }).click();
+	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	const sheet = trackSheet(page);
 	await sheet.getByRole("textbox", { name: "Hours" }).fill("2");
 	await sheet.getByRole("button", { name: "Save entry" }).click();
@@ -112,7 +112,7 @@ test("the week calendar shows each entry as a block with the Week view's totals;
 	await editSheet(page).getByLabel("End").fill("11:30");
 	await editSheet(page).getByRole("button", { name: "Save" }).click();
 	await expect(editSheet(page)).toBeHidden();
-	await expect(page.getByRole("status")).toHaveText("Entry saved.");
+	await expect(page.getByRole("main").getByRole("status")).toHaveText("Entry saved.");
 	await expect(grid.getByRole("columnheader", { name: "Week total 2:30" })).toBeVisible();
 
 	// The slot at 14:00 opens Track time from 14:00.
@@ -163,7 +163,7 @@ test("zooms from the week in detail out to the week and the month, and in to the
 	await expect(zoom(page)).toContainText("Week in detail");
 	await zoom(page).getByRole("button", { name: "Zoom in" }).click();
 	await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}\\?day=\\d{4}-\\d{2}-\\d{2}$`));
-	await expect(page.getByRole("button", { name: "Track time" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Track time", exact: true })).toBeVisible();
 });
 
 test("the week opens at the working hours; compact, the whole day is in view", async ({ page }) => {
@@ -196,7 +196,7 @@ test("the month shows each day's total, today marked and the month's total; Prev
 	await expect(page.getByText(/^Month total/)).toContainText("0:00");
 	await months.getByRole("link", { name: "Previous month" }).click();
 	await months.getByRole("link", { name: "Previous month" }).click();
-	await months.getByRole("link", { name: "Today" }).click();
+	await months.getByRole("link", { name: "Back to this month" }).click();
 	await expect(page).toHaveURL(
 		new RegExp(`${organisationPath(slug)}\\?view=calendar&scale=month$`),
 	);
@@ -220,7 +220,7 @@ test("the week steps by week, and Today returns", async ({ page }) => {
 	await expect(page).toHaveURL(/view=calendar&date=\d{4}-\d{2}-\d{2}&zoom=compact$/);
 	await expect(todayLink(weekGrid(page))).toHaveCount(0);
 	await expect(weekGrid(page).getByRole("columnheader", { name: "Week total 0:00" })).toBeVisible();
-	await weeks.getByRole("link", { name: "Today" }).click();
+	await weeks.getByRole("link", { name: "Back to this week" }).click();
 	await expect(page).toHaveURL(/view=calendar&zoom=compact$/);
 	await expect(todayLink(weekGrid(page))).toBeVisible();
 });

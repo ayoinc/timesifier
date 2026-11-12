@@ -37,19 +37,23 @@ export async function problems(
 	// still while the page does, and never finishes. A view transition counts
 	// from when it starts, and a stylesheet a route brings from when it is asked
 	// for: until it has loaded, the page is measured without it (the links of
-	// the navigation as bare text, 18px tall).
+	// the navigation as bare text, 18px tall). Polled at intervals that are no
+	// divisor of a second, so a running timer's digit, which arrives once a
+	// second, cannot keep landing on every poll.
 	await expect
-		.poll(() =>
-			page.evaluate(
-				() =>
-					document.getAnimations().filter((each) => each.timeline === document.timeline).length +
-					((document as Document & { activeViewTransition?: unknown }).activeViewTransition
-						? 1
-						: 0) +
-					[...document.querySelectorAll<HTMLLinkElement>("link[rel=stylesheet]")].filter(
-						(each) => !each.sheet,
-					).length,
-			),
+		.poll(
+			() =>
+				page.evaluate(
+					() =>
+						document.getAnimations().filter((each) => each.timeline === document.timeline).length +
+						((document as Document & { activeViewTransition?: unknown }).activeViewTransition
+							? 1
+							: 0) +
+						[...document.querySelectorAll<HTMLLinkElement>("link[rel=stylesheet]")].filter(
+							(each) => !each.sheet,
+						).length,
+				),
+			{ intervals: [100, 230, 370] },
 		)
 		.toBe(0);
 	// From 600px the navigation's column scrolls on its own when it is taller

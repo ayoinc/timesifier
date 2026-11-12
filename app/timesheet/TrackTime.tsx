@@ -146,6 +146,21 @@ function TrackTimeSheet({
 						name="description"
 						maxLength={ENTRY_DESCRIPTION_MAX_LENGTH}
 					/>
+					<TextField
+						label="Hours"
+						name="hours"
+						value={hours}
+						onChange={setHours}
+						inputMode="decimal"
+						autoComplete="off"
+						maxLength={16}
+						isRequired={!timerAllowed}
+						description={
+							timerAllowed
+								? "As 1.5, 1,5 or 1:30. Leave it empty to start a timer."
+								: "As 1.5, 1,5 or 1:30. A timer runs today only."
+						}
+					/>
 					<div className="grid grid-cols-2 gap-4">
 						<TextField
 							label="Date"
@@ -165,21 +180,6 @@ function TrackTimeSheet({
 							/>
 						)}
 					</div>
-					<TextField
-						label="Hours"
-						name="hours"
-						value={hours}
-						onChange={setHours}
-						inputMode="decimal"
-						autoComplete="off"
-						maxLength={16}
-						isRequired={!timerAllowed}
-						description={
-							timerAllowed
-								? "As 1.5, 1,5 or 1:30. Leave it empty to start a timer."
-								: "As 1.5, 1,5 or 1:30. A timer runs today only."
-						}
-					/>
 					<DayNote
 						day={current?.day}
 						isToday={isToday}
@@ -220,7 +220,7 @@ function DayNote({
 	if (!day) return null;
 	const said = lock ?? closed ?? left;
 	return (
-		<p role="note" className="text-body-medium text-on-surface-variant">
+		<p className="text-body-medium text-on-surface-variant">
 			{isToday ? `Today, ${formatDay(day)}` : formatDay(day)}
 			{lockLabel ? `. ${lockLabel}` : ""}
 			{said ? <span className={lock || closed ? "block text-error" : "block"}>{said}</span> : null}

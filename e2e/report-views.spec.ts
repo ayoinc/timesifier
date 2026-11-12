@@ -34,7 +34,7 @@ async function ownerWithTime(page: Page) {
 		new Date(Date.now() - 86_400_000).toLocaleDateString("en-CA"),
 	);
 	await openShell(page, `${organisationPath(organisation.slug)}?day=${day}`);
-	await page.getByRole("button", { name: "Track time" }).click();
+	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	const sheet = page.getByRole("dialog", { name: "Track time" });
 	await sheet.getByRole("textbox", { name: "Hours" }).fill("2");
 	await sheet.getByRole("button", { name: "Save entry" }).click();

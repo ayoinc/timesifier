@@ -191,7 +191,8 @@ describe("the timer (TS-012a)", () => {
 
 		expect(textOf(main)).toContain("No project to track yet");
 		expect(main).not.toContain(">Track time</button>");
-		const timer = /<section aria-labelledby="timer-heading"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
+		const timer =
+			/<section aria-labelledby="timer-heading"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
 		const links = [...timer.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)];
 		expect(links.map(([, href, label]) => [href, textOf(label ?? "")])).toEqual([
 			["/app/acme/projects", "Create a project"],
@@ -200,7 +201,8 @@ describe("the timer (TS-012a)", () => {
 
 	it("with a project shows one button, Track time, and no form of its own", async () => {
 		const main = await mainOf(PAGE);
-		const timer = /<section aria-labelledby="timer-heading"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
+		const timer =
+			/<section aria-labelledby="timer-heading"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
 
 		expect(timer.match(/<button\b/g)).toHaveLength(1);
 		expect(timer).toMatch(/>Track time<\/button>/);
@@ -351,7 +353,9 @@ describe("the Day view (TS-013)", () => {
 		await seedEntry(ada, start, start + HOUR);
 
 		expect(await textAt(`${PAGE}?day=2026-11-10`)).toMatch(/Day total 1:00/);
-		expect(await textAt(`${PAGE}?day=2026-11-11`)).toContain("Nothing yet on Wednesday 11 November.");
+		expect(await textAt(`${PAGE}?day=2026-11-11`)).toContain(
+			"Nothing yet on Wednesday 11 November.",
+		);
 	});
 
 	it("with nothing tracked says so, with its one action, Track time, as a text button (taste HT-F)", async () => {
@@ -359,7 +363,11 @@ describe("the Day view (TS-013)", () => {
 		expect(textOf(main)).toContain("Nothing yet on Sunday 1 November. Track time.");
 		// The page's filled Track time, and the empty day's own, a text button.
 		expect(main.match(/>Track time<\/button>/g)).toHaveLength(2);
-		expect(main.match(/class="[^"]*\btext-primary\b[^"]*"[^>]*>(<svg[\s\S]*?<\/svg>)?Track time<\/button>/g)).toHaveLength(1);
+		expect(
+			main.match(
+				/class="[^"]*\btext-primary\b[^"]*"[^>]*>(<svg[\s\S]*?<\/svg>)?Track time<\/button>/g,
+			),
+		).toHaveLength(1);
 		expect(main).not.toContain("Copy");
 	});
 

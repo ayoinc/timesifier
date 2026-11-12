@@ -262,7 +262,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 																</IconButton>
 															</Tooltip>
 															<MenuTrigger>
-																<IconButton label={`More for ${what}, ${clock(each.startedAt)}`}>
+																<IconButton label={`Actions for ${what}, ${clock(each.startedAt)}`}>
 																	<MoreVertIcon />
 																</IconButton>
 																<Menu
@@ -346,7 +346,12 @@ function EmptyDay({
 			</p>
 			{onTrack && (
 				<div className="mt-2 flex flex-wrap gap-2">
-					<Button variant="text" icon={<AddIcon size="medium" />} onPress={onTrack}>
+					<Button
+						variant="text"
+						icon={<AddIcon size="medium" />}
+						aria-label={`Track time on ${when}`}
+						onPress={onTrack}
+					>
 						Track time
 					</Button>
 					{copyFrom && (

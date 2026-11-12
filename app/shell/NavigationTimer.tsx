@@ -31,7 +31,9 @@ import { accountPath } from "./destinations";
  * nothing running it is a floating button at the bottom right, above the bar;
  * while a timer runs it is one strip just above the bar. On the Timesheet it
  * is not drawn under 600px at all, as the page has its own Track time and its
- * own running timer a few rows above.
+ * own running timer a few rows above; from 600px there it shows a running
+ * timer alone, as the page's Track time is the one way to track (one action
+ * in one place).
  *
  * The elapsed time is the clock's now minus the stored start, as on the Day
  * view, so the two read the same to the second. What runs is read again when
@@ -60,6 +62,7 @@ export function NavigationTimer({
 	// While the stop is on its way the control already reads as stopped.
 	const stopping = stop.state !== "idle";
 
+	if (onTimesheet && !(running && !stopping)) return null;
 	return (
 		<div className={cx("medium:mb-6 medium:ps-4", onTimesheet && "max-medium:hidden")}>
 			{running && !stopping ? (

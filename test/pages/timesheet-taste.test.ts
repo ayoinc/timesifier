@@ -189,18 +189,16 @@ describe("the Day view's entries (HT-A, HT-B)", () => {
 		const running = await seedEntry(ada, T0 - HOUR, null, "Plans");
 		const main = await mainOf(PAGE);
 		// Today's chip, the running bar and the running row.
-		expect(main.match(/bg-primary-container/g)?.length).toBe(3);
+		expect(main.match(/(bg|over)-primary-container/g)?.length).toBe(3);
 		expect(main).toContain("timer running");
 
 		await env.DB.prepare("update time_entries set ended_at = ? where id = ?")
 			.bind(T0, running)
 			.run();
-		expect(await mainOf(PAGE)).toContain("bg-primary-container");
+		expect(await mainOf(PAGE)).toContain("over-primary-container");
 
-		expect(await mainOf(`${PAGE}?day=2026-10-14`)).not.toContain("bg-primary-container");
-		expect(await mainOf(`${PAGE}?view=week&start=2026-10-12`)).not.toContain(
-			"bg-primary-container",
-		);
+		expect(await mainOf(`${PAGE}?day=2026-10-14`)).not.toContain("primary-container");
+		expect(await mainOf(`${PAGE}?view=week&start=2026-10-12`)).not.toContain("primary-container");
 		expect(await mainOf(`${PAGE}?view=week`)).toContain('aria-current="date"');
 	});
 

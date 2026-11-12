@@ -120,7 +120,7 @@ export function DayPicker({ slug, day, label }: { slug: string; day: Day; label:
 														className={cx(
 															"relative flex size-11 flex-col items-center justify-center rounded-full text-label-large tabular-nums outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator",
 															isToday
-																? "bg-primary-container text-on-primary-fixed"
+																? "over-primary-container text-on-primary-fixed"
 																: each.inMonth
 																	? "text-on-surface"
 																	: "text-on-surface-variant",

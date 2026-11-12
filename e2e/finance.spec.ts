@@ -66,7 +66,7 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	await createProject(page, slug, "Website");
 
 	await openShell(page, organisationPath(slug));
-	await page.getByRole("button", { name: "Track time" }).click();
+	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	const track = page.getByRole("dialog", { name: "Track time" });
 	await track.getByRole("textbox", { name: "Description" }).fill("Design review");
 	await track.getByRole("textbox", { name: "Hours" }).fill("1.5");

@@ -73,10 +73,10 @@ export function WeekDays({
 									onClick={finishRunningTransition}
 									aria-current={isShown ? "date" : undefined}
 									className={cx(
-										"flex min-h-14 flex-col items-center justify-center rounded-medium px-0.5 py-1 outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator",
+										"flex h-full min-h-14 flex-col items-center justify-center rounded-medium px-0.5 py-1 outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator",
 										isShown ? "border-2 border-on-surface" : "border border-outline-variant",
 										isToday
-											? "bg-primary-container text-on-primary-fixed"
+											? "over-primary-container text-on-primary-fixed"
 											: isShown
 												? "text-on-surface"
 												: "text-on-surface-variant",
@@ -113,7 +113,7 @@ export function WeekDays({
 										</span>
 									)}
 									{over > 0 && (
-										<span className="text-label-small text-error">
+										<span className={cx("text-label-small", isToday ? undefined : "text-error")}>
 											<span className="sr-only">, </span>
 											<span aria-hidden="true">Over</span>
 											<span className="sr-only">{overLabel(over)}</span>

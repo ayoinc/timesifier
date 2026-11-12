@@ -412,3 +412,17 @@ A person who has chosen nothing gets the light scheme on every page, whatever th
 | Follow the device (was built)            | What a person who set their device to dark expects of most software. Half of first visits would see the scheme the owner thinks the weaker. It stays available, as a choice.    |
 
 **What it costs.** A person whose device is set to dark gets a light page until they find the choice in Settings, and a person who is not signed in has no Settings: the public pages and the sign-in page are light for everybody who has not chosen. Dark is held to the same contrast tests and stays in the accessibility scans.
+
+### 32. Undo a deletion: delete at once, put back from a signed token
+
+Card TS-093 (research/harvest-taste.md, HT-A). Deleting an entry no longer asks first: the snackbar says "Entry deleted." and offers Undo for 8 seconds.
+
+The entry is deleted when the person asks, in one batch with its row in the activity log, and the answer carries a token: what the entry was (its id, project, task, billable, description, times and tags), for whom, in which organisation and when, signed with `BETTER_AUTH_SECRET` (`app/timesheet/undo.server.ts`, the keyed hash of `app/auth/keyed-hash.server.ts`). Undo sends the token back; the server checks the signature, the person, the organisation and that it is at most 60 seconds old, and writes the same entry again with its id, as any new time is written: refused on a day locked since, a day that no longer takes it (TS-090), or a project archived since. The log then holds the deletion and the entry made again.
+
+| Option                                  | Evidence                                                                                                                                                                                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delete at once, a signed token (chosen) | No migration and no column: the entry is gone from every report, total, export and API answer at once, as the person asked. Nothing has to run later to finish a deletion, and one that is never undone needs nothing more. The token cannot be written by the page. |
+| Soft delete, removed after 8 seconds    | Every read of `time_entries` (reports, totals, exports, the API, invoices) would have to leave out entries marked deleted, and something would have to remove them later, which a Worker without a schedule for it does not do.                                      |
+| Keep the confirmation sheet             | Slower for every deletion and still no way to take a mistake back (the taste review's item 6).                                                                                                                                                                       |
+
+**What it costs.** The token holds the entry's description, signed but not encrypted, in the page's memory for a minute; it is the person's own description, which the page has shown them. The server takes it for 60 seconds, longer than the 8 seconds the snackbar shows Undo, so a slow answer still lands.
