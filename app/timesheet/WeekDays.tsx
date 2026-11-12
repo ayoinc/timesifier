@@ -87,8 +87,7 @@ export function WeekDays({
 											aria-hidden="true"
 											className="flex flex-col items-center whitespace-nowrap medium:flex-row medium:gap-1"
 										>
-											<span>{weekday}</span>
-											<span>{date}</span>
+											<span>{weekday}</span> <span>{date}</span>
 										</span>
 										<span className="sr-only">
 											{isToday ? "Today, " : ""}

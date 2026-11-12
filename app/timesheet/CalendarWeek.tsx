@@ -241,14 +241,21 @@ export function CalendarWeek({
 												<span className="sr-only"> tracked</span>
 											</span>
 											{status && (
-												<span className="max-w-full truncate text-label-small text-on-surface-variant">
+												<span
+													className={cx(
+														"max-w-full truncate text-label-small",
+														!isToday && "text-on-surface-variant",
+													)}
+												>
 													<span className="sr-only">, </span>
 													{status.label}
 												</span>
 											)}
-											{!locked && <RuleLine rule={rule} />}
+											{!locked && <RuleLine rule={rule} onAmber={isToday} />}
 											{locked && (
-												<span className="text-label-small text-on-surface-variant">
+												<span
+													className={cx("text-label-small", !isToday && "text-on-surface-variant")}
+												>
 													<span className="sr-only">, </span>Submitted
 												</span>
 											)}

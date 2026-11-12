@@ -412,15 +412,17 @@ describe("a destination a person is not shown", () => {
 
 describe("the navigation's timer control (TS-051)", () => {
 	it.each(Object.keys(SHOWN))(
-		"comes before the first heading for a %s, and with nothing running is Track time, to the Day view's timer",
+		"comes before the first heading for a %s, and with nothing running is Track time, a button that opens the sheet",
 		async (kind) => {
+			// On Timesheet the page's own Track time is the one way to track: it is looked for on Projects.
 			const nav = navigationOf(
-				await pageBody(await open(organisationPath(ACME), people[kind] as Person)),
+				await pageBody(await open(`${organisationPath(ACME)}/projects`, people[kind] as Person)),
 			);
 			const timer = nav.slice(0, nav.indexOf("<ul"));
 
 			expect(nav.indexOf("<ul")).toBeGreaterThan(0);
-			expect(timer).toMatch(/<a[^>]*href="\/app\/acme#timer"[^>]*>[\s\S]*Track time[\s\S]*<\/a>/);
+			expect(timer).toMatch(/<button[^>]*>[\s\S]*Track time[\s\S]*<\/button>/);
+			expect(timer).not.toContain("#timer");
 			expect(textOf(timer)).toBe("Track time");
 		},
 	);

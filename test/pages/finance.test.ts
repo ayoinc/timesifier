@@ -632,6 +632,9 @@ const ROLE_TABLE: Record<string, Row> = {
 		address: (w) => `/app/acme/history?entry=${w.entry}`,
 		page: by(200, 200, 200, 200, 404),
 	},
+	// What Track time and the day title's month read (TS-093): each person's own, whatever their role.
+	"routes/app/timesheet.day": { page: every(200) },
+	"routes/app/timesheet.month": { page: every(200) },
 	"routes/app/integrations": {
 		page: by(200, 200, 404, 404, 404),
 		form: {

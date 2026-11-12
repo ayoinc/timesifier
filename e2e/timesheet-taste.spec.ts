@@ -276,7 +276,7 @@ test.describe("at 390px", () => {
 		);
 		expect(new Set(heights).size).toBe(1);
 
-		for (const query of ["view=week", `view=week&start=${await dayFrom(page, -7)}`, ""]) {
+		for (const query of ["view=week", "view=calendar", ""]) {
 			await openShell(page, `${organisationPath(slug)}?${query}`);
 			expect(
 				await page.evaluate(() => document.documentElement.scrollWidth),

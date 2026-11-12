@@ -437,7 +437,7 @@ function Cell({
 				if (event.key === "Enter") save();
 			}}
 			className={cx(
-				"h-11 w-16 rounded-extra-small border border-outline-variant bg-surface px-2 text-end tabular-nums outline-none focus-visible:focus-indicator",
+				"h-11 w-16 rounded-extra-small border border-outline-variant bg-surface px-2 text-on-surface text-end tabular-nums outline-none focus-visible:focus-indicator",
 				invalid && "border-error",
 			)}
 		/>
