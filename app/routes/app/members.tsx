@@ -18,14 +18,10 @@ import { declined, done, refused, unavailable } from "~/organisations/outcome.se
 import { AS_ROLE, nameOrEmail, ROLE_LABELS } from "~/organisations/people";
 import { NEEDS_AN_OWNER, NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows, mayRemove, Role, rolesToGive } from "~/organisations/roles";
-import { scheduleView } from "~/schedules/schedules";
-import { formerPlace, placesOf, scheduleBookOf } from "~/schedules/schedules.server";
-import { invitationsPath, schedulesPath } from "~/shell/destinations";
+import { invitationsPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { TeamTabs } from "~/teams/TeamTabs";
-import { dayOf } from "~/time/calendar";
-import { zoneOfMember } from "~/time/zones.server";
 
 import type { Route } from "./+types/members";
 import { FormSheet } from "./FormSheet";
@@ -45,24 +41,15 @@ export function meta() {
 
 /** Everyone in the organisation, each with what the person may do to them. */
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const membership = context.get(membershipContext);
-	const { organisation, role, user } = membership;
-	const scope = organisationScope(env.DB, organisation.id);
-	// Owners and admins see each member's work schedule and why (TS-097); managers see their own people's on Team.
-	const seesSchedules = isAdministrator(role);
-	const [members, rows, book, places, zone] = await Promise.all([
+	const { organisation, role, user } = context.get(membershipContext);
+	const [members, rows] = await Promise.all([
 		listMembers(request, organisation.id),
-		scope.memberships.select(),
-		seesSchedules ? scheduleBookOf(scope) : null,
-		seesSchedules ? placesOf(scope) : null,
-		zoneOfMember(membership),
+		organisationScope(env.DB, organisation.id).memberships.select(),
 	]);
-	const today = dayOf(Date.now(), zone);
 	if (!members.ok) throw unavailable(members);
 	const contractors = new Set(rows.filter((row) => row.isContractor).map(({ id }) => id));
 
 	return {
-		schedulesPath: seesSchedules ? schedulesPath(organisation.slug) : null,
 		canInvite: allows(role, { invitation: ["create"] }),
 		members: members.data.map((member) => {
 			const isYou = member.userId === user.id;
@@ -73,10 +60,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				role: member.role,
 				isYou,
 				isContractor: contractors.has(member.id),
-				schedule:
-					book && places
-						? scheduleView(book, places.get(member.userId) ?? formerPlace(member.userId), today)
-						: null,
 				// A person's own way out is leaving, and their own role is another's to change.
 				rolesToGive: isYou ? [] : rolesToGive(role, member.role),
 				canRemove: !isYou && mayRemove(role, member.role),
@@ -184,7 +167,7 @@ type Member = Route.ComponentProps["loaderData"]["members"][number];
 type Task = "role" | "remove";
 
 export default function Members({ loaderData }: Route.ComponentProps) {
-	const { members, canInvite, schedulesPath: schedules } = loaderData;
+	const { members, canInvite } = loaderData;
 	const organisation = useOrganisation();
 
 	const [task, setTask] = useState<Task | null>(null);
@@ -226,16 +209,7 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 										</span>
 									}
 									detail={
-										<>
-											{each.name !== each.email && (
-												<span className="block wrap-anywhere">{each.email}</span>
-											)}
-											{each.schedule && (
-												<span className="block">
-													{each.schedule.name}, {each.schedule.weekLabel}. {each.schedule.reason}.
-												</span>
-											)}
-										</>
+										each.name !== each.email && <span className="wrap-anywhere">{each.email}</span>
 									}
 									value={
 										<span className="text-label-large text-on-surface-variant">
@@ -291,15 +265,6 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 						{members.length === 1 && "You are the only one here. "}People join by invitation, from{" "}
 						<Link to={invitationsPath(organisation.slug)} className={TEXT_LINK}>
 							Invitations
-						</Link>
-						.
-					</p>
-				)}
-				{schedules && (
-					<p className="mt-4 max-w-160 text-body-medium text-on-surface-variant">
-						Give people a different work schedule in{" "}
-						<Link to={schedules} className={TEXT_LINK}>
-							Work schedules
 						</Link>
 						.
 					</p>

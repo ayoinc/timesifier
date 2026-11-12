@@ -424,11 +424,6 @@ function ThisWeek({ data }: { data: WeekData }) {
 													{p.leaveDays.length > 0 && (
 														<span className="block">Leave: {p.leaveDays.join(", ")}</span>
 													)}
-													{p.schedule && (
-														<span className="block">
-															{p.schedule.name}, {p.schedule.weekLabel}. {p.schedule.reason}.
-														</span>
-													)}
 												</>
 											}
 											value={
@@ -444,6 +439,11 @@ function ThisWeek({ data }: { data: WeekData }) {
 														{p.expected} expected
 														{p.leave && ` · ${p.leave} leave`}
 													</span>
+													{p.schedule && (
+														<span className="block text-body-medium text-on-surface-variant">
+															{p.schedule.name}, {p.schedule.weekLabel}. {p.schedule.reason}.
+														</span>
+													)}
 												</>
 											}
 										/>
