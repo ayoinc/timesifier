@@ -17,6 +17,8 @@ export interface PendingCode {
 	email: string;
 	/** How long the code still works, in milliseconds. */
 	remaining: number;
+	/** Whether a new account should get the newsletter (TS-099). */
+	newsletter: boolean;
 }
 
 /** The tab's storage, or nothing where the browser refuses it. */
@@ -28,10 +30,10 @@ function storage(): Storage | null {
 	}
 }
 
-/** Remembers that a code for `email` was asked for just now. */
-export function rememberCode(email: string): void {
+/** Remembers that a code for `email` was asked for just now, and the newsletter choice beside it. */
+export function rememberCode(email: string, newsletter = false): void {
 	try {
-		storage()?.setItem(KEY, JSON.stringify({ email, askedAt: Date.now() }));
+		storage()?.setItem(KEY, JSON.stringify({ email, askedAt: Date.now(), newsletter }));
 	} catch {
 		// A full or forbidden store: the page works as it did without one.
 	}
@@ -56,12 +58,16 @@ export function pendingCode(): PendingCode | null {
 	}
 	if (typeof kept !== "object" || kept === null) return null;
 
-	const { email, askedAt } = kept as { email?: unknown; askedAt?: unknown };
+	const { email, askedAt, newsletter } = kept as {
+		email?: unknown;
+		askedAt?: unknown;
+		newsletter?: unknown;
+	};
 	const remaining = typeof askedAt === "number" ? askedAt + LIFETIME_MS - Date.now() : 0;
 	// A time in the future is not one this page wrote.
 	if (typeof email !== "string" || !email || remaining <= 0 || remaining > LIFETIME_MS) {
 		forgetCode();
 		return null;
 	}
-	return { email, remaining };
+	return { email, remaining, newsletter: newsletter === true };
 }

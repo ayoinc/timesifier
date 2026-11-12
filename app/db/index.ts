@@ -13,6 +13,8 @@ export {
 	organisationCountOf,
 	organisationsWithWebhooks,
 } from "./lookups";
+// The platform console's reads and writes across organisations: metadata only (TS-099).
+export * as platformData from "./platform";
 export {
 	type ActivitySummary,
 	type ActivityValue,

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
+import { Checkbox } from "~/components/Checkbox";
 import { TextField } from "~/components/TextField";
 
 import { POLICY_ADDITION_HEADER, TURNSTILE_ADDITION } from "../../workers/security-headers";
@@ -42,6 +43,8 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 	const [email, setEmail] = useState("");
 	// When the code this tab is waiting for runs out, as a time on its clock.
 	const [until, setUntil] = useState<number | null>(null);
+	// Whether a new account gets the newsletter: no until the person says yes.
+	const [newsletter, setNewsletter] = useState(false);
 
 	// How a change of view moves, and when it does not: ./auth/AuthPage.tsx.
 	const go = (to: Step) => changeStep(() => setStep(to));
@@ -55,6 +58,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 		if (!pending) return;
 		setEmail(pending.email);
 		setUntil(Date.now() + pending.remaining);
+		setNewsletter(pending.newsletter);
 		setStep("code");
 	}, []);
 
@@ -67,7 +71,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 	}, [until]);
 
 	function sent() {
-		rememberCode(email);
+		rememberCode(email, newsletter);
 		setUntil(Date.now() + CODE_LIFETIME_SECONDS * 1000);
 	}
 
@@ -102,6 +106,10 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 							autoComplete="email"
 							isRequired
 						/>
+						{/* Off until ticked, and read only when the code makes a new account (TS-099). */}
+						<Checkbox name="newsletter" isSelected={newsletter} onChange={setNewsletter}>
+							New here? Email me the Timesifier newsletter. You can stop it at any time.
+						</Checkbox>
 					</SendCodeForm>
 				</>
 			)}
@@ -110,6 +118,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 					email={email}
 					siteKey={turnstileSiteKey}
 					onSent={sent}
+					newsletter={newsletter}
 					onSignedIn={() => {
 						forget();
 						leaveFor(next);

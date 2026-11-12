@@ -101,6 +101,9 @@ export const ActivityAction = z.enum([
 	"webhook.deleted",
 	"import.imported",
 	"import.reverted",
+	"support_access.granted",
+	"support_access.revoked",
+	"support_access.used",
 ]);
 export type ActivityAction = z.infer<typeof ActivityAction>;
 
@@ -130,6 +133,7 @@ export const SubjectType = z.enum([
 	"api_token",
 	"webhook",
 	"import",
+	"support_access",
 ]);
 export type SubjectType = z.infer<typeof SubjectType>;
 

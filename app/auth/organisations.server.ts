@@ -37,6 +37,8 @@ import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
 import { LOGOS_NOT_DELETED, RECEIPTS_NOT_DELETED } from "~/organisations/problems";
 import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
+import { SEATS_FULL } from "~/plans/plans";
+import { seatForOneMore } from "~/plans/plans.server";
 import { sendEmail } from "./email.server";
 import { isOurHost } from "./hosts";
 import { valid } from "./input.server";
@@ -364,7 +366,11 @@ export function organisationPlugins() {
 				// is really made uses up one of the day's twenty. The count is kept
 				// apart from the invitations themselves: cancelling one, or deleting
 				// the organisation, gives nothing back.
-				async beforeCreateInvitation({ inviter }) {
+				async beforeCreateInvitation({ inviter, organization }) {
+					// The plan's seats come first (TS-099): a refusal there uses up nothing.
+					if (!(await seatForOneMore(organization.id, new Date()))) {
+						throw new APIError("FORBIDDEN", { code: "SEATS_FULL", message: SEATS_FULL });
+					}
 					if (!(await takeOne(env.DB, `invitations:${inviter.id}`, INVITATIONS_PER_SENDER))) {
 						throw new APIError("TOO_MANY_REQUESTS", {
 							code: "TOO_MANY_INVITATIONS",
