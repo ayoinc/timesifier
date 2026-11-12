@@ -103,7 +103,6 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		tagOptions(scope),
 		lockNoticeOf(organisation.id),
 	]);
-	const tagName = new Map(tags.map((t) => [t.id, t.name]));
 	const personId = url.searchParams.get(PERSON_PARAM) || user.id;
 	const person = choices.find(({ id }) => id === personId);
 	if (!person || !maySeeExpensesOf(access, personId)) throw notFound();
@@ -188,9 +187,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				...(e.reimbursable ? ["Reimburse me"] : []),
 			].join(" · "),
 			notes: e.notes,
-			tags: e.tagIds
-				.map((id) => tagName.get(id))
-				.filter((name) => name !== undefined)
+			// In the order of the organisation's tags (by name), not of their ids.
+			tags: tags
+				.filter((tag) => e.tagIds.includes(tag.id))
+				.map((tag) => tag.name)
 				.join(", "),
 			receipt:
 				e.receiptName === null
