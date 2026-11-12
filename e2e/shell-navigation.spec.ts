@@ -66,6 +66,16 @@ function title(destination: Destination): string {
 	return `${destination.label} · Timesifier`;
 }
 
+/**
+ * The destination's own address. A page may then write what it opened on into
+ * the query (Approvals writes its week and status, TS-094), so the query is
+ * allowed; the path is exact.
+ */
+function atDestination(destination: Destination): RegExp {
+	const path = homePath(destination.id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(`${path}(\\?[^#]*)?$`);
+}
+
 type Box = { x: number; y: number; width: number; height: number };
 
 async function box(element: Locator): Promise<Box> {
@@ -490,7 +500,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				const before = await page.title();
 				await (await linkTo(page, destination)).click();
 
-				await expect(page).toHaveURL(homePath(destination.id));
+				await expect(page).toHaveURL(atDestination(destination));
 				await expect(
 					page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 				).toBeFocused();
@@ -538,7 +548,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				);
 
 				await page.keyboard.press("Enter");
-				await expect(page).toHaveURL(homePath(destination.id));
+				await expect(page).toHaveURL(atDestination(destination));
 				await expect(
 					page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 				).toBeFocused();
