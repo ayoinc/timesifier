@@ -58,6 +58,7 @@ import {
 	savedReportShares,
 	savedReports,
 	scheduleAssignments,
+	supportGrants,
 	tags,
 	tasks,
 	taxes,
@@ -338,6 +339,7 @@ export const tenantTables = {
 	importJobs,
 	calendarFeeds,
 	workRequests,
+	supportGrants,
 } as const;
 
 type Accessors = {
