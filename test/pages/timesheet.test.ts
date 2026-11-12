@@ -191,7 +191,7 @@ describe("the timer (TS-012a)", () => {
 
 		expect(textOf(main)).toContain("No project to track yet");
 		expect(main).not.toContain(">Track time</button>");
-		const timer = /<section id="timer"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
+		const timer = /<section aria-labelledby="timer-heading"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
 		const links = [...timer.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)];
 		expect(links.map(([, href, label]) => [href, textOf(label ?? "")])).toEqual([
 			["/app/acme/projects", "Create a project"],
@@ -200,7 +200,7 @@ describe("the timer (TS-012a)", () => {
 
 	it("with a project shows one button, Track time, and no form of its own", async () => {
 		const main = await mainOf(PAGE);
-		const timer = /<section id="timer"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
+		const timer = /<section aria-labelledby="timer-heading"[\s\S]*?<\/section>/.exec(main)?.[0] ?? "";
 
 		expect(timer.match(/<button\b/g)).toHaveLength(1);
 		expect(timer).toMatch(/>Track time<\/button>/);
@@ -351,14 +351,16 @@ describe("the Day view (TS-013)", () => {
 		await seedEntry(ada, start, start + HOUR);
 
 		expect(await textAt(`${PAGE}?day=2026-11-10`)).toMatch(/Day total 1:00/);
-		expect(await textAt(`${PAGE}?day=2026-11-11`)).toContain("Nothing tracked on this day.");
+		expect(await textAt(`${PAGE}?day=2026-11-11`)).toContain("Nothing yet on Wednesday 11 November.");
 	});
 
-	it("with nothing tracked says so and adds no button to the list", async () => {
+	it("with nothing tracked says so, with its one action, Track time, as a text button (taste HT-F)", async () => {
 		const main = await mainOf(`${PAGE}?day=2026-11-01`);
-		expect(textOf(main)).toContain("Nothing tracked on this day.");
-		expect(main.match(/>Track time<\/button>/g)).toHaveLength(1);
-		expect(main).not.toContain("Add entry");
+		expect(textOf(main)).toContain("Nothing yet on Sunday 1 November. Track time.");
+		// The page's filled Track time, and the empty day's own, a text button.
+		expect(main.match(/>Track time<\/button>/g)).toHaveLength(2);
+		expect(main.match(/class="[^"]*\btext-primary\b[^"]*"[^>]*>(<svg[\s\S]*?<\/svg>)?Track time<\/button>/g)).toHaveLength(1);
+		expect(main).not.toContain("Copy");
 	});
 
 	it("answers a day that is not a date with 400", async () => {
@@ -732,12 +734,15 @@ describe("Track time (TS-056)", () => {
 		expect(main).not.toContain(">Start timer</button>");
 	});
 
-	it("is where Track time in the navigation leads: today's Day view, at Track time", async () => {
+	it("is in the navigation as a button that opens the sheet over the page (taste HT-C, W01)", async () => {
 		clockAt(T0);
 		const html = await pageBody(await open("/app/acme/projects", ada));
 		const nav = /<nav aria-label="Main"[^>]*>([\s\S]*?)<\/nav>/.exec(html)?.[1] ?? "";
-		expect(nav).toMatch(/<a[^>]*href="\/app\/acme#timer"[^>]*>[\s\S]*?Track time/);
-		expect(await mainOf(PAGE)).toMatch(/<section id="timer"[\s\S]*?>Track time<\/button>/);
+		expect(nav).toMatch(/<button[^>]*>[\s\S]*?Track time/);
+		expect(nav).not.toContain("#timer");
+		expect(await mainOf(PAGE)).toMatch(
+			/<section aria-labelledby="timer-heading"[\s\S]*?>Track time<\/button>/,
+		);
 	});
 
 	it("with no hours starts the timer at the server's clock", async () => {
@@ -1005,9 +1010,10 @@ describe("getting started (TS-056)", () => {
 		const links = [...none.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)];
 		expect(links.map(([, href, label]) => [href, textOf(label ?? "")])).toEqual([
 			["/app/acme/projects", "Add a project"],
-			["/app/acme#timer", "Track an entry"],
 			["/app/acme?view=week", "Open the week"],
 		]);
+		// Tracking an entry is done here: its step opens the Track time sheet.
+		expect(none).toMatch(/<button[^>]*>Track an entry<\/button>/);
 
 		// Any active project ticks the first.
 		await env.DB.prepare("update projects set archived_at = null").run();

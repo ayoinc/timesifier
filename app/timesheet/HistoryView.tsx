@@ -34,10 +34,10 @@ export function HistoryView({ data, slug }: { data: HistoryData; slug: string })
 								title={
 									<Link
 										to={weekPath(slug, row.startsOn)}
+										aria-current={isCurrent ? "date" : undefined}
 										className="rounded-extra-small underline-offset-4 outline-none hover:underline focus-visible:focus-indicator"
 									>
 										{label}
-										{isCurrent && <span className="sr-only"> (this week)</span>}
 									</Link>
 								}
 								detail={
