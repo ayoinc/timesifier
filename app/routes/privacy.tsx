@@ -91,11 +91,6 @@ function Controller() {
 	);
 }
 
-/** A heading inside a part of the notice, over the rows it groups. */
-function Group({ children }: { children: ReactNode }) {
-	return <h3 className="mt-4 text-title-large">{children}</h3>;
-}
-
 /** The kinds of event a webhook can be sent, as Integrations names them, in a sentence. */
 const EVENTS = Object.values(EVENT_LABELS)
 	.map((label, index, all) =>
@@ -249,7 +244,7 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 				</p>
 				{STORED.map(({ heading, rows }) => (
 					<div key={heading} className="flex flex-col gap-4">
-						<Group>{heading}</Group>
+						<h3 className="mt-4 text-title-large">{heading}</h3>
 						<Rows>
 							{rows.map(({ term }) => (
 								<Row key={term} term={term}>
