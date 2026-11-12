@@ -493,6 +493,12 @@ export const leaveKinds = sqliteTable(
 		needsApproval: integer("needs_approval", { mode: "boolean" }).notNull().default(true),
 		/** Half days a year, or null for none. */
 		allowanceHalfDays: integer("allowance_half_days"),
+		/**
+		 * Days of notice a request should give (TS-090): from the day it is made
+		 * to its first day. 0 asks for none; sick leave and public holidays are
+		 * never held to it. The migration sets each kind's start.
+		 */
+		noticeDays: integer("notice_days").notNull().default(0),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
