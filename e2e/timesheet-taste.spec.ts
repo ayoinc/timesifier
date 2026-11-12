@@ -61,7 +61,11 @@ function dayFrom(page: Page, days: number): Promise<string> {
 	}, days);
 }
 
-/** The latest weekday before today whose day before is a weekday too: a working day with a working day behind it. */
+/**
+ * The latest weekday before today whose day before is a weekday too: a working
+ * day with a working day behind it. Tests track there, not today, because a
+ * weekend day's time may count as overtime (TS-095).
+ */
 async function pastWorkingPair(page: Page): Promise<{ source: string; target: string }> {
 	for (let back = 1; back < 10; back++) {
 		const weekday = await page.evaluate((step) => {
@@ -98,7 +102,7 @@ test.describe("at 1280px", () => {
 		page,
 	}) => {
 		const { slug } = await trackingOrganisation(page);
-		const yesterday = await dayFrom(page, -1);
+		const { target: day } = await pastWorkingPair(page);
 		await navigation(page).getByRole("link", { name: "Projects", exact: true }).click();
 		const projects = new RegExp(`${organisationPath(slug)}/projects$`);
 		await expect(page).toHaveURL(projects);
@@ -107,7 +111,7 @@ test.describe("at 1280px", () => {
 			page,
 			navigation(page).getByRole("button", { name: "Track time", exact: true }),
 			"2",
-			yesterday,
+			day,
 			"Drawings",
 		);
 		await expect(page).toHaveURL(projects);
@@ -118,16 +122,17 @@ test.describe("at 1280px", () => {
 		expect(Math.abs((box?.x ?? 0) + (box?.width ?? 0) / 2 - MEDIUM.width / 2)).toBeLessThan(2);
 		await page.keyboard.press("Escape");
 
-		await openShell(page, `${organisationPath(slug)}?day=${yesterday}`);
+		await openShell(page, `${organisationPath(slug)}?day=${day}`);
 		await expect(entryRows(page)).toHaveCount(1);
 		await expect(entryRows(page).first()).toContainText("Drawings");
 		await expect(entryRows(page).first()).toContainText("2:00");
 	});
 
 	test("Start again, delete with Undo, and the row that changed is marked", async ({ page }) => {
-		await trackingOrganisation(page);
-		const today = await dayFrom(page, 0);
-		await trackHours(page, pageTrackTime(page), "1", today, "Plans");
+		const { slug } = await trackingOrganisation(page);
+		const { target: day } = await pastWorkingPair(page);
+		await trackHours(page, pageTrackTime(page), "1", day, "Plans");
+		await openShell(page, `${organisationPath(slug)}?day=${day}`);
 		await expect(entryRows(page)).toHaveCount(1);
 		const times = await entryRows(page).first().textContent();
 
@@ -139,7 +144,11 @@ test.describe("at 1280px", () => {
 		).toBeAttached();
 		await main(page).getByRole("button", { name: "Stop timer", exact: true }).click();
 		await expect(dayTimer(page)).toHaveCount(0);
-		await expect(entryRows(page)).toHaveCount(2);
+		// The timer ran today, so the day it started from keeps its one entry.
+		await expect(entryRows(page)).toHaveCount(1);
+		await openShell(page, organisationPath(slug));
+		await expect(entryRows(page)).toHaveCount(1);
+		await openShell(page, `${organisationPath(slug)}?day=${day}`);
 
 		// Deleting asks nothing: the entry goes, and Undo brings the same one back.
 		await main(page)
@@ -149,10 +158,10 @@ test.describe("at 1280px", () => {
 		await page.getByRole("menuitem", { name: "Delete entry" }).click();
 		await expect(page.getByRole("dialog")).toHaveCount(0);
 		await expect(snackbar(page)).toContainText("Entry deleted.");
-		await expect(entryRows(page)).toHaveCount(1);
+		await expect(entryRows(page)).toHaveCount(0);
 		await page.getByRole("button", { name: "Undo" }).click();
 		await expect(snackbar(page)).toContainText("Entry restored.");
-		await expect(entryRows(page)).toHaveCount(2);
+		await expect(entryRows(page)).toHaveCount(1);
 		await expect(entryRows(page).first()).toHaveText(times ?? "");
 	});
 
@@ -196,13 +205,19 @@ test.describe("at 1280px", () => {
 		page,
 	}) => {
 		const { slug } = await trackingOrganisation(page);
-		const today = await dayFrom(page, 0);
-		await trackHours(page, pageTrackTime(page), "1:30", today, "Plans");
+		// Today when it is a weekday; on a weekend, whose time may be overtime
+		// (TS-095), the latest weekday before it, shown first.
+		const weekend = await page.evaluate(() => [0, 6].includes(new Date().getDay()));
+		const day = weekend ? (await pastWorkingPair(page)).target : await dayFrom(page, 0);
+		await trackHours(page, pageTrackTime(page), "1:30", day, "Plans");
+		if (weekend) await openShell(page, `${organisationPath(slug)}?day=${day}`);
 
 		const days = page.getByRole("group", { name: "Days", exact: true });
 		await days.getByRole("button", { name: /: choose a day$/ }).click();
 		const picker = page.getByRole("dialog", { name: "Choose a day" });
-		await expect(picker.getByRole("link", { name: /^Today, .*, 1:30 tracked$/ })).toBeVisible();
+		await expect(
+			picker.getByRole("link", { name: weekend ? /, 1:30 tracked$/ : /^Today, .*, 1:30 tracked$/ }),
+		).toBeVisible();
 		await picker.getByRole("button", { name: "Previous month" }).click();
 		await picker.getByRole("link").first().click();
 		await expect(picker).toBeHidden();
@@ -296,10 +311,11 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				page,
 			}) => {
 				const { slug } = await trackingOrganisation(page);
-				const today = await dayFrom(page, 0);
-				await trackHours(page, pageTrackTime(page), "1", today, "Plans");
+				const { target: day } = await pastWorkingPair(page);
+				await trackHours(page, pageTrackTime(page), "1", day, "Plans");
 				await page.getByRole("button", { name: "Dismiss" }).click();
 				await expect(snackbar(page)).toHaveCount(0);
+				await openShell(page, `${organisationPath(slug)}?day=${day}`);
 				expect(await problems(page, [EMPTY_INPUT]), "an entry with Start again").toEqual([]);
 
 				await main(page).getByRole("button", { name: "Start again: Plans" }).click();
