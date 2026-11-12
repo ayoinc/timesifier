@@ -654,6 +654,7 @@ const ROLE_TABLE: Record<string, Row> = {
 		},
 	},
 	"routes/app/integrations.export": { page: by(200, 200, 404, 404, 404) },
+	"routes/app/integrations.invoices-export": { page: by(200, 200, 404, 404, 404) },
 	"routes/app/settings": {
 		page: by(200, 200, 404, 404, 404),
 		form: {

@@ -91,7 +91,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the Contractors report and its export, the export of the Activity log, an entry's history, the pages of Invoices and Estimates, My account, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, My account, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -126,6 +126,7 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/integrations",
 				"/app/acme/integrations/import",
 				"/app/acme/integrations/export",
+				"/app/acme/integrations/invoices-export",
 				"/app/acme/team",
 				"/app/acme/team/members",
 				"/app/acme/team/invitations",
