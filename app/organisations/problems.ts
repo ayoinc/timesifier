@@ -10,9 +10,13 @@ export interface Refused {
 
 /**
  * What an action answers a form with: what happened, in a sentence the page
- * can say, or why nothing did.
+ * can say, or why nothing did. A Timesheet action may add what the page marks
+ * as changed (`changed`, entry ids) and the token that takes a deletion back
+ * (`undo`).
  */
-export type Outcome = { ok: true; said: string } | { ok: false; problem: string };
+export type Outcome =
+	| { ok: true; said: string; changed?: string[]; undo?: string }
+	| { ok: false; problem: string };
 
 export const TOO_MANY_ATTEMPTS = "Too many attempts. Try again in a minute.";
 export const NOT_ALLOWED = "Your role in this organisation does not allow that.";

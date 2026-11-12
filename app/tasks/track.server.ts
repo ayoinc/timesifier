@@ -1,9 +1,10 @@
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
 import { projectBudgets } from "~/budgets/budget.server";
 import type { OrganisationScope } from "~/db";
 import type { Membership } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
+import { recentProjectIds } from "~/projects/recent.server";
 import { tagOptions, tagsOfEntries } from "~/tags/tags.server";
 import { tasksOfProjects } from "./tasks.server";
 import type { TrackChoices } from "./track";
@@ -11,8 +12,9 @@ import type { TrackChoices } from "./track";
 /**
  * What Track time and an entry's sheet offer beside the project (TS-066,
  * TS-085, TS-069): each project's active tasks, the organisation's tags, the
- * projects over budget whose people are warned, and the task and tags of each
- * entry shown, so its sheet starts at what it has.
+ * projects over budget whose people are warned, the task and tags of each
+ * entry shown, so its sheet starts at what it has, and for the project picker
+ * the person's recent projects and each project's client.
  */
 export async function trackChoices(
 	scope: OrganisationScope,
@@ -20,17 +22,22 @@ export async function trackChoices(
 	shownEntryIds: readonly string[],
 	now: number,
 ): Promise<TrackChoices> {
-	const [byProject, tags, overBudget, entries, entryTags] = await Promise.all([
-		tasksOfProjects(scope),
-		tagOptions(scope),
-		warnedOverBudget(scope, membership, now),
-		shownEntryIds.length === 0
-			? []
-			: scope.timeEntries.select(
-					(e) => sql`${e.id} in (select value from json_each(${JSON.stringify(shownEntryIds)}))`,
-				),
-		tagsOfEntries(scope, shownEntryIds),
-	]);
+	const [byProject, tags, overBudget, entries, entryTags, recent, withClient, clients] =
+		await Promise.all([
+			tasksOfProjects(scope),
+			tagOptions(scope),
+			warnedOverBudget(scope, membership, now),
+			shownEntryIds.length === 0
+				? []
+				: scope.timeEntries.select(
+						(e) => sql`${e.id} in (select value from json_each(${JSON.stringify(shownEntryIds)}))`,
+					),
+			tagsOfEntries(scope, shownEntryIds),
+			recentProjectIds(scope, membership.user.id),
+			scope.projects.select((p) => and(isNull(p.archivedAt), isNotNull(p.clientId))),
+			scope.clients.select(),
+		]);
+	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
 	return {
 		tasks: Object.fromEntries(
 			[...byProject].map(([projectId, list]) => [
@@ -47,6 +54,13 @@ export async function trackChoices(
 		overBudget,
 		entries: Object.fromEntries(
 			entries.map((e) => [e.id, { taskId: e.taskId, tagIds: entryTags.get(e.id) ?? [] }]),
+		),
+		recent,
+		clients: Object.fromEntries(
+			withClient.flatMap((p) => {
+				const client = p.clientId === null ? undefined : clientNames.get(p.clientId);
+				return client === undefined ? [] : [[p.id, client]];
+			}),
 		),
 	};
 }

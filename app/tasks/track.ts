@@ -25,6 +25,10 @@ export interface TrackChoices {
 	overBudget: string[];
 	/** The task and tags of each entry the view shows, by entry id. */
 	entries: Record<string, { taskId: string | null; tagIds: string[] }>;
+	/** The person's recent projects, most recent first, archived ones left out: the head of the project picker. */
+	recent: string[];
+	/** The client's name of each active project that has a client, by project id. */
+	clients: Record<string, string>;
 }
 
 /** The form field that sends an entry's task. */

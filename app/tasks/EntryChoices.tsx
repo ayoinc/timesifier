@@ -1,6 +1,7 @@
 import { use, useState } from "react";
 
 import { Select } from "~/components/Select";
+import { ProjectPicker } from "~/projects/ProjectPicker";
 import { TagPicker } from "~/tags/TagPicker";
 
 import { OVER_BUDGET, TASK_FIELD, TrackChoicesContext } from "./track";
@@ -12,6 +13,8 @@ export interface EntryChoicesProps {
 	defaultProjectId: string | null;
 	/** The entry being changed, whose task and tags the fields start at; absent for a new one. */
 	entryId?: string;
+	/** Puts the focus in the project field when the sheet opens. */
+	autoFocusProject?: boolean;
 }
 
 /**
@@ -22,7 +25,12 @@ export interface EntryChoicesProps {
  * the active ones alone. Choosing a project whose budget is over, where its
  * people are warned, says so (TS-069); the entry still saves.
  */
-export function EntryChoices({ projects, defaultProjectId, entryId }: EntryChoicesProps) {
+export function EntryChoices({
+	projects,
+	defaultProjectId,
+	entryId,
+	autoFocusProject,
+}: EntryChoicesProps) {
 	const choices = use(TrackChoicesContext);
 	const [projectId, setProjectId] = useState<string | null>(defaultProjectId);
 	const own = entryId === undefined ? undefined : choices?.entries[entryId];
@@ -40,12 +48,17 @@ export function EntryChoices({ projects, defaultProjectId, entryId }: EntryChoic
 
 	return (
 		<>
-			<Select
-				label="Project"
+			<ProjectPicker
 				name="projectId"
-				options={projects.map((p) => ({ id: p.id, label: p.name }))}
+				projects={projects.map((p) => ({
+					id: p.id,
+					name: p.name,
+					clientName: choices?.clients[p.id] ?? null,
+				}))}
+				recent={choices?.recent}
 				value={projectId}
 				onChange={setProjectId}
+				autoFocus={autoFocusProject}
 				isRequired
 			/>
 			{over && (

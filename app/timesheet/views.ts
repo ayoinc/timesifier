@@ -1,5 +1,5 @@
-import { organisationPath } from "~/shell/destinations";
-import type { Day } from "~/time/calendar";
+import { organisationPath } from "../shell/destinations";
+import type { Day } from "../time/calendar";
 
 /**
  * The views of Timesheet and their addresses (docs/navigation.md: "Day view:
@@ -36,8 +36,21 @@ export type Zoom = (typeof ZOOMS)[number];
 /** The week calendar's zoom when the address names none. */
 export const DEFAULT_ZOOM: Zoom = "detailed";
 
-/** Where on the Day view "Track time" is: "Start timer" in the navigation leads here, and the sheet opens. */
-export const TIMER_ANCHOR = "timer";
+/**
+ * What the Track time sheet reads for the date chosen in it, from any page
+ * (taste HT-C), and the month the day title's picker shows (HT-D): two
+ * addresses of data under the organisation, `?day=` and `?date=`.
+ */
+export const TRACK_DAY_SEGMENT = "timesheet/day";
+export const PICKER_MONTH_SEGMENT = "timesheet/month";
+
+export function trackDayPath(slug: string, day?: Day): string {
+	return `${organisationPath(slug)}/${TRACK_DAY_SEGMENT}${day ? `?day=${day}` : ""}`;
+}
+
+export function pickerMonthPath(slug: string, date: Day): string {
+	return `${organisationPath(slug)}/${PICKER_MONTH_SEGMENT}?date=${date}`;
+}
 
 /** The address of the Day view, of `day` or of today. */
 export function dayPath(slug: string, day?: Day): string {

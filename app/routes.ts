@@ -25,6 +25,7 @@ import {
 	NEW_ORGANISATION_SEGMENT,
 	ORGANISATION_PARAM,
 } from "./shell/destinations";
+import { PICKER_MONTH_SEGMENT, TRACK_DAY_SEGMENT } from "./timesheet/views";
 
 // This file runs in Node when the routes are built, but is type-checked with the
 // Worker's settings, which have no Node globals.
@@ -58,6 +59,8 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(CONTRACTORS_EXPORT_SEGMENT, "routes/app/contractors.export.ts"),
 	route(ACTIVITY_EXPORT_SEGMENT, "routes/app/activity.export.ts"),
 	route(HISTORY_SEGMENT, "routes/app/history.tsx"),
+	route(TRACK_DAY_SEGMENT, "routes/app/timesheet.day.ts"),
+	route(PICKER_MONTH_SEGMENT, "routes/app/timesheet.month.ts"),
 	route(`${destination("projects").segment}/${DEFAULT_RATES_SEGMENT}`, "routes/app/rates.tsx"),
 	route(`${destination("projects").segment}/:${PROJECT_PARAM}`, "routes/app/project.tsx"),
 	...REPORT_VIEW_ROUTES.map(({ path, file }) => route(path, file)),

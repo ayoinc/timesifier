@@ -51,9 +51,13 @@ export interface Span {
 	tagIds?: readonly string[];
 }
 
-const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, reason });
+export const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, reason });
 /** A change the day's limit does not take, with what to tell the person (TS-090). */
-const limited = (message: string) => ({ ok: false as const, reason: "limit" as const, message });
+export const limited = (message: string) => ({
+	ok: false as const,
+	reason: "limit" as const,
+	message,
+});
 
 /** What the activity log records of an entry. */
 export const ENTRY_FIELDS = [
@@ -66,7 +70,7 @@ export const ENTRY_FIELDS = [
 ] as const;
 
 /** The entry `id` of `userId`, as the activity log names it. */
-const subject = (userId: string, id: string) =>
+export const subject = (userId: string, id: string) =>
 	({ type: "time_entry", id, ownerId: userId }) as const;
 
 /** The caller's entry by id, or null: another person's is none. */
@@ -141,7 +145,19 @@ export async function editEntry(
 	return { ok: true as const };
 }
 
-/** Deletes an entry of `userId` that has ended. */
+/** An entry as it was when it was deleted: what "Undo" puts back (taste HT-A). */
+export interface DeletedEntry {
+	id: string;
+	projectId: string;
+	taskId: string | null;
+	billable: boolean;
+	description: string | null;
+	startedAt: number;
+	endedAt: number;
+	tagIds: string[];
+}
+
+/** Deletes an entry of `userId` that has ended, and answers what it was, so it can be put back. */
 export async function deleteEntry(
 	scope: OrganisationScope,
 	userId: string,
@@ -156,6 +172,7 @@ export async function deleteEntry(
 		return refuse("locked");
 	}
 	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
+	const tagIds = (await tagsOfEntries(scope, [id])).get(id) ?? [];
 	await scope.batch([
 		scope.timeEntries.statements.delete((e) => and(eq(e.id, id), eq(e.userId, userId))),
 		recordStatement(
@@ -167,11 +184,70 @@ export async function deleteEntry(
 			source,
 		),
 	]);
+	const deleted: DeletedEntry = {
+		id,
+		projectId: entry.projectId,
+		taskId: entry.taskId,
+		billable: entry.billable,
+		description: entry.description,
+		startedAt: entry.startedAt.getTime(),
+		endedAt: entry.endedAt.getTime(),
+		tagIds,
+	};
+	return { ok: true as const, deleted };
+}
+
+/**
+ * Puts back an entry of `userId` deleted moments ago, with its id, times,
+ * task and tags (taste HT-A, "Undo"). The day must still take it: a day
+ * locked since, or with no room left under its limit, refuses it as any new
+ * time is refused; so does a project archived since. An entry with that id
+ * already there is not written twice.
+ */
+export async function restoreEntry(
+	scope: OrganisationScope,
+	userId: string,
+	zone: string,
+	entry: DeletedEntry,
+	now: number,
+) {
+	if (await ownEntry(scope, userId, entry.id)) return { ok: true as const };
+	if (!(await findActiveProject(scope, entry.projectId))) return refuse("no-project");
+	const day = dayOf(entry.startedAt, zone);
+	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
+	const over = await refusalOf(scope, userId, zone, now, {
+		day,
+		replaces: null,
+		afterMs: entry.endedAt - entry.startedAt,
+	});
+	if (over) return limited(over);
+	const restored = {
+		id: entry.id,
+		userId,
+		projectId: entry.projectId,
+		taskId: entry.taskId,
+		billable: entry.billable,
+		description: entry.description,
+		startedAt: new Date(entry.startedAt),
+		endedAt: new Date(entry.endedAt),
+	};
+	const kept = entry.tagIds.length > 0 && (await tagsAllowed(scope, [], entry.tagIds));
+	await scope.batch([
+		scope.timeEntries.statements.insert(restored),
+		...entryTagStatements(scope, entry.id, [], kept ? entry.tagIds : []),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.created",
+			subject(userId, entry.id),
+			changes(null, restored, ENTRY_FIELDS),
+		),
+	]);
 	return { ok: true as const };
 }
 
 /** The entries of `userId` that belong to `day` in `zone`: those that start on it. */
-function entriesOfDay(scope: OrganisationScope, userId: string, day: Day, zone: string) {
+export function entriesOfDay(scope: OrganisationScope, userId: string, day: Day, zone: string) {
 	const { from, to } = bounds(day, day, zone);
 	return scope.timeEntries.select((e) =>
 		and(eq(e.userId, userId), gte(e.startedAt, new Date(from)), lt(e.startedAt, new Date(to))),

@@ -43,6 +43,7 @@ import { declined, done } from "~/organisations/outcome.server";
 import { type PeriodDays, periodBounds } from "~/periods/periods";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
 import { activeProjects } from "~/projects/projects.server";
+import { recentProjectIds } from "~/projects/recent.server";
 import { peopleToChoose } from "~/reports/reports.server";
 import { destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
@@ -116,16 +117,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			.map(({ amountMinor, currency }) => money(amountMinor, currency))
 			.join(" + ");
 
-	// What the person needs to record and change their own: the active projects
-	// and categories, and where their week stands.
+	// What the person needs to record and change their own: the active projects,
+	// with the ones they recently tracked time to first, the categories, and where
+	// their week stands.
 	let form: {
 		projects: ProjectChoice[];
+		recent: string[];
 		categories: CategoryChoice[];
 		submission: PeriodSubmission;
 	} | null = null;
 	if (own) {
-		const [projects, categories, submission] = await Promise.all([
+		const [projects, recent, categories, submission] = await Promise.all([
 			activeProjects(scope),
+			recentProjectIds(scope, user.id),
 			listCategories(scope),
 			submissionOf(scope, user.id, period, viewed),
 		]);
@@ -134,17 +138,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		];
 		const clients =
 			clientIds.length === 0 ? [] : await scope.clients.select((c) => inArray(c.id, clientIds));
-		const clientCurrency = new Map(clients.map((c) => [c.id, c.currency]));
+		const clientOf = new Map(clients.map((c) => [c.id, c]));
 		form = {
-			projects: projects.map((p) => ({
-				id: p.id,
-				name: p.name,
-				currency:
-					p.currency ??
-					(p.clientId === null ? null : clientCurrency.get(p.clientId)) ??
-					terms.currency,
-				billable: p.billingType !== "non_billable",
-			})),
+			projects: projects.map((p) => {
+				const client = p.clientId === null ? undefined : clientOf.get(p.clientId);
+				return {
+					id: p.id,
+					name: p.name,
+					clientName: client?.name ?? null,
+					currency: p.currency ?? client?.currency ?? terms.currency,
+					billable: p.billingType !== "non_billable",
+				};
+			}),
+			recent,
 			categories: categories
 				.filter((c) => !c.archived)
 				.map(({ id, name, unitName, prices }) => ({ id, name, unitName, prices })),
@@ -198,7 +204,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					: { name: e.receiptName, to: receiptPath(organisation.slug, e.id) },
 			lock: e.lock === null ? null : LOCK_WORDS[e.lock],
 			// What its sheet offers when its project or category has since been archived.
-			project: { id: e.projectId, name: e.project, currency: e.currency, billable: e.billable },
+			project: {
+				id: e.projectId,
+				name: e.project,
+				clientName: null,
+				currency: e.currency,
+				billable: e.billable,
+			},
 			category: { id: e.categoryId, name: e.category, unitName: e.unitName, prices: [] },
 			values: {
 				spentOn: e.spentOn,
@@ -536,6 +548,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 							categories={form.categories}
 							tags={loaderData.tags}
 							currency={loaderData.currency}
+							recent={form.recent}
 							values={{
 								spentOn: loaderData.firstDay,
 								projectId: form.projects[0]?.id ?? "",
@@ -567,6 +580,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 									categories={withChoice(form.categories, target.category)}
 									tags={loaderData.tags}
 									currency={loaderData.currency}
+									recent={form.recent}
 									values={target.values}
 								/>
 							</>
