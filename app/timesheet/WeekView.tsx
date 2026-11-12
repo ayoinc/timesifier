@@ -236,6 +236,16 @@ function Grid({
 												{marked.label}
 											</span>
 										)}
+										{marked?.hours && (
+											<span
+												className={cx(
+													"block text-label-small font-normal whitespace-nowrap tabular-nums",
+													day === data.today ? undefined : "text-on-surface-variant",
+												)}
+											>
+												{marked.hours}
+											</span>
+										)}
 										<span className="flex justify-end font-normal">
 											<RuleLine rule={ruleOf(day)} onAmber={day === data.today} />
 										</span>
