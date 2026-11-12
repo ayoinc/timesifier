@@ -144,7 +144,7 @@ export default function RecurringInvoice({ loaderData }: Route.ComponentProps) {
 			</PageHeading>
 			<PageLead>
 				{running
-					? `${recurring.frequencyLabel}. The next invoice is made on ${recurring.nextIssueText}${recurring.sendAutomatically ? " and sent" : " as a draft"}.`
+					? `${recurring.frequencyLabel}, the next invoice made on ${recurring.nextIssueText}${recurring.sendAutomatically ? " and sent" : " as a draft"}.`
 					: `Stopped ${recurring.stopped}.`}
 			</PageLead>
 			<BillingTabs slug={slug} current="recurring" />

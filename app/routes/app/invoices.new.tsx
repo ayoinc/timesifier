@@ -267,8 +267,7 @@ export default function NewInvoice({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>New invoice</PageHeading>
 			<PageLead>
-				Choose a client and a range. The billable time and expenses of its projects that are on no
-				invoice yet become the lines of a draft, which you can change before you issue it.
+				A client's billable time and expenses on no invoice yet, as a draft you can change.
 			</PageLead>
 			<BillingTabs slug={slug} current="invoices" />
 

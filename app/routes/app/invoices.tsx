@@ -116,8 +116,7 @@ export default function Invoices({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
-				What you charge your clients, from the time and expenses tracked for them. Your legal name,
-				taxes and payment terms are in{" "}
+				What you charge your clients, with your legal name, taxes and terms in{" "}
 				<Link to={invoiceSettingsPath(slug)} className={TEXT_LINK}>
 					invoice settings
 				</Link>

@@ -102,8 +102,7 @@ export default function CalendarFeeds({ loaderData }: Route.ComponentProps) {
 			<PageHeading>Calendar feeds</PageHeading>
 			<PageLead>
 				Subscribe Google Calendar, Outlook or Apple Calendar to your approved time off
-				{teams.length > 0 ? ", or to the time off of a team you manage" : ""}. The calendar reads it
-				again every hour or so.
+				{teams.length > 0 ? ", or to the time off of a team you manage" : ""}.
 			</PageLead>
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}

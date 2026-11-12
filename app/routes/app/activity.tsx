@@ -82,9 +82,7 @@ export default function Activity({ loaderData }: Route.ComponentProps) {
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
 				Who changed what, and when,{" "}
-				{everyone ? "across the organisation" : "for you and your teams"}. Times are in{" "}
-				{loaderData.zone}. Descriptions and notes are never copied here, only that they changed.
-				Records are kept for two years.
+				{everyone ? "across the organisation" : "for you and your teams"}, in {loaderData.zone}.
 			</PageLead>
 
 			<div className="mt-8 max-w-200">

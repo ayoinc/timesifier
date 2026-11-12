@@ -225,10 +225,7 @@ export default function SavedReports({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>
-				Reports saved from any view. Each opens on today's figures, as whoever opens it may see
-				them.
-			</PageLead>
+			<PageLead>Reports saved from any view, each on today's figures.</PageLead>
 			<ReportTabs slug={loaderData.slug} current="saved" views={loaderData.views} search="" />
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">

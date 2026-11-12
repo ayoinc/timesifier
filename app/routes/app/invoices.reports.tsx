@@ -116,7 +116,6 @@ export default function InvoiceReports({ loaderData }: Route.ComponentProps) {
 			<PageHeading>Invoice reports</PageHeading>
 			<PageLead>
 				What was invoiced and paid in a range, and what clients owe now by how overdue it is.
-				Amounts in different currencies are never added together.
 			</PageLead>
 			<BillingTabs slug={slug} current="reports" />
 

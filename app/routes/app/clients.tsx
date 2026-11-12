@@ -220,12 +220,7 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>
-				The companies your projects are for.{" "}
-				{canManage
-					? "Give a project its client on Projects; everyone sees it there."
-					: "Each client is listed with its projects; owners and admins manage them."}
-			</PageLead>
+			<PageLead>The companies your projects are for.</PageLead>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
