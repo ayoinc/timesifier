@@ -125,9 +125,7 @@ export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>
-				{loaderData.whose}
-			</PageLead>
+			<PageLead>{loaderData.whose}</PageLead>
 			<ReportTabs
 				slug={loaderData.slug}
 				current="expenses"

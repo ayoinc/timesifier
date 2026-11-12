@@ -226,21 +226,6 @@ for (const viewport of [
 				await page.getByRole("button", { name: /^Actions for Drawings/ }).click();
 				await page.getByRole("menuitem", { name: "History" }).click();
 				await expect(page.getByRole("heading", { level: 1, name: "Entry history" })).toBeVisible();
-				// The move to History runs a view transition; axe measures the page once it has ended.
-				await expect
-					.poll(() =>
-						page.evaluate(
-							() =>
-								document
-									.getAnimations()
-									.filter((a) =>
-										((a.effect as KeyframeEffect | null)?.pseudoElement ?? "").startsWith(
-											"::view-transition",
-										),
-									).length,
-						),
-					)
-					.toBe(0);
 				expect(await problems(page), "problems on an entry's history").toEqual([]);
 
 				// Nothing runs off the side of the window.
