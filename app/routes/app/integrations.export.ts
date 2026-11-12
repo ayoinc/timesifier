@@ -13,8 +13,10 @@ import type { Route } from "./+types/integrations.export";
 // Integrations, so only its owners and admins reach it. The columns are
 // Harvest's import columns and an email, so the file can be imported again,
 // here or in Harvest. It is streamed a page at a time and nothing is stored.
+// Overtime (TS-095) is a last column of its own, Yes or No; an import here
+// reads each row's kind from the day's limits again, and Harvest ignores it.
 
-/** The columns, in their order: Harvest's eight, then the person's email. */
+/** The columns, in their order: Harvest's eight, the person's email, then whether it is overtime. */
 export const EXPORT_COLUMNS = [
 	"Date",
 	"Client",
@@ -25,6 +27,7 @@ export const EXPORT_COLUMNS = [
 	"First name",
 	"Last name",
 	"Email",
+	"Overtime",
 ] as const;
 
 const PAGE = 500;
@@ -99,6 +102,7 @@ async function* chunks(
 				first,
 				rest.join(" "),
 				who?.email ?? "",
+				entry.overtime ? "Yes" : "No",
 			]);
 		}
 		yield chunk;

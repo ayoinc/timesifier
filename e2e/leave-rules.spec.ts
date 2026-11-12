@@ -92,7 +92,8 @@ test("the owner sets the timesheet rules with the keyboard alone, then asks for 
 	const { slug } = await ownerWithWeek(page);
 	await openShell(page, destinationPath(slug, "settings"));
 	const rules = page.getByRole("list", { name: "Timesheet rules" });
-	await expect(rules).toContainText("Allowed freely");
+	// Overtime is not allowed until an owner or admin says otherwise (TS-095).
+	await expect(rules).toContainText("Not allowed");
 
 	await tabTo(page, page.getByRole("button", { name: "Change timesheet rules" }));
 	await page.keyboard.press("Enter");
@@ -102,6 +103,7 @@ test("the owner sets the timesheet rules with the keyboard alone, then asks for 
 	const overtime = sheet.getByRole("radiogroup", { name: "Overtime" });
 	await tabTo(page, overtime.getByRole("radio", { checked: true }));
 	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
 	await expect(overtime.getByRole("radio", { name: "Only with pre-approval" })).toBeChecked();
 	await tabTo(page, sheet.getByRole("button", { name: "Save" }));
 	await page.keyboard.press("Enter");
@@ -110,8 +112,8 @@ test("the owner sets the timesheet rules with the keyboard alone, then asks for 
 	await expect(rules).toContainText("Only with pre-approval");
 
 	await openShell(page, destinationPath(slug, "time-off"));
-	// Weekend work is still allowed freely, so only overtime is asked for.
-	await expect(page.getByRole("button", { name: "Request weekend work" })).toHaveCount(0);
+	// Time on a day not worked counts as overtime, so weekend work is asked for too.
+	await expect(page.getByRole("button", { name: "Request weekend work" })).toBeVisible();
 	await page.getByRole("button", { name: "Request overtime" }).click();
 	const asking = page.getByRole("dialog", { name: "Request overtime" });
 	await asking.getByRole("textbox", { name: "First day" }).fill(dayFromToday(7));
@@ -269,7 +271,7 @@ for (const viewport of [
 				await expectNoProblemsInSheet(
 					page,
 					rules,
-					rules.getByText("Allowed freely", { exact: true }).first(),
+					rules.getByText("Not allowed", { exact: true }).first(),
 				);
 				await page.getByRole("button", { name: "Change timesheet rules" }).click();
 				await rules

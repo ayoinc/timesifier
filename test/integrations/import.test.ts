@@ -479,6 +479,7 @@ describe("exporting all time", () => {
 			"First name",
 			"Last name",
 			"Email",
+			"Overtime",
 		]);
 		expect(rows.slice(1).map((r) => r.cells)).toEqual([
 			[
@@ -491,8 +492,20 @@ describe("exporting all time", () => {
 				"Ada",
 				"Lovelace",
 				"ada@example.com",
+				"No",
 			],
-			["2026-10-07", "", "Apollo", "", "'=SUM(A1)", "0.50", "Max", "Member", "max@example.com"],
+			[
+				"2026-10-07",
+				"",
+				"Apollo",
+				"",
+				"'=SUM(A1)",
+				"0.50",
+				"Max",
+				"Member",
+				"max@example.com",
+				"No",
+			],
 		]);
 		expect((await open("/app/acme/integrations/export", max)).status).toBe(404);
 	});
