@@ -21,12 +21,9 @@ import {
 	leaveKindsOf,
 	publicHolidaysOf,
 	removePublicHoliday,
-	setWorkingWeek,
-	workingWeekOf,
 } from "~/leave/leave.server";
 import {
 	LONGEST_NOTICE_DAYS,
-	LONGEST_OVERTIME_CAP_MINUTES,
 	NON_WORKING_RULE_LABELS,
 	NON_WORKING_RULES,
 	NonWorkingRule,
@@ -54,12 +51,13 @@ import { allows } from "~/organisations/roles";
 import { WeekStart } from "~/periods/periods";
 import { MoneySettings } from "~/projects/MoneySettings";
 import { organisationMoney } from "~/projects/money.server";
-import { APP_PATH, destination } from "~/shell/destinations";
+import { CapHours, defaultScheduleSummary } from "~/schedules/forms";
+import { scheduleBookOf } from "~/schedules/schedules.server";
+import { APP_PATH, destination, schedulesPath } from "~/shell/destinations";
 import { PageHeading, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
 import { formatDuration } from "~/time/format";
 import { TimeZone } from "~/time/zones";
-import { TypedHours } from "~/timesheet/durations";
 import { WEEKDAYS, weekdayName, zoneLabel } from "~/workspace/general";
 import { changeGeneral, timeZones } from "~/workspace/general.server";
 
@@ -70,7 +68,7 @@ import { FormSheet } from "./FormSheet";
 // manage for everyone in it (docs/navigation.md, "Workspace settings"). Only
 // they are shown it; anybody else gets 404 here (app/shell/destinations.ts).
 // General holds its name, its default time zone, the day its weeks start on
-// and whether Clients is shown (TS-048). Below it are the working week, the
+// and whether Clients is shown (TS-048). Below it are the default work schedule (TS-097), the
 // kinds of leave with their allowances and notice, and the public holidays,
 // which apply to everyone in the organisation (TS-061), then the timesheet
 // rules: overtime, weekend work and short-notice leave (TS-090), then the
@@ -87,8 +85,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation, role } = context.get(membershipContext);
 	const canChange = allows(role, { organization: ["update"] });
 	const scope = organisationScope(env.DB, organisation.id);
-	const [week, kinds, holidays, rules, categories, terms, locking] = await Promise.all([
-		workingWeekOf(scope),
+	const [book, kinds, holidays, rules, categories, terms, locking] = await Promise.all([
+		scheduleBookOf(scope),
 		leaveKindsOf(scope),
 		publicHolidaysOf(scope),
 		timesheetRulesOf(organisation.id),
@@ -108,8 +106,16 @@ export async function loader({ context }: Route.LoaderArgs) {
 		},
 		// Only those who may choose a zone are sent the list.
 		zones: canChange ? timeZones() : [],
-		/** The working week, the kinds of leave and the public holidays (TS-061). */
-		leave: { week: [...week], kinds, holidays },
+		/** The default work schedule (TS-097), the kinds of leave and the public holidays (TS-061). */
+		leave: {
+			schedule: defaultScheduleSummary(
+				book,
+				dayOf(Date.now(), organisation.timeZone),
+				schedulesPath(organisation.slug),
+			),
+			kinds,
+			holidays,
+		},
 		/** Overtime, weekend work and short-notice leave (TS-090). */
 		rules,
 		/** The expense categories (TS-070). */
@@ -153,30 +159,6 @@ const AllowanceDays = z
 		}
 		return days * 2;
 	});
-/**
- * An overtime cap as typed (TS-095): hours as `2`, `1.5` or `1:30`, at most a
- * week; empty, or none, is no cap. The result is whole minutes, or null.
- */
-const CapHours = z
-	.string()
-	.trim()
-	.max(8)
-	.transform((text, context) => {
-		if (text === "") return null;
-		const clock = /^(\d{1,3}):([0-5]\d)$/.exec(text);
-		const decimal = /^(\d{1,3})(?:[.,](\d{1,2}))?$/.exec(text);
-		let minutes: number | null = null;
-		if (clock) minutes = Number(clock[1]) * 60 + Number(clock[2]);
-		else if (decimal) minutes = Math.round(Number(`${decimal[1]}.${decimal[2] ?? "0"}`) * 60);
-		if (minutes === null || minutes > LONGEST_OVERTIME_CAP_MINUTES) {
-			context.addIssue({
-				code: "custom",
-				message: `Type hours as 2 or 1:30, at most ${LONGEST_OVERTIME_CAP_MINUTES / 60}.`,
-			});
-			return z.NEVER;
-		}
-		return minutes === 0 ? null : minutes;
-	});
 /** Days of notice a kind asks for, whole; empty is none. */
 const NoticeDays = z
 	.string()
@@ -205,16 +187,6 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("budget-hours"), countNonBillable: z.literal("on").optional() }),
 	// What the person typed to confirm. It is compared with the name; it is never used as one.
 	z.object({ intent: z.literal("delete"), confirmation: z.string().max(200) }),
-	z.object({
-		intent: z.literal("working-week"),
-		day1: TypedHours,
-		day2: TypedHours,
-		day3: TypedHours,
-		day4: TypedHours,
-		day5: TypedHours,
-		day6: TypedHours,
-		day7: TypedHours,
-	}),
 	z.object({
 		intent: z.literal("kind"),
 		kindId: z.string().min(1).max(64),
@@ -311,25 +283,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 			);
 		}
 
-		case "working-week":
 		case "kind":
 		case "add-holiday":
 		case "remove-holiday": {
 			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
 			const scope = organisationScope(env.DB, organisation.id);
-			if (input.intent === "working-week") {
-				const week = [
-					input.day1,
-					input.day2,
-					input.day3,
-					input.day4,
-					input.day5,
-					input.day6,
-					input.day7,
-				];
-				await setWorkingWeek(scope, week);
-				return done("The working week is saved.");
-			}
 			if (input.intent === "kind") {
 				const changed = await changeKind(scope, input.kindId, {
 					name: input.name,

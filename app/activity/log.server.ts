@@ -203,6 +203,7 @@ const STEPS: Record<string, string> = {
 	revoked: "Revoked",
 	imported: "Imported",
 	reverted: "Reverted",
+	assigned: "Assigned",
 };
 
 /** What each kind of thing an action names is called in a sentence. */
@@ -231,6 +232,7 @@ const NOUNS: Record<string, string> = {
 	webhook: "a webhook",
 	import: "an import",
 	timesheet_rules: "the timesheet rules",
+	work_schedule: "work schedule",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */
@@ -279,6 +281,11 @@ const FIELD_LABELS: Record<string, string> = {
 	overtimeDayCap: "Overtime cap a day",
 	overtimeWeekCap: "Overtime cap a week",
 	shortNotice: "Short notice",
+	days: "Days",
+	weekMinutes: "Hours a week",
+	scheduleId: "Schedule",
+	teamId: "Team",
+	organisation: "Organisation",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */
@@ -312,27 +319,28 @@ async function namesOf(scope: OrganisationScope, records: readonly RecordRow[]):
 		}
 	}
 	const list = [...ids];
-	const [accounts, projects, clients, teams, kinds, categories, tags] = await Promise.all([
-		people.size === 0
-			? []
-			: drizzle(env.DB)
-					.select({ id: users.id, name: users.name, email: users.email })
-					.from(users)
-					.where(inArray(users.id, [...people])),
-		list.length === 0 ? [] : scope.projects.select((p) => inArray(p.id, list)),
-		list.length === 0 ? [] : scope.clients.select((c) => inArray(c.id, list)),
-		list.length === 0 ? [] : scope.teams.select((t) => inArray(t.id, list)),
-		list.length === 0 ? [] : scope.leaveKinds.select((k) => inArray(k.id, list)),
-		list.length === 0 ? [] : scope.expenseCategories.select((c) => inArray(c.id, list)),
-		list.length === 0 ? [] : scope.tags.select((t) => inArray(t.id, list)),
-	]);
+	const [accounts, projects, clients, teams, kinds, categories, tags, schedules] =
+		await Promise.all([
+			people.size === 0
+				? []
+				: drizzle(env.DB)
+						.select({ id: users.id, name: users.name, email: users.email })
+						.from(users)
+						.where(inArray(users.id, [...people])),
+			list.length === 0 ? [] : scope.projects.select((p) => inArray(p.id, list)),
+			list.length === 0 ? [] : scope.clients.select((c) => inArray(c.id, list)),
+			list.length === 0 ? [] : scope.teams.select((t) => inArray(t.id, list)),
+			list.length === 0 ? [] : scope.leaveKinds.select((k) => inArray(k.id, list)),
+			list.length === 0 ? [] : scope.expenseCategories.select((c) => inArray(c.id, list)),
+			list.length === 0 ? [] : scope.tags.select((t) => inArray(t.id, list)),
+			list.length === 0 ? [] : scope.workSchedules.select((s) => inArray(s.id, list)),
+		]);
 	return {
 		people: new Map(accounts.map((a) => [a.id, nameOrEmail(a)])),
 		things: new Map(
-			[...projects, ...clients, ...teams, ...kinds, ...categories, ...tags].map((thing) => [
-				thing.id,
-				thing.name,
-			]),
+			[...projects, ...clients, ...teams, ...kinds, ...categories, ...tags, ...schedules].map(
+				(thing) => [thing.id, thing.name],
+			),
 		),
 	};
 }
@@ -358,7 +366,8 @@ function valueText(key: string, value: ActivityValue | undefined, names: Names, 
 			.join(", ");
 	}
 	if (typeof value === "string" && RULE_VALUES[key]?.[value]) return RULE_VALUES[key][value];
-	if (key.endsWith("Cap") && typeof value === "number") return formatDuration(value * 60);
+	if ((key.endsWith("Cap") || key === "weekMinutes") && typeof value === "number")
+		return formatDuration(value * 60);
 	if (key.endsWith("Id") && typeof value === "string") {
 		return names.things.get(value) ?? names.people.get(value) ?? "a deleted one";
 	}

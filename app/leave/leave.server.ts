@@ -16,6 +16,7 @@ import {
 import { accessOf } from "~/organisations/access.server";
 import { type Membership, viewerOf } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
+import { type Timetables, timetableFor, timetablesOf } from "~/schedules/schedules.server";
 import { canSee } from "~/shell/destinations";
 import { type Person, peopleOf } from "~/teams/people.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
@@ -25,7 +26,6 @@ import {
 	type Balance,
 	balance,
 	type DayStatus,
-	DEFAULT_WORKING_WEEK,
 	dayStatuses,
 	expectedMinutes,
 	halfDaysByYear,
@@ -37,7 +37,6 @@ import {
 	overlaps,
 	type PersonStatus,
 	personStatus,
-	type WorkingWeek,
 } from "./days";
 import {
 	HOLIDAY_KIND,
@@ -78,15 +77,6 @@ export async function leaveKindsOf(scope: OrganisationScope): Promise<LeaveKind[
 			allowanceHalfDays: row.allowanceHalfDays,
 			noticeDays: row.noticeDays,
 		})),
-	);
-}
-
-/** The organisation's working week, Monday first, in minutes a day. */
-export async function workingWeekOf(scope: OrganisationScope): Promise<WorkingWeek> {
-	const rows = await scope.workingDays.select();
-	if (rows.length === 0) return DEFAULT_WORKING_WEEK;
-	return [1, 2, 3, 4, 5, 6, 7].map(
-		(weekday) => rows.find((row) => row.weekday === weekday)?.minutes ?? 0,
 	);
 }
 
@@ -155,7 +145,8 @@ function requestOf(row: RequestRow, kinds: readonly LeaveKind[]): LeaveRequest {
 /** What the rules of `days.ts` take for many people over a run of days, read in three queries and one more for leave. */
 export interface LeaveContext {
 	kinds: LeaveKind[];
-	week: WorkingWeek;
+	/** Each person's work schedule, day by day (TS-097). */
+	timetables: Timetables;
 	/** Public holidays in the run, by day; empty while public holidays are switched off. */
 	holidays: Map<Day, string>;
 	/** Approved requests of the people that touch the run. */
@@ -170,9 +161,9 @@ export async function leaveContext(
 	last: Day,
 ): Promise<LeaveContext> {
 	const ids = [...new Set(userIds)];
-	const [kinds, week, holidays, rows] = await Promise.all([
+	const [kinds, timetables, holidays, rows] = await Promise.all([
 		leaveKindsOf(scope),
-		workingWeekOf(scope),
+		timetablesOf(scope, ids),
 		publicHolidaysOf(scope, { first, last }),
 		ids.length === 0
 			? Promise.resolve([])
@@ -188,7 +179,7 @@ export async function leaveContext(
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
 	return {
 		kinds,
-		week,
+		timetables,
 		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
 		approved: rows.map((row) => requestOf(row, kinds)),
 	};
@@ -197,7 +188,7 @@ export async function leaveContext(
 /** The calendar of one person out of a `LeaveContext`. */
 export function calendarOf(context: LeaveContext, userId: string): LeaveCalendar {
 	return {
-		week: context.week,
+		timetable: context.timetables(userId),
 		holidays: context.holidays,
 		leave: context.approved.filter((r) => r.userId === userId),
 	};
@@ -228,9 +219,9 @@ export async function myLeave(
 ): Promise<{ kinds: LeaveKind[]; requests: LeaveRequest[]; balances: KindBalance[] }> {
 	const first = `${year}-01-01`;
 	const last = `${year}-12-31`;
-	const [kinds, week, holidays, rows] = await Promise.all([
+	const [kinds, timetable, holidays, rows] = await Promise.all([
 		leaveKindsOf(scope),
-		workingWeekOf(scope),
+		timetableFor(scope, userId),
 		publicHolidaysOf(scope),
 		scope.leaveRequests.select((r) => eq(r.userId, userId), {
 			orderBy: (r) => [desc(r.startsOn), desc(r.createdAt)],
@@ -238,7 +229,7 @@ export async function myLeave(
 	]);
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
 	const calendar = {
-		week,
+		timetable,
 		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
 	};
 	const requests = rows.map((row) => requestOf(row, kinds));
@@ -258,14 +249,14 @@ export async function myLeave(
 }
 
 /**
- * The half days of working days a span takes in the organisation, by year. The
- * calendar holds the public holidays of each whole year the span touches, as
+ * The half days of a person's working days a span takes, by year: their
+ * schedule's days on each day (TS-097). The calendar holds the public holidays of each whole year the span touches, as
  * the balance of those years counts the person's other requests against them.
  */
-async function takenByYear(scope: OrganisationScope, span: LeaveSpan) {
-	const [kinds, week, holidays] = await Promise.all([
+async function takenByYear(scope: OrganisationScope, userId: string, span: LeaveSpan) {
+	const [kinds, timetable, holidays] = await Promise.all([
 		leaveKindsOf(scope),
-		workingWeekOf(scope),
+		timetableFor(scope, userId),
 		publicHolidaysOf(scope, {
 			first: `${span.startsOn.slice(0, 4)}-01-01`,
 			last: `${span.endsOn.slice(0, 4)}-12-31`,
@@ -273,7 +264,7 @@ async function takenByYear(scope: OrganisationScope, span: LeaveSpan) {
 	]);
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
 	const calendar = {
-		week,
+		timetable,
 		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
 	};
 	return {
@@ -357,7 +348,7 @@ export async function requestLeave(
 			},
 		};
 	}
-	const { kinds, calendar, byYear, taken } = await takenByYear(scope, span);
+	const { kinds, calendar, byYear, taken } = await takenByYear(scope, userId, span);
 	const kind = kinds.find((k) => k.id === request.kindId);
 	if (!kind?.enabled || kind.key === HOLIDAY_KIND) {
 		return { ok: false, problem: { field: "kindId", message: "Choose a kind of leave." } };
@@ -646,9 +637,9 @@ export async function requestsToDecide(
 	const ids = people.map((p) => p.id);
 	if (ids.length === 0) return { pending: [], upcoming: [] };
 	const earliestToday = people.map(todayOf).sort()[0] ?? "0000-01-01";
-	const [kinds, week, rows] = await Promise.all([
+	const [kinds, timetables, rows] = await Promise.all([
 		leaveKindsOf(scope),
-		workingWeekOf(scope),
+		timetablesOf(scope, ids),
 		scope.leaveRequests.select(
 			(r) =>
 				and(
@@ -666,10 +657,7 @@ export async function requestsToDecide(
 		.at(-1);
 	const holidays = first && last ? await publicHolidaysOf(scope, { first, last }) : [];
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
-	const calendar = {
-		week,
-		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
-	};
+	const holidaysByDay = new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []);
 	const byId = new Map(people.map((p) => [p.id, p]));
 	const deciders = await namesOf(rows.flatMap((r) => (r.decidedBy ? [r.decidedBy] : [])));
 	const pending: RequestToDecide[] = [];
@@ -681,7 +669,10 @@ export async function requestsToDecide(
 		const listed: RequestToDecide = {
 			...request,
 			person,
-			halfDays: halfDaysTaken(request, calendar),
+			halfDays: halfDaysTaken(request, {
+				timetable: timetables(person.id),
+				holidays: holidaysByDay,
+			}),
 			decidedByName: (row.decidedBy && deciders.get(row.decidedBy)) || null,
 			cancellable: false,
 		};
@@ -737,15 +728,6 @@ export async function countPending(
 
 /** One for each row: what `sum` adds up to count them. */
 const sqlOne = sql<number>`1`;
-
-/** Sets the minutes expected on each day of the week, Monday first. */
-export async function setWorkingWeek(scope: OrganisationScope, week: WorkingWeek): Promise<void> {
-	const [monday, ...rest] = week.map((minutes, index) =>
-		scope.workingDays.statements.update({ minutes }, (d) => eq(d.weekday, index + 1)),
-	);
-	if (!monday) return;
-	await scope.batch([monday, ...rest]);
-}
 
 /** What owners and admins change of a kind. Public holidays have no allowance and need no decision. */
 export interface KindChange {

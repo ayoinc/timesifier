@@ -57,6 +57,7 @@ import {
 	retainers,
 	savedReportShares,
 	savedReports,
+	scheduleAssignments,
 	tags,
 	tasks,
 	taxes,
@@ -67,6 +68,9 @@ import {
 	webhooks,
 	workingDays,
 	workRequests,
+	workScheduleDays,
+	workSchedules,
+	workScheduleVersions,
 } from "./schema";
 
 /** A table whose rows belong to one organisation. A table without the column is rejected by the compiler. */
@@ -297,6 +301,10 @@ export const tenantTables = {
 	leaveRequests,
 	publicHolidays,
 	workingDays,
+	workSchedules,
+	workScheduleVersions,
+	workScheduleDays,
+	scheduleAssignments,
 	tasks,
 	projectTasks,
 	tags,
