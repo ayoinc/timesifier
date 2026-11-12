@@ -157,9 +157,15 @@ describe("the words", () => {
 			"We will email you a code. If you are new here, the same code sets you up.",
 		);
 		expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Continue<\/button>/);
-		// One field: no name is asked on the way in.
-		expect(html.match(/<input\b/g)).toHaveLength(1);
-		expect(html).toMatch(/<input[^>]*type="email"/);
+		// One field: no name is asked on the way in. Beside it, the newsletter's
+		// box, unticked until the person ticks it (TS-099).
+		const inputs = html.match(/<input\b[^>]*>/g) ?? [];
+		expect(inputs).toHaveLength(2);
+		expect(inputs.filter((input) => /type="email"/.test(input))).toHaveLength(1);
+		const box = inputs.find((input) => /type="checkbox"/.test(input));
+		expect(box).toMatch(/name="newsletter"/);
+		expect(box).not.toMatch(/\bchecked\b/);
+		expect(text).toContain("New here? Email me the Timesifier newsletter.");
 		// Where script does not run, the page says so.
 		expect(html).toMatch(/<noscript>.*Signing in needs JavaScript\..*<\/noscript>/s);
 	});

@@ -54,9 +54,9 @@ export const DELETED_NAME = "Deleted person";
 
 export interface PlatformHealth {
 	accounts: number;
-	signUps7: number;
-	signUps30: number;
-	/** Sign-ups in each of the last eight weeks, oldest first, by the week's first day. */
+	newAccounts7: number;
+	newAccounts30: number;
+	/** New accounts in each of the last eight weeks, oldest first, by the week's first day. */
 	weekly: { from: Date; count: number }[];
 	/** People with a session used in the last 7 and 30 days. */
 	active7: number;
@@ -116,8 +116,8 @@ export async function platformHealth(database: D1Database, now: Date): Promise<P
 	const byWeek = new Map(weeks.map(({ week, n }) => [Number(week), n]));
 	return {
 		accounts: accounts?.n ?? 0,
-		signUps7: week?.n ?? 0,
-		signUps30: month?.n ?? 0,
+		newAccounts7: week?.n ?? 0,
+		newAccounts30: month?.n ?? 0,
 		weekly: Array.from({ length: 8 }, (_, index) => {
 			const ago = 7 - index;
 			return { from: at(ago * 7 + 7), count: byWeek.get(ago) ?? 0 };

@@ -6,11 +6,13 @@ import { freshDatabase } from "../db/database";
 import {
 	answer,
 	ORGANISATION_NOT_FOUND,
+	ROOM_FOR_EVERYONE,
 	type Role,
 	roleOf,
 	seedInvitation,
 	seedMember,
 	seedOrganisation,
+	setSeats,
 	signInAs,
 	value,
 } from "./harness";
@@ -94,6 +96,8 @@ afterEach(() => {
 /** Acme, its three people who never sign in, and the actor, who signs in holding `as`. */
 async function stageFor(as: Role | null): Promise<Stage> {
 	const organisation = await seedOrganisation("Acme", "acme");
+	// The table is about roles; the plan's seats have tests of their own (TS-099).
+	await setSeats(organisation.id, ROOM_FOR_EVERYONE);
 	const owner = await seedMember(organisation.id, "owner", "olu@example.com");
 	const admin = await seedMember(organisation.id, "admin", "amara@example.com");
 	const member = await seedMember(organisation.id, "member", "mo@example.com");
