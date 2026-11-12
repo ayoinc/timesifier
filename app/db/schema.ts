@@ -88,6 +88,12 @@ export const organisations = sqliteTable("organisations", {
 	deadlineTime: text("deadline_time"),
 	/** How many days after each deadline the lock date moves up to it (B22). Null when auto-lock is off. */
 	autoLockDays: integer("auto_lock_days"),
+	/** Why the lock date was last set or moved back by hand: an owner's or admin's words, at most 200 characters (TS-065). Null when it has none, or when auto-lock set it. */
+	lockReason: text("lock_reason"),
+	/** Whether, when the lock date moves forward, every unsubmitted period up to it is submitted by the system (B22, TS-065). */
+	autoSubmitAtLock: integer("auto_submit_at_lock", { mode: "boolean" }).notNull().default(false),
+	/** The deadline auto-lock last moved the lock date up to, so each deadline locks once and a date moved back stays back (TS-065). */
+	autoLockedThrough: text("auto_locked_through"),
 	/** Whether non-billable time counts against hour budgets (B7). */
 	budgetCountsNonBillable: integer("budget_counts_non_billable", { mode: "boolean" })
 		.notNull()
@@ -388,7 +394,8 @@ export const periods = sqliteTable(
 /**
  * Each step in a period's life, with who took it and when: submitted,
  * withdrawn, approved, returned, or reopened by an owner or admin (TS-046,
- * TS-047). Rows are only ever added.
+ * TS-047). Rows are only ever added. `actorId` is null for a period the
+ * system submitted when the lock date moved up past it (TS-065).
  */
 export const periodEvents = sqliteTable(
 	"period_events",
@@ -400,9 +407,7 @@ export const periodEvents = sqliteTable(
 		periodId: text("period_id").notNull(),
 		/** `submitted`, `withdrawn`, `approved`, `returned` or `reopened`. */
 		action: text("action").notNull(),
-		actorId: text("actor_id")
-			.notNull()
-			.references(() => users.id),
+		actorId: text("actor_id").references(() => users.id),
 		/** The comment given with a return or a reopening, at most 500 characters. */
 		comment: text("comment"),
 		createdAt: createdAt(),
