@@ -80,7 +80,7 @@ components:
         started_at: { type: string, format: date-time }
         hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
         description: { type: [string, "null"], maxLength: 2000 }
-        overtime: { type: boolean, description: Overtime rather than regular time; held to the organisation's rules. }
+        overtime: { type: boolean, description: Overtime, as the rules allow. }
     TimeEntryChange:
       type: object
       additionalProperties: false
@@ -91,7 +91,7 @@ components:
         ended_at: { type: string, format: date-time }
         hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
         description: { type: [string, "null"], maxLength: 2000 }
-        overtime: { type: boolean, description: Overtime rather than regular time; held to the organisation's rules. }
+        overtime: { type: boolean, description: Overtime, as the rules allow. }
     Page:
       type: object
       properties:
