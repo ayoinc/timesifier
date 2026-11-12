@@ -106,7 +106,7 @@ export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>Expense report</PageHeading>
 			<PageLead>
-				{loaderData.whose} Amounts in different currencies are totalled apart; nothing is converted.{" "}
+				{loaderData.whose}{" "}
 				<Link to={loaderData.timePath} className={TEXT_LINK}>
 					Report on time
 				</Link>

@@ -28,7 +28,16 @@ export function meta({ loaderData }: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
 	const organisations = await listOrganisations(request);
 	if (!organisations.ok) throw unavailable(organisations);
-	return { first: organisations.data.length === 0 };
+	const [only, ...others] = organisations.data;
+	return {
+		first: organisations.data.length === 0,
+		// The way back, named for where it goes (audit W31): the one organisation
+		// a person has, or the list of theirs when they have several.
+		back:
+			only && others.length === 0
+				? { to: organisationPath(only.slug), label: `Back to ${only.name}` }
+				: { to: APP_PATH, label: "Back to your organisations" },
+	};
 }
 
 const form = z.object({ name: Name });
@@ -50,15 +59,14 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function NewOrganisation({ loaderData, actionData }: Route.ComponentProps) {
-	const { first } = loaderData;
+	const { first, back } = loaderData;
 	const busy = useNavigation().state !== "idle";
 
 	return (
 		<>
 			<PageHeading>{titleFor(first)}</PageHeading>
 			<PageLead>
-				An organisation holds the projects and tracked time of the people who work together. You
-				will be its owner, and you can invite the others once it exists.
+				It holds the projects and time of the people who work together, with you as owner.
 			</PageLead>
 
 			<Form
@@ -84,8 +92,8 @@ export default function NewOrganisation({ loaderData, actionData }: Route.Compon
 				<div className="flex flex-wrap items-center gap-4">
 					<Button type="submit">Create organisation</Button>
 					{!first && (
-						<Link to={APP_PATH} className={TEXT_LINK}>
-							Back to your organisations
+						<Link to={back.to} className={`${TEXT_LINK} wrap-anywhere`}>
+							{back.label}
 						</Link>
 					)}
 				</div>

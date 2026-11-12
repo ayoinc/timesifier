@@ -22,6 +22,12 @@ export interface ProfileMenuProps {
 	email: string;
 	/** The address of My account in the organisation on screen; none outside an organisation. */
 	accountHref?: string | undefined;
+	/** The name of the organisation on screen, shown under the person's; none outside one. */
+	organisation?: string | undefined;
+	/** Reports with the person's own time this week ("My time report"); none outside an organisation. */
+	timeReportHref?: string | undefined;
+	/** The list of the person's organisations, offered when they belong to more than one (audit W31). */
+	organisationsHref?: string | undefined;
 	/**
 	 * What the way out is called. On the page a new account lands on it is "Use
 	 * a different email": one page signs in new and returning people alike, so a
@@ -38,7 +44,15 @@ const AVATAR =
 	"before:absolute before:-inset-1 " +
 	"data-hovered:state-hover data-focus-visible:state-focus data-focus-visible:focus-indicator data-pressed:state-pressed";
 
-export function ProfileMenu({ name, email, accountHref, wayOut = "Sign out" }: ProfileMenuProps) {
+export function ProfileMenu({
+	name,
+	email,
+	accountHref,
+	organisation,
+	timeReportHref,
+	organisationsHref,
+	wayOut = "Sign out",
+}: ProfileMenuProps) {
 	const navigate = useNavigate();
 	const [notice, setNotice] = useState<Notice | null>(null);
 	// Where Account settings leads, held until the menu has gone (`WhenGone`).
@@ -84,6 +98,11 @@ export function ProfileMenu({ name, email, accountHref, wayOut = "Sign out" }: P
 						<div className="flex flex-col gap-1">
 							{name && <p className="wrap-anywhere text-title-small">{name}</p>}
 							<p className="wrap-anywhere text-body-medium text-on-surface-variant">{email}</p>
+							{organisation && (
+								<p className="wrap-anywhere text-body-medium text-on-surface-variant">
+									{organisation}
+								</p>
+							)}
 							<NoticeLine notice={notice} />
 							<WhenGone
 								run={() => {
@@ -104,6 +123,16 @@ export function ProfileMenu({ name, email, accountHref, wayOut = "Sign out" }: P
 					{accountHref ? (
 						<MenuItem id="account" href={accountHref}>
 							Account settings
+						</MenuItem>
+					) : null}
+					{timeReportHref ? (
+						<MenuItem id="time-report" href={timeReportHref}>
+							My time report
+						</MenuItem>
+					) : null}
+					{organisationsHref ? (
+						<MenuItem id="organisations" href={organisationsHref}>
+							Your organisations
 						</MenuItem>
 					) : null}
 					<MenuItem id="sign-out" keepsOpen>

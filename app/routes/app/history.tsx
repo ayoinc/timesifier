@@ -66,10 +66,7 @@ export default function History({ loaderData }: Route.ComponentProps) {
 		return (
 			<>
 				<PageHeading>Entry history</PageHeading>
-				<PageLead>
-					Every change to one of your entries, oldest first. Open an entry's Actions on the Day view
-					and choose History.
-				</PageLead>
+				<PageLead>Every change to one of your entries, oldest first.</PageLead>
 				<p className="mt-6">
 					<Link to={loaderData.timesheet} className={ACTION_LINK}>
 						Go to your timesheet
@@ -86,8 +83,7 @@ export default function History({ loaderData }: Route.ComponentProps) {
 				{[project ? `An entry of ${project}` : "An entry", owner ? `by ${owner}` : null]
 					.filter(Boolean)
 					.join(" ")}
-				{deleted ? ", since deleted." : "."} Every change to it, oldest first. Descriptions are
-				never copied here, only that they changed.
+				{deleted ? ", since deleted" : ""}: every change to it, oldest first.
 			</PageLead>
 			<div className="mt-8 max-w-200">
 				<Ledger heading="Changes" note={rows.length}>

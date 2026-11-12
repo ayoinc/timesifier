@@ -34,11 +34,21 @@ export async function problems(
 ): Promise<string[]> {
 	// A colour measured part-way through a fade is not the colour shown. An
 	// animation on the scroll's timeline (the band settling) is no fade: it holds
-	// still while the page does, and never finishes.
+	// still while the page does, and never finishes. A view transition counts
+	// from when it starts, and a stylesheet a route brings from when it is asked
+	// for: until it has loaded, the page is measured without it (the links of
+	// the navigation as bare text, 18px tall).
 	await expect
 		.poll(() =>
 			page.evaluate(
-				() => document.getAnimations().filter((each) => each.timeline === document.timeline).length,
+				() =>
+					document.getAnimations().filter((each) => each.timeline === document.timeline).length +
+					((document as Document & { activeViewTransition?: unknown }).activeViewTransition
+						? 1
+						: 0) +
+					[...document.querySelectorAll<HTMLLinkElement>("link[rel=stylesheet]")].filter(
+						(each) => !each.sheet,
+					).length,
 			),
 		)
 		.toBe(0);

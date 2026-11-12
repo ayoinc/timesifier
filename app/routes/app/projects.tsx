@@ -192,10 +192,11 @@ type Task = "create" | "rename" | "archive" | "restore";
 
 /** The sentence that says whose hours a project's figure adds up. */
 const HOURS_SAID: Record<HoursOf, string> = {
-	everyone: "Each shows the hours tracked on it to date, a running timer included.",
+	everyone:
+		"The projects everyone tracks time against, each with the hours tracked on it to date, a running timer included.",
 	teams:
-		"Each shows the hours you and the people in your teams have tracked on it to date, a running timer included.",
-	own: "Each shows the hours you have tracked on it to date, a running timer included.",
+		"The projects everyone tracks time against, each with the hours you and your teams have tracked on it to date, a running timer included.",
+	own: "The projects everyone tracks time against, each with the hours you have tracked on it to date, a running timer included.",
 };
 
 export default function Projects({ loaderData }: Route.ComponentProps) {
@@ -294,10 +295,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>
-				What everyone in {organisation.name} tracks time against. Anyone here can add one, rename
-				it, or archive it when the work is done. {HOURS_SAID[hoursOf]}
-			</PageLead>
+			<PageLead>{HOURS_SAID[hoursOf]}</PageLead>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}

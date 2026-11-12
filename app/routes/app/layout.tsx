@@ -11,8 +11,10 @@ import { cx } from "~/components/cx";
 import { PAGE, SiteHeader } from "~/landing/Site";
 import { requireSession, signedInContext } from "~/routes/auth/session.server";
 import {
+	APP_PATH,
 	accountPath,
 	destinationIndex,
+	destinationPath,
 	NEW_ORGANISATION_PATH,
 	ORGANISATION_PARAM,
 } from "~/shell/destinations";
@@ -112,14 +114,27 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 			<SiteHeader
 				current={pathname}
 				end={
-					<div className="flex min-w-0 items-center gap-6">
+					<div className="flex min-w-0 items-center gap-3 medium:gap-6">
 						{organisationData && (
-							<p className="min-w-0 truncate text-title-medium">{organisationData.name}</p>
+							// Two lines before it is cut, and a size smaller under 600px, so a
+							// long name still reads in full in the band (audit W17).
+							<p className="line-clamp-2 min-w-0 wrap-anywhere text-title-small medium:text-title-medium">
+								{organisationData.name}
+							</p>
 						)}
 						<ProfileMenu
 							name={loaderData.name}
 							email={loaderData.email}
 							accountHref={organisationData && accountPath(organisationData.slug)}
+							organisation={organisationData?.name}
+							timeReportHref={
+								organisationData?.destinations.includes("reports")
+									? `${destinationPath(organisationData.slug, "reports")}?range=this-week&group=project&person=${organisationData.userId}`
+									: undefined
+							}
+							organisationsHref={
+								organisationData && organisationData.organisationCount > 1 ? APP_PATH : undefined
+							}
 							// The page that creates an organisation is where a new account lands, and
 							// signing in with the wrong one of two addresses makes one: its way out says so.
 							wayOut={pathname === NEW_ORGANISATION_PATH ? "Use a different email" : "Sign out"}

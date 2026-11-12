@@ -95,10 +95,7 @@ export default function Estimates({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>
-				Quotes for your clients. Send one and the client accepts or declines it on its link; an
-				accepted estimate becomes an invoice.
-			</PageLead>
+			<PageLead>Quotes for your clients, accepted or declined on their link.</PageLead>
 
 			<div className="mt-8 max-w-200">
 				<Ledger heading="Estimates" note={estimates.length}>

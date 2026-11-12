@@ -97,7 +97,7 @@ describe("what the page shows", () => {
 
 		const invitations = await pageBody(await open(INVITATIONS, ada));
 		expect(textOf(invitations)).toContain(
-			"A person joins Acme by an invitation sent to their email address. Its link works once and expires after 7 days.",
+			"A person joins Acme by a link sent to their email address, good once for 7 days.",
 		);
 		expect(invitations).toMatch(/<button[^>]*>Invite a person<\/button>/);
 		// Nothing is waiting, so the list says so.

@@ -240,10 +240,9 @@ for (const viewport of [
 			await expect(page.getByRole("status")).toHaveText("Timesheet approved.");
 			await expectApprovalsLink("");
 
-			// The status and the grouping are chosen with the keyboard, and kept in the address.
+			// The status and the grouping are chosen with the keyboard, each applied as it is
+			// chosen (W28), and kept in the address.
 			await choose(page, "Status", "Approved (1)");
-			await focusOn(page, "button", "Show");
-			await page.keyboard.press("Enter");
 			await expect(page).toHaveURL(
 				`${destinationPath(slug, "approvals")}?week=${WEEK}&status=approved&group=person`,
 			);
@@ -265,9 +264,10 @@ for (const viewport of [
 			);
 
 			await choose(page, "Status", "Returned (1)");
+			await expect(page).toHaveURL(
+				`${destinationPath(slug, "approvals")}?week=${WEEK}&status=returned&group=person`,
+			);
 			await choose(page, "Group by", "Project");
-			await focusOn(page, "button", "Show");
-			await page.keyboard.press("Enter");
 			await expect(page).toHaveURL(
 				`${destinationPath(slug, "approvals")}?week=${WEEK}&status=returned&group=project`,
 			);

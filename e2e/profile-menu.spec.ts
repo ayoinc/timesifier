@@ -48,7 +48,7 @@ async function personWithOrganisation(page: Page) {
 	return { person, organisation };
 }
 
-test("opens by a click and holds exactly Account settings and Sign out, under the person's name and address", async ({
+test("opens by a click and holds Account settings, My time report and Sign out, under the person's name, address and organisation", async ({
 	page,
 }) => {
 	const { person, organisation } = await personWithOrganisation(page);
@@ -69,7 +69,14 @@ test("opens by a click and holds exactly Account settings and Sign out, under th
 
 	const menu = await openProfileMenu(page);
 	await expect(menu).toHaveAccessibleName("Account menu for Ada King Lovelace, AL");
-	await expect(menu.getByRole("menuitem")).toHaveText(["Account settings", "Sign out"]);
+	await expect(menu.getByRole("menuitem")).toHaveText([
+		"Account settings",
+		"My time report",
+		"Sign out",
+	]);
+	await expect(
+		page.locator("[data-trigger=MenuTrigger]").getByText(organisation.name, { exact: true }),
+	).toBeVisible();
 	await expect(page.getByText("Ada King Lovelace", { exact: true })).toBeVisible();
 	await expect(page.getByText(person.email, { exact: true })).toBeVisible();
 
@@ -101,10 +108,10 @@ test("opens with Enter, Space and ArrowDown; Escape closes it and gives the focu
 		await expect(avatar, key).toHaveAttribute("data-focus-visible", "true");
 	}
 
-	// The arrows move between the two items, and Enter follows Account settings.
+	// The arrows move between the items, and Enter follows Account settings.
 	await page.keyboard.press("Enter");
 	await page.keyboard.press("ArrowDown");
-	await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeFocused();
+	await expect(page.getByRole("menuitem", { name: "My time report" })).toBeFocused();
 	await page.keyboard.press("ArrowUp");
 	await expect(settings).toBeFocused();
 	await page.keyboard.press("Enter");
@@ -165,3 +172,28 @@ for (const viewport of [COMPACT, MEDIUM]) {
 		});
 	}
 }
+
+test("My time report opens Reports with the person's own time this week; with a second organisation the menu lists them (W31)", async ({
+	page,
+}) => {
+	const { organisation } = await personWithOrganisation(page);
+	let menu = await openProfileMenu(page);
+	await menu.getByRole("menuitem", { name: "My time report" }).click();
+	await expect(page).toHaveURL(/\/reports\?range=this-week&group=project&person=/);
+	await expect(page.getByRole("heading", { level: 1, name: "Reports" })).toBeVisible();
+
+	const second = await createOrganisation(page);
+	await openShell(page, organisationPath(second.slug));
+	menu = await openProfileMenu(page);
+	await expect(menu.getByRole("menuitem")).toHaveText([
+		"Account settings",
+		"My time report",
+		"Your organisations",
+		"Sign out",
+	]);
+	await menu.getByRole("menuitem", { name: "Your organisations" }).click();
+	await expect(page).toHaveURL("/app");
+	await expect(page.getByRole("heading", { level: 1, name: "Your organisations" })).toBeVisible();
+	await expect(page.getByRole("link", { name: organisation.name })).toBeVisible();
+	await expect(page.getByRole("link", { name: second.name })).toBeVisible();
+});

@@ -141,6 +141,9 @@ test("signing out from the profile menu, with the keyboard alone", async ({ page
 	await page.keyboard.press("Space");
 	await expectFocusShown(page.getByRole("menuitem", { name: "Account settings" }));
 	await page.keyboard.press("ArrowDown");
+	// An owner sees their own time this week between the two (TS-094).
+	await expectFocusShown(page.getByRole("menuitem", { name: "My time report" }));
+	await page.keyboard.press("ArrowDown");
 	await expectFocusShown(page.getByRole("menuitem", { name: "Sign out" }));
 
 	await page.keyboard.press("Enter");

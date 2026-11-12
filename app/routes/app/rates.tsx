@@ -181,7 +181,7 @@ export default function Rates({ loaderData }: Route.ComponentProps) {
 			<PageHeading>Default rates</PageHeading>
 			<PageLead>
 				Billable rates an hour, in {currency}, for projects that bill by person or by task and set
-				none of their own. A new rate prices entries from its day on; earlier entries keep theirs.
+				none of their own.
 			</PageLead>
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}

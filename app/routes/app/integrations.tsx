@@ -194,8 +194,7 @@ export default function Integrations({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
-				Connect {organisation.name}'s own tools to Timesifier: read and write time through the API,
-				hear about changes as they happen, and bring time in from a spreadsheet.
+				Connect {organisation.name}'s tools: the API, webhooks, and time from a spreadsheet.
 			</PageLead>
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}

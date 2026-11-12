@@ -196,13 +196,15 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 			<Section
 				id="account"
 				heading="Your account"
-				lead="Yours alone. These are the same in every organisation you belong to."
+				lead="The same in every organisation you belong to."
 				className="max-w-200"
 			>
-				<Ledger heading="Your name">
+				{/* One ledger for the details, and every other part a ruled section (audit W25). */}
+				<Ledger heading="Your details">
 					<LedgerRows>
 						<LedgerRow
-							title={
+							title="Name"
+							detail={
 								<span className="wrap-anywhere">
 									{person.name ?? `Not set. People see your address, ${person.email}.`}
 								</span>
@@ -213,31 +215,24 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 								</Button>
 							}
 						/>
+						<LedgerRow
+							title="Time zone"
+							detail={
+								timeZone.own ??
+								`${timeZone.organisation}, your organisation's, until you choose one`
+							}
+							action={
+								<Button variant="text" onPress={() => setTask("time-zone")}>
+									Change time zone
+								</Button>
+							}
+						/>
 					</LedgerRows>
 				</Ledger>
-
-				<div className="mt-8">
-					<Ledger heading="Your time zone">
-						<LedgerRows>
-							<LedgerRow
-								title={
-									timeZone.own ??
-									`${timeZone.organisation}, your organisation's, until you choose one`
-								}
-								detail="Your days, weeks and the times of your entries are counted in it."
-								action={
-									<Button variant="text" onPress={() => setTask("time-zone")}>
-										Change time zone
-									</Button>
-								}
-							/>
-						</LedgerRows>
-					</Ledger>
-				</div>
-
-				<Appearance />
-				<SignOutEverywhere />
 			</Section>
+
+			<Appearance />
+			<SignOutEverywhere />
 
 			<Section
 				id="working-week"
@@ -380,11 +375,8 @@ function Appearance() {
 	const chosen = fetcher.formData?.get("scheme")?.toString() ?? stored;
 
 	return (
-		<section aria-labelledby="appearance" className="mt-8">
-			<h3 id="appearance" className="text-title-medium">
-				Appearance
-			</h3>
-			<fetcher.Form method="post" className="mt-2 flex flex-col items-start gap-2">
+		<Section id="appearance" heading="Appearance" className="max-w-200">
+			<fetcher.Form method="post" className="flex flex-col items-start gap-2">
 				<RadioGroup
 					label="Colour scheme"
 					name="scheme"
@@ -402,7 +394,7 @@ function Appearance() {
 					<Button type="submit">Save</Button>
 				</noscript>
 			</fetcher.Form>
-		</section>
+		</Section>
 	);
 }
 

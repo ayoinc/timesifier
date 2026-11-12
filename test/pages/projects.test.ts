@@ -573,18 +573,14 @@ describe("hours to date (TS-057)", () => {
 
 		const owner = await mainText(PROJECTS, ada);
 		expect(owner).toMatch(/Design 15:00/);
-		expect(owner).toContain(
-			"Each shows the hours tracked on it to date, a running timer included.",
-		);
+		expect(owner).toContain("each with the hours tracked on it to date, a running timer included.");
 		expect(await mainText(PROJECTS, grace)).toMatch(/Design 15:00/);
 		const manager = await mainText(PROJECTS, hedy);
 		expect(manager).toMatch(/Design 6:00/);
-		expect(manager).toContain(
-			"Each shows the hours you and the people in your teams have tracked on it to date",
-		);
+		expect(manager).toContain("each with the hours you and your teams have tracked on it to date");
 		const member = await mainText(PROJECTS, mallory);
 		expect(member).toMatch(/Design 8:00/);
-		expect(member).toContain("Each shows the hours you have tracked on it to date");
+		expect(member).toContain("each with the hours you have tracked on it to date");
 		expect(await mainText(PROJECTS, linus)).toMatch(/Design 4:00/);
 	});
 

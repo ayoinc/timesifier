@@ -195,8 +195,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
-				{loaderData.whose} Each entry counts whole on the day it starts, in your time zone,{" "}
-				{loaderData.zone}, even when it runs past midnight. A running entry counts up to now.{" "}
+				{loaderData.whose}{" "}
 				<Link to={loaderData.expensesPath} className={TEXT_LINK}>
 					Report on expenses
 				</Link>
@@ -290,7 +289,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 						<Section
 							id="entries"
 							heading="Entries"
-							lead="Each entry on the day it starts, as the export lists them."
+							lead={`Each entry whole on the day it starts in ${loaderData.zone}, even past midnight, a running one up to now, as the export lists them.`}
 						>
 							<Ledger heading="Entries" note={report.entryCount}>
 								<LedgerRows>

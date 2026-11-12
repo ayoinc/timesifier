@@ -120,8 +120,8 @@ export default function InvitationPage({ loaderData, params }: Route.ComponentPr
 					<div className={OUTSIDE_COLUMN}>
 						<PageHeading>{GONE_TITLE}</PageHeading>
 						<PageLead>
-							It may have been used or cancelled, it may have expired, or it may have been sent to
-							another address. Ask the person who invited you to send a new one.
+							It may have been used, cancelled, expired or sent to another address: ask for a new
+							one.
 						</PageLead>
 						<p className="mt-10">
 							<Link to={APP_PATH} className={TEXT_LINK}>

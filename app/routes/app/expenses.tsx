@@ -357,7 +357,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
 				{person.own
-					? "Costs you spend on a project, to be paid back or billed to its client. They are submitted with your week's time."
+					? "Costs you spend on a project, submitted with your week's time."
 					: `The expenses of ${person.name}.`}
 			</PageLead>
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">

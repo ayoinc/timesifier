@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 
 import { Button } from "~/components/Button";
+import { Section } from "~/shell/PageHeading";
 
 import { type Notice, NoticeLine, problem, useOneAtATime } from "./AuthPage";
 import { leaveFor, type Outcome, signOutEverywhere } from "./client";
@@ -57,18 +58,15 @@ function Leaving({ id, title, end, children }: LeavingProps) {
 		});
 	}
 
+	// A ruled section like every other on My account (audit W25).
 	return (
-		<section aria-labelledby={id} className="mt-8">
-			<h3 id={id} className="text-title-medium">
-				{title}
-			</h3>
-			<p className="mt-2 text-body-medium text-on-surface-variant">{children}</p>
-			<div className="mt-4 flex flex-col items-start gap-4">
+		<Section id={id} heading={title} lead={children} className="max-w-200">
+			<div className="flex flex-col items-start gap-4">
 				<NoticeLine notice={notice} />
 				<Button variant="outlined" onPress={leave}>
 					{title}
 				</Button>
 			</div>
-		</section>
+		</Section>
 	);
 }

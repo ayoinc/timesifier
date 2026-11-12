@@ -417,7 +417,7 @@ function PersonWeek({ data }: { data: PersonData }) {
 			</div>
 			<PageLead>
 				Their week of {week.label}, in {person.timeZone}: {statusLabel(status)}, {expected}{" "}
-				expected. You can read it here; only they can change it.
+				expected; only they can change it.
 			</PageLead>
 			{status === "returned" && comment && (
 				<p className="mt-2 max-w-160 text-body-medium text-on-surface-variant">
@@ -493,8 +493,8 @@ function Teams({ data }: { data: TeamsData }) {
 			<PageHeading>Teams</PageHeading>
 			<PageLead>
 				{canManage
-					? "A team's managers see its members' time and decide their timesheets. Owners and admins make the teams."
-					: "The teams you manage. Owners and admins change them."}
+					? "A team's managers see its members' time and decide their timesheets."
+					: "The teams you manage, which owners and admins change."}
 			</PageLead>
 			<TeamTabs slug={organisation.slug} current="teams" />
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">

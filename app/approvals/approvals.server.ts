@@ -16,7 +16,7 @@ import { nameOrEmail } from "~/organisations/people";
 import { type PeriodDays, PeriodStatus, statusAfter } from "~/periods/periods";
 import { canSee } from "~/shell/destinations";
 import { type Person, peopleOf } from "~/teams/people.server";
-import type { Day } from "~/time/calendar";
+import { type Day, dayOf } from "~/time/calendar";
 
 /**
  * Approvals (TS-047): the periods people submit, decided one period at a
@@ -74,12 +74,16 @@ export async function approvalsFor(
 	today: Day,
 ): Promise<PeriodApprovals> {
 	const ids = people.map((p) => p.id);
-	const rows =
+	const [rows, joined] =
 		ids.length === 0
-			? []
-			: await scope.periods.select((p) =>
-					and(inArray(p.userId, ids), eq(p.startsOn, period.startsOn)),
-				);
+			? [[], []]
+			: await Promise.all([
+					scope.periods.select((p) => and(inArray(p.userId, ids), eq(p.startsOn, period.startsOn))),
+					scope.memberships.select((m) => inArray(m.userId, ids)),
+				]);
+	// The day each person joined, in their zone: nobody is chased for a
+	// period that ended before they were a member (W13).
+	const joinedAt = new Map(joined.map((m) => [m.userId, m.createdAt.getTime()]));
 	const byPerson = new Map(rows.map((row) => [row.userId, row]));
 	const deciders = [...new Set(rows.flatMap((row) => (row.decidedBy ? [row.decidedBy] : [])))];
 	const deciderNames = new Map(
@@ -111,7 +115,10 @@ export async function approvalsFor(
 				comment: row.comment,
 			});
 		} else {
-			notSubmitted.push(person);
+			const at = joinedAt.get(person.id);
+			if (at === undefined || dayOf(at, person.timeZone) <= period.endsOn) {
+				notSubmitted.push(person);
+			}
 		}
 	}
 	return { pending, notSubmitted: period.endsOn < today ? notSubmitted : null, decided };

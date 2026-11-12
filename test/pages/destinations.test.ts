@@ -321,6 +321,21 @@ describe.each(Object.keys(SHOWN))("to a %s", (kind) => {
 		else expect(moreOf(nav)).toEqual(compact.more);
 	});
 
+	it("every destination's intro is one sentence at most (HT-I)", async () => {
+		const who = people[kind] as Person;
+		const viewer = VIEWERS[kind] as Viewer;
+		for (const { id } of destinations.filter((each) => canSee(viewer, each.id))) {
+			const html = await pageBody(await open(destinationPath(ACME, id), who));
+			const lead =
+				/<p class="mt-4 max-w-160 text-body-large text-on-surface-variant">([\s\S]*?)<\/p>/.exec(
+					html,
+				)?.[1];
+			if (lead === undefined) continue;
+			// A full stop, then another sentence; a link after it, such as Reports' "Report on expenses", is not one.
+			expect(textOf(lead.replace(/<a\b[\s\S]*?<\/a>/g, "")), id).not.toMatch(/[.?!]\s+[A-Z]/);
+		}
+	});
+
 	it("every page of a destination: shown, or the same 404 as another organisation's", async () => {
 		const who = people[kind] as Person;
 		const viewer = VIEWERS[kind] as Viewer;

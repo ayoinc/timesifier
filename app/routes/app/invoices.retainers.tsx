@@ -132,10 +132,7 @@ export default function Retainers({ loaderData }: Route.ComponentProps) {
 	return (
 		<>
 			<PageHeading>Retainers</PageHeading>
-			<PageLead>
-				Money clients pay ahead, held for their work. A funds invoice adds to a retainer once it is
-				paid; an invoice draws from it on the invoice's page.
-			</PageLead>
+			<PageLead>Money clients pay ahead, held for their work.</PageLead>
 			<BillingTabs slug={slug} current="retainers" />
 
 			<div className="mt-8 flex max-w-200 flex-col gap-6">

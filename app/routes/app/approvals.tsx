@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
-import { useState } from "react";
-import { data, Form, Link, redirect } from "react-router";
+import { useEffect, useState } from "react";
+import { data, Form, Link, redirect, useNavigate } from "react-router";
 import * as z from "zod";
 
 import {
@@ -22,7 +22,9 @@ import {
 	withoutTab,
 } from "~/approvals/choices";
 import { Button } from "~/components/Button";
+import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
+import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
@@ -85,12 +87,11 @@ export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
-/** The rest of an address of Approvals that keeps `query`'s view: the values that are not the default. */
+/** The rest of an address of Approvals that keeps `query`'s view: its status always, its grouping when not the default. */
 function viewSearch(query: ApprovalsQuery): string {
-	return [
-		query.status === "pending" ? "" : `&status=${query.status}`,
-		query.group === "person" ? "" : `&group=${query.group}`,
-	].join("");
+	return [`&status=${query.status}`, query.group === "person" ? "" : `&group=${query.group}`].join(
+		"",
+	);
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -105,19 +106,25 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			301,
 		);
 	}
-	const query = parseApprovalsQuery(url.searchParams);
-	if (!query) throw data("Bad Request", { status: 400 });
+	const asked = parseApprovalsQuery(url.searchParams);
+	if (!asked) throw data("Bad Request", { status: 400 });
+	let query: ApprovalsQuery = asked;
 
 	const access = await accessOf(membership);
 	const scope = organisationScope(env.DB, organisation.id);
 	const people = await decidablePeople(scope, organisation, access);
 	const waiting = await pendingPeriods(scope, people);
 
-	// With no week asked for, last week: the one most people have just
-	// submitted. It does not follow what is pending, so a decision that empties
-	// it leaves the page where it is; other weeks waiting are linked above.
+	// With no week asked for, the latest week with something pending, else the
+	// current one (W13). A decision that empties it adds `?week=` to its
+	// address, so the page stays where it is; other weeks waiting are linked above.
 	const now = Date.now();
-	const viewed = await viewedPeriod(membership, url, -1, now);
+	const opened = new URL(url);
+	const latestWaiting = waiting[0];
+	if (!url.searchParams.has(WEEK_PARAM) && latestWaiting) {
+		opened.searchParams.set(WEEK_PARAM, latestWaiting.startsOn);
+	}
+	const viewed = await viewedPeriod(membership, opened, 0, now);
 	const leavePeople = await leaveDecidablePeople(scope, organisation, access);
 	const todayOf = (person: { timeZone: string }) => dayOf(now, person.timeZone);
 	const [approvals, time, leave, leaveRequests, work, spent] = await Promise.all([
@@ -150,6 +157,23 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const date = { format: (instant: number) => formatDayAndTime(instant, viewed.zone) };
 	const secondsOf = (personId: string) =>
 		time.reduce((sum, each) => (each.userId === personId ? sum + each.seconds : sum), 0);
+	// With no status asked for, the first one that has somebody in it (W13).
+	if (!url.searchParams.has("status")) {
+		const sizes: Record<(typeof STATUSES)[number], number> = {
+			pending: approvals.pending.length,
+			approved: approvals.decided.filter((p) => p.status === "approved").length,
+			returned: approvals.decided.filter((p) => p.status === "returned").length,
+			"not-submitted": notSubmitted?.length ?? 0,
+		};
+		const first = STATUSES.find((status) => sizes[status] > 0);
+		if (first) query = { ...query, status: first };
+	}
+	// The address of the view it opened on: the page puts it in the address
+	// bar, so a decision that empties it leaves the page where it is.
+	const opensAt =
+		url.searchParams.has(WEEK_PARAM) && url.searchParams.has("status")
+			? null
+			: `${destinationPath(organisation.slug, "approvals")}?${WEEK_PARAM}=${viewed.period.startsOn}${viewSearch(query)}`;
 	const approved = approvals.decided.filter((p) => p.status === "approved");
 	const returned = approvals.decided.filter((p) => p.status === "returned");
 
@@ -220,7 +244,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 	return {
 		query,
-		keep: viewSearch(query),
+		opensAt,
 		week: { label: periodLabel(viewed.period), ...viewed },
 		canReopen: mayReopenPeriods(access),
 		elsewhere: waiting
@@ -395,7 +419,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 	const organisation = useOrganisation();
 	const {
 		query,
-		keep,
+		opensAt,
 		week,
 		rows,
 		projects,
@@ -406,6 +430,11 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 		leaveWaiting,
 		workWaiting,
 	} = loaderData;
+	const navigate = useNavigate();
+	// The week and status it opened on go into the address (W13).
+	useEffect(() => {
+		if (opensAt) navigate(opensAt, { replace: true, preventScrollReset: true });
+	}, [opensAt, navigate]);
 	const [task, setTask] = useState<
 		| "approve"
 		| "all"
@@ -425,27 +454,40 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 		setTask(next);
 	};
 	const here = destinationPath(organisation.slug, "approvals");
+	const grouped = query.group === "person" ? "" : `&group=${query.group}`;
 	const status = STATUS_LABELS[query.status];
 
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
-			<PageLead>The timesheets people submit for the week of {week.label}.</PageLead>
+			<PageLead>The timesheets people submit, a week at a time.</PageLead>
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
 			</p>
-			<p className="mt-6 flex max-w-200 items-center justify-between gap-4 text-body-large">
-				<Link to={`${here}?${WEEK_PARAM}=${week.previous}${keep}`} className={TEXT_LINK}>
-					← Previous week
-				</Link>
-				{week.next ? (
-					<Link to={`${here}?${WEEK_PARAM}=${week.next}${keep}`} className={TEXT_LINK}>
-						Next week →
-					</Link>
-				) : (
-					<span className="text-on-surface-variant">This is the current week</span>
-				)}
-			</p>
+			{/* Another week opens on its own first status with somebody in it (W13). */}
+			<div className="mt-6 max-w-200">
+				<PeriodStepper
+					label="Weeks"
+					period={week.label}
+					previous={{
+						to: `${here}?${WEEK_PARAM}=${week.previous}${grouped}`,
+						label: "Previous week",
+					}}
+					next={
+						week.next
+							? { to: `${here}?${WEEK_PARAM}=${week.next}${grouped}`, label: "Next week" }
+							: null
+					}
+					current={
+						week.next
+							? {
+									to: `${here}?${WEEK_PARAM}=${week.current.startsOn}${grouped}`,
+									label: "This week",
+								}
+							: undefined
+					}
+				/>
+			</div>
 			{elsewhere.length > 0 && (
 				<p className="mt-4 max-w-200 text-body-medium text-on-surface-variant">
 					Also waiting:{" "}
@@ -778,15 +820,23 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 	);
 }
 
-/** The status and the grouping, chosen together; the week shown stays. */
+/** The status and the grouping, applied as each is chosen (W28); the week shown stays. */
 function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "week">) {
 	return (
-		<Form
-			method="get"
-			aria-label="Choose timesheets"
-			className="mt-8 flex max-w-200 flex-wrap items-end gap-6"
-		>
-			<input type="hidden" name={WEEK_PARAM} value={week.period.startsOn} />
+		<div className="mt-8 max-w-200">
+			<FilterBar name="Choose timesheets" keep={{ [WEEK_PARAM]: week.period.startsOn }}>
+				<ViewFields query={query} counts={counts} />
+			</FilterBar>
+		</div>
+	);
+}
+
+function ViewFields({ query, counts }: Pick<Loaded, "query" | "counts">) {
+	const apply = useApplyFilters();
+	// The hidden selects hold the new value once React has drawn it.
+	const applySoon = () => setTimeout(apply, 0);
+	return (
+		<>
 			<div className="min-w-0 flex-1 basis-56">
 				<Select
 					label="Status"
@@ -799,6 +849,7 @@ function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "
 						};
 					})}
 					defaultValue={query.status}
+					onChange={applySoon}
 				/>
 			</div>
 			<div className="min-w-0 flex-1 basis-56">
@@ -807,9 +858,9 @@ function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "
 					name="group"
 					options={APPROVAL_GROUPS.map((id) => ({ id, label: APPROVAL_GROUP_LABELS[id] }))}
 					defaultValue={query.group}
+					onChange={applySoon}
 				/>
 			</div>
-			<Button type="submit">Show</Button>
-		</Form>
+		</>
 	);
 }

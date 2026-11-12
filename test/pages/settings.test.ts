@@ -93,12 +93,14 @@ describe("what the page shows", () => {
 		expect(account).toContain(">My account</h1>");
 		const yours = account.indexOf(">Your account</h2>");
 		expect(yours).toBeGreaterThan(-1);
-		// The colour scheme and signing out everywhere are under the person's heading.
+		// The colour scheme and signing out everywhere follow it, each a ruled section
+		// like every other on the page (audit W25): one heading level, no sub-headings.
 		for (const heading of ["Appearance", "Sign out everywhere"]) {
-			expect(account.indexOf(`>${heading}</h3>`), heading).toBeGreaterThan(yours);
+			expect(account.indexOf(`>${heading}</h2>`), heading).toBeGreaterThan(yours);
 		}
+		expect(account).not.toContain("</h3>");
 		// Signing out of this browser alone is in the profile menu, not on the page (TS-063).
-		expect(account).not.toContain(">Sign out</h3>");
+		expect(account).not.toContain(">Sign out</h2>");
 		expect(textOf(account)).not.toContain("Delete organisation");
 	});
 

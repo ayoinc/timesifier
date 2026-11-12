@@ -138,7 +138,7 @@ export default function Invitations({ loaderData }: Route.ComponentProps) {
 			<PageHeading>{TITLE}</PageHeading>
 			<PageLead>
 				{canInvite
-					? `A person joins ${organisation.name} by an invitation sent to their email address. Its link works once and expires after ${INVITATION_DAYS} days.`
+					? `A person joins ${organisation.name} by a link sent to their email address, good once for ${INVITATION_DAYS} days.`
 					: `Owners and admins invite people to ${organisation.name}.`}
 			</PageLead>
 			<TeamTabs slug={organisation.slug} current="invitations" />
