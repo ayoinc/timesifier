@@ -7,7 +7,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // Tasks, rates and budgets in a browser (TS-066, TS-067, TS-069): an owner
 // makes a task, opens a project's own page and moves between its tabs, sets
@@ -68,12 +68,17 @@ async function createTask(page: Page, slug: string, name: string) {
 	await expect(page.getByRole("list", { name: "Active tasks" })).toContainText(name);
 }
 
-/** A new person's organisation, with a task Research on every new project, and the project Site. */
+/**
+ * A new person's organisation, with a task Research on every new project, and
+ * the project Site, that works every day: time is tracked today, and is
+ * regular time whatever day the run is on (TS-095).
+ */
 async function siteWithResearch(page: Page) {
 	await signIn(page, newPerson().email);
 	const { slug } = await createOrganisation(page);
 	await createTask(page, slug, "Research");
 	await createProject(page, slug, "Site");
+	await workEveryDay(page, slug);
 	return slug;
 }
 

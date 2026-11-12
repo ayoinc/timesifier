@@ -54,6 +54,7 @@ function entry(
 		taskId: null,
 		task: null,
 		billable: false,
+		overtime: false,
 		...more,
 	};
 }
@@ -362,31 +363,65 @@ describe("the totals of a report", () => {
 	it("by project, in the order of the names", () => {
 		expect(totalsOf(rows, "project")).toEqual({
 			groups: [
-				{ key: "p3", label: "app", minutes: 30 },
-				{ key: "p2", label: "Billing", minutes: 60 },
-				{ key: "p1", label: "Site", minutes: 120 },
+				{ key: "p3", label: "app", minutes: 30, overtimeMinutes: 0 },
+				{ key: "p2", label: "Billing", minutes: 60, overtimeMinutes: 0 },
+				{ key: "p1", label: "Site", minutes: 120, overtimeMinutes: 0 },
 			],
 			minutes: 210,
+			overtimeMinutes: 0,
 		});
 	});
 
 	it("by client, the time with no client last", () => {
 		expect(totalsOf(rows, "client").groups).toEqual([
-			{ key: "c2", label: "acme", minutes: 30 },
-			{ key: "c1", label: "Initech", minutes: 120 },
-			{ key: "", label: null, minutes: 60 },
+			{ key: "c2", label: "acme", minutes: 30, overtimeMinutes: 0 },
+			{ key: "c1", label: "Initech", minutes: 120, overtimeMinutes: 0 },
+			{ key: "", label: null, minutes: 60, overtimeMinutes: 0 },
 		]);
 	});
 
 	it("by day, an entry across midnight whole on the day it starts", () => {
 		expect(totalsOf(rows, "day").groups).toEqual([
-			{ key: "2026-11-02", label: "2026-11-02", minutes: 180 },
-			{ key: "2026-11-03", label: "2026-11-03", minutes: 30 },
+			{ key: "2026-11-02", label: "2026-11-02", minutes: 180, overtimeMinutes: 0 },
+			{ key: "2026-11-03", label: "2026-11-03", minutes: 30, overtimeMinutes: 0 },
 		]);
 	});
 
+	it("hold the overtime of each group and of all apart, within its time (TS-095)", () => {
+		const mixed = [
+			rowOf(entry("2026-11-02T09:00:00Z", "2026-11-02T16:30:00Z"), week, "UTC", 0),
+			rowOf(
+				entry("2026-11-02T16:30:00Z", "2026-11-02T17:45:00Z", { overtime: true }),
+				week,
+				"UTC",
+				0,
+			),
+			rowOf(
+				entry("2026-11-03T09:00:00Z", "2026-11-03T09:30:00Z", {
+					projectId: "p2",
+					project: "Billing",
+					overtime: true,
+				}),
+				week,
+				"UTC",
+				0,
+			),
+		].flatMap((row) => (row ? [row] : []));
+		expect(totalsOf(mixed, "project")).toEqual({
+			groups: [
+				{ key: "p2", label: "Billing", minutes: 30, overtimeMinutes: 30 },
+				{ key: "p1", label: "Site", minutes: 525, overtimeMinutes: 75 },
+			],
+			minutes: 555,
+			overtimeMinutes: 105,
+		});
+		const [, second] = mixed;
+		if (!second) throw new Error("a row expected");
+		expect(rowCells(second, true).at(-1)).toBe("yes");
+	});
+
 	it("are nothing when nothing was tracked", () => {
-		expect(totalsOf([], "project")).toEqual({ groups: [], minutes: 0 });
+		expect(totalsOf([], "project")).toEqual({ groups: [], minutes: 0, overtimeMinutes: 0 });
 	});
 });
 
@@ -493,7 +528,7 @@ describe("a cell of the CSV", () => {
 	it("ends each line with CRLF", () => {
 		expect(csvLine(["a", "b"])).toBe("a,b\r\n");
 		expect(csvLine(CSV_COLUMNS)).toBe(
-			"entry_id,person,project,client,description,started_at,ended_at,duration_seconds\r\n",
+			"entry_id,person,project,client,description,started_at,ended_at,duration_seconds,overtime\r\n",
 		);
 	});
 
@@ -567,6 +602,7 @@ describe("a row of the CSV", () => {
 			"2026-11-03T23:30:00Z",
 			"2026-11-04T00:30:59Z",
 			"3600",
+			"no",
 		]);
 		expect(rowCells(row, false)[3]).toBe("");
 		expect(csvLine(rowCells(row, true))).toContain(",'=1+1,");
@@ -581,7 +617,14 @@ describe("a row of the CSV", () => {
 			now,
 		);
 		if (!row) throw new Error("a row expected");
-		expect(rowCells(row, true).slice(3)).toEqual(["", "", "2026-11-04T09:00:00Z", "", "3600"]);
+		expect(rowCells(row, true).slice(3)).toEqual([
+			"",
+			"",
+			"2026-11-04T09:00:00Z",
+			"",
+			"3600",
+			"no",
+		]);
 	});
 
 	it("is in a file named for the organisation and the range", () => {

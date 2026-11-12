@@ -65,6 +65,8 @@ export interface MonthDay {
 	day: Day;
 	/** The time of the entries that start on it: the Day view's total. */
 	total: number;
+	/** How much of that is overtime (TS-095). */
+	overtime: number;
 	/** Whether it is a day of the month shown; the days of the first and last weeks that are not are muted. */
 	inMonth: boolean;
 }

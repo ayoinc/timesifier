@@ -10,10 +10,12 @@ import {
 	recordsStatement,
 } from "~/activity/activity.server";
 import { type OrganisationScope, organisations, type ScopedStatement, users, uuidv7 } from "~/db";
+import { type KindsMs, kindOfNewTime, type RulesCalendar, weekOf } from "~/leave/rules";
+import { rulesCalendarOf } from "~/leave/rules.server";
 import { nameKey, recordName } from "~/lib/names";
 import { lockOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
-import { bounds, type Day, dayOf, instantAt } from "~/time/calendar";
+import { addDays, bounds, type Day, dayOf, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
 import { ENTRY_FIELDS } from "~/time/manual.server";
 
@@ -34,7 +36,10 @@ import {
  * written before then. A time import makes each entry with the import's id, so
  * reverting deletes exactly those entries, unless one of them is locked. Rows
  * already in Timesifier are skipped, people are never created, and missing
- * clients, projects and tasks are.
+ * clients, projects and tasks are. A row is held to its day's limits as the
+ * Timesheet holds a change (TS-095): past the day's expected hours it is
+ * overtime where the organisation allows that much, and skipped with the
+ * reason where it does not.
  */
 
 /** The largest file an import takes, in bytes. */
@@ -43,8 +48,11 @@ export const IMPORT_MAX_BYTES = 1024 * 1024;
 /** The most rows an import takes. */
 export const IMPORT_MAX_ROWS = 5000;
 
-/** Rows in one insert: D1 binds at most 100 values to a statement. */
-const ROWS_PER_INSERT = 8;
+/**
+ * Rows in one insert: D1 binds at most 100 values to a statement, and an
+ * entry binds up to 13 of them since it gained `overtime` (TS-095).
+ */
+const ROWS_PER_INSERT = 7;
 
 /** Statements in one batch. */
 const STATEMENTS_PER_BATCH = 50;
@@ -158,6 +166,8 @@ export interface TimeRow {
 	task: string | null;
 	notes: string | null;
 	minutes: number;
+	/** Whether the row is overtime: past its day's expected hours, where the organisation allows (TS-095). */
+	overtime: boolean;
 }
 
 export interface Skipped {
@@ -378,13 +388,16 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			task: recordName(cell(row, "task")),
 			notes: notes ? notes.slice(0, 2000) : null,
 			minutes,
+			overtime: false,
 		});
 	}
 	preview.unmatched = [...unmatched].map(([person, lines]) => ({ person, lines }));
 	if (candidates.length === 0) return;
 
 	// What is already there: each person's entries over the file's days, and
-	// their locked days.
+	// their locked days; and, for the limits of their days (TS-095), their
+	// rules and the time of each kind on each day of the weeks the file
+	// touches, which the file's rows add to as they are taken.
 	const [projects, tasks, clients] = await Promise.all([
 		scope.projects.select(),
 		scope.tasks.select(),
@@ -394,6 +407,11 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 	const taskKey = new Map(tasks.map((t) => [t.id, t.nameKey]));
 	const present = new Map<string, number>();
 	const locked = new Set<string>();
+	const calendars = new Map<string, RulesCalendar>();
+	const tracked = new Map<string, KindsMs>();
+	const trackedOf = (userId: string) => (day: Day) =>
+		tracked.get(`${userId}|${day}`) ?? { regularMs: 0, overtimeMs: 0 };
+	const now = Date.now();
 	for (const [userId, member] of memberOf) {
 		const days = candidates
 			.filter((c) => c.userId === userId)
@@ -401,7 +419,13 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			.sort();
 		const first = days[0] as Day;
 		const last = days.at(-1) as Day;
-		const { from, to } = bounds(first, last, member.zone);
+		const calendar = await rulesCalendarOf(scope, userId, first, last);
+		calendars.set(userId, calendar);
+		const { from, to } = bounds(
+			weekOf(calendar.rules, first),
+			addDays(weekOf(calendar.rules, last), 6),
+			member.zone,
+		);
 		const [entries, periods] = await Promise.all([
 			scope.timeEntries.select((e) =>
 				and(eq(e.userId, userId), gte(e.startedAt, new Date(from)), lt(e.startedAt, new Date(to))),
@@ -409,10 +433,17 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			scope.periods.select((p) => eq(p.userId, userId)),
 		]);
 		for (const entry of entries) {
+			const day = dayOf(entry.startedAt, member.zone);
+			const slot = `${userId}|${day}`;
+			const sum = tracked.get(slot) ?? { regularMs: 0, overtimeMs: 0 };
+			const ms = (entry.endedAt?.getTime() ?? now) - entry.startedAt.getTime();
+			if (entry.overtime) sum.overtimeMs += ms;
+			else sum.regularMs += ms;
+			tracked.set(slot, sum);
 			if (entry.endedAt === null) continue;
 			const key = duplicateKey(
 				userId,
-				dayOf(entry.startedAt, member.zone),
+				day,
 				projectKey.get(entry.projectId) ?? "",
 				entry.taskId ? (taskKey.get(entry.taskId) ?? "") : "",
 				Math.round((entry.endedAt.getTime() - entry.startedAt.getTime()) / 60_000),
@@ -464,7 +495,24 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			});
 			continue;
 		}
-		preview.rows.push(row);
+		const calendar = calendars.get(row.userId);
+		const ms = row.minutes * 60_000;
+		const kind = calendar
+			? kindOfNewTime(calendar, row.day, ms, trackedOf(row.userId))
+			: { ok: true as const, overtime: false };
+		if (!kind.ok) {
+			preview.skipped.push({ line: row.line, reason: kind.message });
+			continue;
+		}
+		const slot = `${row.userId}|${row.day}`;
+		const sum = trackedOf(row.userId)(row.day);
+		tracked.set(
+			slot,
+			kind.overtime
+				? { ...sum, overtimeMs: sum.overtimeMs + ms }
+				: { ...sum, regularMs: sum.regularMs + ms },
+		);
+		preview.rows.push({ ...row, overtime: kind.overtime });
 		if (!knownProjects.has(nameKey(row.project))) {
 			newProjects.set(nameKey(row.project), row.project);
 			if (row.client && !knownClients.has(nameKey(row.client))) {
@@ -730,6 +778,7 @@ async function entriesToCreate(
 			startedAt: new Date(startedAt),
 			endedAt: new Date(endedAt),
 			billable: taskId === null ? false : (known.billable.get(`${projectId}|${taskId}`) ?? false),
+			overtime: row.overtime,
 			importId,
 		});
 	}

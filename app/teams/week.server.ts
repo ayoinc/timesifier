@@ -20,6 +20,8 @@ export interface PersonInWeek {
 	email: string;
 	/** Seconds logged in the period. */
 	seconds: number;
+	/** Of `seconds`, those of overtime (TS-095). */
+	overtimeSeconds: number;
 	/** Whether a timer of theirs runs now, in whatever period it started. */
 	running: boolean;
 	/** Where their period stands; null when it has never been submitted. */
@@ -72,16 +74,18 @@ export async function teamWeek(
 		scope.timeEntries.select((e) => and(inArray(e.userId, ids), isNull(e.endedAt))),
 		scope.periods.select((p) => and(inArray(p.userId, ids), eq(p.startsOn, period.startsOn))),
 	]);
-	return people.map((person) => ({
-		id: person.id,
-		name: person.name,
-		email: person.email,
-		seconds: entries
-			.filter((e) => e.userId === person.id)
-			.reduce((sum, e) => sum + secondsOf(e, now), 0),
-		running: running.some((e) => e.userId === person.id),
-		status: (periods.find((p) => p.userId === person.id)?.status ?? null) as PeriodStatus | null,
-	}));
+	return people.map((person) => {
+		const own = entries.filter((e) => e.userId === person.id);
+		return {
+			id: person.id,
+			name: person.name,
+			email: person.email,
+			seconds: own.reduce((sum, e) => sum + secondsOf(e, now), 0),
+			overtimeSeconds: own.reduce((sum, e) => sum + (e.overtime ? secondsOf(e, now) : 0), 0),
+			running: running.some((e) => e.userId === person.id),
+			status: (periods.find((p) => p.userId === person.id)?.status ?? null) as PeriodStatus | null,
+		};
+	});
 }
 
 /** The time one person logged on one project in a period. */
@@ -90,6 +94,8 @@ export interface ProjectTime {
 	projectId: string;
 	project: string;
 	seconds: number;
+	/** Of `seconds`, those of overtime (TS-095). */
+	overtimeSeconds: number;
 }
 
 /**
@@ -111,8 +117,11 @@ export async function timeByProject(
 			projectId: entry.projectId,
 			project: "",
 			seconds: 0,
+			overtimeSeconds: 0,
 		};
-		sum.seconds += secondsOf(entry, now);
+		const seconds = secondsOf(entry, now);
+		sum.seconds += seconds;
+		if (entry.overtime) sum.overtimeSeconds += seconds;
 		sums.set(key, sum);
 	}
 	const projectIds = [...new Set(entries.map((e) => e.projectId))];
@@ -129,6 +138,8 @@ export interface EntryInWeek {
 	startedAt: number;
 	endedAt: number | null;
 	seconds: number;
+	/** Whether the entry is overtime rather than regular time (TS-095). */
+	overtime: boolean;
 }
 
 /** One person's period, day by day: what the Week view shows, to read and not to change. */
@@ -138,8 +149,10 @@ export async function personWeek(
 	period: PeriodDays,
 	now: number,
 ): Promise<{
-	days: { day: Day; seconds: number; entries: EntryInWeek[] }[];
+	days: { day: Day; seconds: number; overtimeSeconds: number; entries: EntryInWeek[] }[];
 	seconds: number;
+	/** Of `seconds`, those of overtime (TS-095). */
+	overtimeSeconds: number;
 	status: PeriodStatus | null;
 	comment: string | null;
 }> {
@@ -163,12 +176,19 @@ export async function personWeek(
 				startedAt: e.startedAt.getTime(),
 				endedAt: e.endedAt?.getTime() ?? null,
 				seconds: secondsOf(e, now),
+				overtime: e.overtime,
 			}));
-		return { day, seconds: own.reduce((sum, e) => sum + e.seconds, 0), entries: own };
+		return {
+			day,
+			seconds: own.reduce((sum, e) => sum + e.seconds, 0),
+			overtimeSeconds: own.reduce((sum, e) => sum + (e.overtime ? e.seconds : 0), 0),
+			entries: own,
+		};
 	});
 	return {
 		days,
 		seconds: days.reduce((sum, d) => sum + d.seconds, 0),
+		overtimeSeconds: days.reduce((sum, d) => sum + d.overtimeSeconds, 0),
 		status: (row?.status ?? null) as PeriodStatus | null,
 		comment: row?.comment ?? null,
 	};

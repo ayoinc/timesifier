@@ -15,7 +15,7 @@ import { TagIds } from "~/tags/tags";
 import { Day, dayOf, exactInstantAt } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { startTimer, stopTimer } from "~/time/entries.server";
-import { formatDay } from "~/time/format";
+import { formatDay, formatDuration } from "~/time/format";
 import {
 	addHours,
 	deleteEntry,
@@ -53,6 +53,15 @@ const Description = z
 /** Hours as typed: `1.5`, `1,5`, `1:30`, or nothing. */
 const Hours = z.string().max(16);
 
+/**
+ * Whether time is overtime (TS-095), as a checkbox or a hidden field sends
+ * it: "on" or "true" is, "false" is not, nothing leaves it to the writer.
+ */
+export const OvertimeFlag = z
+	.enum(["on", "true", "false"])
+	.optional()
+	.transform((value) => (value === undefined ? undefined : value !== "false"));
+
 export const TimesheetForm = z.discriminatedUnion("intent", [
 	z.object({
 		intent: z.literal("track"),
@@ -64,6 +73,7 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		start: Clock.optional(),
 		taskId: Id.optional(),
 		tagIds: TagIds,
+		overtime: OvertimeFlag,
 	}),
 	z.object({ intent: z.literal("stop") }),
 	z.object({
@@ -76,6 +86,7 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		description: Description.default(""),
 		taskId: Id.optional(),
 		tagIds: TagIds,
+		overtime: OvertimeFlag,
 	}),
 	z.object({ intent: z.literal("delete"), entryId: Id }),
 	/** Puts back the entry just deleted (taste HT-A): the token its deletion answered. */
@@ -83,7 +94,13 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 	/** Copies the last working day with time onto this empty day, or the last week with time onto this week (HT-F). */
 	z.object({ intent: z.literal("copy-day"), day: Day }),
 	z.object({ intent: z.literal("copy-week"), startsOn: Day }),
-	z.object({ intent: z.literal("cell"), projectId: Id, day: Day, hours: Hours }),
+	z.object({
+		intent: z.literal("cell"),
+		projectId: Id,
+		day: Day,
+		hours: Hours,
+		overtime: OvertimeFlag,
+	}),
 	z.object({ intent: z.literal("submit"), startsOn: Day }),
 	z.object({ intent: z.literal("withdraw"), startsOn: Day }),
 	z.object({ intent: z.literal("put-away") }),
@@ -178,21 +195,31 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				now,
 				taskId: input.taskId,
 				tagIds: input.tagIds,
+				overtime: input.overtime,
 			});
 			return added.ok ? { ...done("Entry saved."), changed: [added.entry.id] } : refusal(added);
 		}
 
-		// A timer that ran past what its day takes is kept; the day is flagged
-		// over until an entry is trimmed or moved (TS-090).
+		// A timer that ran past its day's expected hours is cut there, the rest
+		// overtime, where the day takes overtime (TS-095); else, or past a cap,
+		// it is kept and the day flagged over until an entry is trimmed or
+		// moved (TS-090).
 		case "stop": {
-			const stopped = await stopTimer(scope, user.id, now);
+			const stopped = await stopTimer(scope, user.id, zone, now);
 			if (!stopped) return done("No timer was running.");
 			const day = dayOf(stopped.startedAt, zone);
 			const [over] = await daysOver(scope, user.id, day, day, zone, now);
+			const ended = stopped.endedAt?.getTime() ?? now;
+			const split =
+				ended < now
+					? ` ${formatDuration((now - ended) / 1000)} past the day's expected hours is recorded as overtime.`
+					: stopped.overtime
+						? " It is recorded as overtime."
+						: "";
 			return done(
 				over
-					? `Timer stopped. ${formatDay(day, "short")} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
-					: "Timer stopped.",
+					? `Timer stopped.${split} ${formatDay(day, "short")} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
+					: `Timer stopped.${split}`,
 			);
 		}
 
@@ -212,6 +239,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 					endedAt,
 					taskId: input.taskId,
 					tagIds: input.tagIds,
+					overtime: input.overtime,
 				},
 				now,
 			);
@@ -267,6 +295,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				projectId: input.projectId,
 				day: input.day,
 				minutes: hours.data,
+				overtime: input.overtime,
 				zone,
 				now,
 			});

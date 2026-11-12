@@ -359,8 +359,9 @@ describe("the Day view (TS-013)", () => {
 	});
 
 	it("with nothing tracked says so, with its one action, Track time, as a text button (taste HT-F)", async () => {
-		const main = await mainOf(`${PAGE}?day=2026-11-01`);
-		expect(textOf(main)).toContain("Nothing yet on Sunday 1 November. Track time.");
+		// A working day: a day not worked takes no time where overtime is not allowed (TS-095).
+		const main = await mainOf(`${PAGE}?day=2026-11-02`);
+		expect(textOf(main)).toContain("Nothing yet on Monday 2 November. Track time.");
 		// The page's filled Track time, and the empty day's own, a text button.
 		expect(main.match(/>Track time<\/button>/g)).toHaveLength(2);
 		expect(
@@ -437,7 +438,10 @@ describe("the Week view (TS-013, TS-052)", () => {
 		expect(text).toContain("Mon 9");
 		expect(text).toContain("Sun 15");
 		expect(text).toContain("Ops (archived)");
-		expect(text).toMatch(/Day total 2:00 0:00 0:00 0:00 0:00 0:00 1:00 Week total 3:00/);
+		// Sunday is not a working day: its hour is over what it takes (TS-095).
+		expect(text).toMatch(
+			/Day total 2:00 0:00 0:00 0:00 0:00 0:00 1:00 , Over by 1:00 Week total 3:00/,
+		);
 	});
 
 	it("follows the organisation's week start", async () => {
@@ -912,7 +916,11 @@ describe("the week's days above the day (TS-056)", () => {
 		);
 		expect(textOf(main)).toContain("Week total 4:45");
 
-		const week = await textAt(`${PAGE}?view=week&start=2026-11-09`);
+		// The Week view's totals, without what it says of a day over (TS-095).
+		const week = (await textAt(`${PAGE}?view=week&start=2026-11-09`)).replaceAll(
+			/ , Over by \d+:\d\d/g,
+			"",
+		);
 		const [, dayTotals = "", weekTotal] =
 			/Day total ((?:\d+:\d\d ){7})Week total (\d+:\d\d)/.exec(week) ?? [];
 		expect(days.map((each) => each.total)).toEqual(dayTotals.trim().split(" "));

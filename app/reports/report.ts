@@ -35,6 +35,8 @@ export interface ReportEntry {
 	taskId: string | null;
 	task: string | null;
 	billable: boolean;
+	/** Whether the entry is overtime rather than regular time (TS-095). */
+	overtime: boolean;
 }
 
 /** An entry as a report counts it: on the day it starts, for its whole length in minutes. */
@@ -89,21 +91,27 @@ export interface GroupTotal {
 	/** The project's or client's name, or the day; null for no client. */
 	label: string | null;
 	minutes: number;
+	/** Of `minutes`, those of overtime (TS-095). */
+	overtimeMinutes: number;
 }
 
 export interface Totals {
 	groups: GroupTotal[];
 	minutes: number;
+	/** Of `minutes`, those of overtime (TS-095). */
+	overtimeMinutes: number;
 }
 
 /**
- * The rows' time by `grouping`, and in all, in whole minutes. Projects and
+ * The rows' time by `grouping`, and in all, in whole minutes, with the part of
+ * it that is overtime beside it (TS-095). Projects and
  * clients are in the order of their names, the time with no client last; days
  * in their order. A group is listed only when it has a row.
  */
 export function totalsOf(rows: readonly Row[], grouping: Grouping): Totals {
 	const groups = new Map<string, GroupTotal>();
 	let minutes = 0;
+	let overtimeMinutes = 0;
 	for (const row of rows) {
 		const { entry } = row;
 		const [key, label] =
@@ -112,15 +120,19 @@ export function totalsOf(rows: readonly Row[], grouping: Grouping): Totals {
 				: grouping === "client"
 					? [entry.clientId ?? "", entry.client]
 					: [row.day, row.day];
-		const group = groups.get(key) ?? { key, label, minutes: 0 };
+		const group = groups.get(key) ?? { key, label, minutes: 0, overtimeMinutes: 0 };
 		group.minutes += row.minutes;
-		groups.set(key, group);
 		minutes += row.minutes;
+		if (entry.overtime) {
+			group.overtimeMinutes += row.minutes;
+			overtimeMinutes += row.minutes;
+		}
+		groups.set(key, group);
 	}
 	const ordered = [...groups.values()].sort((a, b) => {
 		if (a.label === null || b.label === null) return a.label === null ? 1 : -1;
 		if (grouping === "day") return a.key < b.key ? -1 : 1;
 		return a.label.localeCompare(b.label, "en") || (a.key < b.key ? -1 : 1);
 	});
-	return { groups: ordered, minutes };
+	return { groups: ordered, minutes, overtimeMinutes };
 }

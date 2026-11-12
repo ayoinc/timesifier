@@ -12,7 +12,7 @@ import {
 } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // The Timesheet as Harvest makes it feel (TS-093, research/harvest-taste.md):
 // Start again on a finished entry, a deletion taken back with Undo in the
@@ -33,10 +33,15 @@ test.beforeEach(async ({ context, baseURL }) => {
 	await ownAddress(context, baseURL);
 });
 
+/**
+ * A new person's organisation with a project, Site, that works every day of
+ * the week: Start again runs a timer today, whatever day the test runs (TS-095).
+ */
 async function trackingOrganisation(page: Page) {
 	await signIn(page, newPerson().email);
 	const organisation = await createOrganisation(page);
 	await createProject(page, organisation.slug, "Site");
+	await workEveryDay(page, organisation.slug);
 	await openShell(page, organisationPath(organisation.slug));
 	return organisation;
 }

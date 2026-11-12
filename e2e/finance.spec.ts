@@ -22,7 +22,7 @@ import {
 	INVITATION_LINK,
 	openInvitations,
 } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // The Finance role in the browser (TS-075): a new owner makes an organisation,
 // a project, an hour and a half of time and a client through the pages, and
@@ -64,6 +64,8 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	({ slug, name: organisationName } = await createOrganisation(page));
 	await setName(page, owner.name);
 	await createProject(page, slug, "Website");
+	// Time is tracked today: every day is worked, so it is regular time whatever day the run is on (TS-095).
+	await workEveryDay(page, slug);
 
 	await openShell(page, organisationPath(slug));
 	await page.getByRole("button", { name: "Track time", exact: true }).click();
@@ -205,12 +207,12 @@ test("on Reports Finance narrows to the owner, returns to Everyone, and download
 	const bytes = readFileSync(await download.path());
 	const lines = bytes.subarray(3).toString("utf8").split("\r\n");
 	expect(lines[0]).toBe(
-		"entry_id,person,project,client,description,started_at,ended_at,duration_seconds",
+		"entry_id,person,project,client,description,started_at,ended_at,duration_seconds,overtime",
 	);
 	const rows = lines.slice(1, -1);
 	expect(rows).toHaveLength(1);
 	expect(rows[0]).toContain(`,${owner.name},Website,,Design review,`);
-	expect(rows[0]?.endsWith(",5400")).toBe(true);
+	expect(rows[0]?.endsWith(",5400,no")).toBe(true);
 });
 
 for (const viewport of [

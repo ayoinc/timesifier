@@ -367,6 +367,63 @@ describe("the same role rules as the pages", () => {
 		).toBe(3);
 	});
 
+	it("holds overtime to the organisation's rules, as the Timesheet does, for every role (TS-095)", async () => {
+		const { ben, fin, max, apollo } = await people();
+		for (const who of [ada, ben, fin, max]) {
+			const token = await tokenFor(who);
+			const post = (body: Record<string, unknown>) =>
+				api("/time_entries", token, {
+					method: "POST",
+					body: { project_id: apollo, spent_date: "2026-11-04", ...body },
+				});
+			const regular = await post({ hours: 7.5 });
+			expect(regular.status).toBe(201);
+			expect((await json(regular)).overtime).toBe(false);
+
+			// Overtime is not allowed by default: past 7:30 nothing goes in.
+			await env.DB.prepare("update organisations set overtime_policy = 'none' where id = ?")
+				.bind(acme.id)
+				.run();
+			const more = await post({ hours: 0.5 });
+			expect(more.status).toBe(422);
+			expect((await json<{ error: { message: string } }>(more)).error.message).toBe(
+				"This day has 0:00 left.",
+			);
+			const refused = await post({ hours: 0.5, overtime: true });
+			expect((await json<{ error: { message: string } }>(refused)).error.message).toBe(
+				"This organisation does not allow overtime.",
+			);
+
+			// Allowed, with a cap of an hour a day.
+			await env.DB.prepare(
+				"update organisations set overtime_policy = 'allowed', overtime_day_cap_minutes = 60 where id = ?",
+			)
+				.bind(acme.id)
+				.run();
+			const overtime = await post({ hours: 1, overtime: true });
+			expect(overtime.status).toBe(201);
+			const made = await json(overtime);
+			expect(made.overtime).toBe(true);
+			expect((await post({ hours: 0.25, overtime: true })).status).toBe(422);
+			// A change of kind is held to the new kind's limit.
+			const back = await api(`/time_entries/${made.id}`, token, {
+				method: "PATCH",
+				body: { overtime: false },
+			});
+			expect(back.status).toBe(422);
+			expect((await json<{ error: { message: string } }>(back)).error.message).toBe(
+				"This day has 0:00 left. Track more as overtime.",
+			);
+			const shown = await json(await api(`/time_entries/${made.id}`, token));
+			expect(shown.overtime).toBe(true);
+			await env.DB.prepare(
+				"update organisations set overtime_policy = 'none', overtime_day_cap_minutes = null where id = ?",
+			)
+				.bind(acme.id)
+				.run();
+		}
+	});
+
 	it("checks what it is sent", async () => {
 		const { max, apollo } = await people();
 		const token = await tokenFor(max);

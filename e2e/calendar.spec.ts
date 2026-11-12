@@ -12,7 +12,7 @@ import {
 } from "./axe";
 import { expect, openShell, takenOver, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, pastWeekday } from "./timesheet";
 
 // The Calendar view of Timesheet in a browser (TS-062): the week on an hour
 // axis and the month of days, their totals against the Day and Week views',
@@ -31,22 +31,19 @@ test.beforeEach(async ({ context, baseURL }) => {
 	await ownAddress(context, baseURL);
 });
 
-/** Yesterday in the browser's zone, which the person's becomes: `2026-11-11`. */
-const yesterdayIn = (page: Page) =>
-	page.evaluate(() => new Date(Date.now() - 86_400_000).toLocaleDateString("en-CA"));
-
 /**
  * Signs a new person in, with an organisation and a project, Site, and two
- * hours tracked yesterday from 09:00: on a day that has passed, so the time
- * never runs past now whatever the hour of the run (TS-091, W08). `day` is
- * yesterday, which the week and month are opened at.
+ * hours tracked from 09:00 on the latest weekday before today: on a day that
+ * has passed, so the time never runs past now whatever the hour of the run
+ * (TS-091, W08), and a working day, so the time is regular time whatever day
+ * the run is on (TS-095). `day` is that day, which the week and month are opened at.
  */
 async function personWithTime(page: Page) {
 	await signIn(page, newPerson().email);
 	const organisation = await createOrganisation(page);
 	await createProject(page, organisation.slug, "Site");
 	await openShell(page, organisationPath(organisation.slug));
-	const day = await yesterdayIn(page);
+	const day = await pastWeekday(page);
 	await openShell(page, `${organisationPath(organisation.slug)}?day=${day}`);
 	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	const sheet = trackSheet(page);
@@ -202,7 +199,7 @@ test("the month shows each day's total, today marked and the month's total; Prev
 	);
 	await expect(todayLink(grid)).toBeVisible();
 
-	// Yesterday's month, which is this month but on the first.
+	// The month of the day with time, opened on its first.
 	await openShell(page, `${organisationPath(slug)}?view=calendar&scale=month&date=${day}`);
 	await grid.getByRole("link", { name: /^Week of .*, 2:00$/ }).click();
 	await expect(page).toHaveURL(/view=calendar&date=\d{4}-\d{2}-\d{2}$/);
@@ -213,8 +210,9 @@ test("the month shows each day's total, today marked and the month's total; Prev
 });
 
 test("the week steps by week, and Today returns", async ({ page }) => {
-	const { slug } = await personWithTime(page);
-	await openShell(page, `${organisationPath(slug)}?view=calendar&zoom=compact`);
+	const { slug, day } = await personWithTime(page);
+	// From the week of the day with time, so the week before it has none, whatever day the run is on.
+	await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}&zoom=compact`);
 	const weeks = page.getByRole("group", { name: "Weeks" });
 	await weeks.getByRole("link", { name: "Previous week" }).click();
 	await expect(page).toHaveURL(/view=calendar&date=\d{4}-\d{2}-\d{2}&zoom=compact$/);
@@ -247,15 +245,16 @@ test("with the keyboard alone: arrows move between days, Enter opens a day, a sl
 	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL(new RegExp(`${first?.replace("?", "\\?")}$`));
 
-	// The week: from yesterday's head, along the heads and down into the day.
+	// The week: from the head of the day with time, along the heads and down into the day.
 	await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 	const week = weekGrid(page);
 	// The week takes one stop of Tab, on today's head or its first day's; the
-	// arrows lead along the heads to yesterday's.
+	// arrows lead along the heads to the day's.
 	await tabTo(page, week.locator('a[tabindex="0"]').first());
 	for (let step = 0; step < 7; step++) {
-		if ((await focused(page).getAttribute("href"))?.endsWith(`?day=${day}`)) break;
-		await page.keyboard.press("ArrowLeft");
+		const at = (await focused(page).getAttribute("href"))?.split("?day=")[1] ?? "";
+		if (at === day) break;
+		await page.keyboard.press(at < day ? "ArrowRight" : "ArrowLeft");
 	}
 	await expect(dayLink(week, day)).toBeFocused();
 	await page.keyboard.press("ArrowDown");
@@ -279,9 +278,9 @@ test("with the keyboard alone: arrows move between days, Enter opens a day, a sl
 	await page.keyboard.press("Escape");
 	await expect(trackSheet(page)).toBeHidden();
 
-	// Home leads back to the first day's head.
+	// Home leads back to the first day's head, which says what is left of a working day (TS-095).
 	await page.keyboard.press("Home");
-	await expect(focused(page)).toHaveAccessibleName(/, \d+:\d{2} tracked$/);
+	await expect(focused(page)).toHaveAccessibleName(/, \d+:\d{2} tracked\b/);
 	await page.keyboard.press("ArrowRight");
 	await page.keyboard.press("Enter");
 	await expect(page).toHaveURL(/\?day=\d{4}-\d{2}-\d{2}$/);

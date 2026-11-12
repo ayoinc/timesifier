@@ -42,12 +42,14 @@ export interface BudgetNearLimit {
 export interface Dashboard {
 	/** Seconds tracked in the range. */
 	totalSeconds: number;
+	/** Of `totalSeconds`, those of overtime (TS-095). */
+	overtimeSeconds: number;
 	/** Minutes expected over the range of the people shown. */
 	expectedMinutes: number;
 	billableSeconds: number;
 	utilisation: UtilisationReport;
-	/** The projects with the most time, most first. */
-	topProjects: { id: string; name: string; seconds: number }[];
+	/** The projects with the most time, most first, with the part of it that is overtime. */
+	topProjects: { id: string; name: string; seconds: number; overtimeSeconds: number }[];
 	budgets: BudgetNearLimit[];
 	/** The people shown who have approved leave in the range. */
 	onLeave: { id: string; name: string; leaveMinutes: number; halfDays: number }[];
@@ -98,6 +100,7 @@ export async function dashboardOf(
 	const byProject = totalsOf(rows, "project");
 	return {
 		totalSeconds: byProject.minutes * 60,
+		overtimeSeconds: byProject.overtimeMinutes * 60,
 		expectedMinutes: lines.reduce((sum, line) => sum + line.expectedMinutes, 0),
 		billableSeconds: rows.reduce(
 			(sum, row) => sum + (bills(row, nonBillable) ? row.minutes * 60 : 0),
@@ -107,7 +110,12 @@ export async function dashboardOf(
 		topProjects: [...byProject.groups]
 			.sort((a, b) => b.minutes - a.minutes || (a.label ?? "").localeCompare(b.label ?? "", "en"))
 			.slice(0, PANEL_ROWS)
-			.map((g) => ({ id: g.key, name: g.label ?? "", seconds: g.minutes * 60 })),
+			.map((g) => ({
+				id: g.key,
+				name: g.label ?? "",
+				seconds: g.minutes * 60,
+				overtimeSeconds: g.overtimeMinutes * 60,
+			})),
 		budgets,
 		onLeave: lines
 			.filter((line) => line.leaveHalfDays > 0)

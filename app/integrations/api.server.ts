@@ -368,6 +368,7 @@ interface EntryRow {
 	startedAt: Date;
 	endedAt: Date | null;
 	billable: boolean;
+	overtime: boolean;
 	importId: string | null;
 	createdAt: Date;
 	updatedAt: Date;
@@ -413,6 +414,7 @@ async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number)
 			ended_at: iso(entry.endedAt),
 			running: entry.endedAt === null,
 			hours: Math.round(((end - entry.startedAt.getTime()) / 3_600_000) * 100) / 100,
+			overtime: entry.overtime,
 			billable: entry.billable,
 			...(describe ? { description: entry.description } : {}),
 			import_id: entry.importId,
@@ -487,6 +489,8 @@ const NewEntry = z
 		started_at: z.iso.datetime({ offset: true }).optional(),
 		hours: z.number().positive().max(24).optional(),
 		description: Description,
+		/** Whether the hours are overtime (TS-095): held to the organisation's rules, as on the Timesheet. */
+		overtime: z.boolean().optional(),
 	})
 	.strict()
 	.refine((body) => body.spent_date !== undefined || body.started_at !== undefined, {
@@ -503,6 +507,7 @@ const EntryChange = z
 		ended_at: z.iso.datetime({ offset: true }).optional(),
 		hours: z.number().positive().max(24).optional(),
 		description: Description,
+		overtime: z.boolean().optional(),
 	})
 	.strict()
 	.refine((body) => !(body.ended_at && body.hours), {
@@ -568,7 +573,8 @@ async function tellWebhooks(caller: TokenCaller, now: number) {
 async function createEntry({ caller, request, now }: Call) {
 	const body = await bodyOf(request, NewEntry);
 	if (!body.ok) return body.response;
-	const { user_id, project_id, task_id, spent_date, started_at, hours, description } = body.data;
+	const { user_id, project_id, task_id, spent_date, started_at, hours, description, overtime } =
+		body.data;
 	// Nobody changes anybody's entries but their own (decision 25), on a page or here.
 	if (user_id !== undefined && user_id !== caller.user.id) {
 		return forbidden("A token adds its maker's own time, and nobody else's.");
@@ -589,6 +595,7 @@ async function createEntry({ caller, request, now }: Call) {
 		startedAt,
 		zone,
 		now,
+		overtime,
 	};
 	const written = await addHours(caller.scope, caller.user.id, dayHours, "api");
 	if (!written.ok) return refused(written);
@@ -608,7 +615,7 @@ async function changeEntry({ caller, request, id, now }: Call) {
 		return forbidden("A token changes its maker's own entries, and nobody else's.");
 	}
 	if (entry.endedAt === null) return refused({ reason: "running" });
-	const { project_id, task_id, started_at, ended_at, hours, description } = body.data;
+	const { project_id, task_id, started_at, ended_at, hours, description, overtime } = body.data;
 	const startedAt = started_at === undefined ? entry.startedAt.getTime() : Date.parse(started_at);
 	const length = entry.endedAt.getTime() - entry.startedAt.getTime();
 	const endedAt =
@@ -624,6 +631,7 @@ async function changeEntry({ caller, request, id, now }: Call) {
 			description === undefined ? entry.description : description?.length ? description : null,
 		startedAt,
 		endedAt,
+		overtime,
 	};
 	const written = await editEntry(
 		caller.scope,

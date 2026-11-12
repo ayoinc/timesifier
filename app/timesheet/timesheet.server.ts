@@ -86,6 +86,7 @@ export function toSheetEntry(row: TimeEntries["$inferSelect"]): SheetEntry {
 		description: row.description,
 		startedAt: row.startedAt.getTime(),
 		endedAt: row.endedAt?.getTime() ?? null,
+		overtime: row.overtime,
 	};
 }
 

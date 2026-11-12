@@ -101,6 +101,7 @@ Query: `from`, `to` (days, at most 366 apart, in the organisation's zone), `user
 	"ended_at": "2026-11-03T10:30:00.000Z",
 	"running": false,
 	"hours": 1.5,
+	"overtime": false,
 	"billable": true,
 	"description": "Pairing",
 	"import_id": null,
@@ -109,7 +110,7 @@ Query: `from`, `to` (days, at most 366 apart, in the organisation's zone), `user
 }
 ```
 
-`spent_date` is the day it starts in its person's zone; `description` is there only with `descriptions:read`.
+`spent_date` is the day it starts in its person's zone; `description` is there only with `descriptions:read`. `overtime` says whether the entry is overtime rather than regular time (TS-095).
 
 ### `GET /time_entries/{id}` — `time:read`
 
@@ -127,11 +128,11 @@ One entry, or 404.
 }
 ```
 
-`started_at` (ISO 8601 with offset) may replace or go with `spent_date`; without it the entry is placed on the day as the Timesheet's week grid places one. `hours` is above 0 and at most 24. `user_id`, if sent, must be the maker's. Answers `201` with the entry and `Location`.
+`started_at` (ISO 8601 with offset) may replace or go with `spent_date`; without it the entry is placed on the day as the Timesheet's week grid places one. `hours` is above 0 and at most 24. `user_id`, if sent, must be the maker's. `overtime` (default `false`) records the hours as overtime. The Timesheet's rules hold: regular time past the day's expected hours, or overtime the organisation does not allow, past its caps or past approved hours, answers `422` `invalid` with what the day has left in its `message`. Answers `201` with the entry and `Location`.
 
 ### `PATCH /time_entries/{id}` — `time:write`
 
-Any of `project_id`, `task_id`, `started_at`, `ended_at` or `hours` (not both), `description` (null clears it). The maker's own entries that have ended.
+Any of `project_id`, `task_id`, `started_at`, `ended_at` or `hours` (not both), `description` (null clears it), `overtime`. The maker's own entries that have ended.
 
 ### `DELETE /time_entries/{id}` — `time:write`
 

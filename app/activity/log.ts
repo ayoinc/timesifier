@@ -31,7 +31,7 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	estimate: "Estimates",
 	payment: "Payments",
 	leave: "Leave",
-	organisation: "Lock date and deadline",
+	organisation: "Workspace settings",
 	api_token: "API tokens",
 	webhook: "Webhooks",
 	import: "Imports",

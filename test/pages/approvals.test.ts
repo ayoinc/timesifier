@@ -12,7 +12,7 @@ import {
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
-import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
+import { markOvertime, seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Approvals (TS-047): one period at a time, its timesheets in one status
 // (Pending, Approved, Returned, Not submitted) and grouped by person or by
@@ -554,5 +554,88 @@ describe("time off waiting (TS-061)", () => {
 		expect(text).toContain("Not submitted (4)");
 		for (const listed of ["ada@", "linus@", "nils@", "bob@"]) expect(text).toContain(listed);
 		for (const away of ["grace@", "mona@"]) expect(text).not.toContain(away);
+	});
+});
+
+describe("overtime (TS-095)", () => {
+	/**
+	 * Grace, in Mona's team, submits 7:30 and 1:00 of overtime; Linus, in no
+	 * team, 1:00 and 2:00 of overtime.
+	 */
+	async function overtimeWorld() {
+		const alan = await memberOfAcme("admin", "alan@example.com");
+		const mona = await memberOfAcme("member", "mona@example.com");
+		const grace = await memberOfAcme("member", "grace@example.com");
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const fin = await memberOfAcme("finance", "fin@example.com");
+		await seedTeam(acme.id, "Design", { members: [grace.user.id], managers: [mona.user.id] });
+		const project = await seedProject(acme.id, "Website");
+		await seedEntry(
+			acme.id,
+			grace.user.id,
+			project,
+			"2026-01-06T10:00:00Z",
+			"2026-01-06T17:30:00Z",
+		);
+		await markOvertime(
+			await seedEntry(
+				acme.id,
+				grace.user.id,
+				project,
+				"2026-01-06T17:30:00Z",
+				"2026-01-06T18:30:00Z",
+			),
+		);
+		await seedEntry(
+			acme.id,
+			linus.user.id,
+			project,
+			"2026-01-07T10:00:00Z",
+			"2026-01-07T11:00:00Z",
+		);
+		await markOvertime(
+			await seedEntry(
+				acme.id,
+				linus.user.id,
+				project,
+				"2026-01-07T11:00:00Z",
+				"2026-01-07T13:00:00Z",
+			),
+		);
+		await seedPeriod(acme.id, grace.user.id, WEEK, "submitted");
+		await seedPeriod(acme.id, linus.user.id, WEEK, "submitted");
+		return { alan, mona, grace, fin };
+	}
+
+	it.each(["owner", "admin"] as const)(
+		"shows the %s each submitted week's overtime apart before it is approved",
+		async (role) => {
+			const world = await overtimeWorld();
+			const who = role === "owner" ? ada : world.alan;
+			const text = textOf(await pageBody(await open(`${APPROVALS}?week=${WEEK}`, who)));
+			expect(text).toMatch(/grace@example\.com Submitted .*? 8:30 7:30 \+ 1:00 overtime Approve/);
+			expect(text).toMatch(/linus@example\.com Submitted .*? 3:00 1:00 \+ 2:00 overtime Approve/);
+			expect(text).toContain("Total 11:30 8:30 + 3:00 overtime");
+
+			const byProject = textOf(
+				await pageBody(await open(`${APPROVALS}?week=${WEEK}&group=project`, who)),
+			);
+			expect(byProject).toMatch(/Website .*? 11:30 8:30 \+ 3:00 overtime/);
+		},
+	);
+
+	it("shows a manager the overtime of their team's people and nobody else's", async () => {
+		const { mona } = await overtimeWorld();
+		const text = textOf(await pageBody(await open(`${APPROVALS}?week=${WEEK}`, mona)));
+		expect(text).toMatch(/grace@example\.com Submitted .*? 8:30 7:30 \+ 1:00 overtime Approve/);
+		expect(text).toContain("Total 8:30 7:30 + 1:00 overtime");
+		expect(text).not.toContain("linus@example.com");
+		expect(text).not.toContain("2:00 overtime");
+	});
+
+	it("is not shown to Finance or a member", async () => {
+		const { fin, grace } = await overtimeWorld();
+		expect((await open(`${APPROVALS}?week=${WEEK}`, fin)).status).toBe(404);
+		expect((await open(`${APPROVALS}?week=${WEEK}`, grace)).status).toBe(404);
 	});
 });

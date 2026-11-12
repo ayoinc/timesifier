@@ -253,6 +253,7 @@ export async function* entryPages(
 				taskId: row.taskId,
 				task: row.taskId === null ? null : (taskNames.get(row.taskId) ?? null),
 				billable: row.billable,
+				overtime: row.overtime,
 			};
 		});
 		const last = rows.at(-1);
@@ -281,6 +282,8 @@ export interface PersonLine {
 	address: string | null;
 	/** Seconds of tracked time in the range. Leave is never in it. */
 	worked: number;
+	/** Of `worked`, the seconds of overtime (TS-095). */
+	overtime: number;
 	/** Minutes expected over the range: the working week, less public holidays and approved leave. */
 	expectedMinutes: number;
 	/** Minutes of approved leave in the range, and the half days they make. */
@@ -310,8 +313,11 @@ export async function peopleOfReport(
 	]);
 	const range = daysFrom(days.first, days.last);
 	const worked = new Map<string, number>();
+	const overtime = new Map<string, number>();
 	for (const row of rows) {
-		worked.set(row.entry.userId, (worked.get(row.entry.userId) ?? 0) + row.minutes * 60);
+		const { userId } = row.entry;
+		worked.set(userId, (worked.get(userId) ?? 0) + row.minutes * 60);
+		if (row.entry.overtime) overtime.set(userId, (overtime.get(userId) ?? 0) + row.minutes * 60);
 	}
 	return listed.map((person) => {
 		const calendar = calendarOf(context, person.id);
@@ -320,6 +326,7 @@ export async function peopleOfReport(
 			name: person.name,
 			address: person.address,
 			worked: worked.get(person.id) ?? 0,
+			overtime: overtime.get(person.id) ?? 0,
 			expectedMinutes: expectedMinutes(calendar, range),
 			leaveMinutes: leaveMinutes(calendar, range),
 			leaveHalfDays: leaveHalfDays(calendar, range),

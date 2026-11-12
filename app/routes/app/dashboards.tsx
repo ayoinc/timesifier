@@ -18,6 +18,7 @@ import { destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { DEFAULT_LOCALE } from "~/shell/locale";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { regularAndOvertime } from "~/teams/words";
 import { formatDuration } from "~/time/format";
 
 import type { Route } from "./+types/dashboards";
@@ -29,7 +30,8 @@ import type { Route } from "./+types/dashboards";
 // (`timeScopeOf`), and money panels only reach those who see rates. What is
 // owed and what is waiting to be invoiced are as of today, whatever the range,
 // as their pages are, with one figure per currency: amounts in different
-// currencies are never added.
+// currencies are never added. Overtime is shown apart from regular time,
+// "7:30 + 1:00 overtime" (TS-095).
 
 const { label } = destination("dashboards");
 
@@ -50,6 +52,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const shown = {
 		total: hoursAndMinutes(board.totalSeconds),
 		expected: `of ${formatDuration(board.expectedMinutes * 60)} expected`,
+		/** "36:30 + 2:00 overtime" under the total; null when none of it is overtime (TS-095). */
+		split: regularAndOvertime(board.totalSeconds, board.overtimeSeconds),
 		billableShare: percentLabel(
 			board.totalSeconds > 0 ? board.billableSeconds / board.totalSeconds : null,
 		),
@@ -60,7 +64,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		billableUtilisation: percentLabel(
 			shareOfCapacity(utilisation.total.billableSeconds, utilisation.total.capacityMinutes),
 		),
-		topProjects: board.topProjects.map((p) => ({ ...p, time: hoursAndMinutes(p.seconds) })),
+		topProjects: board.topProjects.map((p) => ({
+			...p,
+			time: hoursAndMinutes(p.seconds),
+			split: regularAndOvertime(p.seconds, p.overtimeSeconds),
+		})),
 		budgets: board.budgets.map((b) => ({
 			id: b.projectId,
 			name: b.project,
@@ -152,6 +160,9 @@ function Board(d: Shown) {
 	return (
 		<>
 			<Headline label="Total" value={d.total} beside={d.expected} />
+			{d.split && (
+				<p className="mt-1 max-w-200 text-body-large text-on-surface-variant">{d.split}</p>
+			)}
 
 			<div className="mt-10 grid max-w-200 gap-6 medium:grid-cols-2">
 				<Panel
@@ -180,6 +191,7 @@ function Board(d: Shown) {
 							<LedgerRow
 								key={p.id}
 								title={<span className="wrap-anywhere">{p.name}</span>}
+								detail={p.split ?? undefined}
 								value={p.time}
 							/>
 						))}

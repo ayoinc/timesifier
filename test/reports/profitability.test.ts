@@ -74,6 +74,7 @@ function row(
 			taskId: null,
 			task: null,
 			billable,
+			overtime: false,
 		},
 		day,
 		start,

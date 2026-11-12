@@ -147,6 +147,8 @@ async function copyOnto(
 		day,
 		replaces: null,
 		afterMs: totalMs,
+		// A copy is regular time, whatever the entries copied were (TS-095).
+		overtime: false,
 	});
 	if (over) return { ok: false, problem: over };
 	const tags = await tagsOfEntries(

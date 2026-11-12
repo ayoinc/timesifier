@@ -5,18 +5,19 @@ import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
-import { type DayRule, leftMessage, minutesLeft, overLabel, wholeMinutes } from "~/leave/rules";
+import { type DayRule, leftMessage, overLabel, wholeMinutes } from "~/leave/rules";
 import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
 import { periodAfter } from "~/periods/periods";
 import { TRANSITION, useTravel } from "~/shell/transitions";
+import type { Day } from "~/time/calendar";
 
-import { ClosedDays, RuleLine } from "./DayRules";
+import { ClosedDays, OvertimeTag, RuleLine } from "./DayRules";
 import { cellText, formatDuration, minutesToMs, TypedHours } from "./durations";
 import { useReportAnswer } from "./feedback";
 import { dayNumber, useDayFormat, usePeriodFormat } from "./format";
 import { PeriodHeader } from "./Submission";
-import { type GridCell, isTypable, weekSheet } from "./sheets";
+import { type GridCell, type GridRow, isTypable, rowKey, weekSheet } from "./sheets";
 import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
 import type { WeekData } from "./timesheet.server";
 import { dayPath, timerAction, weekPath } from "./views";
@@ -28,7 +29,9 @@ import { dayPath, timerAction, weekPath } from "./views";
  * week" at its end (`PeriodHeader`, which the Day and Calendar views share);
  * a returned one shows why. A day with a limit shows what is left of it, a
  * day that takes no time is read-only and says why, and a day over its limit
- * says by how much (TS-090).
+ * says by how much (TS-090). While any day of the week takes overtime, or a
+ * project has some, each project has an overtime row under its regular time,
+ * whose cells are its overtime on each day (TS-095).
  */
 export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 	const { period, days, lockedDays, lockDate, projects, today } = data;
@@ -43,10 +46,14 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 	const [addedByWeek, setAddedByWeek] = useState<Record<string, string[]>>({});
 	const added = addedByWeek[period.startsOn] ?? [];
 	const sheet = weekSheet([], days, data.zone, data.now, { addedRows: added });
-	const rows = [
-		...data.sheet.rows,
-		...sheet.rows.filter((row) => !data.sheet.rows.some((r) => r.projectId === row.projectId)),
-	];
+	const rows = withOvertimeRows(
+		[
+			...data.sheet.rows,
+			...sheet.rows.filter((row) => !data.sheet.rows.some((r) => r.projectId === row.projectId)),
+		],
+		days,
+		data.rules.some((rule) => rule.overtimeOpen),
+	);
 	const inGrid = new Set(rows.map((row) => row.projectId));
 	const addable = projects.filter((p) => !p.archived && !inGrid.has(p.id));
 	const editable = lockedDays.length < days.length;
@@ -181,6 +188,13 @@ function Grid({
 		return project ? `${project.name}${project.archived ? " (archived)" : ""}` : "";
 	};
 	const ruleOf = (day: string) => rules.find((rule) => rule.day === day);
+	// The time of one kind on a day, across every row: what a cell's change is checked against.
+	const kindTotal = (day: string, overtime: boolean) => {
+		const totals = sheet.days.find((each) => each.day === day);
+		if (!totals) return 0;
+		return overtime ? totals.overtime : totals.total - totals.overtime;
+	};
+	const weekOvertime = sheet.days.reduce((sum, each) => sum + each.overtime, 0);
 	// Today's column is amber in the week that holds it, and no other (taste HT-B).
 	const todayColumn = (day: string) =>
 		day === data.today ? "bg-primary-container text-on-primary-fixed" : undefined;
@@ -242,9 +256,19 @@ function Grid({
 							</tr>
 						)}
 						{rows.map((row) => (
-							<tr key={row.projectId} data-row={row.projectId}>
+							<tr
+								key={rowKey(row.projectId, row.overtime)}
+								data-row={rowKey(row.projectId, row.overtime)}
+							>
 								<th scope="row" className="max-w-60 truncate px-4 py-2 text-start font-normal">
-									{nameOf(row.projectId)}
+									{row.overtime ? (
+										<span className="flex items-center gap-2 ps-4">
+											<span className="sr-only">{nameOf(row.projectId)}, </span>
+											<OvertimeTag />
+										</span>
+									) : (
+										nameOf(row.projectId)
+									)}
 								</th>
 								{row.cells.map((cell) => (
 									<td
@@ -254,10 +278,11 @@ function Grid({
 										<Cell
 											cell={cell}
 											projectId={row.projectId}
-											label={`${nameOf(row.projectId)}, ${formatLong(cell.day)}`}
+											overtime={row.overtime}
+											label={`${nameOf(row.projectId)}, ${row.overtime ? "overtime, " : ""}${formatLong(cell.day)}`}
 											locked={lockedDays.includes(cell.day)}
 											rule={ruleOf(cell.day)}
-											dayTotal={sheet.days.find((each) => each.day === cell.day)?.total ?? 0}
+											kindTotal={kindTotal(cell.day, row.overtime)}
 											slug={slug}
 											onSaved={onSaved}
 											onProblem={onProblem}
@@ -283,6 +308,17 @@ function Grid({
 										className={cx("px-2 py-3 text-end tabular-nums", todayColumn(each.day))}
 									>
 										{formatDuration(each.total)}
+										{each.overtime > 0 && (
+											<span
+												className={cx(
+													"block text-label-small",
+													each.day === data.today ? undefined : "text-on-surface-variant",
+												)}
+											>
+												<span className="sr-only">, </span>
+												{formatDuration(each.overtime)} overtime
+											</span>
+										)}
 										{over > 0 && (
 											<span
 												className={cx(
@@ -300,6 +336,12 @@ function Grid({
 							<td className="px-4 py-3 text-end text-title-large tabular-nums">
 								<span className="sr-only">Week total </span>
 								{formatDuration(sheet.total)}
+								{weekOvertime > 0 && (
+									<span className="block text-label-small text-on-surface-variant">
+										<span className="sr-only">, </span>
+										{formatDuration(weekOvertime)} overtime
+									</span>
+								)}
 							</td>
 						</tr>
 						<tr className="text-on-surface-variant">
@@ -334,27 +376,32 @@ function Grid({
  * more than one entry, or of a running one, shows its total and leads to the
  * Day view; a cell of a locked day shows its total. A cell of a day that
  * takes no time is read-only and says why; any time on it leads to the Day
- * view, where it can be trimmed or moved.
+ * view, where it can be trimmed or moved. A cell of an overtime row is held
+ * to the overtime its day still takes, and is read-only on a day that takes
+ * none (TS-095).
  */
 function Cell({
 	cell,
 	projectId,
+	overtime,
 	label,
 	locked,
 	rule,
-	dayTotal,
+	kindTotal,
 	slug,
 	onSaved,
 	onProblem,
 }: {
 	cell: GridCell;
 	projectId: string;
+	/** Whether the cell is the project's overtime on its day. */
+	overtime: boolean;
 	label: string;
 	locked: boolean;
 	/** The day's limit; undefined for a row added before the server knows of it. */
 	rule: DayRule | undefined;
-	/** The time of the cell's day across every row, in milliseconds. */
-	dayTotal: number;
+	/** The time of the cell's kind on its day across every row, in milliseconds. */
+	kindTotal: number;
 	slug: string;
 	onSaved: (said: string) => void;
 	onProblem: (problem: string) => void;
@@ -375,7 +422,8 @@ function Cell({
 	}, [answer, label, onSaved, onProblem]);
 
 	if (locked) return <span className="block px-2 py-2">{shown}</span>;
-	const reason = rule?.closedReason ?? null;
+	const reason =
+		rule?.closedReason ?? (overtime && rule && !rule.overtimeOpen ? rule.noOvertimeReason : null);
 	if (reason !== null && cell.total === 0) {
 		return (
 			<span title={reason} className="block px-2 py-2">
@@ -403,17 +451,20 @@ function Cell({
 		if (value.trim() === shown) return;
 		// What the day can take, checked before anything is sent: a change that adds nothing always goes.
 		const typed = TypedHours.safeParse(value);
-		if (typed.success && rule && rule.limitMinutes !== null) {
-			const afterMs = minutesToMs(typed.data);
-			const othersMs = Math.max(0, dayTotal - cell.total);
-			if (afterMs > cell.total && wholeMinutes(othersMs + afterMs) > rule.limitMinutes) {
-				setRefused(true);
-				onProblem(`${label}: ${leftMessage(minutesLeft(rule, othersMs) ?? 0)}`);
-				return;
-			}
+		const refusal =
+			typed.success && rule
+				? cellRefusal(rule, overtime, cell.total, kindTotal, minutesToMs(typed.data))
+				: null;
+		if (refusal) {
+			setRefused(true);
+			onProblem(`${label}: ${refusal}`);
+			return;
 		}
 		setRefused(false);
-		fetcher.submit({ intent: "cell", projectId, day: cell.day, hours: value }, { method: "post" });
+		fetcher.submit(
+			{ intent: "cell", projectId, day: cell.day, hours: value, overtime: String(overtime) },
+			{ method: "post" },
+		);
 	};
 	const invalid = refused || (answer !== undefined && !answer.ok);
 	return (
@@ -421,11 +472,7 @@ function Cell({
 			type="text"
 			inputMode="decimal"
 			autoComplete="off"
-			aria-label={
-				rule?.leftMinutes != null
-					? `${label}, ${formatDuration(rule.leftMinutes * 60_000)} left`
-					: label
-			}
+			aria-label={cellLabel(label, rule, overtime)}
 			aria-invalid={invalid ? true : undefined}
 			value={value}
 			onChange={(event) => {
@@ -442,6 +489,65 @@ function Cell({
 			)}
 		/>
 	);
+}
+
+/**
+ * What a cell's change would take its day past, checked before it is sent:
+ * the day's regular time, or the overtime it still takes. Null when it fits,
+ * and always for a change that adds nothing, so a day over can be trimmed.
+ */
+function cellRefusal(
+	rule: DayRule,
+	overtime: boolean,
+	beforeMs: number,
+	kindMs: number,
+	afterMs: number,
+): string | null {
+	if (afterMs <= beforeMs) return null;
+	if (overtime) {
+		if (!rule.overtimeOpen) return rule.noOvertimeReason ?? rule.closedReason;
+		const left = rule.overtimeLeftMinutes;
+		if (left === null || wholeMinutes(afterMs - beforeMs) <= left) return null;
+		return `This day has ${formatDuration(left * 60_000)} of overtime left.`;
+	}
+	if (rule.limitMinutes === null) return null;
+	const othersMs = Math.max(0, kindMs - beforeMs);
+	if (wholeMinutes(othersMs + afterMs) <= rule.limitMinutes) return null;
+	const left = leftMessage(Math.max(0, rule.limitMinutes - wholeMinutes(othersMs)));
+	return rule.overtimeOpen ? `${left} Track more as overtime.` : left;
+}
+
+/** A cell's name with what its day has left of the cell's kind. */
+function cellLabel(label: string, rule: DayRule | undefined, overtime: boolean): string {
+	const left = overtime ? rule?.overtimeLeftMinutes : rule?.leftMinutes;
+	return left != null ? `${label}, ${formatDuration(left * 60_000)} left` : label;
+}
+
+/**
+ * The rows as the grid shows them: each project's regular time, then, while
+ * any day of the week takes overtime, its overtime, empty where it has none.
+ * A project with overtime alone keeps a regular row above it.
+ */
+function withOvertimeRows(
+	rows: readonly GridRow[],
+	days: readonly Day[],
+	overtimeOpen: boolean,
+): GridRow[] {
+	const empty = (projectId: string, overtime: boolean): GridRow => ({
+		projectId,
+		overtime,
+		cells: days.map((day) => ({ day, total: 0, entries: 0, running: false, entryId: null })),
+		total: 0,
+	});
+	const shown: GridRow[] = [];
+	for (const projectId of new Set(rows.map((row) => row.projectId))) {
+		const of = (overtime: boolean) =>
+			rows.find((row) => row.projectId === projectId && row.overtime === overtime);
+		shown.push(of(false) ?? empty(projectId, false));
+		const extra = of(true) ?? (overtimeOpen ? empty(projectId, true) : undefined);
+		if (extra) shown.push(extra);
+	}
+	return shown;
 }
 
 /**

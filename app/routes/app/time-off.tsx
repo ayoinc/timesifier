@@ -37,6 +37,7 @@ import {
 	daysLabel,
 	earliestNoticed,
 	isShortNotice,
+	mayAskFor,
 	NOTICE_REASON_MAX_LENGTH,
 	noticeAsked,
 	noticeGiven,
@@ -681,8 +682,8 @@ function Mine({
 	askForWork: (kind: WorkKind) => void;
 }) {
 	const { balances, requests, holidays, year, kinds, workRules, work, teamLeave } = data;
-	const asksOvertime = workRules.overtime === "approval";
-	const asksWeekend = workRules.weekend === "approval";
+	const asksOvertime = mayAskFor(workRules, "overtime");
+	const asksWeekend = mayAskFor(workRules, "weekend");
 	return (
 		<>
 			{(kinds.length > 0 || asksOvertime || asksWeekend) && (

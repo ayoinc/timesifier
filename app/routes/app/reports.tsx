@@ -44,6 +44,16 @@ const { label } = destination("reports");
 /** The most entries the page lists. The export holds all of them. */
 const ENTRIES_SHOWN = 200;
 
+/**
+ * Time split into regular and overtime (TS-095), "6:00 regular · 1:30
+ * overtime", or null when none of it is overtime: a line with no overtime says
+ * nothing more.
+ */
+function overtimeLabel(minutes: number, overtimeMinutes: number): string | null {
+	if (overtimeMinutes <= 0) return null;
+	return `${hoursAndMinutes((minutes - overtimeMinutes) * 60)} regular · ${hoursAndMinutes(overtimeMinutes * 60)} overtime`;
+}
+
 const WEEKDAYS = [
 	["Mon", "Monday"],
 	["Tue", "Tuesday"],
@@ -122,9 +132,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					key: group.key,
 					label: grouping === "day" ? dayLabel(group.key) : (group.label ?? "No client"),
 					duration: hoursAndMinutes(group.minutes * 60),
+					/** Of its time, the overtime (TS-095); none says nothing. */
+					overtime: overtimeLabel(group.minutes, group.overtimeMinutes),
 				})),
 				total: hoursAndMinutes(totals.minutes * 60),
-				expected: lines.length > 0 ? `of ${formatDuration(expected * 60)} expected` : undefined,
+				expected:
+					[
+						lines.length > 0 ? `of ${formatDuration(expected * 60)} expected` : null,
+						totals.overtimeMinutes > 0
+							? `${hoursAndMinutes(totals.overtimeMinutes * 60)} of it overtime`
+							: null,
+					]
+						.filter(Boolean)
+						.join(" · ") || undefined,
 				week: week && {
 					days: week.days.map((day) => {
 						const [short, name] = WEEKDAYS[isoWeekday(day) - 1] ?? ["", ""];
@@ -155,6 +175,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 							.join(" · "),
 						times: formatTimeRange(row.start, row.running ? null : row.end, zone),
 						duration: hoursAndMinutes(row.minutes * 60),
+						overtime: entry.overtime,
 					};
 				}),
 				entryCount: rows.length,
@@ -164,6 +185,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					name: line.name,
 					address: line.address,
 					worked: hoursAndMinutes(line.worked),
+					overtime: overtimeLabel(line.worked / 60, line.overtime / 60),
 					expected: formatDuration(line.expectedMinutes * 60),
 					leave:
 						line.leaveHalfDays === 0
@@ -228,6 +250,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 										<LedgerRow
 											key={group.key}
 											title={<span className="wrap-anywhere">{group.label}</span>}
+											detail={group.overtime ?? undefined}
 											value={group.duration}
 										/>
 									))}
@@ -239,6 +262,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 							)}
 							<LedgerTotal label="Total" value={report.total} />
 						</Ledger>
+
 						<BillableSplit split={report.split} range={loaderData.range} />
 						<p className="mt-2">
 							<a href={report.exportPath} download className={ACTION_LINK}>
@@ -265,6 +289,7 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 														<span className="block wrap-anywhere">{person.address}</span>
 													)}
 													{`${person.expected} expected · ${person.leave}`}
+													{person.overtime && <span className="block">{person.overtime}</span>}
 													{person.shortNotice && (
 														<span className="block">{person.shortNotice}</span>
 													)}
@@ -296,7 +321,12 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 													<span className="text-on-surface-variant">No description</span>
 												)
 											}
-											detail={<span className="wrap-anywhere">{entry.detail}</span>}
+											detail={
+												<span className="wrap-anywhere">
+													{entry.detail}
+													{entry.overtime && " · Overtime"}
+												</span>
+											}
 											aside={entry.times}
 											value={entry.duration}
 										/>

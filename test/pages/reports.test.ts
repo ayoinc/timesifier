@@ -107,6 +107,7 @@ async function exported(who: Person, query: string) {
 		"started_at",
 		"ended_at",
 		"duration_seconds",
+		"overtime",
 	]);
 	return {
 		response,
@@ -459,9 +460,9 @@ describe("the export", () => {
 			// A minute and a half: a whole minute, as the report counts it.
 			endedAt: new Date(Date.parse("2026-10-09T00:00:00Z") + i * 120_000 + 90_000),
 		}));
-		// D1 binds at most 100 values a statement: ten entries an insert.
-		for (let at = 0; at < many.length; at += 10)
-			await scope.timeEntries.insert(many.slice(at, at + 10));
+		// D1 binds at most 100 values a statement: nine entries an insert.
+		for (let at = 0; at < many.length; at += 9)
+			await scope.timeEntries.insert(many.slice(at, at + 9));
 		const { rows } = await exported(linus, WEEK);
 		expect(rows).toHaveLength(451);
 		expect(new Set(rows.map((row) => row.entry_id)).size).toBe(451);
@@ -517,5 +518,65 @@ describe("people: worked, expected and leave (TS-061)", () => {
 		const own = await peopleOf(mallory, WEEK);
 		expect(own).toContain("mallory@example.com 26:15 expected · 3:45 leave (half a day) 3:00");
 		expect(own).not.toContain("linus@example.com");
+	});
+});
+
+describe("regular time and overtime apart (TS-095)", () => {
+	beforeEach(async () => {
+		// Linus's Tuesday entry and Mallory's Thursday hour from 12:00 are overtime.
+		await env.DB.prepare(
+			"update time_entries set overtime = 1 where user_id = ? and started_at = ?",
+		)
+			.bind(linus.user.id, Date.parse("2026-10-06T23:00:00Z"))
+			.run();
+		await scope.timeEntries.insert({
+			userId: mallory.user.id,
+			projectId: billing,
+			description: "Late",
+			startedAt: new Date("2026-10-08T13:00:00Z"),
+			endedAt: new Date("2026-10-08T14:00:00Z"),
+			overtime: true,
+		});
+	});
+
+	it.each([
+		["an owner", () => ada, "9:00", "3:00", true],
+		["an admin", () => grace, "9:00", "3:00", true],
+		["a manager", () => hedy, "4:00", "2:00", false],
+		["a member", () => linus, "2:00", "2:00", false],
+		["a member in no team", () => mallory, "4:00", "1:00", true],
+	])(
+		"%s sees the overtime of the time they may see, on the page and in the export",
+		async (_, who, total, overtime, seesMallory) => {
+			const response = await open(`${REPORTS}?${WEEK}`, who());
+			const text = textOf(await pageBody(response));
+			expect(await pageTotal(who(), WEEK)).toBe(total);
+			expect(text).toContain(`${overtime} of it overtime`);
+			expect(text).toContain(" · Overtime");
+			const { rows } = await exported(who(), WEEK);
+			const overtimeSeconds = rows
+				.filter((row) => row.overtime === "yes")
+				.reduce((sum, row) => sum + Number(row.duration_seconds), 0);
+			expect(overtimeSeconds / HOUR).toBe(Number(overtime.split(":")[0]));
+			expect(rows.every((row) => row.overtime === "yes" || row.overtime === "no")).toBe(true);
+			expect(rows.some((row) => row.description === "Late")).toBe(seesMallory);
+		},
+	);
+
+	it("splits each group and each person into regular time and overtime", async () => {
+		const text = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=project`, ada)));
+		expect(text).toContain("Billing 5:00 regular · 1:00 overtime");
+		expect(text).toContain("Site 1:00 regular · 2:00 overtime");
+		const people = text.slice(text.indexOf("Worked, expected and leave"));
+		expect(people).toContain("0:00 regular · 2:00 overtime");
+		expect(people).toContain("3:00 regular · 1:00 overtime");
+		// A person with no overtime says nothing of it.
+		expect(people).toMatch(/ada@example\.com 37:30 expected · No leave 1:00/);
+	});
+
+	it("says what of each person's utilisation is overtime", async () => {
+		const text = textOf(await pageBody(await open(`${REPORTS}/utilisation?${WEEK}`, ada)));
+		expect(text).toContain("2:00 of 37:30 capacity, 2:00 of it overtime");
+		expect(text).toContain("4:00 of 37:30 capacity, 1:00 of it overtime");
 	});
 });

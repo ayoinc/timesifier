@@ -141,7 +141,7 @@ export function CalendarMonth({
 				<tbody>
 					{sheet.weeks.map((week, row) => (
 						<tr key={week.days[0]?.day} className="border-b border-outline-variant last:border-b-0">
-							{week.days.map(({ day, total, inMonth }, col) => {
+							{week.days.map(({ day, total, overtime, inMonth }, col) => {
 								const isToday = day === today;
 								const locked = lockedDays.includes(day);
 								const status = statuses[day];
@@ -196,6 +196,14 @@ export function CalendarMonth({
 											>
 												{total > 0 ? formatDuration(total) : ""}
 											</span>
+											{overtime > 0 && (
+												<span
+													aria-hidden="true"
+													className="truncate text-label-small text-on-surface-variant tabular-nums"
+												>
+													{formatDuration(overtime)} overtime
+												</span>
+											)}
 											{words && (
 												<span
 													aria-hidden="true"
@@ -227,6 +235,7 @@ export function CalendarMonth({
 													isToday ? "Today" : null,
 													formatLong(day),
 													formatDuration(total),
+													overtime > 0 ? `${formatDuration(overtime)} of it overtime` : null,
 													status?.label,
 													locked ? "submitted" : null,
 													words?.text,

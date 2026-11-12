@@ -1,11 +1,12 @@
 import { and, eq, isNull } from "drizzle-orm";
 
+import type { ActivitySource } from "~/activity/actions";
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
-import { startRefusalOf } from "~/leave/rules.server";
+import { stopSplitOf, timerStartOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
-import { entryTagStatements, tagsAllowed } from "~/tags/tags.server";
+import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 
 import { dayOf } from "./calendar";
@@ -18,6 +19,11 @@ import { dayOf } from "./calendar";
  * end of one is the start of the other and neither happens alone. Times are
  * the server's clock; a time the browser claims is never used. Each start and
  * stop is recorded in the activity log, by the person whose entry it is.
+ *
+ * A timer of regular time that runs past its day's expected hours is cut
+ * where they were used, once it stops (TS-095): the rest becomes an entry of
+ * overtime, in a second batch with its row in the log, where the day takes
+ * overtime; where it takes none, the entry is kept whole and the day is over.
  */
 
 /** The entry of `userId` that is running in the organisation, or null. */
@@ -28,6 +34,9 @@ export async function runningEntry(scope: OrganisationScope, userId: string) {
 	);
 	return entry ?? null;
 }
+
+/** An entry as the timer reads and writes it. */
+type Entry = NonNullable<Awaited<ReturnType<typeof runningEntry>>>;
 
 export interface StartTimer {
 	userId: string;
@@ -41,16 +50,20 @@ export interface StartTimer {
 	taskId?: string;
 	/** The entry's tags (TS-085). */
 	tagIds?: readonly string[];
+	/** Through which door the start came (TS-064). */
+	source?: ActivitySource;
 }
 
 /**
  * Starts a timer for `userId` on an active project of the organisation. A
- * running entry is stopped at the same instant in the same batch. Refused when
- * the project is archived or not the organisation's, or when the day the new
- * entry starts on or the day the running one started on is in a submitted or
- * approved period, and when today takes no more time: a public holiday,
- * whole-day leave, or nothing left of its limit (`startRefusalOf`), and when
- * the task is not on the project's list or a tag is not active.
+ * running entry is stopped at the same instant in the same batch, and cut at
+ * its day's limit (`splitStopped`). Refused when the project is archived or
+ * not the organisation's, or when the day the new entry starts on or the day
+ * the running one started on is in a submitted or approved period, and when
+ * today takes no more time: a public holiday, whole-day leave, or nothing
+ * left of its regular time and no overtime to be had (`timerStartOf`), and
+ * when the task is not on the project's list or a tag is not active. The new
+ * entry is overtime when today has no regular time left.
  */
 export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const { userId, projectId, description, zone, now } = start;
@@ -62,8 +75,10 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	if ((await lockedDays(scope, userId, days)).size > 0) {
 		return { ok: false as const, reason: "locked" as const };
 	}
-	const over = await startRefusalOf(scope, userId, zone, now);
-	if (over) return { ok: false as const, reason: "limit" as const, message: over };
+	const verdict = await timerStartOf(scope, userId, zone, now);
+	if (!verdict.ok)
+		return { ok: false as const, reason: "limit" as const, message: verdict.message };
+	const source = start.source ?? "web";
 	const task = await entryTaskOf(scope, projectId, start.taskId);
 	if (!task.ok) return { ok: false as const, reason: "no-task" as const };
 	if (start.tagIds && !(await tagsAllowed(scope, [], start.tagIds))) {
@@ -85,6 +100,7 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 			description,
 			startedAt: at,
 			endedAt: null,
+			overtime: verdict.overtime,
 		}),
 		...entryTagStatements(scope, id, [], start.tagIds ?? []),
 		recordStatement(
@@ -94,9 +110,17 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 			{ ...entry, id },
 			changes(
 				null,
-				{ projectId, taskId: task.taskId, billable: task.billable, description, startedAt: at },
-				["projectId", "taskId", "billable", "description", "startedAt"],
+				{
+					projectId,
+					taskId: task.taskId,
+					billable: task.billable,
+					description,
+					startedAt: at,
+					overtime: verdict.overtime,
+				},
+				["projectId", "taskId", "billable", "description", "startedAt", "overtime"],
 			),
+			source,
 		),
 		...(running
 			? [
@@ -106,16 +130,28 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 						"time_entry.stopped",
 						{ ...entry, id: running.id },
 						changes({ endedAt: null }, { endedAt: at }, ["endedAt"]),
+						source,
 					),
 				]
 			: []),
 	]);
 	if (!started) throw new Error("The new entry was not returned.");
-	return { ok: true as const, started, stopped: stopped[0] ?? null };
+	const [ended] = stopped;
+	if (ended) await splitStopped(scope, ended, zone, source);
+	return { ok: true as const, started, stopped: ended ?? null };
 }
 
-/** Stops the running entry of `userId` at `now`, and returns it; null when nothing was running. */
-export async function stopTimer(scope: OrganisationScope, userId: string, now: number) {
+/**
+ * Stops the running entry of `userId` at `now`, cut at its day's limit
+ * (`splitStopped`), and returns it as it ends; null when nothing was running.
+ */
+export async function stopTimer(
+	scope: OrganisationScope,
+	userId: string,
+	zone: string,
+	now: number,
+	source: ActivitySource = "web",
+) {
 	const [stopped] = await scope.timeEntries.update({ endedAt: new Date(now) }, (e) =>
 		and(eq(e.userId, userId), isNull(e.endedAt)),
 	);
@@ -126,6 +162,93 @@ export async function stopTimer(scope: OrganisationScope, userId: string, now: n
 		"time_entry.stopped",
 		{ type: "time_entry", id: stopped.id, ownerId: userId },
 		changes({ endedAt: null }, { endedAt: stopped.endedAt }, ["endedAt"]),
+		source,
 	);
-	return stopped;
+	return (await splitStopped(scope, stopped, zone, source)) ?? stopped;
+}
+
+/**
+ * Cuts an entry of regular time, just stopped, at its day's limit (TS-095,
+ * `stopSplitOf`): it ends where the day's expected hours were used, and an
+ * entry of overtime, of the same project, task, description and tags, runs
+ * from there to its end. One wholly past the limit becomes overtime. Returns
+ * the entry as it now is, or null when nothing changed.
+ */
+async function splitStopped(
+	scope: OrganisationScope,
+	stopped: Entry,
+	zone: string,
+	source: ActivitySource,
+): Promise<Entry | null> {
+	if (stopped.overtime || stopped.endedAt === null) return null;
+	const { userId, endedAt } = stopped;
+	const cut = await stopSplitOf(
+		scope,
+		userId,
+		{ id: stopped.id, startedAt: stopped.startedAt.getTime(), endedAt: endedAt.getTime() },
+		zone,
+	);
+	if (cut.overtimeFrom === null && !cut.overtime) return null;
+	const subject = { type: "time_entry", id: stopped.id, ownerId: userId } as const;
+	if (cut.overtimeFrom === null) {
+		const [[changed]] = await scope.batch([
+			scope.timeEntries.statements.update({ overtime: true }, (e) =>
+				and(eq(e.id, stopped.id), eq(e.userId, userId)),
+			),
+			recordStatement(
+				scope,
+				userId,
+				"time_entry.split",
+				subject,
+				changes({ overtime: false }, { overtime: true }, ["overtime"]),
+				source,
+			),
+		]);
+		return changed ?? null;
+	}
+	const from = new Date(cut.overtimeFrom);
+	const tags = (await tagsOfEntries(scope, [stopped.id])).get(stopped.id) ?? [];
+	const rest = {
+		id: uuidv7(),
+		userId,
+		projectId: stopped.projectId,
+		taskId: stopped.taskId,
+		billable: stopped.billable,
+		description: stopped.description,
+		startedAt: from,
+		endedAt,
+		overtime: true,
+	};
+	const [[changed]] = await scope.batch([
+		scope.timeEntries.statements.update({ endedAt: from }, (e) =>
+			and(eq(e.id, stopped.id), eq(e.userId, userId)),
+		),
+		scope.timeEntries.statements.insert(rest),
+		...entryTagStatements(scope, rest.id, [], tags),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.split",
+			subject,
+			changes({ endedAt }, { endedAt: from }, ["endedAt"]),
+			source,
+		),
+		recordStatement(
+			scope,
+			userId,
+			"time_entry.created",
+			{ ...subject, id: rest.id },
+			changes(null, rest, [
+				"projectId",
+				"taskId",
+				"billable",
+				"description",
+				"startedAt",
+				"endedAt",
+				"overtime",
+			]),
+			source,
+		),
+	]);
+	return changed ?? null;
 }

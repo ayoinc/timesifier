@@ -22,9 +22,10 @@ import { gridEntryStart, placeOnDay } from "./grid";
  * organisation or another, is not found, whatever the caller's role
  * (`mayChangeTimeOf`). A day in a submitted or approved period is refused,
  * before and after the change (`lockedDays`), and so is time a day does not
- * take: a public holiday, whole-day leave, or more than is left of the day's
- * limit (TS-090, `refusalOf`). Each change goes in one batch with its row in
- * the activity log.
+ * take: a public holiday, whole-day leave, regular time past the day's
+ * expected hours, or overtime the organisation's rules do not allow (TS-090,
+ * TS-095, `refusalOf`). Each change goes in one batch with its row in the
+ * activity log.
  */
 
 /** Why a change was not made. */
@@ -49,6 +50,8 @@ export interface Span {
 	taskId?: string;
 	/** The entry's tags; left out, they stay as they are (TS-085). */
 	tagIds?: readonly string[];
+	/** Whether the entry is overtime (TS-095); left out, it stays as it is. */
+	overtime?: boolean;
 }
 
 export const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, reason });
@@ -67,6 +70,7 @@ export const ENTRY_FIELDS = [
 	"description",
 	"startedAt",
 	"endedAt",
+	"overtime",
 ] as const;
 
 /** The entry `id` of `userId`, as the activity log names it. */
@@ -107,10 +111,13 @@ export async function editEntry(
 	const days = [dayOf(entry.startedAt, zone), dayOf(span.startedAt, zone)];
 	if ((await lockedDays(scope, userId, days)).size > 0) return refuse("locked");
 	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
+	const overtime = span.overtime ?? entry.overtime;
 	const over = await refusalOf(scope, userId, zone, now, {
 		day: dayOf(span.startedAt, zone),
-		replaces: id,
+		// An entry that changes kind is new time of its new kind.
+		replaces: overtime === entry.overtime ? id : null,
 		afterMs: span.endedAt - span.startedAt,
+		overtime,
 	});
 	if (over) return limited(over);
 	const task = await entryTaskOf(
@@ -129,6 +136,7 @@ export async function editEntry(
 		description: span.description,
 		startedAt: new Date(span.startedAt),
 		endedAt: new Date(span.endedAt),
+		overtime,
 	};
 	await scope.batch([
 		scope.timeEntries.statements.update(changed, (e) => and(eq(e.id, id), eq(e.userId, userId))),
@@ -155,6 +163,8 @@ export interface DeletedEntry {
 	startedAt: number;
 	endedAt: number;
 	tagIds: string[];
+	/** Whether it was overtime (TS-095): it is put back as the same kind. */
+	overtime: boolean;
 }
 
 /** Deletes an entry of `userId` that has ended, and answers what it was, so it can be put back. */
@@ -193,6 +203,7 @@ export async function deleteEntry(
 		startedAt: entry.startedAt.getTime(),
 		endedAt: entry.endedAt.getTime(),
 		tagIds,
+		overtime: entry.overtime,
 	};
 	return { ok: true as const, deleted };
 }
@@ -219,6 +230,7 @@ export async function restoreEntry(
 		day,
 		replaces: null,
 		afterMs: entry.endedAt - entry.startedAt,
+		overtime: entry.overtime,
 	});
 	if (over) return limited(over);
 	const restored = {
@@ -230,6 +242,7 @@ export async function restoreEntry(
 		description: entry.description,
 		startedAt: new Date(entry.startedAt),
 		endedAt: new Date(entry.endedAt),
+		overtime: entry.overtime,
 	};
 	const kept = entry.tagIds.length > 0 && (await tagsAllowed(scope, [], entry.tagIds));
 	await scope.batch([
@@ -269,6 +282,8 @@ export interface DayHours {
 	taskId?: string;
 	/** The entry's tags (TS-085). */
 	tagIds?: readonly string[];
+	/** Whether the hours are overtime (TS-095). */
+	overtime?: boolean;
 }
 
 /** The refusal of hours a day has no room for, saying what it has left (TS-091, W08). */
@@ -294,10 +309,12 @@ export async function addHours(
 	const { projectId, description, day, minutes, zone, now } = hours;
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
+	const overtime = hours.overtime ?? false;
 	const over = await refusalOf(scope, userId, zone, now, {
 		day,
 		replaces: null,
 		afterMs: minutes * 60_000,
+		overtime,
 	});
 	if (over) return limited(over);
 	const task = await entryTaskOf(scope, projectId, hours.taskId);
@@ -318,6 +335,7 @@ export async function addHours(
 		description,
 		startedAt: new Date(placed.start),
 		endedAt: new Date(placed.start + minutes * 60_000),
+		overtime,
 	};
 	const [[entry]] = await scope.batch([
 		scope.timeEntries.statements.insert(added),
@@ -339,26 +357,33 @@ export interface CellHours {
 	day: Day;
 	/** Whole minutes; 0 removes the cell's time. */
 	minutes: number;
+	/** Whether the cell is the project's overtime on the day, rather than its regular time (TS-095). */
+	overtime?: boolean;
 	zone: string;
 	/** The server's clock. */
 	now: number;
 }
 
 /**
- * Sets the time of one project on one day to `minutes` (TS-052). A cell with
- * no entry gains one, which starts where `gridEntryStart` says; a cell of one
- * entry keeps its start and has its end moved; 0 deletes it. A cell of more
- * than one entry, or of a running one, is changed in the Day view. Either way
- * the entry is placed within its day by `placeOnDay` (TS-091, W08): it never
+ * Sets the time of one project on one day to `minutes` (TS-052), of regular
+ * time or of overtime (TS-095): a cell is the entries of one project and one
+ * kind. A cell with no entry gains one, which starts where `gridEntryStart`
+ * says; a cell of one entry keeps its start and has its end moved; 0 deletes
+ * it. A cell of more than one entry, or of a running one, is changed in the
+ * Day view. Either way the entry is placed within its day by `placeOnDay`
+ * (TS-091, W08): it never
  * ends past the end of the day or past now, and a day without room for the
  * hours is refused, saying what it has left.
  */
 export async function setCellHours(scope: OrganisationScope, userId: string, cell: CellHours) {
 	const { projectId, day, minutes, zone, now } = cell;
+	const overtime = cell.overtime ?? false;
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
 
 	const ofDay = await entriesOfDay(scope, userId, day, zone);
-	const inCell = ofDay.filter((entry) => entry.projectId === projectId);
+	const inCell = ofDay.filter(
+		(entry) => entry.projectId === projectId && entry.overtime === overtime,
+	);
 	if (inCell.length > 1 || inCell.some((entry) => entry.endedAt === null)) {
 		return refuse("in-day-view");
 	}
@@ -370,6 +395,7 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 		day,
 		replaces: entry?.id ?? null,
 		afterMs: minutes * 60_000,
+		overtime,
 	});
 	if (over) return limited(over);
 
@@ -421,6 +447,7 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 			taskId: task.taskId,
 			billable: task.billable,
 			description: null,
+			overtime,
 			...span,
 		};
 		await scope.batch([
