@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { data } from "react-router";
+import { data, Link } from "react-router";
 
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
+import { expenseReportPath } from "~/expenses/paths";
 import { halfDaysLabel } from "~/leave/kinds";
 import { membershipContext } from "~/organisations/membership.server";
 import {
@@ -29,7 +30,7 @@ import {
 import { byStart, totalsOf } from "~/reports/report";
 import { peopleOfReport, reportRequest, rowsOfReport } from "~/reports/reports.server";
 import { destination } from "~/shell/destinations";
-import { ACTION_LINK } from "~/shell/links";
+import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { dayOf } from "~/time/calendar";
 import { formatDuration, formatTimeRange } from "~/time/format";
@@ -76,6 +77,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		groupings: showClients ? [...GROUPS] : GROUPS.filter((each) => each !== "client"),
 		choices: others ? choices : [],
 		everyone: seesEveryone ? "Everyone" : "You and your teams",
+		expensesPath: expenseReportPath(membership.organisation.slug),
 	};
 
 	// A custom range that makes no report: the form again, holding what was
@@ -199,7 +201,10 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
 				{loaderData.whose} Each entry counts whole on the day it starts, in your time zone,{" "}
-				{loaderData.zone}, even when it runs past midnight. A running entry counts up to now.
+				{loaderData.zone}, even when it runs past midnight. A running entry counts up to now.{" "}
+				<Link to={loaderData.expensesPath} className={TEXT_LINK}>
+					Report on expenses
+				</Link>
 			</PageLead>
 
 			<div className="mt-8">

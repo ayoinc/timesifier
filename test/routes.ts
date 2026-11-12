@@ -70,3 +70,12 @@ export const NOT_FOUND_ROUTE = "routes/app/not-found";
 export function isNotFound(route: RouteUnderTest): boolean {
 	return route.id === NOT_FOUND_ROUTE;
 }
+
+/**
+ * Whether the route's address names a record of the organisation, such as an
+ * expense's receipt: its stand-in names none, so even a member is answered 404
+ * there. Each such route has a test of its own with a real record.
+ */
+export function namesARecord(route: Pick<RouteUnderTest, "address">): boolean {
+	return route.address.split("/").includes("x");
+}

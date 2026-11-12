@@ -1,5 +1,10 @@
 import { index, type RouteConfig, route } from "@react-router/dev/routes";
 import {
+	EXPENSE_REPORT_EXPORT_SEGMENT,
+	EXPENSE_REPORT_SEGMENT,
+	RECEIPT_SEGMENT,
+} from "./expenses/paths";
+import {
 	API_PATH,
 	CALENDAR_FEEDS_SEGMENT,
 	EXPORT_SEGMENT,
@@ -44,6 +49,9 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(REPORT_EXPORT_SEGMENT, "routes/app/reports.export.ts"),
 	route(IMPORT_SEGMENT, "routes/app/integrations.import.tsx"),
 	route(EXPORT_SEGMENT, "routes/app/integrations.export.ts"),
+	route(EXPENSE_REPORT_SEGMENT, "routes/app/reports.expenses.tsx"),
+	route(EXPENSE_REPORT_EXPORT_SEGMENT, "routes/app/reports.expenses.export.ts"),
+	route(RECEIPT_SEGMENT, "routes/app/expenses.receipt.ts"),
 	route(ACCOUNT_SEGMENT, "routes/app/account.tsx"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	...Object.keys(MOVED).map((segment) =>

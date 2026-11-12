@@ -32,6 +32,16 @@ function inNobodys(address: string): string {
 }
 
 /**
+ * What a member gets at the route's address. A receipt's address names an
+ * expense, and Ada has none called "x": her own organisation answers 404 too,
+ * and the test of a receipt she has is test/pages/expenses.test.ts.
+ */
+function memberStatus(route: (typeof allRoutes)[number]): number {
+	if (isMoved(route)) return 301;
+	return isNotFound(route) || route.id === "routes/app/expenses.receipt" ? 404 : 200;
+}
+
+/**
  * What a response says, apart from the address it was asked for, which a page
  * may repeat and the person asking already has.
  */
@@ -71,7 +81,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, the export of Reports, My account, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, the exports of Reports, the Expenses view, a receipt, My account, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -94,6 +104,9 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/approvals",
 				"/app/acme/reports",
 				"/app/acme/reports/export",
+				"/app/acme/reports/expenses",
+				"/app/acme/reports/expenses/export",
+				"/app/acme/expenses/x/receipt",
 				"/app/acme/settings",
 				"/app/acme/account",
 				"/app/acme/account/calendar",
@@ -110,6 +123,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/approvals",
 			"routes/app/calendar-feeds",
 			"routes/app/clients",
+			"routes/app/expenses",
 			"routes/app/integrations",
 			"routes/app/integrations.import",
 			"routes/app/invitations",
@@ -129,9 +143,7 @@ describe("a member of one organisation asking for another organisation's address
 		const { ada } = await twoOrganisations();
 		// A member is answered the page, or the redirect of a moved address, or,
 		// at an address that holds no page, the 404 drawn in their own shell.
-		expect((await open(address, ada)).status).toBe(
-			isMoved(route) ? 301 : isNotFound(route) ? 404 : 200,
-		);
+		expect((await open(address, ada)).status).toBe(memberStatus(route));
 
 		const theirs = await open(address, grace);
 		const nobodys = await open(inNobodys(address), grace);
@@ -152,9 +164,7 @@ describe("a member of one organisation asking for another organisation's address
 		const { address } = route;
 		const { ada } = await twoOrganisations();
 		// A redirect is answered to a data request with 202 and where to go.
-		expect((await openData(address, ada)).status).toBe(
-			isMoved(route) ? 202 : isNotFound(route) ? 404 : 200,
-		);
+		expect((await openData(address, ada)).status).toBe(isMoved(route) ? 202 : memberStatus(route));
 
 		const theirs = await openData(address, grace);
 		const nobodys = await openData(inNobodys(address), grace);
@@ -181,6 +191,7 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/integrations": { intent: "token-create", name: "Taken over", scopes: "time:read" },
 		"routes/app/integrations.import": { intent: "discard", importId: "i-acme" },
 		"routes/app/calendar-feeds": { intent: "feed-create", follow: "me" },
+		"routes/app/expenses": { intent: "delete", expenseId: "e-ada" },
 		"routes/app/time-off": {
 			intent: "request",
 			kindId: "k-annual",
@@ -213,6 +224,7 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from leave_requests")).toBe(0);
 			expect(await value("select count(*) from api_tokens")).toBe(0);
 			expect(await value("select count(*) from calendar_feeds")).toBe(0);
+			expect(await value("select count(*) from expense_categories")).toBe(0);
 		},
 	);
 

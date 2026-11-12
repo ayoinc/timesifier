@@ -26,6 +26,7 @@ import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger"
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { expenseTotalsOf } from "~/expenses/expenses.server";
 import { nothingExpected } from "~/leave/days";
 import { halfDaysLabel, LEAVE_TEXT_MAX_LENGTH } from "~/leave/kinds";
 import {
@@ -39,6 +40,7 @@ import { noticeLabel, WORK_KIND_LABELS } from "~/leave/rules";
 import { spanLabel } from "~/leave/words";
 import { decideWork, workToDecide } from "~/leave/work.server";
 import { parseRequest } from "~/lib/validate";
+import { formatMoney, type Money, totalsByCurrency } from "~/money/money";
 import { mayReopenPeriods } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -115,7 +117,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const viewed = await viewedPeriod(membership, url, -1, now);
 	const leavePeople = await leaveDecidablePeople(scope, organisation, access);
 	const todayOf = (person: { timeZone: string }) => dayOf(now, person.timeZone);
-	const [approvals, time, leave, leaveRequests, work] = await Promise.all([
+	const [approvals, time, leave, leaveRequests, work, spent] = await Promise.all([
 		approvalsFor(scope, people, viewed.period, viewed.today),
 		timeByProject(scope, people, viewed.period, now),
 		leaveContext(
@@ -126,6 +128,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		),
 		requestsToDecide(scope, access, leavePeople, todayOf),
 		workToDecide(scope, access, leavePeople, todayOf),
+		// Expenses are submitted and decided with the week's time (TS-070).
+		expenseTotalsOf(
+			scope,
+			people.map((p) => p.id),
+			viewed.period.startsOn,
+			viewed.period.endsOn,
+		),
 	]);
 	// A person whose whole period was leave, public holidays and days not worked
 	// had nothing to submit (TS-061).
@@ -150,6 +159,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		detail: string;
 		comment: string | null;
 		periodId: string | null;
+		/** What their expenses in the week come to, or null when they have none (TS-070). */
+		expenses: string | null;
+	};
+	const moneyWords = (totals: readonly Money[]) =>
+		totals.map((m) => formatMoney(m.amountMinor, m.currency, "en-GB")).join(" + ");
+	const expensesOf = (personId: string) => {
+		const own = spent.get(personId);
+		if (!own) return null;
+		const billable = own.billable.length > 0 ? `, ${moneyWords(own.billable)} billable` : "";
+		return `Expenses: ${moneyWords(own.total)}${billable}`;
 	};
 	const row = (
 		person: { id: string; name: string },
@@ -163,6 +182,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		detail,
 		comment,
 		periodId,
+		expenses: expensesOf(person.id),
 	});
 	const decided = (p: (typeof approvals.decided)[number]) =>
 		row(
@@ -239,6 +259,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					).map((group) => ({ ...group, hours: hours(group.seconds) }))
 				: [],
 		total: hours(rows?.reduce((sum, r) => sum + r.seconds, 0) ?? 0),
+		expenseTotal: moneyWords(
+			totalsByCurrency((rows ?? []).flatMap((r) => spent.get(r.person.id)?.total ?? [])),
+		),
 	};
 }
 
@@ -468,6 +491,16 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 												<>
 													{p.detail}
 													{p.comment && <span className="block wrap-anywhere">“{p.comment}”</span>}
+													{p.expenses && (
+														<span className="block">
+															<Link
+																to={`${destinationPath(organisation.slug, "expenses")}?${WEEK_PARAM}=${week.period.startsOn}&person=${p.person.id}`}
+																className={TEXT_LINK}
+															>
+																{p.expenses}
+															</Link>
+														</span>
+													)}
 												</>
 											}
 											value={hours(p.seconds)}
@@ -521,6 +554,9 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 							<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
 								No time was logged on any project in these timesheets.
 							</p>
+						)}
+						{loaderData.expenseTotal && (
+							<LedgerTotal label="Expenses" value={loaderData.expenseTotal} />
 						)}
 						<LedgerTotal label="Total" value={total} />
 					</Ledger>

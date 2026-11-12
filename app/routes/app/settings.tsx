@@ -10,6 +10,9 @@ import { Select } from "~/components/Select";
 import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { keepCategory, listCategories } from "~/expenses/categories.server";
+import { ExpenseCategories } from "~/expenses/ExpenseCategories";
+import { termsOf } from "~/expenses/expenses.server";
 import { LARGEST_ALLOWANCE_DAYS, LEAVE_NAME_MAX_LENGTH } from "~/leave/kinds";
 import { LeaveSettings } from "~/leave/LeaveSettings";
 import {
@@ -44,7 +47,7 @@ import { allows } from "~/organisations/roles";
 import { WeekStart } from "~/periods/periods";
 import { APP_PATH, destination } from "~/shell/destinations";
 import { PageHeading, Section } from "~/shell/PageHeading";
-import { Day } from "~/time/calendar";
+import { Day, dayOf } from "~/time/calendar";
 import { TimeZone } from "~/time/zones";
 import { TypedHours } from "~/timesheet/durations";
 import { WEEKDAYS, weekdayName, zoneLabel } from "~/workspace/general";
@@ -60,8 +63,8 @@ import { FormSheet } from "./FormSheet";
 // and whether Clients is shown (TS-048). Below it are the working week, the
 // kinds of leave with their allowances and notice, and the public holidays,
 // which apply to everyone in the organisation (TS-061), then the timesheet
-// rules: overtime, weekend work and short-notice leave (TS-090). The person's
-// own account is on My account.
+// rules: overtime, weekend work and short-notice leave (TS-090), then the
+// expense categories (TS-070). The person's own account is on My account.
 
 const { label } = destination("settings");
 
@@ -74,11 +77,13 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation, role } = context.get(membershipContext);
 	const canChange = allows(role, { organization: ["update"] });
 	const scope = organisationScope(env.DB, organisation.id);
-	const [week, kinds, holidays, rules] = await Promise.all([
+	const [week, kinds, holidays, rules, categories, terms] = await Promise.all([
 		workingWeekOf(scope),
 		leaveKindsOf(scope),
 		publicHolidaysOf(scope),
 		timesheetRulesOf(organisation.id),
+		listCategories(scope),
+		termsOf(organisation.id),
 	]);
 	return {
 		organisation: {
@@ -96,6 +101,12 @@ export async function loader({ context }: Route.LoaderArgs) {
 		leave: { week: [...week], kinds, holidays },
 		/** Overtime, weekend work and short-notice leave (TS-090). */
 		rules,
+		/** The expense categories (TS-070). */
+		expenses: {
+			currency: terms.currency,
+			today: dayOf(Date.now(), organisation.timeZone),
+			categories,
+		},
 	};
 }
 
@@ -181,6 +192,25 @@ const form = z.discriminatedUnion("intent", [
 	}),
 	z.object({ intent: z.literal("add-holiday"), day: Day, name: LeaveName }),
 	z.object({ intent: z.literal("remove-holiday"), holidayId: z.string().min(1).max(64) }),
+	z.object({
+		intent: z.literal("add-category"),
+		name: z.string().max(200),
+		unitName: z.string().max(200).optional(),
+		unitPrice: z.string().max(32).optional(),
+		from: z.preprocess((value) => (value === "" ? undefined : value), Day.optional()),
+	}),
+	z.object({
+		intent: z.literal("change-category"),
+		categoryId: z.string().min(1).max(64),
+		name: z.string().max(200),
+		unitName: z.string().max(200).optional(),
+		unitPrice: z.string().max(32).optional(),
+		from: z.preprocess((value) => (value === "" ? undefined : value), Day.optional()),
+	}),
+	z.object({
+		intent: z.enum(["archive-category", "restore-category"]),
+		categoryId: z.string().min(1).max(64),
+	}),
 ]);
 
 /**
@@ -269,6 +299,20 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return done("The timesheet rules are saved.");
 		}
 
+		case "add-category":
+		case "change-category":
+		case "archive-category":
+		case "restore-category": {
+			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
+			const kept = await keepCategory(
+				organisationScope(env.DB, organisation.id),
+				input,
+				(await termsOf(organisation.id)).currency,
+				dayOf(Date.now(), organisation.timeZone),
+			);
+			return kept.ok ? done(kept.said) : declined(kept.problem, kept.status);
+		}
+
 		case "delete": {
 			if (input.confirmation.trim() !== organisation.name) {
 				return declined("That is not the organisation's name. Type it exactly as it is shown.");
@@ -283,7 +327,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 type Task = "rename" | "time-zone" | "week-start" | "delete";
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-	const { organisation, zones, leave, rules } = loaderData;
+	const { organisation, zones, leave, rules, expenses } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	// The name typed to confirm a deletion. The confirmation waits until it is the name exactly.
@@ -349,6 +393,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 			<LeaveSettings data={leave} onDone={setSaid} />
 
 			<RulesSection rules={rules} onDone={setSaid} />
+
+			<ExpenseCategories data={expenses} onDone={setSaid} />
 
 			{/* Deletion is last, under its own rule. */}
 			{organisation.canDelete && (

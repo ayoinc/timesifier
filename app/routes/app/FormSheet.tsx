@@ -47,6 +47,8 @@ export interface FormSheetProps {
 	onDone?: (said: string) => void;
 	/** What the person reads and fills in. Fields are part of the form. */
 	children: ReactNode;
+	/** `multipart/form-data` for a form with a file field. */
+	encType?: "multipart/form-data";
 }
 
 /**
@@ -68,6 +70,7 @@ export function FormSheet({
 	onClose,
 	onDone,
 	children,
+	encType,
 }: FormSheetProps) {
 	const form = useId();
 	const fetcher = useFetcher<Outcome>();
@@ -111,6 +114,7 @@ export function FormSheet({
 			<fetcher.Form
 				id={form}
 				method="post"
+				encType={encType}
 				className="flex flex-col gap-4"
 				onSubmit={(event) => {
 					if (fetcher.state !== "idle") event.preventDefault();

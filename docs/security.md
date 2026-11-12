@@ -229,7 +229,7 @@ An owner or admin imports time, clients or projects from a CSV of at most 1 MB a
 
 ### Receipts
 
-An expense's receipt is stored in R2 under a key scoped to the organisation, `org/<organisation id>/receipts/<expense id>`, built on the server from the expense's row and never taken from a request. It is served through the Worker only to a person who may see the expense (`maySeeExpensesOf`); anyone else, in this organisation or another, gets the same 404 (TS-070).
+An expense's receipt is stored in R2 under a key scoped to the organisation, `org/<organisation id>/receipts/<expense id>`, built on the server from the expense's row and never taken from a request. It is served through the Worker only to a person who may see the expense (`maySeeExpensesOf`); anyone else, in this organisation or another, gets the same 404 (TS-070). A receipt is accepted only as a PDF, PNG or JPEG of at most 10 MB, judged by its first bytes as well as its declared type; its file name is cleaned of control characters, quotes and path parts before it is kept, and it is served with its stored type, `nosniff` and a policy under which nothing loads. Only `app/expenses/receipts.server.ts` reaches the `RECEIPTS` binding.
 
 ### The gate in front of the plugin
 

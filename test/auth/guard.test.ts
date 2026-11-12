@@ -14,7 +14,13 @@ import {
 } from "~/shell/destinations";
 import { freshDatabase } from "../db/database";
 import { createOrganisation } from "../organisations/harness";
-import { isMoved, isNotFound, routesAtOrUnder, STAND_IN_ORGANISATION } from "../routes";
+import {
+	isMoved,
+	isNotFound,
+	namesARecord,
+	routesAtOrUnder,
+	STAND_IN_ORGANISATION,
+} from "../routes";
 import { captureEmail, type Mailbox, ORIGIN, post, signIn } from "./harness";
 
 // Criterion 6 of card TS-008: every route under /app redirects to sign-in
@@ -149,9 +155,11 @@ describe("with a session", () => {
 	// An address that has moved answers with a redirect to its new place;
 	// test/pages/destinations.test.ts follows it. A resource route, a file to
 	// download, is served as that file. The organisation's catch-all answers 404
-	// to everyone; test/pages/errors.test.ts follows it.
+	// to everyone; test/pages/errors.test.ts follows it. A route that names a
+	// record, such as a receipt, is followed by its own test.
 	const served = underApp.filter(
-		(route) => route.address !== APP_PATH && !isMoved(route) && !isNotFound(route),
+		(route) =>
+			route.address !== APP_PATH && !isMoved(route) && !isNotFound(route) && !namesARecord(route),
 	);
 	const pages = served.filter((route) => route.hasPage);
 	const files = served.filter((route) => !route.hasPage);
