@@ -31,7 +31,6 @@ import {
 	TEAM_LEAVE_AHEAD_DAYS,
 	teamLeaveAhead,
 	withdrawLeave,
-	workingWeekOf,
 } from "~/leave/leave.server";
 import {
 	daysLabel,
@@ -42,6 +41,7 @@ import {
 	noticeAsked,
 	noticeGiven,
 	noticeLabel,
+	rulesOn,
 	WORK_KIND_LABELS,
 	WorkKind,
 } from "~/leave/rules";
@@ -68,6 +68,7 @@ import { accessOf } from "~/organisations/access.server";
 import { membershipContext, viewerOf } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
+import { timetableFor } from "~/schedules/schedules.server";
 import { canSee, destination, destinationPath } from "~/shell/destinations";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
@@ -117,20 +118,23 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			: "mine";
 	const access = await accessOf(membership);
 
-	const [mine, week, holidays, decidedByOthers, rules, work, teamLeave] = await Promise.all([
-		myLeave(scope, user.id, year),
-		workingWeekOf(scope),
-		publicHolidaysOf(scope, { first: today, last: `${year + 1}-12-31` }),
-		someoneElseDecides(scope, user.id),
-		timesheetRulesOf(organisation.id),
-		myWork(scope, user.id),
-		teamLeaveAhead(scope, organisation, access, today),
-	]);
+	const [mine, timetable, holidays, decidedByOthers, organisationRules, work, teamLeave] =
+		await Promise.all([
+			myLeave(scope, user.id, year),
+			timetableFor(scope, user.id),
+			publicHolidaysOf(scope, { first: today, last: `${year + 1}-12-31` }),
+			someoneElseDecides(scope, user.id),
+			timesheetRulesOf(organisation.id),
+			myWork(scope, user.id),
+			teamLeaveAhead(scope, organisation, access, today),
+		]);
 	const holidayKind = mine.kinds.find((k) => k.key === HOLIDAY_KIND);
 	const calendar = {
-		week,
+		timetable,
 		holidays: new Map(holidayKind?.enabled === false ? [] : holidays.map((h) => [h.day, h.name])),
 	};
+	// Their schedule today may carry its own rules for overtime and weekend work (TS-097).
+	const rules = rulesOn({ timetable, rules: organisationRules }, today);
 
 	let requests = null;
 	let waiting = 0;

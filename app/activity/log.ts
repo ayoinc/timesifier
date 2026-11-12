@@ -32,6 +32,7 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	payment: "Payments",
 	leave: "Leave",
 	organisation: "Workspace settings",
+	work_schedule: "Work schedules",
 	api_token: "API tokens",
 	webhook: "Webhooks",
 	import: "Imports",

@@ -1,10 +1,11 @@
 import * as z from "zod";
 
 import { periodContaining } from "~/periods/periods";
+import type { Timetable } from "~/schedules/schedules";
 import { addDays, type Day, daysFrom } from "~/time/calendar";
 import { formatDuration } from "~/time/format";
 
-import { type DayStatus, dayStatus, type LeaveCalendar, weekMinutes } from "./days";
+import { type DayStatus, dayStatus, type LeaveCalendar } from "./days";
 import type { KindKey, LeaveStatus } from "./kinds";
 import { WEEKDAY_NAMES } from "./words";
 
@@ -119,8 +120,9 @@ export interface WorkRequestLike {
 /** The most a request for overtime or weekend work asks for on one day, in minutes. */
 export const MOST_WORK_MINUTES_A_DAY = 16 * 60;
 
-/** Everything that decides one person's limits: their leave calendar, the rules, and their approved work. */
+/** Everything that decides one person's limits: their leave calendar, the organisation's rules, and their approved work. */
 export interface RulesCalendar extends LeaveCalendar {
+	/** The organisation's rules: a day's schedule may carry its own (`rulesOn`). */
 	rules: DayRulesOf;
 	/** The person's requests for overtime and weekend work. Only approved ones count. */
 	work: readonly WorkRequestLike[];
@@ -152,6 +154,27 @@ export interface DayLimit {
 	noOvertime: NoOvertime | null;
 	/** The minutes of approved overtime or weekend work on it. */
 	approvedMinutes: number;
+}
+
+/**
+ * The rules that hold on `day` for the person (TS-097): their schedule's own
+ * overtime rule, with its caps, and its own rule for days not worked, where
+ * it has them; else the organisation's.
+ */
+export function rulesOn<
+	R extends Pick<DayRulesOf, "overtime" | "weekend" | "overtimeDayCap" | "overtimeWeekCap">,
+>(calendar: { rules: R; timetable: Timetable }, day: Day): R {
+	const own = calendar.timetable(day).rules;
+	if (!own.overtime && !own.weekend) return calendar.rules;
+	return {
+		...calendar.rules,
+		...(own.overtime && {
+			overtime: own.overtime.policy,
+			overtimeDayCap: own.overtime.dayCap,
+			overtimeWeekCap: own.overtime.weekCap,
+		}),
+		...(own.weekend && { weekend: own.weekend }),
+	};
 }
 
 /** The approved minutes of `kind` on `day`: the sum of the approved requests that cover it. */
@@ -202,6 +225,7 @@ function overtimeOf(
 export function dayLimit(calendar: RulesCalendar, day: Day): DayLimit {
 	const status = dayStatus(calendar, day);
 	const { is } = status;
+	const rules = rulesOn(calendar, day);
 	const closed = (why: Closed): DayLimit => ({
 		day,
 		status,
@@ -215,14 +239,14 @@ export function dayLimit(calendar: RulesCalendar, day: Day): DayLimit {
 		case "holiday":
 			return closed({ why: "holiday", name: is.name });
 		case "not-a-working-day": {
-			if (calendar.rules.weekend === "none") return closed({ why: "weekend-not-allowed" });
+			if (rules.weekend === "none") return closed({ why: "weekend-not-allowed" });
 			const approved = approvedWorkMinutes(calendar.work, "weekend", day);
 			return {
 				day,
 				status,
 				regularMinutes: 0,
 				closed: null,
-				...overtimeOf(calendar.rules, approved, false),
+				...overtimeOf(rules, approved, false),
 				approvedMinutes: approved,
 			};
 		}
@@ -237,7 +261,7 @@ export function dayLimit(calendar: RulesCalendar, day: Day): DayLimit {
 				status,
 				regularMinutes: Math.floor(status.expectedMinutes),
 				closed: null,
-				...overtimeOf(calendar.rules, approved, true),
+				...overtimeOf(rules, approved, true),
 				approvedMinutes: approved,
 			};
 		}
@@ -529,8 +553,9 @@ export function dayRules(
 	return days.map((day) => {
 		const limit = dayLimit(calendar, day);
 		const ms = tracked(day);
-		const before = weekOvertimeBetween(calendar.rules, weekOf(calendar.rules, day), day, tracked);
-		const allowance = overtimeAllowance(limit, calendar.rules, before);
+		const rules = rulesOn(calendar, day);
+		const before = weekOvertimeBetween(rules, weekOf(rules, day), day, tracked);
+		const allowance = overtimeAllowance(limit, rules, before);
 		const overtime = wholeMinutes(ms.overtimeMs);
 		return {
 			day,
@@ -579,7 +604,7 @@ export function kindOfNewTime(
 	ms: number,
 	tracked: (day: Day) => KindsMs,
 ): { ok: true; overtime: boolean } | { ok: false; message: string } {
-	const { rules } = calendar;
+	const rules = rulesOn(calendar, day);
 	const limit = dayLimit(calendar, day);
 	const ofDay = tracked(day);
 	const fresh = { beforeMs: 0, afterMs: ms, weekOvertimeBefore: 0, weekOvertimeAfter: 0 };
@@ -688,7 +713,7 @@ export function workDays(
 	});
 }
 
-/** Whether `day` is worked in the week at all, before holidays and leave. */
-export function inWorkingWeek(calendar: Pick<LeaveCalendar, "week">, day: Day): boolean {
-	return weekMinutes(calendar.week, day) > 0;
+/** Whether `day` is worked in the person's schedule at all, before holidays and leave. */
+export function inWorkingWeek(calendar: Pick<LeaveCalendar, "timetable">, day: Day): boolean {
+	return calendar.timetable(day).minutes > 0;
 }

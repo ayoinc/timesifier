@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
 	balance,
-	DEFAULT_WORKING_WEEK,
 	dayLabel,
 	dayStatus,
 	expectedMinutes,
@@ -19,8 +18,6 @@ import {
 	overlaps,
 	personStatus,
 	personStatusLabel,
-	type WorkingWeek,
-	weekMinutes,
 	workingMinutes,
 } from "~/leave/days";
 import {
@@ -35,7 +32,13 @@ import {
 	requestableKinds,
 } from "~/leave/kinds";
 import { DEFAULT_NOTICE_DAYS } from "~/leave/rules";
+import { STANDARD_WEEK, weekly, weekMinutesOf } from "~/schedules/schedules";
 import { addDays, bounds, type Day, daysFrom } from "~/time/calendar";
+
+/** Minutes a day, Monday first: a week of a schedule as these tests write it. */
+type WorkingWeek = readonly number[];
+/** The Standard schedule every organisation starts with (TS-097): Monday to Friday, 7:30 a day. */
+const DEFAULT_WORKING_WEEK: WorkingWeek = weekMinutesOf(STANDARD_WEEK);
 
 // The rules of leave (TS-061) without the database: working days, half days,
 // public holidays, the leave year, a person's status now, and what is expected
@@ -78,7 +81,7 @@ function calendar(
 	}: { week?: WorkingWeek; holidays?: Record<Day, string> } = {},
 	...requests: LeaveRequestLike[]
 ): LeaveCalendar {
-	return { week, holidays: new Map(Object.entries(holidays)), leave: requests };
+	return { timetable: weekly(week), holidays: new Map(Object.entries(holidays)), leave: requests };
 }
 
 describe("the working week", () => {
@@ -86,7 +89,7 @@ describe("the working week", () => {
 		expect(DEFAULT_WORKING_WEEK).toEqual([450, 450, 450, 450, 450, 0, 0]);
 		// 2026-11-09 is a Monday.
 		expect(
-			daysFrom("2026-11-09", "2026-11-15").map((d) => weekMinutes(DEFAULT_WORKING_WEEK, d)),
+			daysFrom("2026-11-09", "2026-11-15").map((d) => weekly(DEFAULT_WORKING_WEEK)(d).minutes),
 		).toEqual([450, 450, 450, 450, 450, 0, 0]);
 	});
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_WORKING_WEEK, type LeaveRequestLike, type WorkingWeek } from "~/leave/days";
+import type { LeaveRequestLike } from "~/leave/days";
+import { STANDARD_WEEK, type Timetable, weekly, weekMinutesOf } from "~/schedules/schedules";
+
+/** Minutes a day, Monday first: a week of a schedule as these tests write it. */
+type WorkingWeek = readonly number[];
+const DEFAULT_WORKING_WEEK: WorkingWeek = weekMinutesOf(STANDARD_WEEK);
+
 import { KIND_KEYS, type KindKey, type LeaveStatus } from "~/leave/kinds";
 import {
 	closedReason,
@@ -95,8 +101,11 @@ function calendar({
 	dayCap = null,
 	weekCap = null,
 	approved = [],
+	timetable = weekly(week),
 }: {
 	week?: WorkingWeek;
+	/** A schedule day by day (TS-097); else `week`, every day, with the organisation's rules. */
+	timetable?: Timetable;
 	holidays?: Record<Day, string>;
 	requests?: LeaveRequestLike[];
 	overtime?: OvertimeRule;
@@ -106,7 +115,7 @@ function calendar({
 	approved?: WorkRequestLike[];
 } = {}): RulesCalendar {
 	return {
-		week,
+		timetable,
 		holidays: new Map(Object.entries(holidays)),
 		leave: requests,
 		rules: { overtime, weekend, overtimeDayCap: dayCap, overtimeWeekCap: weekCap, weekStartsOn: 1 },

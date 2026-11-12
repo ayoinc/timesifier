@@ -1,24 +1,25 @@
 import { useState } from "react";
+import { Link } from "react-router";
 
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { TextField } from "~/components/TextField";
 import { FormSheet } from "~/routes/app/FormSheet";
+import { ACTION_LINK } from "~/shell/links";
 import { Section } from "~/shell/PageHeading";
-import { formatDuration } from "~/time/format";
 
 import { halfDaysLabel, type KindKey, LEAVE_NAME_MAX_LENGTH } from "./kinds";
 import { heldToNotice, LONGEST_NOTICE_DAYS, noticeLabel } from "./rules";
-import { spanLabel, WEEKDAY_NAMES, workingWeekLabel } from "./words";
+import { spanLabel } from "./words";
 
-// Workspace settings for leave (TS-061): the working week everyone is
-// expected to work, the kinds of leave, and the public holidays. Only owners
+// Workspace settings for leave (TS-061): the default work schedule (TS-097,
+// set on its own page), the kinds of leave, and the public holidays. Only owners
 // and admins are shown Workspace settings; the page's action asks again.
 
 export interface LeaveSettingsData {
-	/** Minutes a day, Monday first. */
-	week: number[];
+	/** The organisation's default work schedule today (TS-097), and the address of the schedules page. */
+	schedule: { name: string; weekLabel: string; path: string };
 	kinds: {
 		id: string;
 		key: KindKey;
@@ -32,10 +33,7 @@ export interface LeaveSettingsData {
 	holidays: { id: string; day: string; name: string }[];
 }
 
-type Task = "week" | "kind" | "add-holiday" | "remove-holiday";
-
-/** Hours as the working week's fields show them: 450 is "7:30", none is empty. */
-const hoursText = (minutes: number) => (minutes > 0 ? formatDuration(minutes * 60) : "");
+type Task = "kind" | "add-holiday" | "remove-holiday";
 
 /** The notice a kind asks for, as its row reads: "14 days' notice", "No notice", "Never needs notice". */
 const noticeText = (kind: { key: KindKey; noticeDays: number }) => {
@@ -61,28 +59,20 @@ export function LeaveSettings({
 	return (
 		<>
 			<Section
-				id="working-week"
-				heading="Working week"
-				lead="The hours everyone is expected to work on each day of the week. Leave and public holidays are taken from them."
+				id="work-schedules"
+				heading="Work schedules"
+				lead="The hours people are expected to work: named schedules with a start, a finish and a break on each day worked, given to people, teams and roles. Leave and public holidays are taken from them."
 				className="max-w-200"
 			>
-				<Ledger heading={workingWeekLabel(data.week)}>
-					<LedgerRows label="Working week">
-						{WEEKDAY_NAMES.map((name, index) => (
-							<LedgerRow
-								key={name}
-								title={name}
-								value={
-									(data.week[index] ?? 0) > 0 ? formatDuration((data.week[index] ?? 0) * 60) : "Off"
-								}
-							/>
-						))}
+				<Ledger heading={data.schedule.name} note="Default">
+					<LedgerRows label="The default schedule">
+						<LedgerRow title="Everyone without another schedule" detail={data.schedule.weekLabel} />
 					</LedgerRows>
 				</Ledger>
 				<div className="mt-4">
-					<Button variant="outlined" onPress={() => setTask("week")}>
-						Change working week
-					</Button>
+					<Link to={data.schedule.path} className={ACTION_LINK}>
+						Work schedules
+					</Link>
 				</div>
 			</Section>
 
@@ -172,30 +162,6 @@ export function LeaveSettings({
 					</Button>
 				</div>
 			</Section>
-
-			<FormSheet
-				title="Change the working week"
-				intent="working-week"
-				submitLabel="Save"
-				isOpen={task === "week"}
-				onClose={close}
-				onDone={onDone}
-			>
-				<p>Hours on each day, as 7.5 or 7:30. Leave a day empty when nobody works it.</p>
-				<div className="grid grid-cols-2 gap-4">
-					{WEEKDAY_NAMES.map((name, index) => (
-						<TextField
-							key={name}
-							label={name}
-							name={`day${index + 1}`}
-							defaultValue={hoursText(data.week[index] ?? 0)}
-							inputMode="decimal"
-							autoComplete="off"
-							maxLength={5}
-						/>
-					))}
-				</div>
-			</FormSheet>
 
 			<FormSheet
 				title={`Change ${kind?.name ?? "this kind"}`}

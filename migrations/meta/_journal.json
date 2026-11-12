@@ -127,6 +127,13 @@
 			"when": 1794525584000,
 			"tag": "0018_invoiced_expense_receipts",
 			"breakpoints": true
+		},
+		{
+			"idx": 18,
+			"version": "6",
+			"when": 1794568836335,
+			"tag": "0019_work_schedules",
+			"breakpoints": true
 		}
 	]
 }
