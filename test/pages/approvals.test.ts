@@ -273,7 +273,7 @@ describe("status and grouping (TS-058)", () => {
 		await seedPeriod(acme.id, mona.user.id, WEEK, "approved");
 
 		const text = textOf(await page(ada, ""));
-		expect(text).toMatch(/grace@example\.com Submitted .*? 3:30/);
+		expect(text).toMatch(/grace grace@example\.com Submitted .*? 3:30/);
 		expect(text).toMatch(/linus@example\.com Submitted .*? 4:00/);
 		expect(text).not.toContain("mona@example.com Submitted");
 		expect(text).toContain("Total 7:30");
@@ -288,9 +288,7 @@ describe("status and grouping (TS-058)", () => {
 
 		const text = textOf(await page(ada, "&group=project"));
 		// Projects in name order.
-		expect(text).toMatch(
-			/Billing grace@example\.com 1:30 Site grace@example\.com, linus@example\.com 6:00 Total 7:30/,
-		);
+		expect(text).toMatch(/Billing grace 1:30 Site grace, linus 6:00 Total 7:30/);
 	});
 
 	it("shows each status in the address, with the period's hours", async () => {
@@ -304,7 +302,7 @@ describe("status and grouping (TS-058)", () => {
 		expect(approved).toContain("Total 3:30");
 
 		const returned = textOf(await page(ada, "&status=returned&group=project"));
-		expect(returned).toMatch(/Site linus@example\.com 4:00 Total 4:00/);
+		expect(returned).toMatch(/Site linus 4:00 Total 4:00/);
 
 		// Not submitted: Ada, who has no time, and Mona, who has eight hours.
 		const missing = textOf(await page(ada, "&status=not-submitted"));
@@ -356,9 +354,7 @@ describe("status and grouping (TS-058)", () => {
 		expect(byPerson).toContain("Total 3:30");
 
 		const byProject = textOf(await page(mona, "&group=project"));
-		expect(byProject).toMatch(
-			/Billing grace@example\.com 1:30 Site grace@example\.com 2:00 Total 3:30/,
-		);
+		expect(byProject).toMatch(/Billing grace 1:30 Site grace 2:00 Total 3:30/);
 		expect(byProject).not.toContain("linus@example.com");
 
 		// Not submitted holds nobody of hers either: Grace submitted, Linus and Mona are not hers.

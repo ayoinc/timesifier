@@ -52,6 +52,57 @@ Builder: an AI session on branch `ts-090-leave-rules`. Asked for by the owner on
 - [x] "Submit week" has one look and one place on Day, Week and Calendar, with one filled primary in each view (`PeriodHeader` in `app/timesheet/Submission.tsx`, tonal, in the header row of each; `test/pages/timesheet.test.ts`; `e2e/timesheet.spec.ts`, "its header submits the week").
 - [x] Unit and property tests of the rules; worker tests per role for every write path and every new intent; the new intents in the cross-organisation 404 and action-validation tests; a browser spec on the person's own time with `fill()`, the keyboard and axe at 390px and 1280px in both schemes (`test/leave/rules.test.ts`, 600 seeded cases a property; `test/pages/isolation.test.ts`, each new intent of Time off, Approvals and Settings; `test/action-validation.test.ts` is per route and no route is new; `e2e/leave-rules.spec.ts`).
 
+### TS-068 · B8 · Utilisation report
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-061 (B1), TS-066, TS-014a.
+
+- [x] Reports shows, per person and per team for a range: capacity, logged, billable logged, utilisation and billable utilisation (billable ÷ capacity) (`routes/app/reports.utilisation.tsx`, `app/reports/utilisation.ts`; `test/pages/report-views.test.ts`, "Utilisation": per role, and 2:00 of 15:00 capacity, 13%).
+- [x] Leave reduces capacity as in TS-084. Utilisation for a person on leave all week shows "—" (`test/pages/report-views.test.ts`, "shows — for a person on leave all week").
+- [x] Harvest-taste items 8 and 9: the range's total is the largest figure with a week drawn as a timetable of projects by days, and people are titled by name or the start of their address with the whole address under it on Reports, Team and Approvals (`app/reports/WeekTimetable.tsx`, `shownName`/`addressLine`; `test/pages/team.test.ts`, `test/pages/approvals.test.ts`).
+- [x] On the shared FilterBar, PeriodStepper and LinkTabs of TS-091 (`app/reports/ReportChoice.tsx`, `RangeSteps.tsx`, `ReportTabs.tsx`); keyboard and axe at 390px and 1280px in both schemes (`e2e/report-views.spec.ts`).
+
+### TS-071 · B6 · Cost rates and profitability
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-067 (TS-070 for expense costs).
+
+- [x] An owner, admin or Finance gives each person a cost rate per hour with an effective-from date, in the organisation currency (`test/pages/report-views.test.ts`, "Cost rates"; a manager or member gets 404).
+- [ ] The project page and a Profitability report show, for a range: revenue, cost and profit, with margin. Revenue is the billable amount for hourly projects, or the fee spread evenly over the project's start-to-end days for fixed fee. Cost is hours × cost rate plus expenses (TS-070) (tests with fixtures in Harvest's own worked examples). The Profitability report is done (`test/reports/profitability.test.ts` on the rules of Harvest's "Profitability report" article; `test/pages/report-views.test.ts`, £940 profit on £1,200 revenue). Not ticked: there is no project page yet to show it on.
+- [x] Only owners, admins and Finance see cost and profit; never a manager (`RATES_ONLY` in `routes/app/organisation.tsx`; `test/pages/destinations.test.ts`; `test/pages/report-views.test.ts`, "Profitability").
+
+### TS-084 · B3 · Leave in reports and capacity
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-061 (TS-042, B1), TS-014a.
+
+- [x] Reports has a Leave view: allowance, taken, booked, pending and remaining per person and type for the leave year, with a CSV export of one row per person per type (`test/pages/report-views.test.ts`, "Leave balances": per role, and the CSV totals equal the screen).
+- [x] A person's expected hours for a week are their capacity (B1) less approved leave and holidays in that week. Team's week shows "Expected", "Leave" and "Logged" (`test/pages/report-views.test.ts`, "Team's week": 3 days of leave in a 5-day week, 15:00 of 37:30).
+- [ ] The research's ICS feed of approved leave is built by TS-089, which also carries entries.
+
+### TS-080 · B18 · Saved and shared reports
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-014a, TS-014b.
+
+- [x] Any report view (range kind, filters, grouping) can be saved under a name. Reopening it reruns it against today's data, with a relative range such as "last month" moving with the date (`test/pages/report-views.test.ts`, "keeps the question", with a fake clock).
+- [x] The owner of a saved report shares it with named people as view or edit. A recipient sees only the rows their own role allows, never the sharer's scope (`test/pages/report-views.test.ts`: a member opening an admin's shared report sees 2:00, the admin 8:00).
+- [x] Out of scope: a custom-metric builder. Dashboards are TS-086.
+
+### TS-086 · Dashboards
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-067, TS-068, TS-069, TS-071. Asked for by the owner; the research left dashboards out.
+
+- [x] Review > Dashboards shows owners, admins, Finance and team managers panels for a range: utilisation, billable utilisation, hours by project and the budgets nearest their limit, each over the people the viewer may see (`timeScopeOf`; `test/pages/report-views.test.ts`, "Dashboards", per role; a member gets 404).
+- [ ] Panels with money, revenue, cost, profit, uninvoiced and receivables, are shown only to those who see rates; a manager never sees them. Revenue, cost and profit are done and shown only to owners, admins and Finance (`test/pages/report-views.test.ts`). Not ticked: the uninvoiced and receivables panels are omitted until Bill (PR #46) merges; they will read `receivablesOf` and `uninvoicedTotalsOf` from `app/invoices`.
+- [x] Each panel's figure equals the report it links to (`test/pages/report-views.test.ts`: total, utilisation and profit against their views).
+
 ### TS-063 · The profile menu
 
 Builder: an AI session on branch `ts-063-profile-menu`. Harvest opens profile and sign out from the person at the top (`docs/research/harvest-app/*.txt`, "Profile and settings for <owner>"); Timesifier had a "My account" link in the band and a Sign out button on My account. This card puts both in one profile menu at the end of the band. In review: the pull request against `main`; screenshots at 390px and 1280px in both schemes are in `cmux-assets/browser/timesifier/TS-063/` (band, menu open, the menu outside an organisation).
@@ -751,13 +802,6 @@ Depends on: TS-064, TS-046, TS-047.
 - [x] Optional auto-lock: N days after each deadline, the lock date moves forward to the deadline. It never moves backward (test with a fake clock). `deadline.ts` with the hourly Cron Trigger in `workers/scheduled.ts` (`test/locks/deadline.test.ts`, "auto-lock"; `test/pages/lock-date.test.ts`, "auto-locks N days after each deadline, never backward, and submits as the system when asked").
 - [x] Optional auto-submit at lock: every unsubmitted period up to the lock date becomes submitted, recorded as "submitted by the system" (test). Its `period_events` row has a null actor (migration `0013_lock_date`) and its activity record source `system` (`test/pages/lock-date.test.ts`, "submits every unsubmitted week up to the new lock date, as the system").
 
-### TS-068 · B8 · Utilisation report
-
-Depends on: TS-064, TS-061 (B1), TS-066, TS-014a.
-
-- [ ] Reports shows, per person and per team for a range: capacity, logged, billable logged, utilisation and billable utilisation (billable ÷ capacity) (test with known fixtures).
-- [ ] Leave reduces capacity as in TS-084. Utilisation for a person on leave all week shows "—" (test).
-
 ### TS-070 · B9 · Expenses
 
 Depends on: TS-064, TS-011a, TS-046, TS-047.
@@ -771,14 +815,6 @@ Builder: an AI session on branch `ts-b2b-expenses`, migration `0012_expense_cate
 - [x] A person sees and changes their own expenses; a manager sees their teams' people's, an owner, admin or Finance everyone's, and only the person changes them (`maySeeExpensesOf`, `mayChangeExpensesOf`; role table). (`test/pages/expenses.test.ts`, "who sees whose expenses")
 - [x] Reports include an Expenses view and CSV by person, project and category, with billable and reimbursable totals (test). (`test/pages/expenses.test.ts`, "the Expenses view of Reports"; `e2e/expenses.spec.ts`)
 - [x] Out of scope, said on the card: paying reimbursements.
-
-### TS-071 · B6 · Cost rates and profitability
-
-Depends on: TS-064, TS-067 (TS-070 for expense costs).
-
-- [ ] An owner, admin or Finance gives each person a cost rate per hour with an effective-from date, in the organisation currency (test).
-- [ ] The project page and a Profitability report show, for a range: revenue, cost and profit, with margin. Revenue is the billable amount for hourly projects, or the fee spread evenly over the project's start-to-end days for fixed fee. Cost is hours × cost rate plus expenses (TS-070) (tests with fixtures in Harvest's own worked examples).
-- [ ] Only owners, admins and Finance see cost and profit; never a manager (role table).
 
 ### TS-072 · B17 · Activity log
 
@@ -860,14 +896,6 @@ Builder: an AI session in the governance slice, on branch `ts-b2b-governance`. H
 - [x] A Contractors report lists each contractor's unrounded hours and cost for a range, including people who left the organisation if they tracked in it, with CSV. Owners, admins and Finance only (role table). At `reports/contractors` and `reports/contractors/export`, with Reports' ranges and Previous and Next; a member, a manager and another organisation get the organisation's 404. Hours are whole seconds; cost is each entry's seconds at the cost rate in force on the day it starts in the person's zone (`resolveRate`), added exactly and rounded half up once per person and currency, one total per currency; time with no cost rate counts 0 and says "Missing rate for h:mm". A person who left is listed when their last `membership.removed` record says they were a contractor; their entries stay when their membership goes. The CSV has seconds and hours to six places, one row per currency and one for time without a rate (`app/contractors/`, `app/routes/app/contractors.tsx`, `contractors.export.ts`; `test/pages/contractors.test.ts`, "the Contractors report": a rate change mid-range, a missing rate, a project rate in euros, a departed contractor in and a departed employee out, a day in Auckland, the CSV's headers and rows; `test/pages/destinations.test.ts`, `test/pages/isolation.test.ts`; `e2e/contractors.spec.ts`: time tracked on the Timesheet shows with "Missing rate", the download, axe at 390px and 1280px in both schemes).
 - [ ] Reports links to the Contractors report for those who see rates. Not done here: `app/routes/app/reports.tsx` is another slice's, and the link is more than a one-line change (`docs/navigation.md`, "Running a report and exporting it").
 
-### TS-080 · B18 · Saved and shared reports
-
-Depends on: TS-064, TS-014a, TS-014b.
-
-- [ ] Any report view (range kind, filters, grouping) can be saved under a name. Reopening it reruns it against today's data, with a relative range such as "last month" moving with the date (test with a fake clock).
-- [ ] The owner of a saved report shares it with named people as view or edit. A recipient sees only the rows their own role allows, never the sharer's scope (test: a member opening an admin's shared report sees only their own hours).
-- [ ] Out of scope: a custom-metric builder. Dashboards are TS-086.
-
 ### TS-081 · B20 · Public API with organisation tokens
 
 Depends on: TS-064, TS-020, TS-072 (for "via API").
@@ -890,22 +918,6 @@ Depends on: TS-064, TS-074, TS-088. A connector card per provider follows the sa
 
 - [ ] An owner or admin connects Xero by OAuth. Issuing an invoice in Timesifier creates the same invoice (contact, lines, tax, currency, number) in Xero once, and a retry never duplicates it (idempotency test against a recorded fixture).
 - [ ] A payment recorded in Xero is read back and recorded on the Timesifier invoice (test).
-
-### TS-084 · B3 · Leave in reports and capacity
-
-Depends on: TS-064, TS-061 (TS-042, B1), TS-014a.
-
-- [ ] Reports has a Leave view: allowance, taken, booked, pending and remaining per person and type for the leave year, with a CSV export of one row per person per type (test that the CSV totals equal the screen).
-- [ ] A person's expected hours for a week are their capacity (B1) less approved leave and holidays in that week. Team's week (TS-045) shows "Expected", "Leave" and "Logged" (test with a 3-day leave in a 5-day week giving 2/5 of capacity).
-- [ ] The research's ICS feed of approved leave is built by TS-089, which also carries entries.
-
-### TS-086 · Dashboards
-
-Depends on: TS-064, TS-067, TS-068, TS-069, TS-071. Asked for by the owner; the research left dashboards out.
-
-- [ ] Review > Dashboards shows owners, admins, Finance and team managers panels for a range: utilisation, billable utilisation, hours by project and the budgets nearest their limit, each over the people the viewer may see (`timeScopeOf`; test).
-- [ ] Panels with money, revenue, cost, profit, uninvoiced and receivables, are shown only to those who see rates; a manager never sees them (role table).
-- [ ] Each panel's figure equals the report it links to (test).
 
 ### TS-087 · Webhooks
 

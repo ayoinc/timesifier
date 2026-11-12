@@ -12,6 +12,26 @@ export function nameOrEmail(person: { name?: string | null | undefined; email: s
 	return person.name?.trim() || person.email;
 }
 
+/**
+ * How a person is titled in a list of people (Team, Approvals, Reports): their
+ * name, or, when they have given none, the part of their address before the
+ * "@", with the whole address on the line under it (`addressLine`).
+ */
+export function shownName(person: { name?: string | null | undefined; email: string }): string {
+	const name = person.name?.trim();
+	if (name) return name;
+	const at = person.email.lastIndexOf("@");
+	return at > 0 ? person.email.slice(0, at) : person.email;
+}
+
+/** The line under a person's title in a list: their address when they have given no name, else nothing. */
+export function addressLine(person: {
+	name?: string | null | undefined;
+	email: string;
+}): string | null {
+	return person.name?.trim() ? null : person.email;
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
 	owner: "Owner",
 	admin: "Admin",

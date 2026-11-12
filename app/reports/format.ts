@@ -37,6 +37,7 @@ export function stepUnit(range: Range, { first, last }: { first: Day; last: Day 
 		case "week":
 			return "week";
 		case "this-month":
+		case "last-month":
 		case "month":
 			return "month";
 		case "custom": {

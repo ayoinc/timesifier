@@ -190,7 +190,7 @@ test("a member asks for leave and records sick leave; the owner approves; both s
 	await openShell(page, destinationPath(slug, "team"));
 	const people = page.getByRole("list", { name: "People" });
 	await expect(people).toContainText("On leave · Sick leave");
-	await expect(people).toContainText(/of \d+:\d\d expected/);
+	await expect(people).toContainText(/logged\d+:\d\d expected/);
 
 	// Bob's own Timesheet says so on the day and in the week's strip.
 	await openShell(other, organisationPath(slug));

@@ -46,11 +46,13 @@ import { mayReopenPeriods } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
+import { shownName } from "~/organisations/people";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { PERIOD_COMMENT_MAX_LENGTH, periodContaining } from "~/periods/periods";
 import { destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
+import type { Person } from "~/teams/people.server";
 import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
 import { hours, periodLabel, WEEK_PARAM } from "~/teams/words";
@@ -155,7 +157,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	// what can be done with it.
 	type Row = {
 		id: string;
-		person: { id: string; name: string };
+		person: { id: string; name: string; address: string | null };
 		seconds: number;
 		detail: string;
 		comment: string | null;
@@ -172,13 +174,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		return `Expenses: ${moneyWords(own.total)}${billable}`;
 	};
 	const row = (
-		person: { id: string; name: string },
+		person: Pick<Person, "id" | "name" | "email" | "address">,
 		detail: string,
 		periodId: string | null = null,
 		comment: string | null = null,
 	): Row => ({
 		id: periodId ?? person.id,
-		person: { id: person.id, name: person.name },
+		// The name, or the start of the address with the whole of it under (harvest-taste item 9).
+		person: {
+			id: person.id,
+			name: person.address ? shownName({ email: person.address }) : person.name,
+			address: person.address,
+		},
 		seconds: secondsOf(person.id),
 		detail,
 		comment,
@@ -491,6 +498,9 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 											}
 											detail={
 												<>
+													{p.person.address && (
+														<span className="block wrap-anywhere">{p.person.address}</span>
+													)}
 													{p.detail}
 													{p.comment && <span className="block wrap-anywhere">“{p.comment}”</span>}
 													{p.expenses && (

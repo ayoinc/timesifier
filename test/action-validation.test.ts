@@ -71,6 +71,22 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			"/app/acme/projects/rates",
 			"intent=rate&level=client&key=c1&amount=10&from=2026-12-01",
 		),
+	// A report is saved under a name; "keep" is not a thing a view does.
+	"routes/app/reports": () =>
+		formFromAMember("/app/acme/reports?range=this-week", "intent=keep&name=Mine"),
+	"routes/app/reports.utilisation": () =>
+		formFromAMember("/app/acme/reports/utilisation?range=this-week", "intent=keep&name=Mine"),
+	"routes/app/reports.leave": () =>
+		formFromAMember("/app/acme/reports/leave", "intent=keep&name=Mine"),
+	// A cost rate starts on a date the calendar has; 31 February is not.
+	"routes/app/reports.profitability": () =>
+		formFromAMember(
+			"/app/acme/reports/profitability",
+			"intent=cost-rate&userId=u1&amount=40.00&effectiveFrom=2026-02-31",
+		),
+	// A saved report is renamed, deleted, shared or unshared; this asks to publish it.
+	"routes/app/reports.saved": () =>
+		formFromAMember("/app/acme/reports/saved", "intent=publish&reportId=r1"),
 	// A request's first day is a date the calendar has; 31 February is not.
 	"routes/app/time-off": () =>
 		formFromAMember(

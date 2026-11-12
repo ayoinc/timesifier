@@ -122,13 +122,14 @@ export async function addressFor(route: RouteUnderTest, organisationId: string):
  * The pages below a destination that only some of those shown it may open,
  * and who: the default rates (`projects/rates`, TS-067) are below Projects,
  * which everyone is shown, and the Contractors report and its export
- * (TS-079) below Reports; each holds money and is open to those who see rates
+ * (TS-079) and the Profitability view (TS-071) below Reports; each holds money and is open to those who see rates
  * alone. Anyone else gets the 404 a destination they are not shown answers.
  */
 const NARROWER: Record<string, (role: Role) => boolean> = {
 	"routes/app/rates": maySeeRates,
 	"routes/app/contractors": maySeeRates,
 	"routes/app/contractors.export": maySeeRates,
+	"routes/app/reports.profitability": maySeeRates,
 };
 
 /** Whether a person of `role`, who is shown the route's destination, may open the route. */

@@ -10,8 +10,8 @@ import { calendarOf, leaveContext, shortNoticeCounts } from "~/leave/leave.serve
 import { type Access, type TimeScope, timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { type Membership, notFound } from "~/organisations/membership.server";
-import { nameOrEmail } from "~/organisations/people";
-import { bounds, dayOf, daysFrom } from "~/time/calendar";
+import { addressLine, nameOrEmail, shownName } from "~/organisations/people";
+import { bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { zoneOfMember } from "~/time/zones.server";
 
 import type { Grouping } from "./choices";
@@ -38,10 +38,13 @@ export const ENTRY_PAGE_SIZE = 200;
 /** D1 takes at most 100 bound parameters a statement; a list of ids is read in chunks under that. */
 const IDS_A_QUERY = 90;
 
-/** A person a report can be narrowed to. */
+/** A person a report can be narrowed to, by the name lists show them by (`shownName`). */
 export interface Person {
 	id: string;
 	name: string;
+	/** Their address, shown under the name when they have given none. */
+	address: string | null;
+	email: string;
 }
 
 /** What a report's page needs whether or not its range makes a report. */
@@ -63,6 +66,12 @@ interface ReportChoices {
 	now: number;
 	/** Only the time with this tag, on the entry or on its project (TS-085). */
 	tag?: string;
+	/** What the viewer may see and do, for the views that read more than time (TS-068, TS-084). */
+	access: Access;
+	/** Today in the viewer's zone. */
+	today: Day;
+	/** The day the organisation's weeks start on, for the way back to today's week. */
+	weekStartsOn: number;
 }
 
 /** Everything a report needs to be read, from the address of its page or of its export. */
@@ -100,11 +109,13 @@ export async function reportRequest(
 	}
 
 	const zone = await zoneOfMember(membership);
+	const today = dayOf(now, zone);
 	const showClients = organisation.clientsEnabled;
 	const report: ReportChoices = {
 		scope,
 		query,
 		grouping: query.group === "client" && !showClients ? "project" : query.group,
+
 		zone,
 		people: query.person === undefined ? whose : { everyone: false, people: [query.person] },
 		seesEveryone: whose.everyone,
@@ -112,9 +123,12 @@ export async function reportRequest(
 		showClients,
 		now,
 		tag: query.tag,
+		access,
+		today,
+		weekStartsOn: organisation.weekStartsOn,
 	};
 	if (problem) return { ...report, problem };
-	return { ...report, days: rangeDays(query, dayOf(now, zone), organisation.weekStartsOn) };
+	return { ...report, days: rangeDays(query, today, organisation.weekStartsOn) };
 }
 
 /** `column` is one of `people`, as one bound parameter however many they are. */
@@ -145,24 +159,44 @@ export async function peopleToChoose(scope: OrganisationScope, access: Access): 
 	const members = await scope.memberships.select(
 		whose.everyone ? undefined : (m) => amongPeople(m.userId, whose.people),
 	);
-	const names = await namesOf(members.map((m) => m.userId));
+	const accounts = await accountsOf(members.map((m) => m.userId));
 	return members
-		.map(({ userId }) => ({ id: userId, name: names.get(userId) ?? "" }))
+		.map(({ userId }) => {
+			const account = accounts.get(userId) ?? { name: null, email: "" };
+			return {
+				id: userId,
+				name: shownName(account),
+				address: addressLine(account),
+				email: account.email,
+			};
+		})
 		.sort((a, b) => a.name.localeCompare(b.name, "en") || (a.id < b.id ? -1 : 1));
 }
 
-/** How each of these people is named: their name, or their address when they have given none. */
-async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
-	const names = new Map<string, string>();
+/** The name and address of each of these people. */
+async function accountsOf(
+	ids: readonly string[],
+): Promise<Map<string, { name: string | null; email: string }>> {
+	const accounts = new Map<string, { name: string | null; email: string }>();
 	const db = drizzle(env.DB);
 	for (let at = 0; at < ids.length; at += IDS_A_QUERY) {
 		const rows = await db
 			.select({ id: users.id, name: users.name, email: users.email })
 			.from(users)
 			.where(inArray(users.id, ids.slice(at, at + IDS_A_QUERY)));
-		for (const row of rows) names.set(row.id, nameOrEmail(row));
+		for (const row of rows) accounts.set(row.id, row);
 	}
-	return names;
+	return accounts;
+}
+
+/**
+ * How each of these people is named in an export: their name, or their whole
+ * address when they have given none, so a file read by a machine tells
+ * everyone apart.
+ */
+async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
+	const accounts = await accountsOf(ids);
+	return new Map([...accounts].map(([id, account]) => [id, nameOrEmail(account)]));
 }
 
 /**
@@ -243,6 +277,8 @@ export async function rowsOfReport(request: ReportRequest): Promise<Row[]> {
 export interface PersonLine {
 	id: string;
 	name: string;
+	/** Their address, shown under the name when they have given none. */
+	address: string | null;
 	/** Seconds of tracked time in the range. Leave is never in it. */
 	worked: number;
 	/** Minutes expected over the range: the working week, less public holidays and approved leave. */
@@ -282,6 +318,7 @@ export async function peopleOfReport(
 		return {
 			id: person.id,
 			name: person.name,
+			address: person.address,
 			worked: worked.get(person.id) ?? 0,
 			expectedMinutes: expectedMinutes(calendar, range),
 			leaveMinutes: leaveMinutes(calendar, range),

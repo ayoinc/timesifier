@@ -358,12 +358,12 @@ describe("who is not working (TS-061)", () => {
 
 		const text = textOf(await pageBody(await open(TEAM, ada)));
 		expect(text).toMatch(
-			/grace@example\.com On leave · Annual leave Not submitted Leave: Wed 11 Annual leave, Fri 13 Annual leave \(half day\) 0:00 of 26:15 expected/,
+			/grace grace@example\.com On leave · Annual leave Not submitted Leave: Wed 11 Annual leave, Fri 13 Annual leave \(half day\) 0:00 logged 26:15 expected · 11:15 leave/,
 		);
 		expect(text).toMatch(
-			/linus@example\.com Working Not submitted · Timer running Leave: Wed 11 Sick leave 1:00 of 30:00 expected/,
+			/linus linus@example\.com Working Not submitted · Timer running Leave: Wed 11 Sick leave 1:00 logged 30:00 expected · 7:30 leave/,
 		);
-		expect(text).toMatch(/bob@example\.com Available Not submitted 0:00 of 37:30 expected/);
+		expect(text).toMatch(/bob bob@example\.com Available Not submitted 0:00 logged 37:30 expected/);
 
 		// Her manager sees the same of her.
 		const managed = textOf(await pageBody(await open(TEAM, mona)));
@@ -386,7 +386,7 @@ describe("who is not working (TS-061)", () => {
 
 		let text = textOf(await pageBody(await open(TEAM, ada)));
 		expect(text).toMatch(
-			/bob@example\.com Not working today · Armistice Day Not submitted 0:00 of 30:00 expected/,
+			/bob bob@example\.com Not working today · Armistice Day Not submitted 0:00 logged 30:00 expected/,
 		);
 
 		// A Saturday.
@@ -395,7 +395,7 @@ describe("who is not working (TS-061)", () => {
 		expect(text).toMatch(/bob@example\.com Not working today Not submitted/);
 
 		text = textOf(await pageBody(await open(`${TEAM}?week=${WEEK}`, ada)));
-		expect(text).toMatch(/bob@example\.com Not submitted 0:00 of 37:30 expected/);
+		expect(text).toMatch(/bob bob@example\.com Not submitted 0:00 logged 37:30 expected/);
 		expect(text).not.toContain("Not working today");
 	});
 });
