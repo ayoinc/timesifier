@@ -5,10 +5,17 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, organisations, uuidv7 } from "~/db";
-import { type LockInput, type LockReason, lockOf, lockOfChange } from "~/locks/locks";
+import type { LockReason } from "~/locks/locks";
+import { invoicedIds, lockNoticeOf, lockReasonsOn } from "~/locks/locks.server";
 import { lineAmount, type Money, totalsByCurrency } from "~/money/money";
-import { PeriodStatus } from "~/periods/periods";
+import {
+	expenseTagStatements,
+	TAG_NOT_OFFERED,
+	tagsAllowed,
+	tagsOfExpenses,
+} from "~/tags/tags.server";
 import type { Day } from "~/time/calendar";
+import { formatDay } from "~/time/format";
 
 import { type Category, categoriesById } from "./categories.server";
 import { AMOUNT_MAX_MINOR, parseAmount, parseQuantity, priceOn } from "./expenses";
@@ -53,6 +60,41 @@ function refusal(problem: string, status = 400): Refusal {
 	return { ok: false, problem, status };
 }
 
+/** The refusal of a locked write; for the lock date, it names the date and the owner's or admin's reason. */
+async function lockedRefusal(scope: OrganisationScope, lock: LockReason): Promise<Refusal> {
+	if (lock !== "locked-through") return refusal(LOCKED[lock], 409);
+	const notice = await lockNoticeOf(scope.organisationId);
+	if (notice === null) return refusal(LOCKED[lock], 409);
+	const why = notice.reason ? ` The reason given: ${notice.reason}` : "";
+	return refusal(
+		`That day is on or before the lock date, ${formatDay(notice.lockedThrough)}, so its expenses cannot change.${why}`,
+		409,
+	);
+}
+
+/**
+ * Why a write touching `days` of `userId`'s, and the expense `id` when it is
+ * one already, is refused, or null: invoiced first, then the lock date or
+ * period of the days in the order given (app/locks).
+ */
+async function lockOfWrite(
+	scope: OrganisationScope,
+	userId: string,
+	days: readonly Day[],
+	id: string | null,
+): Promise<LockReason | null> {
+	const [reasons, invoiced] = await Promise.all([
+		lockReasonsOn(scope, userId, days),
+		id === null ? Promise.resolve(new Set<string>()) : invoicedIds(scope, "expense", [id]),
+	]);
+	if (id !== null && invoiced.has(id)) return "invoiced";
+	const ranked: LockReason[] = ["locked-through", "approved", "submitted"];
+	for (const reason of ranked) {
+		if (days.some((day) => reasons.get(day) === reason)) return reason;
+	}
+	return null;
+}
+
 /** What a person fills in for an expense, as the form sends it. */
 export interface ExpenseInput {
 	spentOn: Day;
@@ -69,48 +111,23 @@ export interface ExpenseInput {
 	receipt: File | null;
 	/** Whether to remove the receipt it has, when no new one is given. */
 	removeReceipt: boolean;
+	/** The expense's tags; left out, they stay as they are (TS-085). */
+	tagIds?: readonly string[];
 }
 
-/** The organisation's currency and lock date. */
+/** The organisation's currency. */
 export async function termsOf(organisationId: string) {
 	const [row] = await drizzle(env.DB)
-		.select({ currency: organisations.currency, lockedThrough: organisations.lockedThrough })
+		.select({ currency: organisations.currency })
 		.from(organisations)
 		.where(eq(organisations.id, organisationId))
 		.limit(1);
-	return { currency: row?.currency ?? "GBP", lockedThrough: row?.lockedThrough ?? null };
+	return { currency: row?.currency ?? "GBP" };
 }
 
 /** `column` is one of `ids`, as one bound parameter however many they are. */
 export function among(column: SQLiteColumn, ids: readonly string[]): SQL {
 	return sql`${column} in (select value from json_each(${JSON.stringify(ids)}))`;
-}
-
-/**
- * The status of each of `userId`'s periods that holds one of `days`, as a
- * lookup by day: null for a day in no submitted period.
- */
-async function periodStatuses(scope: OrganisationScope, userId: string, days: readonly Day[]) {
-	const sorted = [...days].sort();
-	const first = sorted[0];
-	const last = sorted.at(-1);
-	const periods =
-		first === undefined || last === undefined
-			? []
-			: await scope.periods.select((p) =>
-					and(eq(p.userId, userId), lte(p.startsOn, last), gte(p.endsOn, first)),
-				);
-	return (day: Day): PeriodStatus | null => {
-		const period = periods.find(({ startsOn, endsOn }) => startsOn <= day && day <= endsOn);
-		return period ? PeriodStatus.parse(period.status) : null;
-	};
-}
-
-/** The ids among `ids` of expenses on an invoice line. */
-async function invoicedAmong(scope: OrganisationScope, ids: readonly string[]) {
-	if (ids.length === 0) return new Set<string>();
-	const rows = await scope.invoiceLineSources.select((s) => among(s.expenseId, ids));
-	return new Set(rows.map((row) => row.expenseId).filter((id) => id !== null));
 }
 
 type ExpenseRow = Awaited<ReturnType<OrganisationScope["expenses"]["select"]>>[number];
@@ -207,7 +224,7 @@ async function resolve(
 	};
 }
 
-/** The fields the activity log records a change of. */
+/** The fields the activity log records a change of; `tags` is the tag ids, as for projects. */
 const RECORDED = [
 	"spentOn",
 	"projectId",
@@ -219,7 +236,13 @@ const RECORDED = [
 	"reimbursable",
 	"notes",
 	"receiptName",
+	"tags",
 ] as const;
+
+/** Tag ids as the activity summary holds them. */
+function tagList(tagIds: readonly string[]): string {
+	return [...new Set(tagIds)].sort().join(",");
+}
 
 /** Records an expense of `userId`'s. Its id, or why it was refused. */
 export async function recordExpense(
@@ -232,14 +255,10 @@ export async function recordExpense(
 	if ("ok" in resolved) return resolved;
 	const { values, receipt } = resolved;
 
-	const statusOn = await periodStatuses(scope, userId, [values.spentOn]);
-	const lock = lockOf({
-		day: values.spentOn,
-		lockedThrough: terms.lockedThrough,
-		periodStatus: statusOn(values.spentOn),
-		invoiced: false,
-	});
-	if (lock) return refusal(LOCKED[lock], 409);
+	const lock = await lockOfWrite(scope, userId, [values.spentOn], null);
+	if (lock) return lockedRefusal(scope, lock);
+	const tagIds = input.tagIds ?? [];
+	if (!(await tagsAllowed(scope, [], tagIds))) return refusal(TAG_NOT_OFFERED);
 
 	const id = uuidv7();
 	const row = {
@@ -255,12 +274,13 @@ export async function recordExpense(
 	try {
 		await scope.batch([
 			scope.expenses.statements.insert(row),
+			...expenseTagStatements(scope, id, [], tagIds),
 			recordStatement(
 				scope,
 				userId,
 				"expense.created",
 				{ type: "expense", id, ownerId: userId },
-				changes(null, row, RECORDED),
+				changes(null, { ...row, tags: tagList(tagIds) }, RECORDED),
 			),
 		]);
 	} catch (error) {
@@ -292,18 +312,11 @@ export async function changeExpense(
 	if ("ok" in resolved) return resolved;
 	const { values, receipt } = resolved;
 
-	const [statusOn, invoiced] = await Promise.all([
-		periodStatuses(scope, userId, [before.spentOn, values.spentOn]),
-		invoicedAmong(scope, [id]),
-	]);
-	const lockInput = (day: Day): LockInput => ({
-		day,
-		lockedThrough: terms.lockedThrough,
-		periodStatus: statusOn(day),
-		invoiced: invoiced.has(id),
-	});
-	const lock = lockOfChange(lockInput(before.spentOn), lockInput(values.spentOn));
-	if (lock) return refusal(LOCKED[lock], 409);
+	const lock = await lockOfWrite(scope, userId, [before.spentOn, values.spentOn], id);
+	if (lock) return lockedRefusal(scope, lock);
+	const current = (await tagsOfExpenses(scope, [id])).get(id) ?? [];
+	const tagIds = input.tagIds ?? current;
+	if (!(await tagsAllowed(scope, current, tagIds))) return refusal(TAG_NOT_OFFERED);
 
 	const removes = receipt === null && input.removeReceipt && before.receiptKey !== null;
 	const after = {
@@ -321,12 +334,17 @@ export async function changeExpense(
 	if (receipt) await putReceipt(scope.organisationId, id, receipt);
 	await scope.batch([
 		scope.expenses.statements.update(after, (e) => and(eq(e.id, id), eq(e.userId, userId))),
+		...expenseTagStatements(scope, id, current, tagIds),
 		recordStatement(
 			scope,
 			userId,
 			"expense.updated",
 			{ type: "expense", id, ownerId: userId },
-			changes(before, { ...before, ...after }, RECORDED),
+			changes(
+				{ ...before, tags: tagList(current) },
+				{ ...before, ...after, tags: tagList(tagIds) },
+				RECORDED,
+			),
 		),
 	]);
 	if (removes) await deleteReceipt(scope.organisationId, id);
@@ -341,27 +359,19 @@ export async function deleteExpense(
 ): Promise<{ ok: true } | Refusal> {
 	const before = await ownExpense(scope, userId, id);
 	if (!before) return MISSING;
-	const [terms, statusOn, invoiced] = await Promise.all([
-		termsOf(scope.organisationId),
-		periodStatuses(scope, userId, [before.spentOn]),
-		invoicedAmong(scope, [id]),
-	]);
-	const lock = lockOf({
-		day: before.spentOn,
-		lockedThrough: terms.lockedThrough,
-		periodStatus: statusOn(before.spentOn),
-		invoiced: invoiced.has(id),
-	});
-	if (lock) return refusal(LOCKED[lock], 409);
+	const lock = await lockOfWrite(scope, userId, [before.spentOn], id);
+	if (lock) return lockedRefusal(scope, lock);
+	const current = (await tagsOfExpenses(scope, [id])).get(id) ?? [];
 	await scope.batch([
-		scope.expenses.statements.delete((e) => and(eq(e.id, id), eq(e.userId, userId))),
 		recordStatement(
 			scope,
 			userId,
 			"expense.deleted",
 			{ type: "expense", id, ownerId: userId },
-			changes(before, null, RECORDED),
+			changes({ ...before, tags: tagList(current) }, null, RECORDED),
 		),
+		...expenseTagStatements(scope, id, current, []),
+		scope.expenses.statements.delete((e) => and(eq(e.id, id), eq(e.userId, userId))),
 	]);
 	if (before.receiptKey !== null) await deleteReceipt(scope.organisationId, id);
 	return { ok: true };
@@ -384,6 +394,8 @@ export interface ExpenseView {
 	reimbursable: boolean;
 	notes: string | null;
 	receiptName: string | null;
+	/** The ids of its tags. */
+	tagIds: string[];
 	/** Why it cannot change, or null when its person may change it. */
 	lock: LockReason | null;
 }
@@ -400,13 +412,11 @@ export async function expensesOf(
 		{ orderBy: (e) => [asc(e.spentOn), asc(e.id)] },
 	);
 	const projectIds = [...new Set(rows.map((row) => row.projectId))];
-	const [terms, statusOn, invoiced, projects, categories] = await Promise.all([
-		termsOf(scope.organisationId),
-		periodStatuses(scope, userId, [first, last]),
-		invoicedAmong(
-			scope,
-			rows.map((row) => row.id),
-		),
+	const ids = rows.map((row) => row.id);
+	const [reasons, invoiced, tags, projects, categories] = await Promise.all([
+		lockReasonsOn(scope, userId, [...new Set(rows.map((row) => row.spentOn))]),
+		invoicedIds(scope, "expense", ids),
+		tagsOfExpenses(scope, ids),
 		projectIds.length === 0
 			? Promise.resolve([])
 			: scope.projects.select((p) => inArray(p.id, projectIds)),
@@ -431,12 +441,8 @@ export async function expensesOf(
 			reimbursable: row.reimbursable,
 			notes: row.notes,
 			receiptName: row.receiptName,
-			lock: lockOf({
-				day: row.spentOn,
-				lockedThrough: terms.lockedThrough,
-				periodStatus: statusOn(row.spentOn),
-				invoiced: invoiced.has(row.id),
-			}),
+			tagIds: tags.get(row.id) ?? [],
+			lock: invoiced.has(row.id) ? "invoiced" : (reasons.get(row.spentOn) ?? null),
 		};
 	});
 }

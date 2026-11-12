@@ -4,6 +4,8 @@ import { Checkbox } from "~/components/Checkbox";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { formatMoney } from "~/money/money";
+import { TagPicker } from "~/tags/TagPicker";
+import type { TagChoice } from "~/tags/tags";
 
 import {
 	type DatedPrice,
@@ -50,16 +52,20 @@ export interface ExpenseValues {
 	billable: boolean;
 	reimbursable: boolean;
 	receiptName: string | null;
+	tagIds: string[];
 }
 
 export function ExpenseFields({
 	projects,
 	categories,
+	tags,
 	currency,
 	values,
 }: {
 	projects: ProjectChoice[];
 	categories: CategoryChoice[];
+	/** Every tag of the organisation; the picker offers the active ones and any the expense has. */
+	tags: readonly TagChoice[];
 	/** The organisation's currency, which unit prices are in. */
 	currency: string;
 	values: ExpenseValues;
@@ -156,6 +162,7 @@ export function ExpenseFields({
 			<Checkbox name="reimbursable" value="on" defaultSelected={values.reimbursable}>
 				Reimburse me
 			</Checkbox>
+			<TagPicker tags={tags} selected={values.tagIds} />
 			<div className="flex flex-col gap-1">
 				<label htmlFor={receiptId} className="text-body-medium text-on-surface">
 					{values.receiptName ? "Replace the receipt (optional)" : "Receipt (optional)"}

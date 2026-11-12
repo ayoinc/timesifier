@@ -17,16 +17,8 @@ export function receiptPath(slug: string, id: string): string {
 	return `${destinationPath(slug, "expenses")}/${id}/receipt`;
 }
 
-/** What follows the organisation in the address of the Expenses view of Reports. */
-export const EXPENSE_REPORT_SEGMENT = `${destination("reports").segment}/expenses`;
-
-/** What follows the organisation in the address of its export. */
-export const EXPENSE_REPORT_EXPORT_SEGMENT = `${EXPENSE_REPORT_SEGMENT}/export`;
-
-/** The Expenses view of Reports, with `search` ("?range=…" or ""). */
-export function expenseReportPath(slug: string, search = ""): string {
-	return `${destinationPath(slug, "reports")}/expenses${search}`;
-}
+/** What follows the organisation in the address of the Expenses view's export (the view itself is in app/reports/views.ts). */
+export const EXPENSE_REPORT_EXPORT_SEGMENT = `${destination("reports").segment}/expenses/export`;
 
 /** Its export: the same query on the export's address. */
 export function expenseReportExportPath(slug: string, search: string): string {

@@ -1,13 +1,15 @@
 import { env } from "cloudflare:workers";
-import { and, asc, gte, lte } from "drizzle-orm";
+import { and, asc, gte, lte, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
 import { users } from "~/db";
 import { type Money, totalsByCurrency } from "~/money/money";
 import type { Membership } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
-import { type ReportRequest, reportRequest } from "~/reports/reports.server";
+import { type RefusedReport, type ReportRequest, reportRequest } from "~/reports/reports.server";
+import { tagsOfExpenses } from "~/tags/tags.server";
 import type { Day } from "~/time/calendar";
 
 import { categoriesById } from "./categories.server";
@@ -19,8 +21,10 @@ import { among } from "./expenses.server";
  * grouped by category, project or person, with their totals, billable and to
  * be paid back, one for each currency (amounts in different currencies are
  * never added). Whose expenses it holds is whose time the viewer may see, as
- * for the time report (`reportRequest`), which reads the range and the person
- * from the same address; the grouping is this view's own.
+ * for the time report (`reportRequest`), which reads the range, the person and
+ * the tag from the same address; the grouping is this view's own. A tag
+ * narrows it as it narrows time (TS-085): to the expenses with the tag
+ * themselves or on a project with it.
  */
 
 /** A report of expenses as its address asks for it. */
@@ -28,24 +32,48 @@ export interface ExpenseReportRequest extends ReportRequest {
 	expenseGroup: ExpenseGrouping;
 }
 
+/** A custom range that makes no report, with the grouping asked for. */
+export interface RefusedExpenseReport extends RefusedReport {
+	expenseGroup: ExpenseGrouping;
+}
+
 /**
- * Reads the report the address asks for: the range and the person as the
- * time report reads them, and the grouping. An address that names no grouping
- * this view has is answered 400, as one with no range that can be made.
+ * Reads the report the address asks for: the range, the person and the tag as
+ * the time report reads them, and the grouping. An address that names no
+ * grouping this view has is answered 400; a custom range that makes no report
+ * is refused with its problem, for the page to show under its field.
  */
 export async function expenseReportRequest(
 	membership: Membership,
 	url: URL,
 	now: number,
-): Promise<ExpenseReportRequest> {
+): Promise<ExpenseReportRequest | RefusedExpenseReport> {
 	const expenseGroup = expenseGrouping(url.searchParams.get("group"));
 	if (expenseGroup === null) throw data("Bad Request", { status: 400 });
 	const asTime = new URL(url);
 	asTime.searchParams.delete("group");
-	const report = await reportRequest(membership, asTime, now);
-	// A custom range that makes no report is answered 400 here.
+	return { ...(await reportRequest(membership, asTime, now)), expenseGroup };
+}
+
+/** The report the export reads: a range that makes no report is answered 400. */
+export async function expenseExportRequest(
+	membership: Membership,
+	url: URL,
+	now: number,
+): Promise<ExpenseReportRequest> {
+	const report = await expenseReportRequest(membership, url, now);
 	if ("problem" in report) throw data("Bad Request", { status: 400 });
-	return { ...report, expenseGroup };
+	return report;
+}
+
+/** An expense has `tagId` when it has the tag itself or its project has it, read from the organisation's own rows. */
+function taggedWith(
+	organisationId: string,
+	expenseId: SQLiteColumn,
+	projectId: SQLiteColumn,
+	tagId: string,
+): SQL {
+	return sql`(${expenseId} in (select expense_id from expense_tags where organisation_id = ${organisationId} and tag_id = ${tagId}) or ${projectId} in (select project_id from project_tags where organisation_id = ${organisationId} and tag_id = ${tagId}))`;
 }
 
 /** One expense as the report and its export list it. */
@@ -68,19 +96,22 @@ export interface ReportedExpense {
 	reimbursable: boolean;
 	notes: string | null;
 	hasReceipt: boolean;
+	/** The names of its own tags, by name. */
+	tags: string[];
 }
 
-/** The expenses of the report, by day. */
+/** The expenses of the report, by day: those with its tag, when it has one. */
 export async function reportedExpenses(
-	request: Pick<ReportRequest, "scope" | "days" | "people">,
+	request: Pick<ReportRequest, "scope" | "days" | "people" | "tag">,
 ): Promise<ReportedExpense[]> {
-	const { scope, days, people } = request;
+	const { scope, days, people, tag } = request;
 	const rows = await scope.expenses.select(
 		(e) =>
 			and(
 				gte(e.spentOn, days.first),
 				lte(e.spentOn, days.last),
 				people.everyone ? undefined : among(e.userId, people.people),
+				tag === undefined ? undefined : taggedWith(scope.organisationId, e.id, e.projectId, tag),
 			),
 		{ orderBy: (e) => [asc(e.spentOn), asc(e.id)] },
 	);
@@ -89,17 +120,23 @@ export async function reportedExpenses(
 	const unique = (ids: string[]) => [...new Set(ids)];
 	const projectIds = unique(rows.map((row) => row.projectId));
 	const personIds = unique(rows.map((row) => row.userId));
-	const [projects, categories, persons] = await Promise.all([
+	const [projects, categories, persons, tagsOf, tags] = await Promise.all([
 		scope.projects.select((p) => among(p.id, projectIds)),
 		categoriesById(scope, unique(rows.map((row) => row.categoryId))),
 		drizzle(env.DB)
 			.select({ id: users.id, name: users.name, email: users.email })
 			.from(users)
 			.where(among(users.id, personIds)),
+		tagsOfExpenses(
+			scope,
+			rows.map((row) => row.id),
+		),
+		scope.tags.select(),
 	]);
 	const clientIds = unique(projects.flatMap((p) => (p.clientId === null ? [] : [p.clientId])));
 	const clients =
 		clientIds.length === 0 ? [] : await scope.clients.select((c) => among(c.id, clientIds));
+	const tagName = new Map(tags.map((t) => [t.id, t.name]));
 	const projectOf = new Map(projects.map((p) => [p.id, p]));
 	const clientName = new Map(clients.map((c) => [c.id, c.name]));
 	const personName = new Map(persons.map((p) => [p.id, nameOrEmail(p)]));
@@ -126,6 +163,12 @@ export async function reportedExpenses(
 			reimbursable: row.reimbursable,
 			notes: row.notes,
 			hasReceipt: row.receiptKey !== null,
+			tags: (tagsOf.get(row.id) ?? [])
+				.flatMap((id) => {
+					const name = tagName.get(id);
+					return name === undefined ? [] : [name];
+				})
+				.sort((a, b) => a.localeCompare(b, "en")),
 		};
 	});
 }
@@ -195,6 +238,7 @@ export const EXPENSE_CSV_COLUMNS = [
 	"Billable",
 	"Reimbursable",
 	"Receipt",
+	"Tags",
 ] as const;
 
 /** The cells of one expense, in the order of `EXPENSE_CSV_COLUMNS`. */
@@ -216,6 +260,7 @@ export function expenseCells(expense: ReportedExpense, showClients: boolean): st
 		yes(expense.billable),
 		yes(expense.reimbursable),
 		yes(expense.hasReceipt),
+		expense.tags.join("; "),
 	];
 }
 

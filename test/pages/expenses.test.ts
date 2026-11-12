@@ -101,9 +101,15 @@ async function ask(who: Person, fields: Record<string, string>, path = EXPENSES)
 }
 
 /** The same, as multipart form data, which can carry a receipt. */
-async function send(who: Person, fields: Record<string, string | File>, path = EXPENSES) {
+async function send(
+	who: Person,
+	fields: Record<string, string | File | string[]>,
+	path = EXPENSES,
+) {
 	const body = new FormData();
-	for (const [name, field] of Object.entries(fields)) body.append(name, field);
+	for (const [name, field] of Object.entries(fields)) {
+		for (const each of Array.isArray(field) ? field : [field]) body.append(name, each);
+	}
 	const response = await exports.default.fetch(
 		new Request(`${ORIGIN}${dataAddress(path)}`, {
 			method: "POST",
@@ -116,7 +122,7 @@ async function send(who: Person, fields: Record<string, string | File>, path = E
 }
 
 /** Records an expense as `who` and returns the answer and the id of the expense made, if any. */
-async function record(who: Person, fields: Record<string, string | File>) {
+async function record(who: Person, fields: Record<string, string | File | string[]>) {
 	const before = await value<number>("select count(*) from expenses");
 	const answer = await send(who, { intent: "record", ...fields });
 	const made = (await value<number>("select count(*) from expenses")) !== before;
@@ -636,5 +642,276 @@ describe("the Expenses view of Reports", () => {
 		expect(lines.find((line) => line.includes("Mileage"))).toContain("10,mile,0.45,4.50,GBP");
 
 		expect((await open(`${REPORT}?group=tag`, ada)).status).toBe(400);
+	});
+});
+
+// TS-092: the cross-slice wiring of expenses.
+
+/** Sets Acme's lock date, with an owner's reason, as Workspace settings would. */
+async function lockThrough(day: string, reason: string) {
+	await env.DB.prepare("update organisations set locked_through = ?, lock_reason = ? where id = ?")
+		.bind(day, reason, acme.id)
+		.run();
+}
+
+describe("the lock date, through the shared locks (TS-092)", () => {
+	it("refuses recording, changing and deleting on or before it for every role, naming the reason", async () => {
+		const { hedy, fay, mona, grace, apex, travel } = await seed();
+		const fields = { spentOn: "2026-11-10", projectId: apex.id, categoryId: travel, amount: "5" };
+		const writers = { owner: ada, admin: hedy, finance: fay, manager: mona, member: grace };
+		const made = new Map<Person, string>();
+		for (const who of Object.values(writers)) {
+			const answer = await record(who, fields);
+			expect(answer.status, who.user.email).toBe(200);
+			made.set(who, answer.id ?? "");
+		}
+		await lockThrough("2026-11-10", "October payroll");
+
+		for (const [role, who] of Object.entries(writers)) {
+			const recorded = await record(who, fields);
+			expect(recorded.status, role).toBe(409);
+			expect(recorded.said, role).toContain("lock date");
+			expect(recorded.said, role).toContain("The reason given: October payroll");
+
+			const id = made.get(who) ?? "";
+			const changed = await send(who, { intent: "change", expenseId: id, ...fields, amount: "6" });
+			expect(changed.status, role).toBe(409);
+			expect(changed.said, role).toContain("October payroll");
+			// Moving it out of the locked day is a change to the locked day too.
+			const moved = await send(who, {
+				intent: "change",
+				expenseId: id,
+				...fields,
+				spentOn: "2026-11-11",
+			});
+			expect(moved.status, role).toBe(409);
+
+			const deleted = await send(who, { intent: "delete", expenseId: id });
+			expect(deleted.status, role).toBe(409);
+			expect(deleted.said, role).toContain("October payroll");
+			expect(await expense(id), role).toMatchObject({ amount_minor: 500, spent_on: "2026-11-10" });
+
+			// After it, the same person still records.
+			expect((await record(who, { ...fields, spentOn: "2026-11-11" })).status, role).toBe(200);
+		}
+
+		const page = await textAt(EXPENSES, grace);
+		expect(page).toContain("Locked through");
+		expect(page).toContain("The reason given: October payroll");
+		expect(page).toContain("Locked by the organisation's lock date");
+	});
+
+	it("refuses deleting an expense on an invoice, and Approvals still totals the week", async () => {
+		const { mona, grace, apex, travel } = await seed();
+		const fields = { spentOn: "2026-11-10", projectId: apex.id, categoryId: travel, amount: "5" };
+		const made = await record(grace, fields);
+		const scope = organisationScope(env.DB, acme.id);
+		const [client] = await scope.clients.insert({ name: "Apex Ltd", nameKey: "apex ltd" });
+		const [invoice] = await scope.invoices.insert({
+			number: "1",
+			clientId: client?.id ?? "",
+			currency: "GBP",
+			issuedOn: "2026-11-30",
+			dueOn: "2026-12-30",
+		});
+		const [line] = await scope.invoiceLines.insert({
+			invoiceId: invoice?.id ?? "",
+			position: 0,
+			kind: "expense",
+			description: "Travel",
+			projectId: apex.id,
+			quantityMilli: 1000,
+			unitPriceMinor: 500,
+			amountMinor: 500,
+		});
+		await scope.invoiceLineSources.insert({ lineId: line?.id ?? "", expenseId: made.id ?? "" });
+
+		const deleted = await send(grace, { intent: "delete", expenseId: made.id ?? "" });
+		expect(deleted.status).toBe(409);
+		expect(deleted.said).toContain("on an invoice");
+		expect(await value("select count(*) from expenses")).toBe(1);
+
+		await ask(grace, { intent: "submit", startsOn: WEEK });
+		expect(await textAt(`${APPROVALS}?week=${WEEK}`, mona)).toContain("Expenses: £5.00");
+	});
+});
+
+describe("tags on expenses (TS-092, TS-085)", () => {
+	/** Acme's tags Retainer and Travel days, and Initech's Secret. */
+	async function tagged() {
+		// Signing in reads the real clock, so Ivy of Initech comes first.
+		const ivy = await person(mailbox, "ivy@example.com");
+		const initech = await createOrganisation(ivy.cookie, "Initech");
+		const seeded = await seed();
+		const scope = organisationScope(env.DB, acme.id);
+		const [retainer, days] = await scope.tags.insert([
+			{ name: "Retainer", nameKey: "retainer" },
+			{ name: "Travel days", nameKey: "travel days" },
+		]);
+		const [secret] = await organisationScope(env.DB, initech.id).tags.insert({
+			name: "Secret",
+			nameKey: "secret",
+		});
+		if (!retainer || !days || !secret) throw new Error("seed failed");
+		return { ...seeded, retainer: retainer.id, days: days.id, secret: secret.id };
+	}
+
+	const tagsOf = async (id: string | null) => {
+		const { results } = await env.DB.prepare(
+			"select tag_id from expense_tags where expense_id = ? order by tag_id",
+		)
+			.bind(id)
+			.all<{ tag_id: string }>();
+		return results.map((r) => r.tag_id);
+	};
+
+	it("are saved, changed and shown, with the change in the activity log as tag ids", async () => {
+		const { grace, apex, travel, retainer, days } = await tagged();
+		const fields = { spentOn: "2026-11-10", projectId: apex.id, categoryId: travel, amount: "5" };
+		const made = await record(grace, { ...fields, tagIds: [retainer, days] });
+		expect(made.status).toBe(200);
+		expect(await tagsOf(made.id)).toEqual([retainer, days].sort());
+		expect(await textAt(EXPENSES, grace)).toContain("Tags: Retainer, Travel days");
+
+		const changed = await send(grace, {
+			intent: "change",
+			expenseId: made.id ?? "",
+			...fields,
+			tagIds: [days],
+		});
+		expect(changed.status).toBe(200);
+		expect(await tagsOf(made.id)).toEqual([days]);
+
+		// A change without the picker leaves the tags as they are.
+		await send(grace, { intent: "change", expenseId: made.id ?? "", ...fields, amount: "7" });
+		expect(await tagsOf(made.id)).toEqual([days]);
+
+		const summary = await value<string>(
+			"select summary from activity_records where action = 'expense.updated' and subject_id = ? order by rowid limit 1",
+			made.id,
+		);
+		expect(JSON.parse(summary ?? "{}")).toMatchObject({
+			before: { tags: [retainer, days].sort().join(",") },
+			after: { tags: days },
+		});
+
+		expect((await send(grace, { intent: "delete", expenseId: made.id ?? "" })).status).toBe(200);
+		expect(await value("select count(*) from expense_tags")).toBe(0);
+	});
+
+	it("offers only active tags; an archived tag already on the expense stays; another organisation's is refused", async () => {
+		const { grace, apex, travel, retainer, days, secret } = await tagged();
+		const fields = { spentOn: "2026-11-10", projectId: apex.id, categoryId: travel, amount: "5" };
+		const made = await record(grace, { ...fields, tagIds: [retainer] });
+		await env.DB.prepare("update tags set archived_at = ? where id = ?").bind(T0, retainer).run();
+
+		const kept = await send(grace, {
+			intent: "change",
+			expenseId: made.id ?? "",
+			...fields,
+			tagIds: [retainer, days],
+		});
+		expect(kept.status).toBe(200);
+		expect(await tagsOf(made.id)).toEqual([retainer, days].sort());
+
+		const archived = await record(grace, { ...fields, tagIds: [retainer] });
+		expect(archived.status).toBe(400);
+		expect(archived.said).toContain("Choose active tags only.");
+
+		const foreign = await record(grace, { ...fields, tagIds: [secret] });
+		expect(foreign.status).toBe(400);
+		expect(await value("select count(*) from expense_tags where tag_id = ?", secret)).toBe(0);
+		const foreignChange = await send(grace, {
+			intent: "change",
+			expenseId: made.id ?? "",
+			...fields,
+			tagIds: [secret],
+		});
+		expect(foreignChange.status).toBe(400);
+		expect(await tagsOf(made.id)).toEqual([retainer, days].sort());
+	});
+
+	it("filter the Expenses report and its CSV", async () => {
+		const { grace, bob, apex, travel, retainer, secret } = await tagged();
+		await record(grace, {
+			spentOn: "2026-11-10",
+			projectId: apex.id,
+			categoryId: travel,
+			amount: "12.50",
+			tagIds: [retainer],
+		});
+		await record(bob, {
+			spentOn: "2026-11-11",
+			projectId: apex.id,
+			categoryId: travel,
+			amount: "3",
+		});
+
+		const all = await textAt(`${REPORT}?range=this-week&group=category`, ada);
+		expect(all).toContain("£15.50");
+		const filtered = `${REPORT}?range=this-week&group=category&tag=${retainer}`;
+		const byTag = await textAt(filtered, ada);
+		expect(byTag).toContain("£12.50");
+		expect(byTag).not.toContain("£15.50");
+		expect(byTag).not.toContain("£3.00");
+		// The stepper's links keep the grouping and the tag.
+		expect(await pageBody(await open(filtered, ada))).toMatch(
+			new RegExp(`range=week[^"]*group=category(&amp;|&)tag=${retainer}`),
+		);
+		// Another organisation's tag matches nothing here.
+		expect(await textAt(`${REPORT}?range=this-week&group=category&tag=${secret}`, ada)).toContain(
+			"No expenses in this range.",
+		);
+
+		const file = await open(`${REPORT}/export?range=this-week&group=category&tag=${retainer}`, ada);
+		const lines = (await file.text()).trim().split("\r\n");
+		expect(lines[0]).toMatch(/,Tags$/);
+		expect(lines).toHaveLength(2);
+		expect(lines[1]).toMatch(/,Retainer$/);
+		const untagged = await open(`${REPORT}/export?range=this-week&group=category`, ada);
+		expect((await untagged.text()).trim().split("\r\n")).toHaveLength(3);
+	});
+
+	it("the Expenses report shows a backwards custom range's error under its field, with no figures", async () => {
+		await seed();
+		const backwards = "range=custom&from=2026-11-12&to=2026-11-01&group=category";
+		const response = await open(`${REPORT}?${backwards}`, ada);
+		expect(response.status).toBe(400);
+		const text = textOf(await pageBody(response));
+		expect(text).toContain("Must be on or after the first day");
+		expect(text).not.toContain("Export as CSV");
+		expect((await open(`${REPORT}/export?${backwards}`, ada)).status).toBe(400);
+	});
+});
+
+describe("the tabs of Reports hold Expenses and Contractors (TS-092)", () => {
+	it.each([
+		["owner", true],
+		["admin", true],
+		["finance", true],
+		["manager", false],
+		["member", false],
+	] as const)("for the %s, Contractors shown: %s", async (role, seesRates) => {
+		const { hedy, fay, mona, grace } = await seed();
+		const who = { owner: ada, admin: hedy, finance: fay, manager: mona, member: grace }[role];
+		const contractors = "/app/acme/reports/contractors?range=this-week";
+		for (const path of [
+			"/app/acme/reports?range=this-week",
+			`${REPORT}?range=this-week&group=category`,
+		]) {
+			const html = await pageBody(await open(path, who));
+			expect(html, path).toContain('aria-label="Report views"');
+			expect(html, path).toContain("/app/acme/reports/expenses?");
+			expect(html.includes("/app/acme/reports/contractors?"), path).toBe(seesRates);
+		}
+		expect((await open(contractors, who)).status).toBe(seesRates ? 200 : 404);
+		expect((await open("/app/acme/reports/contractors/export?range=this-week", who)).status).toBe(
+			seesRates ? 200 : 404,
+		);
+		if (seesRates) {
+			const html = await pageBody(await open(contractors, who));
+			expect(html).toContain('aria-label="Report views"');
+			expect(html).toContain("/app/acme/reports/expenses?");
+		}
 	});
 });
