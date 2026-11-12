@@ -304,7 +304,7 @@ A load and a reload draw the page the server sent, in its final place, and nothi
 - **The built files are kept.** Everything under `/assets/` is named by its content and served `immutable` for a year (`public/_headers`), so a reload asks the server for the page alone; before, it revalidated about 60 files and the stylesheet's round trip held back the first paint.
 - **The page is answered near its database.** The Worker runs beside D1 (`placement` in `wrangler.jsonc`, docs/decisions.md 32), so the server's answer, which a reload waits for with the old page still on screen, is no longer a dozen crossings of the Atlantic.
 - **The scheme is the server's.** The page is rendered in the person's scheme from the cookie, so its first frame is in it; no script changes it after.
-- **A page loaded whole hands over as a change of destination does.** `@view-transition { navigation: auto }` in `app/app.css`: the band, the navigation and the content are named only while the browser runs that transition, the band and the navigation are shown once and still, and the content fades out in 100ms and in over 200ms. A reload is not a navigation browsers animate; it draws the same page again in the same place.
+- **No whole-page view transition.** `@view-transition { navigation: auto }` was tried and left out: Chromium abandons it when the sign-in page's form, sent as a whole page, starts its own transition on the way out, and reports that as an uncaught `InvalidStateError` the page cannot catch. A reload is not a navigation browsers animate in any case; it draws the same page again in the same place, which is what the items above make true.
 
 ### Hover, press and focus
 

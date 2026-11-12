@@ -18,17 +18,6 @@ describe("a rejection that is a skipped view transition", () => {
 		);
 	});
 
-	it("is Chromium's InvalidStateError for a whole-page transition it abandoned", () => {
-		expect(
-			isSkippedTransition(
-				new DOMException(
-					"Transition was aborted because of invalid state. ViewTransition opt-in disabled",
-					"InvalidStateError",
-				),
-			),
-		).toBe(true);
-	});
-
 	it("is nothing else: another AbortError, another DOMException, an Error, a string", () => {
 		expect(isSkippedTransition(new DOMException("The operation was aborted.", "AbortError"))).toBe(
 			false,

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { I18nProvider } from "react-aria";
 import {
 	Links,
@@ -129,13 +130,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 	);
 }
 
-// A view transition the browser skips is the shell's design, not an error
-// (transitions.ts). Installed as the module loads, before React hydrates, so a
-// whole-page transition the browser abandons while the page arrives is caught too.
-ignoreSkippedTransitions();
-
 export default function App() {
 	useFreshOnReturn();
+	// A view transition the browser skips is the shell's design, not an error (transitions.ts).
+	useEffect(ignoreSkippedTransitions, []);
 	return <Outlet />;
 }
 

@@ -67,7 +67,7 @@ export function Navigation({ organisation, visible, activeIndex, counts = {} }: 
 				<nav
 					aria-label="Main"
 					className={
-						"shell-rail z-10 bg-surface " +
+						"z-10 bg-surface " +
 						"max-medium:fixed max-medium:inset-x-0 max-medium:bottom-0 max-medium:flex max-medium:h-16 max-medium:border-t-2 max-medium:border-on-surface max-medium:px-1 " +
 						"medium:pointer-events-auto medium:max-h-full medium:w-24 medium:overflow-y-auto medium:pt-6"
 					}

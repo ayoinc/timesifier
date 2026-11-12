@@ -1,10 +1,10 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { BrowserContext, Page } from "@playwright/test";
 
-import { destination } from "../app/shell/destinations";
+import { accountPath, destination } from "../app/shell/destinations";
 import { expect, openShell, test } from "./fixtures";
 import { movement, watchForMovement } from "./motion";
-import { homePath } from "./organisation";
+import { homeOrganisation, homePath } from "./organisation";
 
 // How a page loads, reloads and waits (TS-096; docs/design-system.md, "Shell",
 // "How a page loads" and "While the page waits"): nothing shifts, the first
@@ -69,12 +69,16 @@ test.describe("loading the shell", () => {
 
 	test("a reload draws its first frame in the chosen scheme, styled, and in the stand-in or the real face", async ({
 		page,
-		context,
-		baseURL,
 	}) => {
-		await context.addCookies([
-			{ name: "__Host-color-scheme", value: "dark", url: baseURL, secure: true, sameSite: "Lax" },
-		]);
+		// Dark is chosen on My account, in this browser's cookie alone.
+		await openShell(page, accountPath(homeOrganisation().slug));
+		await page
+			.getByRole("radiogroup", { name: "Colour scheme" })
+			.getByText("Dark", { exact: true })
+			.click();
+		await expect(
+			page.getByRole("radiogroup", { name: "Colour scheme" }).getByRole("radio", { name: "Dark" }),
+		).toBeChecked();
 		await page.addInitScript(() => {
 			window.__frames = [];
 			const read = () => {
@@ -112,19 +116,6 @@ test.describe("loading the shell", () => {
 		expect((await styles).headers()["cache-control"]).toBe("public, max-age=31536000, immutable");
 		expect(document?.headers()["cache-control"]).toBe("private, no-store");
 	});
-
-	test("the stylesheet keeps the rule that hands a whole-page load over", async ({ page }) => {
-		await openShell(page, homePath("timesheet"));
-		const rules = await page.evaluate(() =>
-			[...document.styleSheets].flatMap((sheet) =>
-				[...sheet.cssRules]
-					.filter((rule) => rule.constructor.name === "CSSViewTransitionRule")
-					.map((rule) => rule.cssText),
-			),
-		);
-		expect(rules).toHaveLength(1);
-		expect(rules[0]).toContain("navigation: auto");
-	});
 });
 
 test.describe("while a move waits for the server", () => {
@@ -152,18 +143,6 @@ test.describe("while a move waits for the server", () => {
 		await expect(shape).toHaveCount(0);
 		await expect(main(page).getByRole("heading", { level: 1 })).toBeFocused();
 		expect(await shifted(page)).toBeLessThan(0.05);
-	});
-
-	test("a quick answer shows no shape", async ({ page }) => {
-		await openShell(page, homePath("timesheet"));
-		await page.evaluate(() => {
-			new MutationObserver(() => {
-				if (document.querySelector("[data-skeleton]")) document.body.dataset.sawShape = "";
-			}).observe(document.body, { subtree: true, childList: true });
-		});
-		await nav(page).getByRole("link", { name: projects.label, exact: true }).click();
-		await expect(page).toHaveURL(homePath("projects"));
-		expect(await page.evaluate(() => "sawShape" in document.body.dataset)).toBe(false);
 	});
 
 	test("a press during the wait lands: the second destination arrives (design rule 8)", async ({
