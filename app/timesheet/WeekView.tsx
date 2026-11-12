@@ -3,6 +3,7 @@ import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
+import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { type DayRule, leftMessage, minutesLeft, overLabel, wholeMinutes } from "~/leave/rules";
 import { lockDateNotice } from "~/locks/locks";
@@ -12,12 +13,13 @@ import { TRANSITION, useTravel } from "~/shell/transitions";
 
 import { ClosedDays, RuleLine } from "./DayRules";
 import { cellText, formatDuration, minutesToMs, TypedHours } from "./durations";
+import { useReportAnswer } from "./feedback";
 import { dayNumber, useDayFormat, usePeriodFormat } from "./format";
-import { PeriodLinks } from "./PeriodLinks";
 import { PeriodHeader } from "./Submission";
 import { type GridCell, isTypable, weekSheet } from "./sheets";
+import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
 import type { WeekData } from "./timesheet.server";
-import { dayPath, weekPath } from "./views";
+import { dayPath, timerAction, weekPath } from "./views";
 
 /**
  * The Week view (TS-013, TS-052, TS-046): the period's seven days as a grid of
@@ -49,15 +51,56 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 	const addable = projects.filter((p) => !p.archived && !inGrid.has(p.id));
 	const editable = lockedDays.length < days.length;
 	const thisWeek = period.startsOn <= today && today <= period.endsOn;
+	const previousWeek = weekPath(slug, periodAfter(period, -1).startsOn);
+	const nextWeek = weekPath(slug, periodAfter(period, 1).startsOn);
+
+	// N adds a row (taste HT-D): the project chosen to add, or the first not in the grid, with its first open cell focused.
+	const [chosen, setChosen] = useState<string | null>(null);
+	const pick = chosen && addable.some((p) => p.id === chosen) ? chosen : (addable[0]?.id ?? null);
+	const addRows = (ids: string[]) => {
+		setAddedByWeek((all) => ({
+			...all,
+			[period.startsOn]: [...added, ...ids.filter((id) => !added.includes(id))],
+		}));
+		setSaid(
+			ids.length === 1
+				? `${projects.find((p) => p.id === ids[0])?.name} added.`
+				: `${ids.length} rows added.`,
+		);
+		requestAnimationFrame(() =>
+			document
+				.querySelector<HTMLInputElement>(
+					`[data-row="${ids[0]}"] input:not([readonly]):not([disabled])`,
+				)
+				?.focus(),
+		);
+	};
+	const keys = useTimesheetKeys({
+		onNew: editable && pick ? () => addRows([pick]) : undefined,
+		previous: previousWeek,
+		next: nextWeek,
+		today: weekPath(slug),
+	});
+
+	// "Copy last week with hours" (taste HT-F), answered in the snackbar.
+	const copy = useFetcher<Outcome>();
+	const copied = copy.state === "idle" ? copy.data : undefined;
+	useReportAnswer(copied);
+	useEffect(() => {
+		if (copied && !copied.ok) setProblem(copied.problem);
+	}, [copied]);
 
 	return (
 		<>
-			<PeriodLinks
-				label="Weeks"
-				previous={{ to: weekPath(slug, periodAfter(period, -1).startsOn), label: "Previous week" }}
-				current={{ to: weekPath(slug), label: "Today", isCurrent: thisWeek }}
-				next={{ to: weekPath(slug, periodAfter(period, 1).startsOn), label: "Next week" }}
-			/>
+			<div className="mt-6">
+				<PeriodStepper
+					label="Weeks"
+					period={formatPeriod(period.startsOn, period.endsOn)}
+					previous={{ to: previousWeek, label: "Previous week" }}
+					next={{ to: nextWeek, label: "Next week" }}
+					current={thisWeek ? undefined : { to: weekPath(slug), label: "Back to this week" }}
+				/>
+			</div>
 
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
 				<div className="mt-6">
@@ -91,22 +134,22 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 					{editable && (
 						<AddRows
 							addable={addable}
+							pick={pick}
+							onPick={setChosen}
 							lastWeek={data.lastWeekProjects.filter((id) => !inGrid.has(id))}
-							onAdd={(ids) => {
-								setAddedByWeek((all) => ({
-									...all,
-									[period.startsOn]: [...added, ...ids.filter((id) => !added.includes(id))],
-								}));
-								setSaid(
-									ids.length === 1
-										? `${projects.find((p) => p.id === ids[0])?.name} added.`
-										: `${ids.length} rows added.`,
-								);
-							}}
+							onAdd={addRows}
+							canCopyWeek={data.canCopyWeek}
+							onCopyWeek={() =>
+								copy.submit(
+									{ intent: "copy-week", startsOn: period.startsOn },
+									{ method: "post", action: timerAction(slug) },
+								)
+							}
 						/>
 					)}
 				</div>
 			</ViewTransition>
+			<ShortcutsSheet isOpen={keys.helpOpen} onOpenChange={keys.setHelpOpen} />
 		</>
 	);
 }
@@ -138,10 +181,15 @@ function Grid({
 		return project ? `${project.name}${project.archived ? " (archived)" : ""}` : "";
 	};
 	const ruleOf = (day: string) => rules.find((rule) => rule.day === day);
+	// Today's column is amber in the week that holds it, and no other (taste HT-B).
+	const todayColumn = (day: string) =>
+		day === data.today ? "bg-primary-container text-on-primary-fixed" : undefined;
 
 	return (
 		<>
-			<div className="mt-6 overflow-x-auto rounded-large border-2 border-on-surface">
+			{/* Relative, so the grid's visually hidden words are placed inside the
+			    scroller and clipped by it, not out past the window's edge (audit W02). */}
+			<div className="relative mt-6 overflow-x-auto rounded-large border-2 border-on-surface">
 				<table className="w-full min-w-180 border-collapse text-body-large">
 					<caption className="sr-only">Hours by project and day</caption>
 					<thead>
@@ -152,7 +200,12 @@ function Grid({
 							{days.map((day, index) => {
 								const marked = away.days[index];
 								return (
-									<th key={day} scope="col" className="px-2 py-3 text-end">
+									<th
+										key={day}
+										scope="col"
+										aria-current={day === data.today ? "date" : undefined}
+										className={cx("px-2 py-3 text-end", todayColumn(day))}
+									>
 										<Link
 											to={dayPath(slug, day)}
 											className="rounded-extra-small underline-offset-4 outline-none hover:underline focus-visible:focus-indicator"
@@ -160,12 +213,17 @@ function Grid({
 											{formatDay(day)}
 										</Link>
 										{marked?.label && (
-											<span className="block max-w-24 truncate text-label-small font-normal text-on-surface-variant ms-auto">
+											<span
+												className={cx(
+													"ms-auto block max-w-24 truncate text-label-small font-normal",
+													day === data.today ? undefined : "text-on-surface-variant",
+												)}
+											>
 												{marked.label}
 											</span>
 										)}
 										<span className="flex justify-end font-normal">
-											<RuleLine rule={ruleOf(day)} />
+											<RuleLine rule={ruleOf(day)} onAmber={day === data.today} />
 										</span>
 									</th>
 								);
@@ -179,17 +237,20 @@ function Grid({
 						{rows.length === 0 && (
 							<tr>
 								<td colSpan={days.length + 2} className="px-4 py-3 text-on-surface-variant">
-									Nothing tracked this week. Add a row to type hours.
+									No hours this week. Add a row below and type them in, or copy last week's.
 								</td>
 							</tr>
 						)}
 						{rows.map((row) => (
-							<tr key={row.projectId}>
+							<tr key={row.projectId} data-row={row.projectId}>
 								<th scope="row" className="max-w-60 truncate px-4 py-2 text-start font-normal">
 									{nameOf(row.projectId)}
 								</th>
 								{row.cells.map((cell) => (
-									<td key={cell.day} className="px-1 py-1 text-end tabular-nums">
+									<td
+										key={cell.day}
+										className={cx("px-1 py-1 text-end tabular-nums", todayColumn(cell.day))}
+									>
 										<Cell
 											cell={cell}
 											projectId={row.projectId}
@@ -217,10 +278,18 @@ function Grid({
 							{sheet.days.map((each) => {
 								const over = ruleOf(each.day)?.overMinutes ?? 0;
 								return (
-									<td key={each.day} className="px-2 py-3 text-end tabular-nums">
+									<td
+										key={each.day}
+										className={cx("px-2 py-3 text-end tabular-nums", todayColumn(each.day))}
+									>
 										{formatDuration(each.total)}
 										{over > 0 && (
-											<span className="block text-label-small text-error">
+											<span
+												className={cx(
+													"block text-label-small",
+													each.day === data.today ? undefined : "text-error",
+												)}
+											>
 												<span className="sr-only">, </span>
 												{overLabel(over)}
 											</span>
@@ -238,7 +307,10 @@ function Grid({
 								Expected
 							</th>
 							{away.days.map((each) => (
-								<td key={each.day} className="px-2 pb-3 text-end tabular-nums">
+								<td
+									key={each.day}
+									className={cx("px-2 pb-3 text-end tabular-nums", todayColumn(each.day))}
+								>
 									{formatDuration(each.expectedMinutes * 60_000)}
 								</td>
 							))}
@@ -365,25 +437,35 @@ function Cell({
 				if (event.key === "Enter") save();
 			}}
 			className={cx(
-				"h-10 w-16 rounded-extra-small border border-outline-variant bg-surface px-2 text-end tabular-nums outline-none focus-visible:focus-indicator",
+				"h-11 w-16 rounded-extra-small border border-outline-variant bg-surface px-2 text-on-surface text-end tabular-nums outline-none focus-visible:focus-indicator",
 				invalid && "border-error",
 			)}
 		/>
 	);
 }
 
-/** "Add row" for a project with no time yet, and "Copy last week's rows" (TS-052). */
+/**
+ * "Add row" for a project with no time yet, and the copies of the last week
+ * with time: its rows alone (TS-052), or its hours too (taste HT-F), which
+ * never touch a day that has time or is locked.
+ */
 function AddRows({
 	addable,
+	pick,
+	onPick,
 	lastWeek,
 	onAdd,
+	canCopyWeek,
+	onCopyWeek,
 }: {
 	addable: WeekData["projects"];
+	pick: string | null;
+	onPick: (id: string) => void;
 	lastWeek: string[];
 	onAdd: (ids: string[]) => void;
+	canCopyWeek: boolean;
+	onCopyWeek: () => void;
 }) {
-	const [chosen, setChosen] = useState<string | null>(null);
-	const pick = chosen && addable.some((p) => p.id === chosen) ? chosen : (addable[0]?.id ?? null);
 	return (
 		<div className="mt-4 flex flex-wrap items-end gap-4">
 			{addable.length > 0 && (
@@ -393,7 +475,7 @@ function AddRows({
 							label="Project to add"
 							options={addable.map((p) => ({ id: p.id, label: p.name }))}
 							value={pick}
-							onChange={setChosen}
+							onChange={(id) => id && onPick(id)}
 						/>
 					</div>
 					<Button variant="outlined" onPress={() => pick && onAdd([pick])}>
@@ -404,6 +486,11 @@ function AddRows({
 			{lastWeek.length > 0 && (
 				<Button variant="text" onPress={() => onAdd(lastWeek)}>
 					Copy last week's rows
+				</Button>
+			)}
+			{canCopyWeek && (
+				<Button variant="text" onPress={onCopyWeek}>
+					Copy last week with hours
 				</Button>
 			)}
 		</div>

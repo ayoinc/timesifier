@@ -22,10 +22,12 @@ import { runningEntry } from "~/time/entries.server";
 import { zoneOfMember } from "~/time/zones.server";
 
 import { calendarDays, type DayStatus } from "./calendar-sheets";
+import { copySourceDay, copySourceWeek } from "./copy.server";
 import type { GettingStarted } from "./GettingStarted";
 import { gettingStarted, type Marks } from "./getting-started.server";
 
 import {
+	durationOf,
 	HISTORY_LENGTH,
 	type HistoryRow,
 	historyRows,
@@ -200,6 +202,12 @@ export interface DayData extends TimesheetBase {
 	away: WeekAway;
 	/** Each day of the period with its limit, what is left and what is over (TS-090). */
 	rules: DayRule[];
+	/**
+	 * The day an empty, open day copies its entries from (taste HT-F): the last
+	 * working day with time in the three weeks before; null when the day has
+	 * time, is locked or takes none, or there is nothing to copy.
+	 */
+	copyFrom: Day | null;
 }
 
 export interface WeekData extends TimesheetBase, PeriodSubmission {
@@ -208,6 +216,8 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	sheet: WeekSheet;
 	/** The active projects with time in the week before, which "Copy last week's rows" adds (TS-052). */
 	lastWeekProjects: string[];
+	/** Whether a week of the three before has time to copy with its hours (taste HT-F). */
+	canCopyWeek: boolean;
 	/** The days of the week in a submitted or approved period, or on or before the lock date. */
 	lockedDays: Day[];
 	/** The organisation's lock date and its reason, or null when it has none (TS-065). */
@@ -391,7 +401,16 @@ async function dayData(
 	]);
 	const entries = ofPeriod.filter((entry) => dayOf(entry.startedAt, zone) === day);
 	const { days, total } = weekSheet(ofPeriod, daysFrom(period.startsOn, period.endsOn), zone, now);
+	const rule = rules.find((r) => r.day === day);
+	const open =
+		entries.length === 0 &&
+		!reasons.has(day) &&
+		rule?.closedReason == null &&
+		rule?.leftMinutes !== 0 &&
+		day <= dayOf(now, zone);
+	const source = open ? await copySourceDay(scope, userId, day, zone) : null;
 	return {
+		copyFrom: source?.day ?? null,
 		view: "day" as const,
 		day,
 		entries,
@@ -424,8 +443,11 @@ async function weekData(
 		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
+	const open = days.some((day) => !locked.has(day) && day <= dayOf(now, zone));
+	const source = open ? await copySourceWeek(scope, userId, period, zone) : null;
 	return {
 		view: "week" as const,
+		canCopyWeek: source !== null,
 		...submission,
 		days,
 		sheet: weekSheet(entries, days, zone, now, { projectOrder: projects.map((p) => p.id) }),
@@ -461,5 +483,85 @@ async function historyData(
 			zone,
 			now,
 		),
+	};
+}
+
+/**
+ * What the Track time sheet needs to offer a day (taste HT-C): the sheet opens
+ * over any page of the organisation, so it reads this itself, for the date
+ * chosen in it. The projects (an archived one is named, not offered), and the
+ * day as the rules see it: whether it is locked and why, and its limit
+ * (TS-090), so the sheet says what is left and holds back what the server
+ * would refuse.
+ */
+export interface TrackDay {
+	today: Day;
+	day: Day;
+	projects: ProjectName[];
+	rule: DayRule | null;
+	lockReason: LockReason | null;
+}
+
+export async function trackDayData(
+	membership: Membership,
+	day: Day | null,
+	now: number,
+): Promise<TrackDay> {
+	const { user, organisation } = membership;
+	const scope = organisationScope(env.DB, organisation.id);
+	const zone = await zoneOfMember(membership);
+	const today = dayOf(now, zone);
+	const shown = day ?? today;
+	const [projects, entries, reasons] = await Promise.all([
+		projectsOf(scope),
+		entriesStartingIn(scope, user.id, bounds(addDays(shown, -1), shown, zone)),
+		lockReasonsOn(scope, user.id, [shown]),
+	]);
+	const [rule] = await dayRulesOf(scope, user.id, [shown], entries, zone, now);
+	return {
+		today,
+		day: shown,
+		projects,
+		rule: rule ?? null,
+		lockReason: reasons.get(shown) ?? null,
+	};
+}
+
+/** One day of the month the day title's picker shows (taste HT-D): its total, for its dot and its name. */
+export interface PickerMonth {
+	today: Day;
+	/** The month's first day. */
+	month: Day;
+	/** The days of the weeks that hold the month, with the time that starts on each. */
+	days: { day: Day; total: number; inMonth: boolean }[];
+}
+
+export async function pickerMonthData(
+	membership: Membership,
+	date: Day | null,
+	now: number,
+): Promise<PickerMonth> {
+	const { user, organisation } = membership;
+	const scope = organisationScope(env.DB, organisation.id);
+	const zone = await zoneOfMember(membership);
+	const today = dayOf(now, zone);
+	const { days, month } = calendarDays("month", date ?? today, organisation.weekStartsOn);
+	const first = days[0] as Day;
+	const last = days.at(-1) as Day;
+	const entries = await entriesStartingIn(scope, user.id, bounds(first, last, zone));
+	const shownMonth = month as Day;
+	const totals = new Map<Day, number>();
+	for (const entry of entries) {
+		const at = dayOf(entry.startedAt, zone);
+		totals.set(at, (totals.get(at) ?? 0) + durationOf(entry, now));
+	}
+	return {
+		today,
+		month: shownMonth,
+		days: days.map((d) => ({
+			day: d,
+			total: totals.get(d) ?? 0,
+			inMonth: d.slice(0, 7) === shownMonth.slice(0, 7),
+		})),
 	};
 }

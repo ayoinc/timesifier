@@ -222,8 +222,11 @@ export function CalendarWeek({
 											{...itemProps(headId(day))}
 											className={cx(
 												"flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-medium px-1 py-2 outline-none state-layer transition-control hover:state-hover focus-visible:focus-indicator-inner",
-												isToday && "border-2 border-on-surface",
-												status?.quiet ? "text-on-surface-variant" : "text-on-surface",
+												isToday
+													? "over-primary-container text-on-primary-fixed"
+													: status?.quiet
+														? "text-on-surface-variant"
+														: "text-on-surface",
 											)}
 										>
 											<span className="text-label-large">
@@ -238,14 +241,21 @@ export function CalendarWeek({
 												<span className="sr-only"> tracked</span>
 											</span>
 											{status && (
-												<span className="max-w-full truncate text-label-small text-on-surface-variant">
+												<span
+													className={cx(
+														"max-w-full truncate text-label-small",
+														!isToday && "text-on-surface-variant",
+													)}
+												>
 													<span className="sr-only">, </span>
 													{status.label}
 												</span>
 											)}
-											{!locked && <RuleLine rule={rule} />}
+											{!locked && <RuleLine rule={rule} onAmber={isToday} />}
 											{locked && (
-												<span className="text-label-small text-on-surface-variant">
+												<span
+													className={cx("text-label-small", !isToday && "text-on-surface-variant")}
+												>
 													<span className="sr-only">, </span>Submitted
 												</span>
 											)}

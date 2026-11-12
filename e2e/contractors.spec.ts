@@ -88,7 +88,7 @@ test("time tracked on the Timesheet is on the Contractors report, unrounded, wit
 	page,
 }) => {
 	await openShell(page, organisationPath(slug));
-	await tabTo(page, page.getByRole("button", { name: "Track time" }));
+	await tabTo(page, page.getByRole("button", { name: "Track time", exact: true }));
 	await page.keyboard.press("Enter");
 	const sheet = page.getByRole("dialog", { name: "Track time" });
 	await expect(sheet).toBeVisible();

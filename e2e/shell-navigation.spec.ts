@@ -66,6 +66,16 @@ function title(destination: Destination): string {
 	return `${destination.label} · Timesifier`;
 }
 
+/**
+ * The destination's own address. A page may then write what it opened on into
+ * the query (Approvals writes its week and status, TS-094), so the query is
+ * allowed; the path is exact.
+ */
+function atDestination(destination: Destination): RegExp {
+	const path = homePath(destination.id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(`${path}(\\?[^#]*)?$`);
+}
+
 type Box = { x: number; y: number; width: number; height: number };
 
 async function box(element: Locator): Promise<Box> {
@@ -285,7 +295,7 @@ test.describe("in a window 390px wide", () => {
 	}) => {
 		const projects = destinations.find(({ id }) => id === "projects") as Destination;
 		await openShell(page, homePath(projects.id));
-		const track = navigation(page).getByRole("link", { name: "Track time" });
+		const track = navigation(page).getByRole("button", { name: "Track time", exact: true });
 		const bar = await box(navigation(page));
 
 		// A button at the bottom right, above the bar, not a row across the page (audit W11).
@@ -303,8 +313,10 @@ test.describe("in a window 390px wide", () => {
 		await expect(page).toHaveURL(homePath(first.id));
 		await expect(track).toBeHidden();
 		// No second control under another name: at most the page's own button.
-		expect(await page.getByRole("button", { name: "Track time" }).count()).toBeLessThanOrEqual(1);
-		await expect(page.getByRole("link", { name: "Track time" })).toHaveCount(0);
+		expect(
+			await page.getByRole("button", { name: "Track time", exact: true }).count(),
+		).toBeLessThanOrEqual(1);
+		await expect(page.getByRole("button", { name: "Track time", exact: true })).toHaveCount(0);
 		await expect(page.getByText("Start timer", { exact: true })).toHaveCount(0);
 		expect(await fixedRows(page)).toEqual([64]);
 	});
@@ -326,7 +338,9 @@ test.describe("in a window 1280px wide", () => {
 	test("the timer's control stands before the first heading: Track time while nothing runs", async ({
 		page,
 	}) => {
-		await openShell(page, homePath(first.id));
+		// On Timesheet the page's own Track time is the one way to track; elsewhere it heads the rail.
+		const projects = destinations.find(({ id }) => id === "projects") as Destination;
+		await openShell(page, homePath(projects.id));
 
 		const before = await navigation(page).evaluate((nav) => nav.firstElementChild?.textContent);
 		expect(before).toBe("Track time");
@@ -486,7 +500,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				const before = await page.title();
 				await (await linkTo(page, destination)).click();
 
-				await expect(page).toHaveURL(homePath(destination.id));
+				await expect(page).toHaveURL(atDestination(destination));
 				await expect(
 					page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 				).toBeFocused();
@@ -534,7 +548,7 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				);
 
 				await page.keyboard.press("Enter");
-				await expect(page).toHaveURL(homePath(destination.id));
+				await expect(page).toHaveURL(atDestination(destination));
 				await expect(
 					page.getByRole("heading", { level: 1, name: destination.label, exact: true }),
 				).toBeFocused();

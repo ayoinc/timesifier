@@ -9,6 +9,7 @@ import { parseRequest } from "~/lib/validate";
 import type { Membership } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import type { Outcome } from "~/organisations/problems";
+import { periodContaining } from "~/periods/periods";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
 import { TagIds } from "~/tags/tags";
 import { Day, dayOf, exactInstantAt } from "~/time/calendar";
@@ -20,12 +21,14 @@ import {
 	deleteEntry,
 	editEntry,
 	type NotWritten,
+	restoreEntry,
 	setCellHours,
 } from "~/time/manual.server";
 import { zoneOfMember } from "~/time/zones.server";
-
+import { copyDay, copyWeek } from "./copy.server";
 import { TypedHours } from "./durations";
 import { markCookie } from "./getting-started.server";
+import { entryOfUndo, undoToken } from "./undo.server";
 
 /**
  * Everything the Timesheet's views ask the server for, in one action: "Track
@@ -75,6 +78,11 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		tagIds: TagIds,
 	}),
 	z.object({ intent: z.literal("delete"), entryId: Id }),
+	/** Puts back the entry just deleted (taste HT-A): the token its deletion answered. */
+	z.object({ intent: z.literal("undo"), token: z.string().min(1).max(4096) }),
+	/** Copies the last working day with time onto this empty day, or the last week with time onto this week (HT-F). */
+	z.object({ intent: z.literal("copy-day"), day: Day }),
+	z.object({ intent: z.literal("copy-week"), startsOn: Day }),
 	z.object({ intent: z.literal("cell"), projectId: Id, day: Day, hours: Hours }),
 	z.object({ intent: z.literal("submit"), startsOn: Day }),
 	z.object({ intent: z.literal("withdraw"), startsOn: Day }),
@@ -150,7 +158,9 @@ export async function timesheetAction(request: Request, membership: Membership) 
 					taskId: input.taskId,
 					tagIds: input.tagIds,
 				});
-				return started.ok ? done("Timer started.") : refusal(started);
+				return started.ok
+					? { ...done("Timer started."), changed: [started.started.id] }
+					: refusal(started);
 			}
 			const hours = TypedHours.safeParse(input.hours);
 			if (!hours.success) return declined(hours.error.issues[0]?.message ?? "Type hours as 1.5.");
@@ -169,7 +179,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				taskId: input.taskId,
 				tagIds: input.tagIds,
 			});
-			return added.ok ? done("Entry saved.") : refusal(added);
+			return added.ok ? { ...done("Entry saved."), changed: [added.entry.id] } : refusal(added);
 		}
 
 		// A timer that ran past what its day takes is kept; the day is flagged
@@ -205,12 +215,49 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				},
 				now,
 			);
-			return written.ok ? done("Entry saved.") : refusal(written);
+			return written.ok ? { ...done("Entry saved."), changed: [input.entryId] } : refusal(written);
 		}
 
 		case "delete": {
 			const deleted = await deleteEntry(scope, user.id, zone, input.entryId);
-			return deleted.ok ? done("Entry deleted.") : refusal(deleted);
+			if (!deleted.ok) return refusal(deleted);
+			const who = { organisationId: organisation.id, userId: user.id };
+			return {
+				...done("Entry deleted."),
+				undo: await undoToken(env.BETTER_AUTH_SECRET, who, deleted.deleted, now),
+			};
+		}
+
+		case "undo": {
+			const who = { organisationId: organisation.id, userId: user.id };
+			const entry = await entryOfUndo(env.BETTER_AUTH_SECRET, input.token, who, now);
+			if (!entry) return declined("That deletion can no longer be undone.", 409);
+			const restored = await restoreEntry(scope, user.id, zone, entry, now);
+			return restored.ok ? { ...done("Entry restored."), changed: [entry.id] } : refusal(restored);
+		}
+
+		case "copy-day": {
+			const copied = await copyDay(scope, user.id, input.day, zone, now);
+			if (!copied.ok) return declined(copied.problem, 409);
+			const count = copied.ids.length;
+			return {
+				...done(
+					`Copied ${count} ${count === 1 ? "entry" : "entries"} from ${formatDay(copied.from, "short")}.`,
+				),
+				changed: copied.ids,
+			};
+		}
+
+		case "copy-week": {
+			const period = periodContaining(input.startsOn, organisation.weekStartsOn);
+			const copied = await copyWeek(scope, user.id, period, zone, now);
+			if (!copied.ok) return declined(copied.problem, 409);
+			return {
+				...done(
+					`Copied ${copied.ids.length} ${copied.ids.length === 1 ? "entry" : "entries"} onto ${copied.days} ${copied.days === 1 ? "day" : "days"}.`,
+				),
+				changed: copied.ids,
+			};
 		}
 
 		case "cell": {

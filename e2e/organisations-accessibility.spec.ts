@@ -249,7 +249,7 @@ test.describe("with motion allowed", () => {
 		for (const moved of [
 			/^transition of scale on <span>/, // the mark of the moment grows in
 			/^animation of translate on <html>/, // a destination arrives from the side it lies on
-			// A sheet slides up and back down under 600px, and grows in the middle from 600px.
+			// A sheet slides up and back down under 840px, and grows in the middle from 840px.
 			/^transition of (translate|scale) on <div/,
 		]) {
 			expect(seen).toContainEqual(expect.stringMatching(moved));

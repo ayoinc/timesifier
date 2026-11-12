@@ -7,6 +7,7 @@ import {
 	UNSTABLE_ToastRegion as ToastRegion,
 } from "react-aria-components";
 
+import { cx } from "./cx";
 import { CloseIcon } from "./icons/CloseIcon";
 
 // Material 3 snackbar: inverse-surface with 4px corners at elevation 3, at least
@@ -79,17 +80,25 @@ export function showSnackbar(
 export interface SnackbarRegionProps {
 	/** The queue to show. Defaults to the application's, the one `showSnackbar` adds to. */
 	queue?: SnackbarQueue;
+	/**
+	 * Under 600px, stand above the navigation bar and the floating Track time
+	 * button of an organisation's pages, as Material puts a snackbar above a FAB.
+	 */
+	raised?: boolean;
 }
 
 /**
  * Where snackbars appear: along the bottom of the window. Render it once, near
  * the root of the application. It is a landmark that F6 moves to.
  */
-export function SnackbarRegion({ queue = applicationQueue }: SnackbarRegionProps) {
+export function SnackbarRegion({ queue = applicationQueue, raised = false }: SnackbarRegionProps) {
 	return (
 		<ToastRegion
 			queue={queue}
-			className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-150 flex-col rounded-extra-small outline-none data-focus-visible:focus-indicator"
+			className={cx(
+				"fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-150 flex-col rounded-extra-small outline-none data-focus-visible:focus-indicator",
+				raised && "max-medium:bottom-36",
+			)}
 		>
 			{({ toast }) => (
 				<Toast

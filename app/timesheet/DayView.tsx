@@ -1,13 +1,19 @@
-import { useEffect, useId, useRef, useState, ViewTransition } from "react";
-import { Link, useFetcher, useLocation } from "react-router";
+import { use, useEffect, useId, useState, ViewTransition } from "react";
+import { Link, useFetcher } from "react-router";
 
 import { entryHistoryPath } from "~/activity/paths";
 import { Button } from "~/components/Button";
+import { cx } from "~/components/cx";
 import { Digits } from "~/components/Digits";
+import { IconButton } from "~/components/IconButton";
 import { AddIcon } from "~/components/icons/AddIcon";
+import { MoreVertIcon } from "~/components/icons/MoreVertIcon";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { PeriodStepper } from "~/components/PeriodStepper";
 import { TextField } from "~/components/TextField";
+import { StartArrowhead } from "~/components/TimerMark";
+import { Tooltip } from "~/components/Tooltip";
 import { type DayRule, overLabel } from "~/leave/rules";
 import { LOCK_LABELS, lockSentence } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
@@ -16,29 +22,38 @@ import { destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { EntryChoices } from "~/tasks/EntryChoices";
-import { addDays } from "~/time/calendar";
+import { TrackChoicesContext } from "~/tasks/track";
+import { addDays, type Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 
+import { DayPicker } from "./DayPicker";
 import { refusalOfDay } from "./DayRules";
 import { formatDuration, formatElapsed } from "./durations";
+import { ChangedMark, useReport, useReportAnswer, useReported } from "./feedback";
 import { dayNumber, useClockFormat, useDayFormat, usePeriodFormat } from "./format";
 import { GettingStartedList, usePutAwayAnswer } from "./GettingStarted";
 import { elapsedSeconds, useNow } from "./live";
-import { PeriodLinks } from "./PeriodLinks";
 import { PeriodHeader } from "./Submission";
 import { durationOf, type SheetEntry } from "./sheets";
+import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
+import { useTrackTime } from "./TrackTime";
 import type { DayData } from "./timesheet.server";
-import { dayPath, TIMER_ANCHOR } from "./views";
+import { dayPath, timerAction } from "./views";
 import { WeekDays } from "./WeekDays";
 
 /**
- * The Day view (TS-012a, TS-013, TS-012b, TS-056): getting started while a
- * step is left, the period's header row with its "Submit week" (shared with
- * the Week and Calendar views), the period's seven days with their totals,
- * "Track time", the page's one primary action, with the running timer and its
- * Stop, then the chosen day's entries, earliest first, with a total. An entry
- * is changed or deleted in a sheet. Nothing on a day in a submitted or
- * approved period can be tracked or changed.
+ * The Day view (TS-012a, TS-013, TS-012b, TS-056; taste HT-A to HT-F): the
+ * day stepper, whose title opens the month (`DayPicker`), with "Back to today"
+ * away from today; getting started while a step is left; the period's header
+ * row with its "Submit week" (shared with the Week and Calendar views); the
+ * period's seven days with their totals, today amber; "Track time", the
+ * page's one filled action, and the running timer, amber, its elapsed time the
+ * largest figure on the page; then the chosen day's entries, earliest first,
+ * with a total. A finished entry starts again with one press, and is changed
+ * in a sheet or deleted at once, with Undo in the snackbar. An empty day says
+ * so with its action, and offers the entries of the last working day with
+ * time. Nothing on a day in a submitted or approved period, or on or before
+ * the lock date, can be tracked, started again or changed.
  *
  * A day's limit (TS-090): beside Track time, what is left of a day that has
  * one; on a day that takes no time, or has none left, Track time is disabled
@@ -60,6 +75,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 		submission,
 	} = data;
 	const formatDay = useDayFormat();
+	const formatShort = useDayFormat("short");
 	const formatPeriod = usePeriodFormat();
 	const clock = useClockFormat(zone);
 	const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
@@ -72,36 +88,66 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 	// The day as leave sees it: its name and the time expected on it (TS-061).
 	const shownDay = data.away.days.find((d) => d.day === day);
 	const over = rule?.overMinutes ?? 0;
-	const [task, setTask] = useState<"track" | "edit" | "delete" | null>(null);
 	const [entry, setEntry] = useState<SheetEntry | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
-	const close = () => setTask(null);
 	usePutAwayAnswer(setSaid);
-
-	// "Start timer" in the navigation and "Track an entry" in getting started
-	// lead here with the timer's anchor: each arrival opens "Track time" once.
-	const location = useLocation();
-	const arrived = useRef<string | null>(null);
+	const openTrackTime = useTrackTime();
+	const track = canTrack ? () => openTrackTime({ day }) : null;
+	const report = useReport();
+	const reported = useReported();
 	useEffect(() => {
-		if (location.hash !== `#${TIMER_ANCHOR}` || arrived.current === location.key) return;
-		arrived.current = location.key;
-		if (canTrack) setTask("track");
-	}, [location.hash, location.key, canTrack]);
+		if (reported) setSaid(reported.said);
+	}, [reported]);
+
+	// Deleting, starting again and copying are one press each, answered in the snackbar.
+	const act = useFetcher<Outcome>();
+	const acted = act.state === "idle" ? act.data : undefined;
+	useReportAnswer(acted);
+	const send = (fields: Record<string, string>) =>
+		act.submit(fields, { method: "post", action: timerAction(slug) });
+	const choices = use(TrackChoicesContext);
+	const startAgain = (each: SheetEntry) => {
+		const own = choices?.entries[each.id];
+		const form = new FormData();
+		form.set("intent", "track");
+		form.set("projectId", each.projectId);
+		form.set("description", each.description ?? "");
+		form.set("day", today);
+		if (own?.taskId) form.set("taskId", own.taskId);
+		for (const tag of own?.tagIds ?? []) form.append("tagIds", tag);
+		act.submit(form, { method: "post", action: timerAction(slug) });
+	};
+
+	const keys = useTimesheetKeys({
+		onNew: track ?? undefined,
+		previous: dayPath(slug, addDays(day, -1)),
+		next: dayPath(slug, addDays(day, 1)),
+		today: dayPath(slug),
+	});
 
 	return (
 		<>
-			{data.gettingStarted && <GettingStartedList steps={data.gettingStarted} slug={slug} />}
+			<div className="mt-6">
+				<PeriodStepper
+					label="Days"
+					period={
+						<DayPicker
+							slug={slug}
+							day={day}
+							label={day === today ? `Today, ${formatShort(day)}` : formatDay(day)}
+						/>
+					}
+					previous={{ to: dayPath(slug, addDays(day, -1)), label: "Previous day" }}
+					next={{ to: dayPath(slug, addDays(day, 1)), label: "Next day" }}
+					current={day === today ? undefined : { to: dayPath(slug), label: "Back to today" }}
+				/>
+			</div>
 
-			<PeriodLinks
-				label="Days"
-				previous={{ to: dayPath(slug, addDays(day, -1)), label: "Previous day" }}
-				current={{ to: dayPath(slug), label: "Today", isCurrent: day === today }}
-				next={{ to: dayPath(slug, addDays(day, 1)), label: "Next day" }}
-			/>
+			{data.gettingStarted && <GettingStartedList steps={data.gettingStarted} slug={slug} />}
 
 			{/* What changes with the day, from the period's header row down, moves
 			    as one, as on the Week and Calendar views: the boundary starts just
-			    below the links that step, so it is in view whenever they are used. */}
+			    below the stepper, so it is in view whenever it is used. */}
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
 				<div>
 					<div className="mt-6">
@@ -112,14 +158,22 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 						/>
 					</div>
 
-					<WeekDays week={data.week} away={data.away} rules={data.rules} day={day} slug={slug} />
+					<WeekDays
+						week={data.week}
+						away={data.away}
+						rules={data.rules}
+						day={day}
+						today={today}
+						running={data.running}
+						zone={zone}
+						slug={slug}
+					/>
 
 					<Timer
 						data={data}
 						slug={slug}
 						projectName={projectName}
-						onSaid={setSaid}
-						onTrack={canTrack ? () => setTask("track") : null}
+						onTrack={track}
 						rule={locked ? undefined : rule}
 						blocked={locked ? null : blocked}
 						now={live}
@@ -128,6 +182,9 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 					{/* What the last task did. Always here, so what is put in it is read out. */}
 					<p role="status" className="mt-6 text-body-medium text-on-surface-variant empty:hidden">
 						{said}
+					</p>
+					<p role="alert" className="mt-2 text-body-medium text-error empty:hidden">
+						{acted && !acted.ok ? acted.problem : null}
 					</p>
 
 					<div className="mt-6 max-w-200">
@@ -151,45 +208,78 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 								</p>
 							)}
 							{entries.length === 0 ? (
-								<p className="px-4 pb-4 text-body-large text-on-surface-variant @sm:px-5">
-									Nothing tracked on this day.
-								</p>
+								<EmptyDay
+									day={day}
+									isToday={day === today}
+									onTrack={track}
+									copyFrom={data.copyFrom}
+									onCopy={() => send({ intent: "copy-day", day })}
+								/>
 							) : (
 								<LedgerRows label={over > 0 ? "Entries to trim or move" : "Entries"}>
 									{entries.map((each) => {
 										const isRunning = each.endedAt === null;
 										const name = projectName(each.projectId);
+										const what = each.description || name;
 										return (
 											<LedgerRow
 												key={each.id}
-												title={<span className="wrap-anywhere">{each.description || name}</span>}
-												detail={each.description ? name : undefined}
-												aside={`${clock(each.startedAt)}–${each.endedAt === null ? "Running" : clock(each.endedAt)}`}
+												className={cx(
+													"relative",
+													isRunning &&
+														"-mx-4 bg-primary-container px-4 text-on-primary-fixed @sm:-mx-5 @sm:px-5",
+												)}
+												title={
+													<>
+														<ChangedMark id={each.id} reported={reported} />
+														<span className="wrap-anywhere">{what}</span>
+													</>
+												}
+												detail={
+													each.description ? (
+														<span className={isRunning ? "text-on-primary-fixed" : undefined}>
+															{name}
+														</span>
+													) : undefined
+												}
+												aside={
+													<span className={isRunning ? "text-on-primary-fixed" : undefined}>
+														{`${clock(each.startedAt)}–${isRunning ? "Running" : clock(each.endedAt as number)}`}
+													</span>
+												}
 												value={formatDuration(durationOf(each, now))}
 												action={
 													!locked &&
 													!isRunning && (
-														<MenuTrigger>
-															<Button
-																variant="text"
-																aria-label={`Actions for ${each.description || name}, ${clock(each.startedAt)}`}
-															>
-																Actions
-															</Button>
-															<Menu
-																onAction={(chosen) => {
-																	if (chosen === "history") return;
-																	setEntry(each);
-																	setTask(chosen === "edit" ? "edit" : "delete");
-																}}
-															>
-																<MenuItem id="edit">Edit entry</MenuItem>
-																<MenuItem id="delete">Delete entry</MenuItem>
-																<MenuItem id="history" href={entryHistoryPath(slug, each.id)}>
-																	History
-																</MenuItem>
-															</Menu>
-														</MenuTrigger>
+														<>
+															<Tooltip label="Start again">
+																<IconButton
+																	variant="outlined"
+																	label={`Start again: ${what}`}
+																	onPress={() => startAgain(each)}
+																>
+																	<StartArrowhead />
+																</IconButton>
+															</Tooltip>
+															<MenuTrigger>
+																<IconButton label={`Actions for ${what}, ${clock(each.startedAt)}`}>
+																	<MoreVertIcon />
+																</IconButton>
+																<Menu
+																	onAction={(chosen) => {
+																		if (chosen === "edit") setEntry(each);
+																		if (chosen === "delete")
+																			send({ intent: "delete", entryId: each.id });
+																	}}
+																>
+																	<MenuItem id="edit">Edit entry</MenuItem>
+																	<MenuItem id="delete">Delete entry</MenuItem>
+																	<MenuItem id="history" href={entryHistoryPath(slug, each.id)}>
+																		History
+																	</MenuItem>
+																</Menu>
+															</MenuTrigger>
+														</>
 													)
 												}
 											/>
@@ -208,122 +298,70 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 				</div>
 			</ViewTransition>
 
-			<TrackTime data={data} isOpen={task === "track"} onClose={close} onDone={setSaid} />
-
 			<FormSheet
 				title="Edit entry"
 				intent="edit"
 				submitLabel="Save"
-				isOpen={task === "edit"}
-				onClose={close}
-				onDone={setSaid}
+				action={timerAction(slug)}
+				isOpen={entry !== null}
+				onClose={() => setEntry(null)}
+				onDone={(_said, answer) => report(answer)}
 			>
 				<input type="hidden" name="entryId" value={entry?.id ?? ""} />
 				{entry && <EntryFields key={`edit-${entry.id}`} data={data} entry={entry} clock={clock} />}
 			</FormSheet>
 
-			<FormSheet
-				title="Delete this entry?"
-				intent="delete"
-				submitLabel="Delete"
-				isOpen={task === "delete"}
-				onClose={close}
-				onDone={setSaid}
-			>
-				<input type="hidden" name="entryId" value={entry?.id ?? ""} />
-				<p>
-					{entry
-						? `${entry.description || projectName(entry.projectId)}, ${clock(entry.startedAt)}–${
-								entry.endedAt === null ? "" : clock(entry.endedAt)
-							}, is removed from your timesheet.`
-						: null}
-				</p>
-			</FormSheet>
+			<ShortcutsSheet isOpen={keys.helpOpen} onOpenChange={keys.setHelpOpen} />
 		</>
 	);
 }
 
 /**
- * "Track time" (TS-056): a project, a description and hours on the day shown.
- * With no hours the action is "Start timer", which runs from now; with hours,
- * `1.5`, `1,5` or `1:30`, it is "Save entry", one entry of that length on the
- * day. A timer runs today only, so on another day the hours are asked for.
- * Opened from a slot of the calendar (TS-062) it has a start too, filled in
- * with the slot's, and the hours are asked for from that time. A day with a
- * limit says what it has left (TS-090); the server refuses what does not fit.
- * It is not offered on a day that takes no time, nor one with none left.
+ * An empty day (taste HT-F): one sentence of what will be here, and its
+ * action, Track time, with the copy of the last working day's entries beside
+ * it where there is one to copy.
  */
-export function TrackTime({
-	data,
-	start,
-	isOpen,
-	onClose,
-	onDone,
+function EmptyDay({
+	day,
+	isToday,
+	onTrack,
+	copyFrom,
+	onCopy,
 }: {
-	data: Pick<DayData, "day" | "today" | "projects" | "rules">;
-	/** The time the entry starts, `09:30`, where a slot of the calendar was chosen. */
-	start?: string;
-	isOpen: boolean;
-	onClose: () => void;
-	onDone: (said: string) => void;
+	day: Day;
+	isToday: boolean;
+	onTrack: (() => void) | null;
+	copyFrom: Day | null;
+	onCopy: () => void;
 }) {
-	const [hours, setHours] = useState("");
 	const formatDay = useDayFormat();
-	const isToday = data.day === data.today;
-	const timerAllowed = isToday && start === undefined;
-	const startsTimer = timerAllowed && hours.trim() === "";
-	const active = data.projects.filter((p) => !p.archived);
-	const rule = data.rules.find((r) => r.day === data.day);
+	const formatShort = useDayFormat("short");
+	const when = isToday ? "today" : formatDay(day);
 	return (
-		<FormSheet
-			title="Track time"
-			intent="track"
-			submitLabel={startsTimer ? "Start timer" : "Save entry"}
-			isOpen={isOpen}
-			onClose={() => {
-				setHours("");
-				onClose();
-			}}
-			onDone={onDone}
-		>
+		<div className="px-4 pb-4 @sm:px-5">
 			<p className="text-body-large text-on-surface-variant">
-				{isToday ? `Today, ${formatDay(data.day)}` : formatDay(data.day)}
+				{onTrack
+					? `Nothing yet on ${when}. Track time${copyFrom ? `, or copy ${formatShort(copyFrom)}'s entries` : ""}.`
+					: `Nothing tracked on ${when}.`}
 			</p>
-			{rule && rule.limitMinutes !== null && rule.closedReason === null && (
-				<p role="note" className="text-body-medium text-on-surface-variant">
-					This day has {formatDuration((rule.leftMinutes ?? 0) * 60_000)} left of{" "}
-					{formatDuration(rule.limitMinutes * 60_000)}.
-				</p>
+			{onTrack && (
+				<div className="mt-2 flex flex-wrap gap-2">
+					<Button
+						variant="text"
+						icon={<AddIcon size="medium" />}
+						aria-label={`Track time on ${when}`}
+						onPress={onTrack}
+					>
+						Track time
+					</Button>
+					{copyFrom && (
+						<Button variant="text" onPress={onCopy}>
+							{`Copy ${formatShort(copyFrom)}'s entries`}
+						</Button>
+					)}
+				</div>
 			)}
-			<input type="hidden" name="day" value={data.day} />
-			<EntryChoices projects={active} defaultProjectId={active[0]?.id ?? null} />
-			<TextField label="Description" name="description" maxLength={ENTRY_DESCRIPTION_MAX_LENGTH} />
-			{start !== undefined && (
-				<TextField
-					key={`${data.day}-${start}`}
-					label="Start"
-					name="start"
-					type="time"
-					defaultValue={start}
-					isRequired
-				/>
-			)}
-			<TextField
-				label="Hours"
-				name="hours"
-				value={hours}
-				onChange={setHours}
-				inputMode="decimal"
-				autoComplete="off"
-				maxLength={16}
-				isRequired={!timerAllowed}
-				description={
-					timerAllowed
-						? "As 1.5, 1,5 or 1:30. Leave it empty to start a timer."
-						: "As 1.5, 1,5 or 1:30."
-				}
-			/>
-		</FormSheet>
+		</div>
 	);
 }
 
@@ -374,18 +412,19 @@ export function EntryFields({
 }
 
 /**
- * Where "Start timer" in the navigation leads: "Track time", which opens its
- * sheet, and the running entry with its elapsed time and Stop. With no active
- * project, the way to create one instead; on a locked day, no "Track time".
- * Where the day takes no time, or has none left, Track time is disabled and
- * says why beside it; where the day has a limit, what is left of it stands
- * beside it (TS-090).
+ * "Track time", which opens its sheet over the page, and the running entry
+ * with its elapsed time and Stop. The running entry is amber, the one thing
+ * on the page that is live (docs/design-direction.md), and its elapsed time
+ * the largest figure on the page (taste HT-B). With no active project, the
+ * way to create one instead; on a locked day, no "Track time". Where the day
+ * takes no time, or has none left, Track time is disabled and says why
+ * beside it; where the day has a limit, what is left of it stands beside it
+ * (TS-090).
  */
 function Timer({
 	data,
 	slug,
 	projectName,
-	onSaid,
 	onTrack,
 	rule,
 	blocked,
@@ -394,7 +433,6 @@ function Timer({
 	data: DayData;
 	slug: string;
 	projectName: (id: string) => string;
-	onSaid: (said: string) => void;
 	/** Opens "Track time"; null where nothing can be tracked. */
 	onTrack: (() => void) | null;
 	/** The shown day's limit, while its entries can change. */
@@ -405,6 +443,7 @@ function Timer({
 }) {
 	const fetcher = useFetcher<Outcome>();
 	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
+	useReportAnswer(answer);
 	const clock = useClockFormat(data.zone);
 	const hasActive = data.projects.some((p) => !p.archived);
 	const { running } = data;
@@ -417,9 +456,8 @@ function Timer({
 
 	return (
 		<section
-			id={TIMER_ANCHOR}
 			aria-labelledby="timer-heading"
-			className="mt-8 flex max-w-200 scroll-mt-24 flex-col items-start gap-4"
+			className="mt-8 flex max-w-200 flex-col items-start gap-4"
 		>
 			{hasActive ? (
 				<h2 id="timer-heading" className="sr-only">
@@ -458,26 +496,23 @@ function Timer({
 			{running && (
 				<fetcher.Form
 					method="post"
+					action={timerAction(slug)}
 					onSubmit={(event) => {
 						if (fetcher.state !== "idle") event.preventDefault();
 					}}
-					className="flex w-full flex-col gap-4 rounded-large border-2 border-on-surface p-4 medium:flex-row medium:items-end"
+					className="flex w-full flex-col gap-4 rounded-large bg-primary-container p-4 text-on-primary-fixed medium:flex-row medium:items-end"
 				>
 					<input type="hidden" name="intent" value="stop" />
 					<div className="min-w-0 flex-1">
-						<p className="text-label-large text-on-surface-variant">
-							Running since {clock(running.startedAt)}
-						</p>
+						<p className="text-label-large">Running since {clock(running.startedAt)}</p>
 						<p className="truncate text-title-medium">
 							{running.description || projectName(running.projectId)}
 						</p>
 						{running.description && (
-							<p className="truncate text-body-medium text-on-surface-variant">
-								{projectName(running.projectId)}
-							</p>
+							<p className="truncate text-body-medium">{projectName(running.projectId)}</p>
 						)}
 					</div>
-					<p role="timer" aria-label="Elapsed" className="text-headline-medium">
+					<p role="timer" aria-label="Elapsed" className="text-display-small tabular-nums">
 						<Digits value={formatElapsed(elapsedSeconds(running.startedAt, now))} />
 					</p>
 					<Button type="submit" variant="tonal">
@@ -488,24 +523,6 @@ function Timer({
 			<p role="alert" className="text-body-medium text-error empty:hidden">
 				{answer && !answer.ok ? answer.problem : null}
 			</p>
-			<SaidOnce answer={answer} onSaid={onSaid} />
 		</section>
 	);
-}
-
-/** Hands what the server said, once per answer, to the page's status line. */
-function SaidOnce({
-	answer,
-	onSaid,
-}: {
-	answer: Outcome | undefined;
-	onSaid: (said: string) => void;
-}) {
-	const handled = useRef<Outcome | undefined>(undefined);
-	useEffect(() => {
-		if (!answer || handled.current === answer) return;
-		handled.current = answer;
-		if (answer.ok) onSaid(answer.said);
-	}, [answer, onSaid]);
-	return null;
 }

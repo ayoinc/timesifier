@@ -175,6 +175,9 @@ describe("the Timesheet's week of days, rendered", () => {
 						away: { days: [], expectedMinutes: 0 } as never,
 						rules: [],
 						day: "2026-11-11",
+						today: "2026-11-11",
+						running: null,
+						zone: "Europe/London",
 						slug: "acme",
 					}),
 				),
@@ -191,7 +194,10 @@ describe("the Timesheet's week of days, rendered", () => {
 		const elsewhere = await render({ locale: "de-DE", zone: "Asia/Tokyo" });
 		expect(browser).toBe(server);
 		expect(elsewhere).toBe(server);
-		expect(server).toContain('<span aria-hidden="true">Mon 9</span>');
-		expect(server).toContain('<span class="sr-only">Wednesday 11 November</span>');
+		// The weekday and the date, each in its own span, so the chip can stack them under 600px (W16).
+		expect(server).toMatch(/<span>Mon<\/span> <span>9<\/span>/);
+		expect(server).toMatch(
+			/<span class="sr-only">(Today, (<!-- -->)?)?Wednesday 11 November<\/span>/,
+		);
 	});
 });

@@ -135,7 +135,10 @@ test("an owner sets a project's rate and budget and tracks time to a task, the k
 
 	// Two hours to Research, chosen with the task picker.
 	await openShell(page, organisationPath(slug));
-	await tabTo(page, page.getByRole("main").getByRole("button", { name: "Track time" }));
+	await tabTo(
+		page,
+		page.getByRole("main").getByRole("button", { name: "Track time", exact: true }),
+	);
 	await page.keyboard.press("Enter");
 	const sheet = trackSheet(page);
 	await expect(sheet).toBeVisible();
@@ -174,7 +177,7 @@ test("an owner sets a project's rate and budget and tracks time to a task, the k
 
 	// Track time warns of the budget gone over, and still tracks.
 	await openShell(page, organisationPath(slug));
-	await page.getByRole("main").getByRole("button", { name: "Track time" }).click();
+	await page.getByRole("main").getByRole("button", { name: "Track time", exact: true }).click();
 	await expect(trackSheet(page).getByRole("note")).toHaveText(
 		"This project is over budget. You can still track time to it.",
 	);
@@ -282,7 +285,10 @@ for (const viewport of [
 				await expectNoProblems(page, "Default rates");
 
 				await openShell(page, organisationPath(slug));
-				await page.getByRole("main").getByRole("button", { name: "Track time" }).click();
+				await page
+					.getByRole("main")
+					.getByRole("button", { name: "Track time", exact: true })
+					.click();
 				const sheet = trackSheet(page);
 				await expect(sheet.getByRole("button", { name: /Task$/ })).toContainText("General");
 				await expectNoProblemsInSheet(page, sheet, sheet.getByText("Billable", { exact: true }));

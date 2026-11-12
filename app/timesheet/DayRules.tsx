@@ -29,7 +29,13 @@ export function ruleWords(rule: DayRule | undefined): { text: string; over: bool
 }
 
 /** The day's limit in a short line: "3:45 left of 3:45", "Over by 0:15", "Closed". */
-export function RuleLine({ rule }: { rule: DayRule | undefined }) {
+export function RuleLine({
+	rule,
+	onAmber = false,
+}: {
+	rule: DayRule | undefined;
+	onAmber?: boolean;
+}) {
 	const words = ruleWords(rule);
 	if (!rule || !words) return null;
 	const full =
@@ -40,9 +46,11 @@ export function RuleLine({ rule }: { rule: DayRule | undefined }) {
 		<span
 			title={rule.closedReason ?? undefined}
 			className={
-				words.over
-					? "max-w-full truncate text-label-small text-error"
-					: "max-w-full truncate text-label-small text-on-surface-variant"
+				onAmber
+					? "max-w-full truncate text-label-small"
+					: words.over
+						? "max-w-full truncate text-label-small text-error"
+						: "max-w-full truncate text-label-small text-on-surface-variant"
 			}
 		>
 			<span className="sr-only">, </span>

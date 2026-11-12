@@ -170,7 +170,7 @@ async function halfDaySickToday(page: Page, slug: string) {
 	await expect(status(page)).toHaveText("Recorded. It needs nobody's approval.");
 }
 
-const trackTime = (page: Page) => page.getByRole("button", { name: "Track time" });
+const trackTime = (page: Page) => page.getByRole("button", { name: "Track time", exact: true });
 const trackSheet = (page: Page) => page.getByRole("dialog", { name: "Track time" });
 
 test("half a day of leave leaves the day 3:45: the Day view shows what is left, and the Week grid refuses more with what is left", async ({

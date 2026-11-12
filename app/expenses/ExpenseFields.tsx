@@ -4,6 +4,7 @@ import { Checkbox } from "~/components/Checkbox";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { formatMoney } from "~/money/money";
+import { ProjectPicker } from "~/projects/ProjectPicker";
 import { TagPicker } from "~/tags/TagPicker";
 import type { TagChoice } from "~/tags/tags";
 
@@ -27,6 +28,8 @@ import {
 export interface ProjectChoice {
 	id: string;
 	name: string;
+	/** Its client's name; null when it has none. */
+	clientName: string | null;
 	/** The currency its expenses are in. */
 	currency: string;
 	/** Whether the project bills its client at all. */
@@ -60,6 +63,7 @@ export function ExpenseFields({
 	categories,
 	tags,
 	currency,
+	recent,
 	values,
 }: {
 	projects: ProjectChoice[];
@@ -68,6 +72,8 @@ export function ExpenseFields({
 	tags: readonly TagChoice[];
 	/** The organisation's currency, which unit prices are in. */
 	currency: string;
+	/** The person's recent projects from their time, most recent first, for the head of the list. */
+	recent: readonly string[];
 	values: ExpenseValues;
 }) {
 	const [spentOn, setSpentOn] = useState(values.spentOn);
@@ -91,10 +97,10 @@ export function ExpenseFields({
 				onChange={setSpentOn}
 				isRequired
 			/>
-			<Select
-				label="Project"
+			<ProjectPicker
 				name="projectId"
-				options={projects.map(({ id, name }) => ({ id, label: name }))}
+				projects={projects}
+				recent={recent}
 				value={projectId}
 				onChange={(id) => {
 					if (id === null) return;

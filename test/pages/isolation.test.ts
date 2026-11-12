@@ -97,6 +97,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme",
 				"/app/acme",
 				"/app/acme/time-off",
+				"/app/acme/timesheet/day",
+				"/app/acme/timesheet/month",
 				"/app/acme/expenses",
 				"/app/acme/projects",
 				"/app/acme/projects/rates",
