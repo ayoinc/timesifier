@@ -1,6 +1,6 @@
 import { type BillableAmount, billableMinuteMinor, MINUTES_PER_HOUR } from "~/billing/billable";
 import { roundHalfUp } from "~/money/money";
-import { type PricedProject, priceTime, wholeMinutes } from "~/rates/price";
+import { type PricedProject, priceTime } from "~/rates/price";
 import { type RateRow, resolveRate } from "~/rates/rates";
 import { type Day, daysFrom } from "~/time/calendar";
 import type { ReportDays } from "./query";
@@ -75,8 +75,8 @@ export interface ProfitTotals {
 
 /** The days `range` and the project's dates share. */
 function sharedDays(project: { startsOn: Day; endsOn: Day }, range: ReportDays): number {
-	const first = project.startsOn > range.first ? project.startsOn : range.first;
-	const last = project.endsOn < range.last ? project.endsOn : range.last;
+	const first = Math.max(project.startsOn, range.first);
+	const last = Math.min(project.endsOn, range.last);
 	return first > last ? 0 : daysFrom(first, last).length;
 }
 

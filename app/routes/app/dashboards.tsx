@@ -88,9 +88,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				.filter((r) => r.overdueMinor > 0)
 				.map((r) => formatMoney(r.overdueMinor, r.currency, DEFAULT_LOCALE)),
 		},
-		uninvoiced:
-			board.uninvoiced &&
-			board.uninvoiced.map((u) => formatMoney(u.amountMinor, u.currency, DEFAULT_LOCALE)),
+		uninvoiced: board.uninvoiced?.map((u) =>
+			formatMoney(u.amountMinor, u.currency, DEFAULT_LOCALE),
+		),
 		links: {
 			time: reportViewPath(slug, "time", search),
 			utilisation: reportViewPath(slug, "utilisation", search),

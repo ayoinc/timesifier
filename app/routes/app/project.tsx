@@ -637,9 +637,7 @@ function Profit({ profit }: { profit: NonNullable<Data["profit"]> }) {
 			</Ledger>
 			{figures && (
 				<div className="mt-4 flex flex-col gap-1 text-body-medium text-on-surface-variant empty:hidden">
-					{figures.missingFeeOrDates && (
-						<p>Revenue unknown: the fee or the dates are missing.</p>
-					)}
+					{figures.missingFeeOrDates && <p>Revenue unknown: the fee or the dates are missing.</p>}
 					{figures.otherCurrency && (
 						<p>Billed in {figures.otherCurrency}: no profit without a conversion.</p>
 					)}
