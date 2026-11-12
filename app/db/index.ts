@@ -5,6 +5,13 @@
  * through `organisationScope`, which limits every statement to one organisation.
  * `biome.json` refuses an import of `~/db/schema` or `~/db/scope` anywhere else.
  */
+
+export {
+	activityAfter,
+	apiTokenByHash,
+	calendarFeedByHash,
+	organisationsWithWebhooks,
+} from "./lookups";
 export {
 	type ActivitySummary,
 	type ActivityValue,

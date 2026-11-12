@@ -12,6 +12,7 @@ import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { calendarFeedsPath } from "~/integrations/paths";
 import { workingWeekOf } from "~/leave/leave.server";
 import { WEEKDAY_NAMES, workingWeekLabel } from "~/leave/words";
 import { parseRequest } from "~/lib/validate";
@@ -34,7 +35,7 @@ import {
 	membersPath,
 	NEW_ORGANISATION_PATH,
 } from "~/shell/destinations";
-import { TEXT_LINK } from "~/shell/links";
+import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
 import { formatDuration } from "~/time/format";
 import { isTimeZone, TimeZone } from "~/time/zones";
@@ -234,6 +235,17 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 						))}
 					</LedgerRows>
 				</Ledger>
+			</Section>
+
+			<Section
+				id="calendar-feeds"
+				heading="Calendar feeds"
+				lead="Subscribe your own calendar to your approved time off, and your entries if you like."
+				className="max-w-200"
+			>
+				<Link to={calendarFeedsPath(organisation.slug)} className={ACTION_LINK}>
+					Your calendar feeds
+				</Link>
 			</Section>
 
 			<Section

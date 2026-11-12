@@ -1,0 +1,9 @@
+Date,Client,Project,Project Code,Task,Notes,Hours,Hours Rounded,Billable?,Invoiced?,Approved?,First Name,Last Name,Employee Id,Roles,Employee?,Billable Rate,Billable Amount,Cost Rate,Cost Amount,Currency,External Reference URL
+2026-10-05,Example Client,Website Redesign,WR-01,Design,"Homepage, first draft",3.5,3.5,Yes,No,No,Ada,Lovelace,,Designer,Yes,100.0,350.0,40.0,140.0,British Pound - GBP,
+2026-10-05,Example Client,Website Redesign,WR-01,Project Management,Kick-off call,1.0,1.0,Yes,No,No,Max,Member,,,Yes,100.0,100.0,30.0,30.0,British Pound - GBP,
+10/6/2026,,Apollo,,Programming,Fixed the build,2.25,2.25,Yes,No,No,Ada,Lovelace,,Designer,Yes,100.0,225.0,40.0,90.0,British Pound - GBP,
+2026-10-06,Example Client,Website Redesign,WR-01,Design,Wireframes,1.5,1.5,Yes,No,No,Grace,Hopper,,,Yes,100.0,150.0,40.0,60.0,British Pound - GBP,
+2026-10-07,Example Client,Website Redesign,WR-01,Design,"She said ""ship it""",2.0,2.0,Yes,No,No,Grace,Hopper,,,Yes,100.0,200.0,40.0,80.0,British Pound - GBP,
+2026-10-08,Example Client,Website Redesign,WR-01,Design,,abc,0,Yes,No,No,Max,Member,,,Yes,,,,,British Pound - GBP,
+2026-13-01,Example Client,Website Redesign,WR-01,Design,,1.0,1.0,Yes,No,No,Max,Member,,,Yes,,,,,British Pound - GBP,
+2026-10-09,Acme Internal,Research,,Reading,,0.75,0.75,No,No,No,Max,Member,,,Yes,,,,,British Pound - GBP,

@@ -86,6 +86,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/dashboards",
 				"/app/acme/activity",
 				"/app/acme/integrations",
+				"/app/acme/integrations/import",
+				"/app/acme/integrations/export",
 				"/app/acme/team",
 				"/app/acme/team/members",
 				"/app/acme/team/invitations",
@@ -94,6 +96,7 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/reports/export",
 				"/app/acme/settings",
 				"/app/acme/account",
+				"/app/acme/account/calendar",
 				"/app/acme/settings/members",
 				// Any other address: `*`, stood in for by `x`.
 				"/app/acme/x",
@@ -105,7 +108,10 @@ describe("the list of an organisation's routes", () => {
 		expect(withAction.map(({ id }) => id).sort()).toEqual([
 			"routes/app/account",
 			"routes/app/approvals",
+			"routes/app/calendar-feeds",
 			"routes/app/clients",
+			"routes/app/integrations",
+			"routes/app/integrations.import",
 			"routes/app/invitations",
 			"routes/app/members",
 			"routes/app/projects",
@@ -172,6 +178,9 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/team": { intent: "create", name: "Taken over" },
 		"routes/app/approvals": { intent: "approve-all", startsOn: "2026-01-05" },
 		"routes/app/timesheet": { intent: "stop" },
+		"routes/app/integrations": { intent: "token-create", name: "Taken over", scopes: "time:read" },
+		"routes/app/integrations.import": { intent: "discard", importId: "i-acme" },
+		"routes/app/calendar-feeds": { intent: "feed-create", follow: "me" },
 		"routes/app/time-off": {
 			intent: "request",
 			kindId: "k-annual",
@@ -202,6 +211,8 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from clients")).toBe(0);
 			expect(await value("select count(*) from teams")).toBe(0);
 			expect(await value("select count(*) from leave_requests")).toBe(0);
+			expect(await value("select count(*) from api_tokens")).toBe(0);
+			expect(await value("select count(*) from calendar_feeds")).toBe(0);
 		},
 	);
 
