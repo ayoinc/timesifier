@@ -1,7 +1,8 @@
-import { startTransition, useEffect, useLayoutEffect, useState } from "react";
-import { useNavigation } from "react-router";
+import { startTransition, use, useEffect, useLayoutEffect, useState } from "react";
+import { UNSAFE_DataRouterContext, useNavigation } from "react-router";
 
 import { type DestinationId, destinationIndex, destinations } from "./destinations";
+import { finishRunningTransition } from "./transitions";
 
 // How a move to another destination looks while it waits for the server
 // (docs/design-system.md, "Shell", "While the page waits"). A quick answer shows
@@ -65,6 +66,17 @@ export function useArrival(organisation: string | undefined, pathname: string): 
 	useLayoutEffect(() => {
 		if (moving !== null && shape !== null && shape !== next) setShape(next);
 	}, [moving, shape, next]);
+	// The page is ready the moment the router has its data, before React draws it.
+	// A view transition still playing then (the shape's slide) would hold the page
+	// back until it ended, so it ends at once: the page never waits for a shape.
+	const router = use(UNSAFE_DataRouterContext)?.router;
+	const showingShape = shape !== null;
+	useEffect(() => {
+		if (!router || !showingShape) return;
+		return router.subscribe((state) => {
+			if (state.navigation.state === "idle") finishRunningTransition();
+		});
+	}, [router, showingShape]);
 	// The page that arrives after its shape was shown reveals its sections. Worked
 	// out while rendering, so the sections are hidden on the very frame they arrive.
 	const [revealing, setRevealing] = useState<string | null>(null);

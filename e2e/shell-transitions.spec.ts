@@ -1,3 +1,5 @@
+import { setTimeout as sleep } from "node:timers/promises";
+
 import type { Page } from "@playwright/test";
 
 import { compactNavigation, type Destination, destinations } from "../app/shell/destinations";
@@ -286,6 +288,15 @@ for (const { viewport, axis, leave, arrive } of [
 			const devtools = await context.newCDPSession(page);
 			await devtools.send("Animation.enable");
 			await devtools.send("Animation.setPlaybackRate", { playbackRate: 0.05 });
+			// The far page answers after its shape has slid in, as on a slow
+			// connection: the page must not wait for the shape's slowed slide either.
+			await page.route(
+				(url) => url.pathname === `${homePath(far.id)}.data`,
+				async (route) => {
+					await sleep(400);
+					await route.continue();
+				},
+			);
 
 			const links = page.getByRole("navigation", { name: "Main" });
 			await links.getByRole("link", { name: second.label, exact: true }).click();
