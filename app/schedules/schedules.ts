@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-import type { NonWorkingRule, OvertimeRule } from "~/leave/rules";
+import { type NonWorkingRule, OVERTIME_RULE_LABELS, OvertimeRule } from "~/leave/rules";
 import type { Role } from "~/organisations/roles";
 import { type Day, isoWeekday } from "~/time/calendar";
 import { formatDuration } from "~/time/format";
@@ -138,6 +138,20 @@ export function versionOn(schedule: Pick<Schedule, "versions">, day: Day): Sched
 export const TARGET_KINDS = ["person", "team", "role", "organisation"] as const;
 export const TargetKind = z.enum(TARGET_KINDS);
 export type TargetKind = z.infer<typeof TargetKind>;
+
+// The choices of a schedule's own rules, which the sheet shows. Here, not in
+// ./forms beside the schema that reads them: that module builds a `z.object`
+// as it loads, and Zod 4 then tries `new Function`, which the page's Content
+// Security Policy refuses in the browser (docs/security.md, "no unsafe-eval").
+
+/** "Use the organisation's rule": the value of a rule's choice that sets none of the schedule's own. */
+export const ORGANISATION_CHOICE = "organisation";
+
+/** The overtime choices of a schedule: the organisation's, or one of its own. */
+export const OVERTIME_CHOICES = [
+	{ id: ORGANISATION_CHOICE, label: "The organisation's rule" },
+	...OvertimeRule.options.map((rule) => ({ id: rule, label: OVERTIME_RULE_LABELS[rule] })),
+];
 
 /** The roles a schedule is given to: the four of a membership, a manager of a team, and a contractor. */
 export const SCHEDULE_ROLES = [

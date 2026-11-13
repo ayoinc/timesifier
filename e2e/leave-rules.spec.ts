@@ -314,6 +314,15 @@ for (const viewport of [
 
 				await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 				await expect(page.getByRole("main")).toContainText("Over by 3:45");
+				// At 390px the week opens scrolled to today, and the head of the day before it
+				// lies under the grid's sticky corner, which axe cannot measure through on a
+				// Friday: scanned from the week's first day, as e2e/calendar.spec.ts does.
+				await page
+					.getByRole("table", { name: /^Week calendar, / })
+					.locator("..")
+					.evaluate((scroller) => {
+						scroller.scrollLeft = 0;
+					});
 				await expectNoProblems(page, "Timesheet", [PARTLY_SCROLLED_AWAY]);
 			});
 		});

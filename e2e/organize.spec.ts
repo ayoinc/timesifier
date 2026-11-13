@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { destinationPath } from "../app/shell/destinations";
-import { newPerson, ownAddress, signIn } from "./auth";
+import { newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
@@ -14,6 +14,8 @@ import { createOrganisation } from "./organisation";
 // organisation of their own, so what it adds is seen by no other test.
 
 test.use({ storageState: SIGNED_OUT });
+// Each test asks for a sign-in code, and may stand behind the other tests asking for theirs.
+test.describe.configure({ timeout: TIME_WITH_TURNS });
 
 test.beforeEach(async ({ context, baseURL }) => {
 	await ownAddress(context, baseURL);

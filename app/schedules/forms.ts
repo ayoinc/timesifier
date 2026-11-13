@@ -1,11 +1,6 @@
 import * as z from "zod";
 
-import {
-	LONGEST_OVERTIME_CAP_MINUTES,
-	NonWorkingRule,
-	OVERTIME_RULE_LABELS,
-	OvertimeRule,
-} from "~/leave/rules";
+import { LONGEST_OVERTIME_CAP_MINUTES, NonWorkingRule, OvertimeRule } from "~/leave/rules";
 import { RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import type { Day } from "~/time/calendar";
 
@@ -13,6 +8,7 @@ import {
 	assignmentOn,
 	isWorkedDay,
 	LAST_MINUTE,
+	ORGANISATION_CHOICE,
 	parseClock,
 	type ScheduleBook,
 	type ScheduleRules,
@@ -59,15 +55,6 @@ function capMinutes(text: string): number | null | undefined {
 	if (minutes === null || minutes > LONGEST_OVERTIME_CAP_MINUTES) return undefined;
 	return minutes === 0 ? null : minutes;
 }
-
-/** "Use the organisation's rule": the value of a rule's choice that sets none of the schedule's own. */
-export const ORGANISATION_CHOICE = "organisation";
-
-/** The overtime choices of a schedule: the organisation's, or one of its own. */
-export const OVERTIME_CHOICES = [
-	{ id: ORGANISATION_CHOICE, label: "The organisation's rule" },
-	...OvertimeRule.options.map((rule) => ({ id: rule, label: OVERTIME_RULE_LABELS[rule] })),
-];
 
 const Text = z.string().max(16).optional().default("");
 

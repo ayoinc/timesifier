@@ -16,15 +16,12 @@ import { isAdministrator } from "~/organisations/access";
 import { membershipContext } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
-import {
-	ORGANISATION_CHOICE,
-	OVERTIME_CHOICES,
-	readSchedule,
-	ScheduleFields,
-} from "~/schedules/forms";
+import { readSchedule, ScheduleFields } from "~/schedules/forms";
 import {
 	assignmentOn,
 	clockTime,
+	ORGANISATION_CHOICE,
+	OVERTIME_CHOICES,
 	resolve,
 	SCHEDULE_ROLE_LABELS,
 	SCHEDULE_ROLES,
@@ -368,24 +365,24 @@ export default function Schedules({ loaderData }: Route.ComponentProps) {
 									</>
 								}
 								action={
-									<>
-										{!s.archived && (
-											<Button
-												variant="text"
-												aria-label={`Change ${s.name}`}
-												onPress={() => setEditing(s)}
-											>
-												Change
-											</Button>
-										)}
+									// One action a row, as on Projects (W24): Change's sheet holds Archive.
+									s.archived ? (
 										<Button
 											variant="text"
-											aria-label={`${s.archived ? "Restore" : "Archive"} ${s.name}`}
+											aria-label={`Restore ${s.name}`}
 											onPress={() => setArchiving(s)}
 										>
-											{s.archived ? "Restore" : "Archive"}
+											Restore
 										</Button>
-									</>
+									) : (
+										<Button
+											variant="text"
+											aria-label={`Change ${s.name}`}
+											onPress={() => setEditing(s)}
+										>
+											Change
+										</Button>
+									)
 								}
 							/>
 						))}
@@ -492,6 +489,10 @@ export default function Schedules({ loaderData }: Route.ComponentProps) {
 				today={today}
 				onClose={() => setEditing(null)}
 				onDone={setSaid}
+				onArchive={(row) => {
+					setEditing(null);
+					setArchiving(row);
+				}}
 			/>
 
 			<FormSheet
@@ -555,11 +556,13 @@ function ScheduleSheet({
 	today,
 	onClose,
 	onDone,
+	onArchive,
 }: {
 	editing: ScheduleRow | "new" | null;
 	today: string;
 	onClose: () => void;
 	onDone: (said: string) => void;
+	onArchive: (row: ScheduleRow) => void;
 }) {
 	const row = editing === "new" ? null : editing;
 	const fields = row?.fields ?? {
@@ -620,29 +623,33 @@ function ScheduleSheet({
 							{label} worked
 						</Checkbox>
 						{worked[index] && (
-							<div className="grid grid-cols-3 gap-3">
+							// The day is the group's name, so each field is named by what it holds and is
+							// never cut short; under 640px the break takes a row of its own.
+							<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
 								<TextField
-									label={`${label} start`}
+									label="Start"
 									name={`start${n}`}
 									type="time"
 									defaultValue={day?.start}
 									isRequired
 								/>
 								<TextField
-									label={`${label} finish`}
+									label="Finish"
 									name={`finish${n}`}
 									type="time"
 									defaultValue={day?.finish}
 									isRequired
 								/>
-								<TextField
-									label={`${label} break (minutes)`}
-									name={`break${n}`}
-									inputMode="numeric"
-									autoComplete="off"
-									maxLength={3}
-									defaultValue={day?.breakMinutes}
-								/>
+								<div className="col-span-2 sm:col-span-1">
+									<TextField
+										label="Break (minutes)"
+										name={`break${n}`}
+										inputMode="numeric"
+										autoComplete="off"
+										maxLength={3}
+										defaultValue={day?.breakMinutes}
+									/>
+								</div>
 							</div>
 						)}
 					</fieldset>
@@ -687,6 +694,17 @@ function ScheduleSheet({
 					})),
 				]}
 			/>
+			{row && (
+				// Archiving is not saving: it opens its own sheet, which says what it does.
+				<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
+					<p className="text-body-medium text-on-surface-variant">
+						Done with it? Archive it and it is no longer offered; days that had it keep it.
+					</p>
+					<Button variant="outlined" onPress={() => onArchive(row)}>
+						Archive schedule
+					</Button>
+				</div>
+			)}
 		</FormSheet>
 	);
 }
