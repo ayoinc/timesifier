@@ -25,7 +25,10 @@ export interface WaitingLabelProps {
  * from the start and never changes size. The change shows only once the wait
  * has lasted 400ms (app/app.css, `.wait-appear`). The control's name stays its
  * words at rest: a name that changed under the focus would not be read again,
- * and React Aria says "pending" of a pending button itself.
+ * and React Aria says "pending" of a pending button itself. The words while
+ * waiting are drawn from `data-doing` by CSS (app/app.css, `.waiting-words`),
+ * so they are in no copy of the page's text: not in the HTML read without
+ * styles, nor in what is selected and copied.
  */
 export function WaitingLabel({
 	waiting,
@@ -40,7 +43,7 @@ export function WaitingLabel({
 			<span className={cx(face, waiting && "wait-leave")}>{children}</span>
 			<span aria-hidden="true" className={cx(face, !waiting && "invisible")}>
 				{waiting ? <WaitClock tone={tone} /> : <span className="size-5 shrink-0" />}
-				<span className={waiting ? "wait-appear" : undefined}>{doing}</span>
+				<span data-doing={doing} className={cx("waiting-words", waiting && "wait-appear")} />
 			</span>
 		</span>
 	);

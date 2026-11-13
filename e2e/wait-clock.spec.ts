@@ -115,7 +115,7 @@ test.describe("signing in", () => {
 			expect(timing.sawEarly, "the clock was seen before 400ms").toBe(false);
 			expect(timing.after).toBeGreaterThanOrEqual(APPEARS_AFTER_MS - FRAME_MS);
 			expect(timing.after).toBeLessThan(APPEARS_AFTER_MS + 300);
-			await expect(proceed.getByText("Sending…")).toBeVisible();
+			await expect(proceed.locator('[data-doing="Sending…"]')).toBeVisible();
 			expect(await sizeOf(proceed)).toEqual(atRest);
 			// A second press, and Enter in the field, send nothing more.
 			await proceed.click({ force: true });
@@ -138,7 +138,7 @@ test.describe("signing in", () => {
 		const verifyAtRest = await sizeOf(verify);
 		await verify.click();
 		await expect(verify).toHaveAttribute("data-pending", "true");
-		await expect(verify.getByText("Checking…")).toBeVisible();
+		await expect(verify.locator('[data-doing="Checking…"]')).toBeVisible();
 		await expect(verify.locator("[data-wait-clock]")).toBeVisible();
 		expect(await sizeOf(verify)).toEqual(verifyAtRest);
 		await verify.click({ force: true });
@@ -164,7 +164,7 @@ test("Create organisation waits with the clock, at its size, and is sent once", 
 	const timing = await clockTiming(page);
 	expect(timing.sawEarly, "the clock was seen before 400ms").toBe(false);
 	expect(timing.after).toBeGreaterThanOrEqual(APPEARS_AFTER_MS - FRAME_MS);
-	await expect(create.getByText("Creating…")).toBeVisible();
+	await expect(create.locator('[data-doing="Creating…"]')).toBeVisible();
 	expect(await sizeOf(create)).toEqual(atRest);
 	await create.click({ force: true });
 	await page.getByLabel("Organisation name").press("Enter");
@@ -192,7 +192,7 @@ test("an export waits with the clock in its link until the file arrives, and is 
 	const timing = await clockTiming(page);
 	expect(timing.sawEarly, "the clock was seen before 400ms").toBe(false);
 	expect(timing.after).toBeGreaterThanOrEqual(APPEARS_AFTER_MS - FRAME_MS);
-	await expect(link.getByText("Exporting…")).toBeVisible();
+	await expect(link.locator('[data-doing="Exporting…"]')).toBeVisible();
 	expect(await sizeOf(link)).toEqual(atRest);
 	if (SHOTS) await link.screenshot({ path: join(SHOTS, "exporting-link.png") });
 	await link.click({ force: true });
@@ -278,7 +278,7 @@ test.describe("the clock's hand", () => {
 				expect(await hand.evaluate((element) => getComputedStyle(element).transform)).toBe("none");
 			}
 			const send = gallery.getByRole("button", { name: "Send", exact: true });
-			await expect(send.getByText("Sending…")).toBeVisible();
+			await expect(send.locator('[data-doing="Sending…"]')).toBeVisible();
 			await expect(send.locator("[data-wait-clock]")).toBeVisible();
 			await expect(gallery.getByRole("status").getByText("Reading the file…")).toBeVisible();
 		});
