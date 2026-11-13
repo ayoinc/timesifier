@@ -658,6 +658,22 @@ const ROLE_TABLE: Record<string, Row> = {
 	},
 	"routes/app/integrations.export": { page: by(200, 200, 404, 404, 404) },
 	"routes/app/integrations.invoices-export": { page: by(200, 200, 404, 404, 404) },
+	"routes/app/schedules": {
+		page: by(200, 200, 404, 404, 404),
+		form: {
+			fields: () => ({
+				intent: "create",
+				name: "Early",
+				worked1: "on",
+				start1: "07:00",
+				finish1: "15:00",
+				break1: "30",
+			}),
+			made: async () =>
+				(await count("select count(*) from work_schedules where name = 'Early'")) === 1,
+			post: by<Post>("done", "done", 404, 404, 404),
+		},
+	},
 	"routes/app/settings": {
 		page: by(200, 200, 404, 404, 404),
 		form: {

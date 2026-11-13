@@ -146,6 +146,7 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/reports/leave/export",
 				"/app/acme/reports/saved",
 				"/app/acme/settings",
+				"/app/acme/settings/schedules",
 				"/app/acme/account",
 				"/app/acme/account/calendar",
 				"/app/acme/settings/members",
@@ -182,6 +183,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/reports.profitability",
 			"routes/app/reports.saved",
 			"routes/app/reports.utilisation",
+			"routes/app/schedules",
 			"routes/app/settings",
 			"routes/app/tasks",
 			"routes/app/team",
@@ -235,6 +237,13 @@ describe("a member of one organisation asking for another organisation's address
 	// for who is asking, not for what was sent.
 	const FORMS: Record<string, Record<string, string>> = {
 		"routes/app/settings": { intent: "rename", name: "Taken over" },
+		"routes/app/schedules": {
+			intent: "create",
+			name: "Taken over",
+			worked1: "on",
+			start1: "09:00",
+			finish1: "17:00",
+		},
 		"routes/app/members": { intent: "role", memberId: "m-ada", role: "member" },
 		"routes/app/invitations": { intent: "invite", email: "mallory@example.com", role: "admin" },
 		"routes/app/account": { intent: "leave" },

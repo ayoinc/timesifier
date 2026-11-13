@@ -14,8 +14,6 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { calendarFeedsPath } from "~/integrations/paths";
-import { workingWeekOf } from "~/leave/leave.server";
-import { WEEKDAY_NAMES, workingWeekLabel } from "~/leave/words";
 import { parseRequest } from "~/lib/validate";
 import { leaveOrganisation, listOrganisations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -25,6 +23,8 @@ import { AS_ROLE } from "~/organisations/people";
 import { SOMETHING_WENT_WRONG } from "~/organisations/problems";
 import type { loader as rootLoader } from "~/root";
 import { SignOutEverywhere } from "~/routes/auth/AccountSettings";
+import { scheduleView } from "~/schedules/schedules";
+import { formerPlace, placesOf, scheduleBookOf } from "~/schedules/schedules.server";
 import {
 	type ColorSchemeChoice,
 	colorSchemeCookie,
@@ -38,9 +38,10 @@ import {
 } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
-import { formatDuration } from "~/time/format";
+import { dayOf } from "~/time/calendar";
+import { formatDayWithYear } from "~/time/format";
 import { isTimeZone, TimeZone } from "~/time/zones";
-import { ownZoneOf, setTimeZone } from "~/time/zones.server";
+import { ownZoneOf, setTimeZone, zoneOfMember } from "~/time/zones.server";
 
 import type { Route } from "./+types/account";
 import { FormSheet } from "./FormSheet";
@@ -62,10 +63,13 @@ export function meta() {
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { role, user, organisation } = membership;
-	const [organisations, ownZone, week, owners] = await Promise.all([
+	const scope = organisationScope(env.DB, organisation.id);
+	const [organisations, ownZone, zone, book, places, owners] = await Promise.all([
 		listOrganisations(request),
 		ownZoneOf(membership),
-		workingWeekOf(organisationScope(env.DB, organisation.id)),
+		zoneOfMember(membership),
+		scheduleBookOf(scope),
+		placesOf(scope, [user.id]),
 		// The only owner cannot leave (the auth server refuses it), so is not offered to.
 		role === "owner"
 			? organisationScope(env.DB, organisation.id).memberships.select((m) => eq(m.role, "owner"))
@@ -77,12 +81,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		onlyOwner: owners.length === 1,
 		person: { name: user.name?.trim() || null, email: user.email },
 		timeZone: { own: ownZone, organisation: organisation.timeZone },
-		/** The organisation's working week, which is the person's (TS-061). */
-		workingWeek: WEEKDAY_NAMES.map((name, index) => ({
-			name,
-			hours: (week[index] ?? 0) > 0 ? formatDuration((week[index] ?? 0) * 60) : "Not a working day",
-		})),
-		workingWeekLabel: workingWeekLabel(week),
+		/** Their work schedule today, why it is theirs, and the next change due (TS-097). */
+		schedule: scheduleView(
+			book,
+			places.get(user.id) ?? formerPlace(user.id),
+			dayOf(Date.now(), zone),
+			true,
+		),
 	};
 }
 
@@ -179,7 +184,7 @@ const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
 type Task = "name" | "time-zone" | "leave";
 
 export default function Account({ loaderData }: Route.ComponentProps) {
-	const { person, role, hasOthers, onlyOwner, timeZone, workingWeek } = loaderData;
+	const { person, role, hasOthers, onlyOwner, timeZone, schedule } = loaderData;
 	const organisation = useOrganisation();
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -235,18 +240,24 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 			<SignOutEverywhere />
 
 			<Section
-				id="working-week"
-				heading="Your working week"
-				lead={`${loaderData.workingWeekLabel}, as ${organisation.name} sets it for everyone. Owners and admins change it in Workspace settings.`}
+				id="work-schedule"
+				heading="Your work schedule"
+				lead={`${schedule.name}: ${schedule.weekLabel}. ${schedule.reason}. Owners and admins set schedules in Workspace settings.`}
 				className="max-w-200"
 			>
-				<Ledger heading="Hours expected">
-					<LedgerRows label="Your working week">
-						{workingWeek.map((day) => (
+				<Ledger heading={schedule.name} note={schedule.reason}>
+					<LedgerRows label="Your work schedule">
+						{schedule.days.map((day) => (
 							<LedgerRow key={day.name} title={day.name} value={day.hours} />
 						))}
 					</LedgerRows>
 				</Ledger>
+				{schedule.next && (
+					<p className="mt-4 text-body-medium text-on-surface-variant">
+						From {formatDayWithYear(schedule.next.from)}: {schedule.next.name},{" "}
+						{schedule.next.weekLabel}.
+					</p>
+				)}
 			</Section>
 
 			<Section

@@ -2,8 +2,9 @@ import { and, gte, inArray, lte } from "drizzle-orm";
 
 import { halfDaysByDay } from "~/leave/days";
 import { HOLIDAY_KIND, LeaveStatus } from "~/leave/kinds";
-import { leaveKindsOf, publicHolidaysOf, workingWeekOf } from "~/leave/leave.server";
+import { leaveKindsOf, publicHolidaysOf } from "~/leave/leave.server";
 import { maySeeLeaveKindOf } from "~/organisations/access";
+import { timetablesOf } from "~/schedules/schedules.server";
 import type { Day } from "~/time/calendar";
 
 import type { Person, ReportRequest } from "./reports.server";
@@ -61,9 +62,12 @@ export async function leaveBalances(
 	if (people.length === 0) return [];
 	const first = `${year}-01-01`;
 	const last = `${year}-12-31`;
-	const [kinds, week, holidays, rows] = await Promise.all([
+	const [kinds, timetables, holidays, rows] = await Promise.all([
 		leaveKindsOf(scope),
-		workingWeekOf(scope),
+		timetablesOf(
+			scope,
+			people.map((p) => p.id),
+		),
 		publicHolidaysOf(scope, { first, last }),
 		scope.leaveRequests.select((r) =>
 			and(
@@ -78,14 +82,12 @@ export async function leaveBalances(
 		),
 	]);
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
-	const calendar = {
-		week,
-		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
-	};
+	const holidaysByDay = new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []);
 	const counted = kinds.filter((k) => k.key !== HOLIDAY_KIND);
 
 	return people.flatMap((person) => {
 		const theirs = rows.filter((r) => r.userId === person.id);
+		const calendar = { timetable: timetables(person.id), holidays: holidaysByDay };
 		return counted
 			.filter((kind) => kind.enabled || theirs.some((r) => r.kindId === kind.id))
 			.map((kind) => {

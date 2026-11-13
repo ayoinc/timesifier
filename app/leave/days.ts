@@ -1,4 +1,5 @@
-import { type Day, daysFrom, isoWeekday } from "~/time/calendar";
+import type { Timetable, WorkedDay } from "~/schedules/schedules";
+import { type Day, daysFrom } from "~/time/calendar";
 
 import type { KindKey, LeaveStatus } from "./kinds";
 
@@ -9,18 +10,12 @@ import type { KindKey, LeaveStatus } from "./kinds";
  * the Worker and the browser.
  *
  * A day is a local date, `YYYY-MM-DD`, in the zone of the person it is for
- * (decision 26). A working week, a public holiday and a request are all dates,
+ * (decision 26). A schedule's day, a public holiday and a request are all dates,
  * so a clock change moves none of them: a day expected to hold 7.5 hours holds
  * 7.5 hours whether the day has 23, 24 or 25.
  *
  * Leave is counted in half days, whole numbers, so that no sum drifts.
  */
-
-/** Minutes expected on each day of the week, Monday first: seven numbers, 0 for a day not worked. */
-export type WorkingWeek = readonly number[];
-
-/** Monday to Friday, 7.5 hours a day: what an organisation starts with. */
-export const DEFAULT_WORKING_WEEK: WorkingWeek = [450, 450, 450, 450, 450, 0, 0];
 
 /** The days of a request, both included, and which ends are half days. */
 export interface LeaveSpan {
@@ -41,31 +36,26 @@ export interface LeaveRequestLike extends LeaveSpan {
 	status: LeaveStatus;
 }
 
-/** What decides a person's working days: the organisation's week, its public holidays, and their approved leave. */
+/** What decides a person's working days: their work schedule day by day (TS-097), the organisation's public holidays, and their approved leave. */
 export interface LeaveCalendar {
-	week: WorkingWeek;
+	timetable: Timetable;
 	/** Public holidays by day, with their names. Empty while the organisation has public holidays switched off. */
 	holidays: ReadonlyMap<Day, string>;
 	/** The person's approved requests. Others are ignored. */
 	leave: readonly LeaveRequestLike[];
 }
 
-/** The minutes the week expects on `day`, before holidays and leave. */
-export function weekMinutes(week: WorkingWeek, day: Day): number {
-	return week[isoWeekday(day) - 1] ?? 0;
-}
-
 /** The minutes expected on `day` before leave: none on a public holiday or a day not worked. */
 export function workingMinutes(
-	calendar: Pick<LeaveCalendar, "week" | "holidays">,
+	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
 	day: Day,
 ): number {
-	return calendar.holidays.has(day) ? 0 : weekMinutes(calendar.week, day);
+	return calendar.holidays.has(day) ? 0 : calendar.timetable(day).minutes;
 }
 
-/** Whether `day` is a working day: worked in the week, and no public holiday. */
+/** Whether `day` is a working day: worked in the person's schedule, and no public holiday. */
 export function isWorkingDay(
-	calendar: Pick<LeaveCalendar, "week" | "holidays">,
+	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
 	day: Day,
 ): boolean {
 	return workingMinutes(calendar, day) > 0;
@@ -85,7 +75,7 @@ export function halvesCovered(span: LeaveSpan, day: Day): 0 | 1 | 2 {
 /** The half days of working days a span takes, day by day: a day not worked and a public holiday take none. */
 export function halfDaysByDay(
 	span: LeaveSpan,
-	calendar: Pick<LeaveCalendar, "week" | "holidays">,
+	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
 ): Map<Day, number> {
 	const taken = new Map<Day, number>();
 	for (const day of daysFrom(span.startsOn, span.endsOn)) {
@@ -98,7 +88,7 @@ export function halfDaysByDay(
 /** The half days of working days a span takes in all. */
 export function halfDaysTaken(
 	span: LeaveSpan,
-	calendar: Pick<LeaveCalendar, "week" | "holidays">,
+	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
 ): number {
 	let sum = 0;
 	for (const halves of halfDaysByDay(span, calendar).values()) sum += halves;
@@ -108,7 +98,7 @@ export function halfDaysTaken(
 /** The half days a span takes in each calendar year it touches: the leave year is the calendar year. */
 export function halfDaysByYear(
 	span: LeaveSpan,
-	calendar: Pick<LeaveCalendar, "week" | "holidays">,
+	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
 ): Map<number, number> {
 	const years = new Map<number, number>();
 	for (const [day, halves] of halfDaysByDay(span, calendar)) {
@@ -138,19 +128,22 @@ export interface DayStatus {
 	day: Day;
 	is: DayKind;
 	expectedMinutes: number;
+	/** The start, finish and break the person's schedule sets for the day (TS-097); null on a public holiday or a day it does not work. */
+	hours: WorkedDay | null;
 }
 
 /**
  * What `day` is for the person whose calendar this is. A public holiday comes
- * first, then a day the week does not work, then approved leave, which halves
+ * first, then a day the schedule does not work, then approved leave, which halves
  * the day's minutes for a half day and takes them all for a whole one.
  */
 export function dayStatus(calendar: LeaveCalendar, day: Day): DayStatus {
 	const holiday = calendar.holidays.get(day);
 	if (holiday !== undefined)
-		return { day, is: { kind: "holiday", name: holiday }, expectedMinutes: 0 };
-	const minutes = weekMinutes(calendar.week, day);
-	if (minutes === 0) return { day, is: { kind: "not-a-working-day" }, expectedMinutes: 0 };
+		return { day, is: { kind: "holiday", name: holiday }, expectedMinutes: 0, hours: null };
+	const { minutes, worked } = calendar.timetable(day);
+	if (minutes === 0 || !worked)
+		return { day, is: { kind: "not-a-working-day" }, expectedMinutes: 0, hours: null };
 	for (const request of calendar.leave) {
 		if (request.status !== "approved") continue;
 		const halves = halvesCovered(request, day);
@@ -159,10 +152,11 @@ export function dayStatus(calendar: LeaveCalendar, day: Day): DayStatus {
 				day,
 				is: { kind: "leave", halves, request },
 				expectedMinutes: halves === 2 ? 0 : minutes / 2,
+				hours: worked,
 			};
 		}
 	}
-	return { day, is: { kind: "working" }, expectedMinutes: minutes };
+	return { day, is: { kind: "working" }, expectedMinutes: minutes, hours: worked };
 }
 
 /** Each of `days` for the person, in order. */
@@ -183,11 +177,11 @@ export function leaveHalfDays(calendar: LeaveCalendar, days: readonly Day[]): nu
 	}, 0);
 }
 
-/** The minutes of approved leave over `days`: the week's minutes of each day taken, halved for a half day. */
+/** The minutes of approved leave over `days`: the schedule's minutes of each day taken, halved for a half day. */
 export function leaveMinutes(calendar: LeaveCalendar, days: readonly Day[]): number {
 	return days.reduce((sum, day) => {
 		const { is } = dayStatus(calendar, day);
-		return sum + (is.kind === "leave" ? (weekMinutes(calendar.week, day) * is.halves) / 2 : 0);
+		return sum + (is.kind === "leave" ? (calendar.timetable(day).minutes * is.halves) / 2 : 0);
 	}, 0);
 }
 
@@ -218,7 +212,7 @@ export function balance(
 	allowance: number | null,
 	requests: readonly (LeaveSpan & { status: LeaveStatus })[],
 	year: number,
-	calendar: Pick<LeaveCalendar, "week" | "holidays">,
+	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
 ): Balance {
 	let approved = 0;
 	let pending = 0;
@@ -248,7 +242,7 @@ export type PersonStatus =
 /**
  * Where a person stands on `today`, their own local day: working while their
  * timer runs, whatever the day; else on leave, on a public holiday, on a day
- * the week does not work, or available. The kind of leave is given only when
+ * the schedule does not work, or available. The kind of leave is given only when
  * `kindVisible`: a colleague sees "On leave", their manager and an owner or
  * admin see which leave.
  */

@@ -11,7 +11,7 @@ import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
-import { organisationScope } from "~/db";
+import { type OrganisationScope, organisationScope } from "~/db";
 import { dayLabel as leaveDayLabel, personStatusLabel } from "~/leave/days";
 import { leaveOfPeople } from "~/leave/leave.server";
 import { RECORD_NAME_MAX_LENGTH, RecordName } from "~/lib/names";
@@ -22,6 +22,8 @@ import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { shownName } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
+import { type ScheduleView, scheduleView } from "~/schedules/schedules";
+import { formerPlace, placesOf, scheduleBookOf } from "~/schedules/schedules.server";
 import { destination, destinationPath } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
@@ -48,6 +50,7 @@ import {
 	statusLabel,
 	WEEK_PARAM,
 } from "~/teams/words";
+import { addDays, type Day, dayOf } from "~/time/calendar";
 import { formatDay, formatDuration, formatTimeRange } from "~/time/format";
 
 import type { Route } from "./+types/team";
@@ -124,15 +127,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		// Somebody this person may not see is as absent as somebody who does not exist.
 		const person = people.find((p) => p.id === personId);
 		if (!person) throw notFound();
-		const [shown, leave] = await Promise.all([
+		const [shown, leave, schedules] = await Promise.all([
 			personWeek(scope, person, viewed.period, now),
 			leaveOfPeople(scope, access, [person], viewed.period.startsOn, viewed.period.endsOn, now),
+			schedulesOfPeople(scope, [person], viewed.period.startsOn, now),
 		]);
 		const theirs = leave.get(person.id);
 		return {
 			view: "person" as const,
 			week,
 			person: { id: person.id, name: person.name, timeZone: person.timeZone },
+			/** Their work schedule and why it is theirs (TS-097): seen, not changed, here. */
+			schedule: schedules.get(person.id) ?? null,
 			status: shown.status,
 			comment: shown.comment,
 			seconds: shown.seconds,
@@ -164,7 +170,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		(p) =>
 			p.name.toLocaleLowerCase("en").includes(key) || p.email.toLocaleLowerCase("en").includes(key),
 	);
-	const listed = await teamWeek(scope, shown, viewed.period, now);
+	const [listed, schedules] = await Promise.all([
+		teamWeek(scope, shown, viewed.period, now),
+		schedulesOfPeople(scope, shown, viewed.period.startsOn, now),
+	]);
 	const leave = await leaveOfPeople(
 		scope,
 		access,
@@ -194,6 +203,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				now: isCurrent && theirs ? personStatusLabel(theirs.now) : null,
 				expected: formatDuration((theirs?.expectedMinutes ?? 0) * 60),
 				leave: theirs && theirs.leaveMinutes > 0 ? formatDuration(theirs.leaveMinutes * 60) : null,
+				schedule: schedules.get(p.id) ?? null,
 				leaveDays:
 					theirs?.days
 						.filter((d) => d.is.kind === "leave")
@@ -201,6 +211,33 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			};
 		}),
 	};
+}
+
+/**
+ * The work schedule of each of `people` (TS-097): the current week's on their
+ * own today, another week's on its first day, with why it is theirs.
+ */
+async function schedulesOfPeople(
+	scope: OrganisationScope,
+	people: readonly { id: string; timeZone: string }[],
+	weekStart: Day,
+	now: number,
+) {
+	if (people.length === 0) return new Map<string, ScheduleView>();
+	const [book, places] = await Promise.all([
+		scheduleBookOf(scope),
+		placesOf(
+			scope,
+			people.map((p) => p.id),
+		),
+	]);
+	return new Map(
+		people.map((p) => {
+			const today = dayOf(now, p.timeZone);
+			const day = today >= weekStart && today < addDays(weekStart, 7) ? today : weekStart;
+			return [p.id, scheduleView(book, places.get(p.id) ?? formerPlace(p.id), day)] as const;
+		}),
+	);
 }
 
 const Id = z.string().min(1).max(64);
@@ -402,6 +439,11 @@ function ThisWeek({ data }: { data: WeekData }) {
 														{p.expected} expected
 														{p.leave && ` · ${p.leave} leave`}
 													</span>
+													{p.schedule && (
+														<span className="block text-body-medium text-on-surface-variant">
+															{p.schedule.name}, {p.schedule.weekLabel}. {p.schedule.reason}.
+														</span>
+													)}
 												</>
 											}
 										/>
@@ -432,7 +474,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 
 function PersonWeek({ data }: { data: PersonData }) {
 	const organisation = useOrganisation();
-	const { week, person, days, seconds, split, status, comment, expected } = data;
+	const { week, person, days, seconds, split, status, comment, expected, schedule } = data;
 	return (
 		<>
 			<p>
@@ -453,6 +495,11 @@ function PersonWeek({ data }: { data: PersonData }) {
 			{status === "returned" && comment && (
 				<p className="mt-2 max-w-160 text-body-medium text-on-surface-variant">
 					Returned: {comment}
+				</p>
+			)}
+			{schedule && (
+				<p className="mt-2 max-w-160 text-body-medium text-on-surface-variant">
+					Work schedule: {schedule.name}, {schedule.weekLabel}. {schedule.reason}.
 				</p>
 			)}
 			<TeamTabs slug={organisation.slug} current="week" />

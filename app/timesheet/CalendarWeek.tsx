@@ -94,7 +94,9 @@ export function CalendarWeek({
 						// A time the clocks skip cannot start an entry.
 						(minutes) => exactInstantAt(day, minutes, zone) !== null,
 					);
-		return { day, placed, slots, locked, status: statuses[day], rule };
+		// The person's working hours that day, from their schedule (TS-097), drawn as a band.
+		const band = data.away.days.find((each) => each.day === day)?.band ?? null;
+		return { day, placed, slots, locked, status: statuses[day], rule, band };
 	});
 
 	// The items of the grid in the order the arrow keys walk them: each day's
@@ -297,7 +299,7 @@ export function CalendarWeek({
 									))}
 								</span>
 							</th>
-							{columns.map(({ day, placed, slots, locked, status }, col) => (
+							{columns.map(({ day, placed, slots, locked, status, band }, col) => (
 								<td
 									key={day}
 									className={cx(
@@ -314,6 +316,17 @@ export function CalendarWeek({
 												<span key={hour} />
 											))}
 										</div>
+										{band && (
+											<div aria-hidden="true" className="absolute inset-0 grid grid-rows-288">
+												<span
+													data-working-hours={`${clockOfMinutes(band.start)}–${clockOfMinutes(band.finish)}`}
+													className={cx(
+														"border-s-4 border-primary bg-primary-container/40",
+														placement(Math.floor(band.start / 5), Math.ceil(band.finish / 5)),
+													)}
+												/>
+											</div>
+										)}
 										<div className="relative grid h-full grid-cols-60 grid-rows-288">
 											{slots.map((minutes) => (
 												<button

@@ -258,6 +258,14 @@ export const MEMBERS_SEGMENT = `${destination("team").segment}/members`;
 /** What follows the organisation in the address of its invitations: a page of Team. */
 export const INVITATIONS_SEGMENT = `${destination("team").segment}/invitations`;
 
+/** What follows the organisation in the address of its work schedules (TS-097): a page of Workspace settings, for owners and admins. */
+export const SCHEDULES_SEGMENT = `${destination("settings").segment}/schedules`;
+
+/** The address of the work schedules page of the organisation with this slug. */
+export function schedulesPath(slug: string): string {
+	return `${organisationPath(slug)}/${SCHEDULES_SEGMENT}`;
+}
+
 /** The address of the members page of the organisation with this slug. */
 export function membersPath(slug: string): string {
 	return `${organisationPath(slug)}/${MEMBERS_SEGMENT}`;

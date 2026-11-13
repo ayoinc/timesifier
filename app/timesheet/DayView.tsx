@@ -202,6 +202,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 							{shownDay && (
 								<p className="px-4 pb-3 text-body-medium text-on-surface-variant @sm:px-5">
 									{shownDay.label ? `${shownDay.label}. ` : ""}
+									{shownDay.hours ? `${shownDay.hours}, ` : ""}
 									{formatDuration(shownDay.expectedMinutes * 60_000)} expected.
 								</p>
 							)}

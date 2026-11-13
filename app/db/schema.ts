@@ -653,7 +653,9 @@ export const publicHolidays = sqliteTable(
 /**
  * The organisation's working week: for each day of the week as ISO counts it
  * (1 is Monday), the minutes a person is expected to work; 0 is not a working
- * day. Seven rows an organisation.
+ * day. Seven rows an organisation. Replaced by work schedules (TS-097) and no
+ * longer read: migration `0019_work_schedules` made each organisation's week
+ * its default schedule. A later migration, which ships alone, takes it away.
  */
 export const workingDays = sqliteTable(
 	"working_days",
@@ -674,6 +676,178 @@ export const workingDays = sqliteTable(
 		),
 		check("working_days_weekday_in_range", sql`${table.weekday} BETWEEN 1 AND 7`),
 		check("working_days_minutes_in_range", sql`${table.minutes} BETWEEN 0 AND 1440`),
+	],
+);
+
+// Work schedules (TS-097). An organisation's named schedules, each a run of
+// dated versions: from its day, a version holds the weekdays worked, with a
+// start, a finish and an unpaid break each, and its own overtime and weekend
+// rules or none, when the organisation's apply. An assignment gives a
+// schedule, from its day, to a person, a team, a role or the organisation;
+// the most specific wins (`app/schedules/schedules.ts`). Every organisation is
+// given "Standard" and "Long", Standard its default, by the trigger
+// `organisations_schedule_defaults` in `migrations/0019_work_schedules.sql`.
+
+/** A named work schedule. Archived, it is no longer offered; it is never deleted, as past days keep it. */
+export const workSchedules = sqliteTable(
+	"work_schedules",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		name: text("name").notNull(),
+		/** The name folded for comparison: two schedules of an organisation never share one. */
+		nameKey: text("name_key").notNull(),
+		archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("work_schedules_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("work_schedules_organisation_id_name_key_unique").on(
+			table.organisationId,
+			table.nameKey,
+		),
+	],
+);
+
+/**
+ * A schedule as it is from `effective_from`, a local date, until its next
+ * version. The first version of every schedule is from `0001-01-01`. Its
+ * overtime rule, with its caps, applies when `overtime_policy` is set, else
+ * the organisation's; likewise `non_working_days`.
+ */
+export const workScheduleVersions = sqliteTable(
+	"work_schedule_versions",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		scheduleId: text("schedule_id").notNull(),
+		effectiveFrom: text("effective_from").notNull(),
+		overtimePolicy: text("overtime_policy"),
+		overtimeDayCapMinutes: integer("overtime_day_cap_minutes"),
+		overtimeWeekCapMinutes: integer("overtime_week_cap_minutes"),
+		nonWorkingDays: text("non_working_days"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("work_schedule_versions_organisation_id_id_unique").on(
+			table.organisationId,
+			table.id,
+		),
+		uniqueIndex("work_schedule_versions_schedule_id_effective_from_unique").on(
+			table.scheduleId,
+			table.effectiveFrom,
+		),
+		foreignKey({
+			name: "work_schedule_versions_schedule_fk",
+			columns: [table.organisationId, table.scheduleId],
+			foreignColumns: [workSchedules.organisationId, workSchedules.id],
+		}).onDelete("cascade"),
+		check(
+			"work_schedule_versions_overtime_policy_known",
+			sql`${table.overtimePolicy} IS NULL OR ${table.overtimePolicy} IN ('none', 'allowed', 'approval')`,
+		),
+		check(
+			"work_schedule_versions_non_working_days_known",
+			sql`${table.nonWorkingDays} IS NULL OR ${table.nonWorkingDays} IN ('overtime', 'none')`,
+		),
+	],
+);
+
+/** A weekday a version works: from `start_minute` to `finish_minute` after midnight, less an unpaid break. A weekday without a row is not worked. */
+export const workScheduleDays = sqliteTable(
+	"work_schedule_days",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		versionId: text("version_id").notNull(),
+		weekday: integer("weekday").notNull(),
+		startMinute: integer("start_minute").notNull(),
+		finishMinute: integer("finish_minute").notNull(),
+		breakMinutes: integer("break_minutes").notNull().default(0),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("work_schedule_days_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("work_schedule_days_version_id_weekday_unique").on(table.versionId, table.weekday),
+		foreignKey({
+			name: "work_schedule_days_version_fk",
+			columns: [table.organisationId, table.versionId],
+			foreignColumns: [workScheduleVersions.organisationId, workScheduleVersions.id],
+		}).onDelete("cascade"),
+		check("work_schedule_days_weekday_in_range", sql`${table.weekday} BETWEEN 1 AND 7`),
+		check(
+			"work_schedule_days_times_in_range",
+			sql`${table.startMinute} >= 0 AND ${table.finishMinute} <= 1440 AND ${table.finishMinute} > ${table.startMinute}`,
+		),
+		check(
+			"work_schedule_days_break_fits",
+			sql`${table.breakMinutes} >= 0 AND ${table.breakMinutes} < ${table.finishMinute} - ${table.startMinute}`,
+		),
+	],
+);
+
+/**
+ * A schedule given from `effective_from` to a person (`target_id` their user
+ * id), a team (its id), a role (`owner`, `admin`, `finance`, `member`,
+ * `manager` or `contractor`) or the organisation (`target_id` empty). A later
+ * assignment to the same target replaces it from its day; one with no
+ * schedule takes the target's away, so the next level applies. `source_kind`
+ * says what made it: `manual`, an owner or admin, or later a contract
+ * (TS-098), named by `source_id`.
+ */
+export const scheduleAssignments = sqliteTable(
+	"schedule_assignments",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		scheduleId: text("schedule_id"),
+		targetKind: text("target_kind").notNull(),
+		targetId: text("target_id").notNull(),
+		effectiveFrom: text("effective_from").notNull(),
+		sourceKind: text("source_kind").notNull().default("manual"),
+		sourceId: text("source_id"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("schedule_assignments_organisation_id_id_unique").on(
+			table.organisationId,
+			table.id,
+		),
+		uniqueIndex("schedule_assignments_target_effective_from_unique").on(
+			table.organisationId,
+			table.targetKind,
+			table.targetId,
+			table.effectiveFrom,
+		),
+		foreignKey({
+			name: "schedule_assignments_schedule_fk",
+			columns: [table.organisationId, table.scheduleId],
+			foreignColumns: [workSchedules.organisationId, workSchedules.id],
+		}),
+		check(
+			"schedule_assignments_target_kind_known",
+			sql`${table.targetKind} IN ('person', 'team', 'role', 'organisation')`,
+		),
+		check(
+			"schedule_assignments_organisation_has_schedule",
+			sql`${table.targetKind} <> 'organisation' OR ${table.scheduleId} IS NOT NULL`,
+		),
+		check(
+			"schedule_assignments_source_kind_known",
+			sql`${table.sourceKind} IN ('manual', 'contract')`,
+		),
 	],
 );
 

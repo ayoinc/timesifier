@@ -17,6 +17,7 @@ import {
 	periodBounds,
 	periodContaining,
 } from "~/periods/periods";
+import { hoursLabel } from "~/schedules/schedules";
 import { addDays, bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { runningEntry } from "~/time/entries.server";
 import { zoneOfMember } from "~/time/zones.server";
@@ -156,6 +157,10 @@ export interface DayAway {
 	label: string | null;
 	/** The minutes expected of the person on it. */
 	expectedMinutes: number;
+	/** Its start and finish as the person's schedule sets them, "09:00–17:30" (TS-097); null on a day not worked or taken whole. */
+	hours: string | null;
+	/** The same, in minutes after midnight, for the calendar's working hours band; null as `hours` is. */
+	band: { start: number; finish: number } | null;
 }
 
 /** The person's week as leave sees it: each day, and the minutes expected over it. */
@@ -176,6 +181,11 @@ async function weekAway(
 			kind: status.is.kind,
 			label: dayLabel(status),
 			expectedMinutes: status.expectedMinutes,
+			hours: status.hours && status.expectedMinutes > 0 ? hoursLabel(status.hours) : null,
+			band:
+				status.hours && status.expectedMinutes > 0
+					? { start: status.hours.start, finish: status.hours.finish }
+					: null,
 		})),
 		expectedMinutes: statuses.reduce((sum, s) => sum + s.expectedMinutes, 0),
 	};

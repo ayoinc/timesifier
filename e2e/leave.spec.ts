@@ -6,7 +6,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { destinationLinks, expect, openShell, test } from "./fixtures";
 import { createOrganisation, INVITATION_LINK } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // Time off in a browser (TS-061): a member asks for leave and records sick
 // leave, the keyboard alone doing the second; the owner approves the first
@@ -59,15 +59,7 @@ async function adaAndBob(page: Page, browser: Browser, baseURL: string | undefin
 	await createProject(page, slug, "Site");
 
 	// Every day of the week is a working day here, so today is one, whatever day the test runs.
-	await openShell(page, destinationPath(slug, "settings"));
-	await page.getByRole("button", { name: "Change working week" }).click();
-	const week = page.getByRole("dialog", { name: "Change the working week" });
-	await week.getByLabel("Saturday").fill("7.5");
-	await week.getByLabel("Sunday").fill("7:30");
-	await week.getByRole("button", { name: "Save" }).click();
-	await expect(week).toBeHidden();
-	await expect(page.getByRole("status")).toHaveText("The working week is saved.");
-	await expect(page.getByRole("list", { name: "Working week" })).toContainText("Sunday7:30");
+	await workEveryDay(page, slug);
 
 	await openShell(page, invitationsPath(slug));
 	await page.getByRole("button", { name: "Invite a person" }).click();
@@ -294,8 +286,8 @@ for (const viewport of [
 				await expectNoProblems(page, "Team", [EMPTY_INPUT]);
 
 				await openShell(page, `${organisationPath(slug)}/account`);
-				await expect(page.getByRole("list", { name: "Your working week" })).toContainText(
-					"Monday7:30",
+				await expect(page.getByRole("list", { name: "Your work schedule" })).toContainText(
+					"Monday09:00–17:30, 1:00 break · 7:30",
 				);
 				await expectNoProblems(page, "My account");
 			});

@@ -142,6 +142,10 @@ Any of `project_id`, `task_id`, `started_at`, `ended_at` or `hours` (not both), 
 
 Query: `from`, `to`, `user_id`. `id`, `user`, `kind` (`{ id, name }` or null where the role may not see it), `starts_on`, `ends_on`, `starts_half`, `ends_half`, `status`.
 
+### `GET /work_days` — `time:read`
+
+Query: `from` and `to`, required, at most 62 days; `user_id`, the maker's own when not given, and only a person whose time the maker may see. One row a person and day (TS-097): `user_id`, `date`, `schedule` (`{ id, name }`, the work schedule in force that day), `kind` (`working`, `leave`, `holiday` or `not-a-working-day`; leave without its kind), `half_day`, `start`, `finish` (`HH:MM`, null on a day not worked), `break_minutes`, `scheduled_minutes`, `expected_minutes` (after public holidays and approved leave).
+
 ### `GET /expenses` — `expenses:read`
 
 Query: `from`, `to`, `user_id`, `project_id`, `per_page`, `cursor`. `id`, `user`, `project`, `category`, `spent_on`, `amount_minor`, `currency`, `billable`, `reimbursable`, `has_receipt`; `notes` with `descriptions:read`.

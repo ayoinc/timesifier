@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { accountPath, destinationPath } from "../app/shell/destinations";
+import { accountPath, destinationPath, schedulesPath } from "../app/shell/destinations";
 import { expect, openShell } from "./fixtures";
 
 /**
@@ -18,22 +18,34 @@ export async function createProject(page: Page, slug: string, name: string) {
 }
 
 /**
- * Makes every day of the week a working day of 7:30 in the organisation with
- * this slug, as its owner, so today is one whatever day the test runs: time
- * on a day not worked is overtime, which no organisation allows until it says
- * so (TS-095). For tests whose timer runs today, which no past day can stand in for.
- * It then waits for the person's zone to be the browser's (`zoneIsTheBrowsers`),
- * so today on the server is today in the browser.
+ * Makes every day of the week a working day of 7:30 from today in the
+ * organisation with this slug, as its owner, by changing its default work
+ * schedule, Standard (TS-097), so today is one whatever day the test runs:
+ * time on a day not worked is overtime, which no organisation allows until it
+ * says so (TS-095). For tests whose timer runs today, which no past day can
+ * stand in for. It then waits for the person's zone to be the browser's
+ * (`zoneIsTheBrowsers`), so today on the server is today in the browser.
  */
 export async function workEveryDay(page: Page, slug: string) {
-	await openShell(page, destinationPath(slug, "settings"));
-	await page.getByRole("button", { name: "Change working week" }).click();
-	const week = page.getByRole("dialog", { name: "Change the working week" });
-	await week.getByLabel("Saturday").fill("7:30");
-	await week.getByLabel("Sunday").fill("7:30");
-	await week.getByRole("button", { name: "Save" }).click();
-	await expect(week).toBeHidden();
-	await expect(page.getByRole("status").first()).toHaveText("The working week is saved.");
+	await openShell(page, schedulesPath(slug));
+	await page.getByRole("button", { name: "Change Standard" }).click();
+	const sheet = page.getByRole("dialog", { name: "Change Standard" });
+	for (const day of ["Saturday", "Sunday"]) {
+		// The box is drawn by its label; the input under it is hidden from the pointer.
+		const worked = sheet.getByRole("checkbox", { name: `${day} worked` });
+		await worked.focus();
+		await page.keyboard.press("Space");
+		await expect(worked).toBeChecked();
+		const fields = sheet.getByRole("group", { name: day, exact: true });
+		await fields.getByLabel("Start").fill("09:00");
+		await fields.getByLabel("Finish").fill("17:30");
+		await fields.getByLabel("Break (minutes)").fill("60");
+	}
+	await sheet.getByRole("button", { name: "Save" }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.getByRole("status").first()).toContainText("Standard is saved, from");
+	// Seven days of 7:30 each.
+	await expect(page.getByRole("list", { name: "Schedules" })).toContainText("52:30 a week");
 	await zoneIsTheBrowsers(page, slug);
 }
 
