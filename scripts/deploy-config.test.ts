@@ -237,6 +237,7 @@ describe("the committed wrangler.jsonc belongs to no deployment", () => {
 			PREVIEW_HOST_SUFFIX: "",
 			TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
 			EMAIL_FROM: "no-reply@localhost",
+			PLATFORM_OWNERS: "",
 		});
 		expect(config.previews.vars.PREVIEW_HOST_SUFFIX).toBeUndefined();
 		expect(config.send_email).toEqual([{ name: "EMAIL" }]);

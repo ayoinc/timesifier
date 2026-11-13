@@ -1,4 +1,4 @@
-import { index, type RouteConfig, route } from "@react-router/dev/routes";
+import { index, layout, type RouteConfig, route } from "@react-router/dev/routes";
 import { ACTIVITY_EXPORT_SEGMENT, HISTORY_SEGMENT } from "./activity/paths";
 import { LOGO_SEGMENT } from "./brand/paths";
 import { CONTRACTORS_EXPORT_SEGMENT } from "./contractors/paths";
@@ -12,6 +12,21 @@ import {
 	INVOICES_EXPORT_SEGMENT,
 } from "./integrations/paths";
 import { BILLING_SEGMENTS, ESTIMATE_LINK_SEGMENT } from "./invoices/paths";
+import {
+	ACCOUNT_ID_PARAM,
+	ACCOUNTS_PATH,
+	MAIL_PATH,
+	ORGANISATION_ID_PARAM,
+	ORGANISATIONS_PATH,
+	PERSONAL_DATA_SEGMENT,
+	PLATFORM_ACTIVITY_PATH,
+	PLATFORM_PATH,
+	SUPPORT_ACCESS_SEGMENT,
+	SUPPORT_VIEW_SEGMENT,
+	UNSUBSCRIBE_PATTERN,
+	VERIFY_PATH,
+	WELLBEING_SEGMENT,
+} from "./platform/paths";
 import { DEFAULT_RATES_SEGMENT, PROJECT_PARAM } from "./projects/projects";
 import { REPORT_EXPORT_SEGMENT } from "./reports/paths";
 import { LEAVE_EXPORT_SEGMENT, REPORT_VIEW_ROUTES } from "./reports/views";
@@ -84,6 +99,10 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(BILLING_SEGMENTS.estimate, "routes/app/estimates.$estimate.tsx"),
 	route(BILLING_SEGMENTS.estimatePdf, "routes/app/estimates.$estimate.pdf.ts"),
 	route(ACCOUNT_SEGMENT, "routes/app/account.tsx"),
+	// TS-099: the person's own data, support access and the wellbeing signals.
+	route(PERSONAL_DATA_SEGMENT, "routes/app/account.data.ts"),
+	route(SUPPORT_ACCESS_SEGMENT, "routes/app/support-access.tsx"),
+	route(WELLBEING_SEGMENT, "routes/app/wellbeing.tsx"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	...Object.keys(MOVED).map((segment) =>
 		route(segment, "routes/app/moved.tsx", { id: `routes/app/moved/${segment}` }),
@@ -100,6 +119,30 @@ const app = route(APP_PATH, "routes/app/layout.tsx", [
 	organisation,
 ]);
 
+/** A console address as a path below `/platform`. */
+const belowPlatform = (path: string) => path.slice(PLATFORM_PATH.length + 1);
+const ORGANISATION_IN_CONSOLE = `${belowPlatform(ORGANISATIONS_PATH)}/:${ORGANISATION_ID_PARAM}`;
+
+// The platform console (TS-099, docs/decisions.md entry 36). The layout's
+// middleware answers 404 to anybody who is not a platform owner, and sends a
+// request without a session to sign in; every page but the code's sits under
+// the step-up's layout too. A route added under either is covered by being
+// there; the catch-all puts every other address under `/platform` behind both.
+const platform = route(PLATFORM_PATH, "routes/platform/layout.tsx", [
+	route(belowPlatform(VERIFY_PATH), "routes/platform/verify.tsx"),
+	layout("routes/platform/console.tsx", [
+		index("routes/platform/health.tsx"),
+		route(belowPlatform(ORGANISATIONS_PATH), "routes/platform/organisations.tsx"),
+		route(ORGANISATION_IN_CONSOLE, "routes/platform/organisation.tsx"),
+		route(`${ORGANISATION_IN_CONSOLE}/${SUPPORT_VIEW_SEGMENT}`, "routes/platform/support.tsx"),
+		route(belowPlatform(ACCOUNTS_PATH), "routes/platform/accounts.tsx"),
+		route(`${belowPlatform(ACCOUNTS_PATH)}/:${ACCOUNT_ID_PARAM}`, "routes/platform/account.tsx"),
+		route(belowPlatform(MAIL_PATH), "routes/platform/mail.tsx"),
+		route(belowPlatform(PLATFORM_ACTIVITY_PATH), "routes/platform/log.tsx"),
+		route("*", "routes/platform/not-found.tsx"),
+	]),
+]);
+
 // The privacy notice and the terms have their addresses in landing/Site.tsx.
 // The one page a person uses without a session has its address in
 // routes/auth/paths.ts as well, which the guard and the pages read. An
@@ -110,6 +153,9 @@ export default [
 	route("privacy", "routes/privacy.tsx"),
 	route("terms", "routes/terms.tsx"),
 	app,
+	platform,
+	// A mailing's unsubscribe link (TS-099): its signature, not a session, says whose it is.
+	route(UNSUBSCRIBE_PATTERN, "routes/unsubscribe.tsx"),
 	// An estimate's link, opened by the client without signing in (TS-077).
 	route(`${ESTIMATE_LINK_SEGMENT}/:id/:token`, "routes/estimate.$id.$token.tsx"),
 	route(`${ESTIMATE_LINK_SEGMENT}/:id/:token/logo`, "routes/estimate.$id.$token.logo.ts"),

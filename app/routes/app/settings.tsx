@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { useEffect, useState } from "react";
-import { redirect, useFetcher } from "react-router";
+import { Link, redirect, useFetcher } from "react-router";
 import * as z from "zod";
 
 import { BrandSettings } from "~/brand/BrandSettings";
@@ -51,15 +51,20 @@ import { AS_ROLE } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows } from "~/organisations/roles";
 import { WeekStart } from "~/periods/periods";
+import { planStanding } from "~/plans/plans.server";
+import { SUPPORT_ACCESS_SEGMENT, WELLBEING_SEGMENT } from "~/platform/paths";
+import { activeGrant } from "~/platform/support.server";
 import { MoneySettings } from "~/projects/MoneySettings";
 import { organisationMoney } from "~/projects/money.server";
 import { CapHours, defaultScheduleSummary } from "~/schedules/forms";
 import { scheduleBookOf } from "~/schedules/schedules.server";
-import { APP_PATH, destination, schedulesPath } from "~/shell/destinations";
+import { APP_PATH, destination, organisationPath, schedulesPath } from "~/shell/destinations";
+import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
-import { formatDuration } from "~/time/format";
+import { formatDayAndTime, formatDayWithYear, formatDuration } from "~/time/format";
 import { TimeZone } from "~/time/zones";
+import { zoneOfMember } from "~/time/zones.server";
 import { WEEKDAYS, weekdayName, zoneLabel } from "~/workspace/general";
 import { changeGeneral, timeZones } from "~/workspace/general.server";
 
@@ -86,18 +91,25 @@ export function meta() {
 
 /** The organisation and what the person's role lets them do to it. The checks on the layouts have already run. */
 export async function loader({ context }: Route.LoaderArgs) {
-	const { organisation, role } = context.get(membershipContext);
+	const membership = context.get(membershipContext);
+	const { organisation, role } = membership;
 	const canChange = allows(role, { organization: ["update"] });
 	const scope = organisationScope(env.DB, organisation.id);
-	const [book, kinds, holidays, rules, categories, terms, locking] = await Promise.all([
-		scheduleBookOf(scope),
-		leaveKindsOf(scope),
-		publicHolidaysOf(scope),
-		timesheetRulesOf(organisation.id),
-		listCategories(scope),
-		termsOf(organisation.id),
-		lockingData(organisation, Date.now()),
-	]);
+	const now = new Date();
+	const isOwner = role === "owner";
+	const [book, kinds, holidays, rules, categories, terms, locking, standing, grant] =
+		await Promise.all([
+			scheduleBookOf(scope),
+			leaveKindsOf(scope),
+			publicHolidaysOf(scope),
+			timesheetRulesOf(organisation.id),
+			listCategories(scope),
+			termsOf(organisation.id),
+			lockingData(organisation, now.getTime()),
+			planStanding(organisation.id, now),
+			// Support access is the owners' alone, so nobody else is told whether it is granted.
+			isOwner ? activeGrant(scope, now) : null,
+		]);
 	return {
 		organisation: {
 			name: organisation.name,
@@ -134,6 +146,25 @@ export async function loader({ context }: Route.LoaderArgs) {
 		money: await organisationMoney(organisation.id),
 		/** The logo and colour that lead the organisation's documents (TS-100). */
 		brand: await brandData(organisation),
+		/** The plan Timesifier set, and the seats it uses (TS-099). */
+		plan: standing && {
+			label: standing.label,
+			used: standing.used,
+			seats: standing.seats,
+			trialEndsOn: standing.trialEndsAt
+				? formatDayWithYear(dayOf(standing.trialEndsAt.getTime(), organisation.timeZone))
+				: null,
+			trialEnded: standing.trialEnded,
+			warning: standing.warning,
+		},
+		/** Support access and wellbeing, which only owners open (TS-099). */
+		owners: isOwner
+			? {
+					supportGrantedUntil: grant
+						? formatDayAndTime(grant.expiresAt.getTime(), await zoneOfMember(membership))
+						: null,
+				}
+			: null,
 	};
 }
 
@@ -366,7 +397,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 /** The sheets of this page. One is open at a time. */
 type Task = "rename" | "time-zone" | "week-start" | "delete";
 
-export default function Settings({ loaderData }: Route.ComponentProps) {
+export default function Settings({ loaderData, params }: Route.ComponentProps) {
 	const { organisation, zones, leave, rules, expenses, locking } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -434,6 +465,12 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 				data={loaderData.brand}
 				organisationName={organisation.name}
 				onDone={setSaid}
+			/>
+
+			<PlanSection
+				plan={loaderData.plan}
+				owners={loaderData.owners}
+				home={organisationPath(params.organisation)}
 			/>
 
 			<MoneySettings
@@ -567,6 +604,83 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 				/>
 			</FormSheet>
 		</>
+	);
+}
+
+/**
+ * The plan Timesifier set for the organisation and the seats it uses (TS-099),
+ * and for owners, the two pages that are theirs alone: support access and
+ * wellbeing. Plans are set in the platform console, not here.
+ */
+function PlanSection({
+	plan,
+	owners,
+	home,
+}: {
+	plan: Route.ComponentProps["loaderData"]["plan"];
+	owners: Route.ComponentProps["loaderData"]["owners"];
+	/** The organisation's own address, which the owners' pages are below. */
+	home: string;
+}) {
+	return (
+		<Section
+			id="plan"
+			heading="Plan"
+			lead="Plans are set by Timesifier. Ask us for more seats."
+			className="max-w-200"
+		>
+			<div className="flex flex-col gap-6">
+				{plan && (
+					<Ledger heading="Your plan">
+						<LedgerRows>
+							<LedgerRow
+								title={plan.label}
+								detail={
+									plan.trialEndsOn
+										? `A trial, until ${plan.trialEndsOn}.`
+										: plan.trialEnded
+											? "The trial has ended, so the organisation is now on Free."
+											: undefined
+								}
+							/>
+							<LedgerRow
+								title={`${plan.used} of ${plan.seats} seats used`}
+								detail={
+									plan.warning ??
+									"Each member holds a seat, and so does each invitation not yet accepted."
+								}
+							/>
+						</LedgerRows>
+					</Ledger>
+				)}
+				{owners && (
+					<Ledger heading="For owners only">
+						<LedgerRows>
+							<LedgerRow
+								title={
+									<Link to={`${home}/${SUPPORT_ACCESS_SEGMENT}`} className={TEXT_LINK}>
+										Support access
+									</Link>
+								}
+								detail={
+									owners.supportGrantedUntil
+										? `Granted until ${owners.supportGrantedUntil}.`
+										: "Not granted. Timesifier cannot read your organisation."
+								}
+							/>
+							<LedgerRow
+								title={
+									<Link to={`${home}/${WELLBEING_SEGMENT}`} className={TEXT_LINK}>
+										Wellbeing
+									</Link>
+								}
+								detail="Rough signs of overwork and missed rest across your people, with no names."
+							/>
+						</LedgerRows>
+					</Ledger>
+				)}
+			</div>
+		</Section>
 	);
 }
 

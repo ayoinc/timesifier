@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, redirect, replace, useFetcher, useRouteLoaderData } from "react-router";
 import * as z from "zod";
 
@@ -11,16 +11,19 @@ import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
+import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
-import { organisationScope } from "~/db";
+import { organisationScope, platformData } from "~/db";
 import { calendarFeedsPath } from "~/integrations/paths";
+import { PRIVACY_EMAIL } from "~/landing/Site";
 import { parseRequest } from "~/lib/validate";
 import { leaveOrganisation, listOrganisations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { nameProblem } from "~/organisations/name";
 import { declined, done, refused } from "~/organisations/outcome.server";
 import { AS_ROLE } from "~/organisations/people";
-import { SOMETHING_WENT_WRONG } from "~/organisations/problems";
+import { type Outcome, SOMETHING_WENT_WRONG } from "~/organisations/problems";
+import { PERSONAL_DATA_SEGMENT } from "~/platform/paths";
 import type { loader as rootLoader } from "~/root";
 import { SignOutEverywhere } from "~/routes/auth/AccountSettings";
 import { scheduleView } from "~/schedules/schedules";
@@ -35,6 +38,7 @@ import {
 	destinationPath,
 	membersPath,
 	NEW_ORGANISATION_PATH,
+	organisationPath,
 } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
@@ -64,7 +68,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { role, user, organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
-	const [organisations, ownZone, zone, book, places, owners] = await Promise.all([
+	const [organisations, ownZone, zone, book, places, owners, mail] = await Promise.all([
 		listOrganisations(request),
 		ownZoneOf(membership),
 		zoneOfMember(membership),
@@ -74,6 +78,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		role === "owner"
 			? organisationScope(env.DB, organisation.id).memberships.select((m) => eq(m.role, "owner"))
 			: [],
+		platformData.mailChoices(env.DB, user.id),
 	]);
 	return {
 		role,
@@ -88,6 +93,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			dayOf(Date.now(), zone),
 			true,
 		),
+		/** Which kinds of mail from Timesifier the person takes (TS-099). */
+		mail: mail ?? { newsletter: false, announcements: false },
 	};
 }
 
@@ -106,6 +113,12 @@ const form = z.union([
 		// name this server does not know is answered, not thrown, so the page it
 		// was sent from is not replaced by an error.
 		z.object({ intent: z.literal("time-zone-detected"), timeZone: z.string().max(64) }),
+		// One kind of mail from Timesifier turned on or off (TS-099).
+		z.object({
+			intent: z.literal("mail"),
+			kind: z.enum(["announcement", "newsletter"]),
+			on: z.enum(["on", "off"]).transform((on) => on === "on"),
+		}),
 	]),
 	colorSchemeForm,
 ]);
@@ -149,6 +162,13 @@ export async function action({ request, url, context }: Route.ActionArgs) {
 			return done("");
 		}
 
+		case "mail": {
+			const { user } = context.get(membershipContext);
+			await platformData.setMailChoice(env.DB, user.id, input.kind, input.on);
+			const { said } = MAIL_CHOICES[input.kind];
+			return done(input.on ? `You will get ${said}.` : `You will no longer get ${said}.`);
+		}
+
 		case "leave": {
 			const { organisation, user } = context.get(membershipContext);
 			const scope = organisationScope(env.DB, organisation.id);
@@ -172,6 +192,22 @@ export async function action({ request, url, context }: Route.ActionArgs) {
 		}
 	}
 }
+
+/** The two kinds of mail from Timesifier, as My account names them (TS-099). */
+const MAIL_CHOICES = {
+	announcement: {
+		title: "Product announcements",
+		detail: "A short note when something in Timesifier changes the way you work.",
+		said: "product announcements",
+		field: "announcements",
+	},
+	newsletter: {
+		title: "Newsletter",
+		detail: "News from Timesifier, now and then.",
+		said: "the newsletter",
+		field: "newsletter",
+	},
+} as const;
 
 /** Light first: it is what a person who has chosen nothing has. */
 const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
@@ -269,6 +305,54 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 				<Link to={calendarFeedsPath(organisation.slug)} className={ACTION_LINK}>
 					Your calendar feeds
 				</Link>
+			</Section>
+
+			<Section
+				id="mail"
+				heading="Mail from Timesifier"
+				lead="Sign-in codes and mail about your work always come. These two are up to you, and each message has a link that stops it."
+				className="max-w-200"
+			>
+				<Ledger heading="What we may send you">
+					<LedgerRows>
+						{(Object.keys(MAIL_CHOICES) as (keyof typeof MAIL_CHOICES)[]).map((kind) => (
+							<MailRow
+								key={kind}
+								kind={kind}
+								isOn={loaderData.mail[MAIL_CHOICES[kind].field]}
+								onDone={setSaid}
+							/>
+						))}
+					</LedgerRows>
+				</Ledger>
+			</Section>
+
+			<Section
+				id="your-data"
+				heading="Your data"
+				lead="A copy of what Timesifier holds about you, as one ZIP file you can open with any spreadsheet."
+				className="max-w-200"
+			>
+				<div className="flex flex-col items-start gap-4 text-body-large">
+					<p>
+						It holds your account, when and from which browser you signed in, and your own time,
+						expenses and leave in every organisation you belong to. Nobody else's is in it.
+					</p>
+					<a
+						href={`${organisationPath(organisation.slug)}/${PERSONAL_DATA_SEGMENT}`}
+						download
+						className={ACTION_LINK}
+					>
+						Download my data
+					</a>
+					<p>
+						To have your account deleted, write to{" "}
+						<a href={`mailto:${PRIVACY_EMAIL}`} className={TEXT_LINK}>
+							{PRIVACY_EMAIL}
+						</a>{" "}
+						from the address you sign in with.
+					</p>
+				</div>
 			</Section>
 
 			<Section
@@ -375,6 +459,55 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 				</p>
 			</FormSheet>
 		</>
+	);
+}
+
+/** One kind of mail from Timesifier: a switch that takes effect at once. */
+function MailRow({
+	kind,
+	isOn,
+	onDone,
+}: {
+	kind: keyof typeof MAIL_CHOICES;
+	isOn: boolean;
+	onDone: (said: string) => void;
+}) {
+	const fetcher = useFetcher<Outcome>();
+	const { title, detail } = MAIL_CHOICES[kind];
+	// While the change is on its way, the switch shows what was asked for.
+	const on = fetcher.formData ? fetcher.formData.get("on") === "on" : isOn;
+	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
+	// The answer to one change is told once.
+	useEffect(() => {
+		if (answer?.ok) onDone(answer.said);
+	}, [answer, onDone]);
+
+	return (
+		<LedgerRow
+			title={
+				<Switch
+					isSelected={on}
+					onChange={(selected) =>
+						fetcher.submit(
+							{ intent: "mail", kind, on: selected ? "on" : "off" },
+							{ method: "post" },
+						)
+					}
+				>
+					{title}
+				</Switch>
+			}
+			detail={
+				<>
+					{detail}
+					{answer && !answer.ok && (
+						<span role="alert" className="block text-error">
+							{answer.problem}
+						</span>
+					)}
+				</>
+			}
+		/>
 	);
 }
 

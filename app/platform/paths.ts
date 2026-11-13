@@ -8,6 +8,16 @@ export const ACCOUNTS_PATH = `${PLATFORM_PATH}/accounts`;
 export const MAIL_PATH = `${PLATFORM_PATH}/mail`;
 export const PLATFORM_ACTIVITY_PATH = `${PLATFORM_PATH}/activity`;
 
+/** What follows `/platform/organisations/<id>` in the address of the support view. */
+export const SUPPORT_VIEW_SEGMENT = "support";
+/** The parameter naming an organisation in the console's addresses. */
+export const ORGANISATION_ID_PARAM = "organisationId";
+/** The parameter naming an account in the console's addresses. */
+export const ACCOUNT_ID_PARAM = "accountId";
+
+/** The pattern of the page a mailing's unsubscribe link opens; it needs no session. */
+export const UNSUBSCRIBE_PATTERN = "unsubscribe/:kind/:userId/:signature";
+
 /**
  * The header the sign-in page sends with the code when a new person asked for
  * the newsletter; the account is created with it on (TS-099). It changes
@@ -30,14 +40,17 @@ export function organisationConsolePath(id: string): string {
 }
 
 export function supportViewPath(id: string): string {
-	return `${organisationConsolePath(id)}/support`;
+	return `${organisationConsolePath(id)}/${SUPPORT_VIEW_SEGMENT}`;
 }
 
 export function accountConsolePath(id: string): string {
 	return `${ACCOUNTS_PATH}/${encodeURIComponent(id)}`;
 }
 
-/** The console's sections, in the order its tabs show them. */
+/**
+ * The console's sections, in the order its tabs show them. TS-100 adds the
+ * console's Brand page as the last tab, after Log; there is no page for it yet.
+ */
 export const CONSOLE_TABS = [
 	{ href: PLATFORM_PATH, label: "Health" },
 	{ href: ORGANISATIONS_PATH, label: "Organisations" },

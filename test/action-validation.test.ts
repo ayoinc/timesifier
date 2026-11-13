@@ -4,9 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
 import { estimateToken } from "~/estimates/estimates.server";
 import { makeToken } from "~/integrations/api-tokens.server";
+import { unsubscribePath } from "~/platform/mail.server";
 import { captureEmail, signIn } from "./auth/harness";
 import { freshDatabase } from "./db/database";
 import { createOrganisation, invite } from "./organisations/harness";
+import { platformOwner } from "./platform/harness";
 
 /**
  * One malformed request for every route that exports an `action`, keyed by the
@@ -190,6 +192,41 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 		const bob = await signIn(mailbox, "bob@example.com", { client: "203.0.113.8" });
 		return form(`/invitations/${id}`, "intent=keep", bob.cookie);
 	},
+	// Support access lasts 24 or 72 hours; 48 is neither.
+	"routes/app/support-access": () =>
+		formFromAMember("/app/acme/settings/support", "intent=grant&hours=48"),
+	// An unsubscribe post is empty or a mail client's one-click; this is neither.
+	// The link is a real one, so only the input is wrong.
+	"routes/unsubscribe": async () => {
+		await freshDatabase();
+		const { user } = await signIn(captureEmail(), "ada@example.com");
+		return form(await unsubscribePath("newsletter", user.id), "List-Unsubscribe=Twice", "");
+	},
+	// The console's pages need a platform owner whose session proved the code
+	// (TS-099), and an organisation and an account to act on. A code is digits;
+	// this is a word. The page that asks for it is for a session yet to prove it.
+	"routes/platform/verify": () =>
+		formFromThePlatformOwner(() => ["/platform/verify", "intent=prove&code=apple"], {
+			steppedUp: false,
+		}),
+	// A plan is one of three; this is none of them.
+	"routes/platform/organisation": () =>
+		formFromThePlatformOwner(({ organisationId }) => [
+			`/platform/organisations/${organisationId}`,
+			"intent=plan&plan=platinum&reason=Asked",
+		]),
+	// Every tool needs a reason; this has none.
+	"routes/platform/account": () =>
+		formFromThePlatformOwner(({ accountId }) => [
+			`/platform/accounts/${accountId}`,
+			"intent=revoke-sessions&reason=",
+		]),
+	// A mailing is an announcement or a newsletter; this is neither.
+	"routes/platform/mail": () =>
+		formFromThePlatformOwner(() => [
+			"/platform/mail",
+			"intent=preview&kind=flyer&subject=Hi&body=Hello",
+		]),
 };
 
 /** A form as a browser posts it from our own page, with the session of the person posting. */
@@ -215,6 +252,24 @@ async function formFromAMember(path: string, body: string): Promise<Request> {
 	const { cookie } = await signIn(captureEmail(), "ada@example.com");
 	await createOrganisation(cookie, "Acme");
 	return form(path, body, cookie);
+}
+
+/**
+ * A form from the platform's owner, signed in and, unless `steppedUp` is
+ * false, stepped up (TS-099), with Ada's organisation and account to act on.
+ * Only the input is wrong.
+ */
+async function formFromThePlatformOwner(
+	to: (ids: { organisationId: string; accountId: string }) => [path: string, body: string],
+	{ steppedUp = true } = {},
+): Promise<Request> {
+	await freshDatabase();
+	const mailbox = captureEmail();
+	const ada = await signIn(mailbox, "ada@example.com");
+	const acme = await createOrganisation(ada.cookie, "Acme");
+	const owner = await platformOwner(mailbox, { steppedUp });
+	const [path, body] = to({ organisationId: acme.id, accountId: ada.user.id });
+	return form(path, body, owner.cookie);
 }
 
 const routesWithAction = Object.values(routes)
