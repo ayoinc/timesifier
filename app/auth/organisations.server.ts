@@ -30,10 +30,11 @@ import type { BetterAuthPlugin, DBAdapter } from "better-auth/types";
 import { and, eq, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
+import { deleteOrganisationLogos } from "~/brand/organisation-brand.server";
 import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { organisationScope, organisations } from "~/db";
 import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
-import { RECEIPTS_NOT_DELETED } from "~/organisations/problems";
+import { LOGOS_NOT_DELETED, RECEIPTS_NOT_DELETED } from "~/organisations/problems";
 import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
 import { sendEmail } from "./email.server";
@@ -70,6 +71,44 @@ const organisationNotFound = () =>
 	new APIError("NOT_FOUND", { code: "ORGANIZATION_NOT_FOUND", message: "Organization not found" });
 const invitationNotFound = () =>
 	new APIError("NOT_FOUND", { code: "INVITATION_NOT_FOUND", message: "Invitation not found" });
+
+/**
+ * Deletes the organisation's receipts in R2 before its row, which no foreign
+ * key reaches. Should one delete fail, the organisation is not deleted and says
+ * so, and asking again deletes what is left (docs/security.md, "Receipts").
+ */
+async function deleteReceiptsFirst(organisationId: string): Promise<void> {
+	try {
+		await deleteOrganisationReceipts(organisationId);
+	} catch (error) {
+		console.error(
+			`organisation: receipts not deleted, ${error instanceof Error ? error.name : "unknown"}`,
+		);
+		throw new APIError("SERVICE_UNAVAILABLE", {
+			code: RECEIPTS_NOT_DELETED,
+			message: "The organisation's receipts could not all be deleted. Try again.",
+		});
+	}
+}
+
+/**
+ * Deletes the organisation's logos in R2 before its row, which no foreign key
+ * reaches. Should a delete fail, the organisation is not deleted and says so,
+ * and asking again deletes what is left (docs/security.md, "Organisation logos").
+ */
+async function deleteLogosFirst(organisationId: string): Promise<void> {
+	try {
+		await deleteOrganisationLogos(organisationId);
+	} catch (error) {
+		console.error(
+			`organisation: logos not deleted, ${error instanceof Error ? error.name : "unknown"}`,
+		);
+		throw new APIError("SERVICE_UNAVAILABLE", {
+			code: LOGOS_NOT_DELETED,
+			message: "The organisation's logo could not be deleted. Try again.",
+		});
+	}
+}
 
 /** The slug for a new organisation called `name`: the name's own, or the next one free. */
 async function slugFor(name: string): Promise<string> {
@@ -340,21 +379,11 @@ export function organisationPlugins() {
 				// goes with it through its foreign keys. The plugin's own three
 				// deletes then find nothing left.
 				//
-				// Its receipts in R2 go before the row: no foreign key reaches them.
-				// Should one delete fail, the organisation is not deleted and says
-				// so, and asking again deletes what is left (docs/security.md, "Receipts").
+				// Its receipts and its logos in R2 go before the row: no foreign key
+				// reaches them.
 				async beforeDeleteOrganization({ organization }) {
-					try {
-						await deleteOrganisationReceipts(organization.id);
-					} catch (error) {
-						console.error(
-							`organisation: receipts not deleted, ${error instanceof Error ? error.name : "unknown"}`,
-						);
-						throw new APIError("SERVICE_UNAVAILABLE", {
-							code: RECEIPTS_NOT_DELETED,
-							message: "The organisation's receipts could not all be deleted. Try again.",
-						});
-					}
+					await deleteReceiptsFirst(organization.id);
+					await deleteLogosFirst(organization.id);
 					await drizzle(env.DB).delete(organisations).where(eq(organisations.id, organization.id));
 				},
 			},

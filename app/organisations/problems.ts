@@ -28,6 +28,9 @@ export const NEEDS_AN_OWNER =
 /** The code of an organisation that was not deleted because its receipts were not all deleted. */
 export const RECEIPTS_NOT_DELETED = "RECEIPTS_NOT_DELETED";
 
+/** The code of an organisation that was not deleted because its logo was not deleted. */
+export const LOGOS_NOT_DELETED = "LOGOS_NOT_DELETED";
+
 /** The sentence for each code a person can reach from the pages. */
 const BY_CODE = new Map([
 	// The two caps of card TS-027. The first arrives with status 429, so the code
@@ -74,6 +77,10 @@ const BY_CODE = new Map([
 	[
 		RECEIPTS_NOT_DELETED,
 		"The organisation was not deleted, because not all of its receipts could be deleted. Try again to finish deleting it.",
+	],
+	[
+		LOGOS_NOT_DELETED,
+		"The organisation was not deleted, because its logo could not be deleted. Try again to finish deleting it.",
 	],
 ]);
 
