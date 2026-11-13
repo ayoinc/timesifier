@@ -178,7 +178,7 @@ export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 								<li>
 									<a
 										href={SIGN_IN_PATH}
-										className="inline-block rounded-small border border-on-sheet px-4 py-2 outline-none state-layer over-sheet transition-control hover:state-hover focus-visible:state-focus focus-visible:focus-indicator active:state-pressed motion-safe:active:scale-97"
+										className="inline-block rounded-small border border-on-sheet px-4 py-2 outline-none state-layer over-sheet press transition-control hover:state-hover focus-visible:state-focus focus-visible:focus-indicator active:state-pressed motion-safe:active:scale-97"
 									>
 										Sign in
 									</a>

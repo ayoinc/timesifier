@@ -46,7 +46,7 @@ Builder: AI sessions on branch `ts-103-marketing`. The owner: "marketing on the 
 
 - [x] A section that runs the width of the page opens with its heading at the left and its lead at the right from 840px; the privacy section's photograph stays beside its facts while they are read (`SectionHead`, `app/routes/home.tsx`; screenshots in `cmux-assets/browser/timesifier/TS-103/`).
 - [x] A section's opening words rise into place with the scrolling, by transform and opacity only, and stand still with reduced motion (`rise` in `app/landing/public.css`; `e2e/landing.spec.ts`, "with reduced motion asked for", and "nothing on the page moves when its images arrive").
-- [x] "Start tracking" and "Sign in" have hover, focus and press states on the sheet, and give under the press where motion is allowed (`transition-control` carries `scale`).
+- [x] "Start tracking" and "Sign in" have hover, focus and press states on the sheet, and give under the press where motion is allowed (`press` in `app/landing/public.css`; `e2e/auth-accessibility.spec.ts`, nothing transitions with reduced motion).
 - [x] Text selected on the sheet shows, in both schemes (`.bg-sheet ::selection`).
 - [x] The notices list their parts under the title, and each part's heading stays in the margin while it is read (`app/landing/Document.tsx`; `e2e/documents.spec.ts`).
 - [x] The foot on a surface of its own: the lockup, the notices side by side on a phone, the credits in words (`SiteFooter`; `test/claims.test.ts`, "each photographer is named once").
@@ -54,7 +54,7 @@ Builder: AI sessions on branch `ts-103-marketing`. The owner: "marketing on the 
 - [x] `/sitemap.xml` lists exactly the public pages, which link only to one another; `robots.txt` is the application's and names it (`test/claims.test.ts`, "the sitemap lists exactly the public pages").
 - [x] Every public page has a canonical link, its own `og:url` and a description, `/sign-in` included (`test/claims.test.ts`, "each public page names itself as its canonical address").
 - [x] JSON-LD `Organization` (name, address, logo) and `SoftwareApplication`, no price and no rating (`test/claims.test.ts`, "the structured data parses"; `test/browser-policy.test.ts`).
-- [x] Lighthouse 13.6.0 on the local production build, mobile: 100 in performance, accessibility, best practices and SEO on all four pages (table in the pull request).
+- [x] Lighthouse 13.6.0 on the local production build, mobile, compressed as the edge sends it: 100 in performance, accessibility, best practices and SEO on all four pages; uncompressed, `vite preview` costs the home page 4 points of performance on `main` and here alike (table in the pull request).
 - [ ] The owner verifies the site in Google Search Console and Bing Webmaster Tools and submits the sitemap.
 
 ### TS-096 · Loading and motion like Royal London
