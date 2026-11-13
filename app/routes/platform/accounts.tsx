@@ -15,7 +15,8 @@ import type { Route } from "./+types/accounts";
 // Accounts in the platform console (TS-099): every person with a Timesifier
 // account, newest first, or those whose name or address holds what was
 // searched for. Here the address is shown under each name, because it is what
-// a platform owner is asked about and searches by.
+// a platform owner is asked about and searches by; an account with no name yet
+// is listed by its address.
 
 const HEADING = "Accounts";
 
@@ -92,13 +93,17 @@ export default function Accounts({ loaderData }: Route.ComponentProps) {
 											to={accountConsolePath(account.id)}
 											className={`${TEXT_LINK} wrap-anywhere`}
 										>
-											{account.name || "No name yet"}
+											{account.name || account.email}
 										</Link>
 									}
 									detail={
 										<>
-											<span className="wrap-anywhere">{account.email}</span>. Joined{" "}
-											{account.joined}.
+											{account.name ? (
+												<span className="wrap-anywhere">{account.email}</span>
+											) : (
+												"No name yet"
+											)}
+											. Joined {account.joined}.
 											{account.closed && <strong className="ms-1 text-error">Closed</strong>}
 										</>
 									}

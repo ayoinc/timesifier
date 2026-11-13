@@ -157,6 +157,28 @@ describe("the platform console's reads", () => {
 		}
 	});
 
+	it("list more organisations than D1 takes bound parameters in a statement", async () => {
+		// D1 refuses a statement with more than 100; the console lists 100 at once.
+		const ids: string[] = [];
+		for (let start = 0; start < 120; start += 40) {
+			const made = await Promise.all(
+				Array.from({ length: 40 }, (_, at) =>
+					seedOrganisation(`Org ${start + at}`, `org-${start + at}`),
+				),
+			);
+			ids.push(...made.map(({ id }) => id));
+		}
+
+		const listed = await platformData.platformOrganisations(env.DB, { limit: 100 });
+		const subjects = await platformData.platformSubjectNames(env.DB, {
+			organisationIds: ids,
+			userIds: [],
+		});
+
+		expect(listed).toHaveLength(100);
+		expect(subjects.organisations).toHaveLength(120);
+	});
+
 	it("catch a read of what an organisation keeps", async () => {
 		await seed();
 		const { database, statements } = watchDatabase(env.DB);

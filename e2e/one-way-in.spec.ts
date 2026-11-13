@@ -306,8 +306,9 @@ test.describe("a code that was asked for", () => {
 			(key) => JSON.parse(sessionStorage.getItem(key) ?? "{}"),
 			KEPT,
 		);
-		// The address and the time, and no code.
-		expect(Object.keys(kept).sort()).toEqual(["askedAt", "email"]);
+		// The address, the time and the newsletter's box (TS-099), and no code.
+		expect(Object.keys(kept).sort()).toEqual(["askedAt", "email", "newsletter"]);
+		expect(kept.newsletter).toBe(false);
 		expect(kept.email).toBe(person.email);
 
 		// Another tab of the same browser starts from the address.

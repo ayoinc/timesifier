@@ -178,7 +178,12 @@ test("an owner grants support access; the console reads the organisation until i
 
 	// The reading is in the organisation's own activity log.
 	await openShell(owner.page, destinationPath(owner.organisation.slug, "activity"));
-	await expect(owner.page.getByText(/support/i).first()).toBeVisible();
+	await expect(
+		owner.page
+			.getByRole("main")
+			.getByText(/Used support access for Timesifier/)
+			.first(),
+	).toBeVisible();
 
 	// The owner ends it; the console's view is then a 404.
 	await openShell(owner.page, `${organisationPath(owner.organisation.slug)}/settings/support`);
@@ -224,6 +229,9 @@ test("a new person asks for the newsletter on the sign-in page and finds it on i
 async function check(page: Page, heading: string | RegExp, name: string, at: string) {
 	await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
 	expect(await problems(page, [EMPTY_INPUT]), `problems in ${name}`).toEqual([]);
+	// From the top: a page scrolled by filling its fields would draw the band and
+	// the skip link where the window was, part-way down the picture.
+	await page.evaluate(() => window.scrollTo(0, 0));
 	await page.screenshot({ path: join(SHOTS, `${name}-${at}.png`), fullPage: true });
 }
 
@@ -298,11 +306,13 @@ for (const viewport of [
 
 				await openShell(page, ACCOUNTS_PATH, "header");
 				await check(page, "Accounts", "accounts", at);
-				// The organisation's owner has no name yet: the console finds them by address.
+				// The organisation's owner has no name yet: the console finds them by
+				// address, and lists and heads them by it.
 				await page.getByLabel("Name or address").fill(owner.email);
 				await page.keyboard.press("Enter");
-				await page.getByRole("main").getByRole("link", { name: "No name yet" }).click();
-				await check(page, "No name yet", "account", at);
+				await expect(page.getByText(`Accounts matching “${owner.email}”`)).toBeVisible();
+				await page.getByRole("main").getByRole("link", { name: owner.email, exact: true }).click();
+				await check(page, owner.email, "account", at);
 				await page.getByRole("button", { name: "End sessions" }).click();
 				const ending = page.getByRole("dialog", { name: "End every session?" });
 				await checkSheet(

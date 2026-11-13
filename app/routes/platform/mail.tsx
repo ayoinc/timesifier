@@ -76,7 +76,7 @@ export async function loader() {
 	]);
 	return {
 		audience: { announcement, newsletter } satisfies Record<MailKind, number>,
-		cap: { day: DAILY_MAIL_CAP, minute: MAIL_BATCH },
+		cap: { day: DAILY_MAIL_CAP.toLocaleString("en-GB"), minute: MAIL_BATCH },
 		mailings: mailings.map((mailing) => ({
 			id: mailing.id,
 			subject: mailing.subject,
@@ -135,7 +135,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		detail: { kind, subject, recipients: mailing.recipients },
 	});
 	return done(
-		`Queued “${subject}” to ${people(mailing.recipients)}. It goes out over the next minutes, ${DAILY_MAIL_CAP} a day at most.`,
+		`Queued “${subject}” to ${people(mailing.recipients)}. It goes out over the next minutes, ${DAILY_MAIL_CAP.toLocaleString("en-GB")} a day at most.`,
 	);
 }
 

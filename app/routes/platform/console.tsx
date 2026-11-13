@@ -32,6 +32,7 @@ export default function Console() {
 				label="Platform console sections"
 				tabs={CONSOLE_TABS.map(({ href, label }) => ({ id: href, to: href, label }))}
 				current={currentTab(pathname)}
+				wraps
 			/>
 			<div className="mt-10">
 				<Outlet />

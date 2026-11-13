@@ -140,9 +140,10 @@ async function walkEveryView(page: Page): Promise<number[]> {
 
 // A window the page outgrows at one view and fits again at the other, so a
 // scrollbar would come and go with the change of view. At this width the
-// photograph is not shown and the view that takes the address stands 574px
-// tall with the band and the foot; the one that takes the code, 810px.
-const BETWEEN = { width: 700, height: 700 };
+// photograph is not shown and the view that takes the address, with the
+// newsletter's box (TS-099), stands 745px tall with the band and the foot; the
+// one that takes the code, 810px.
+const BETWEEN = { width: 700, height: 780 };
 
 test.describe("with reduced motion requested", () => {
 	test.use({ reducedMotion: "reduce" });
