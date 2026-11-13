@@ -141,6 +141,13 @@
 			"when": 1794570425785,
 			"tag": "0020_brand",
 			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "6",
+			"when": 1794570805339,
+			"tag": "0021_platform_console",
+			"breakpoints": true
 		}
 	]
 }
