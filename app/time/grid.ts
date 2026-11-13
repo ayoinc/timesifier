@@ -1,4 +1,4 @@
-import { addDays, type Day, dayOf, instantAt, startOfDay } from "./calendar";
+import { addDays, type Day, instantAt, startOfDay } from "./calendar";
 
 /** When the working day is taken to start for a day with no entries: 09:00 (the owner, 2026-11-11, TS-052). */
 export const GRID_DAY_STARTS_AT_MINUTES = 9 * 60;

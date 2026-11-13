@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sendEmail } from "~/auth/email.server";
 import { compose, type PlatformLook } from "~/auth/email-frame";
@@ -9,7 +9,7 @@ import { among, type OrganisationScope, users } from "~/db";
 import { roundHalfUp } from "~/money/money";
 import type { OrganisationMoney, Pricing } from "~/projects/money.server";
 import { priceTime, wholeMinutes } from "~/rates/price";
-import { addDays, dayOf, startOfDay } from "~/time/calendar";
+import { dayOf } from "~/time/calendar";
 
 import {
 	BudgetKind,

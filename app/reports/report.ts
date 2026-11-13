@@ -1,4 +1,4 @@
-import { bounds, type Day, dayOf } from "~/time/calendar";
+import type { Day } from "~/time/calendar";
 
 import type { Grouping } from "./choices";
 import type { ReportDays } from "./query";
@@ -28,6 +28,8 @@ export interface ReportEntry {
 	clientId: string | null;
 	client: string | null;
 	description: string | null;
+	/** The day it belongs to, stored with it when it was tracked (decision 39). */
+	day: Day;
 	startedAt: number;
 	/** Null while it runs. */
 	endedAt: number | null;
@@ -39,10 +41,10 @@ export interface ReportEntry {
 	overtime: boolean;
 }
 
-/** An entry as a report counts it: on the day it starts, for its whole length in minutes. */
+/** An entry as a report counts it: on its stored day, for its whole length in minutes. */
 export interface Row {
 	entry: ReportEntry;
-	/** The local day it starts in. */
+	/** The day it belongs to: its person's, stored when it was tracked (TR-05). */
 	day: Day;
 	start: number;
 	/** When it ended, or the time of the request while it runs. */
@@ -56,22 +58,17 @@ export interface Row {
 const MINUTE = 60_000;
 
 /**
- * `entry` as a report of `range` in `zone` counts it, or null when it starts
- * outside the range. A running entry ends at `now`.
+ * `entry` as a report of `range` counts it, or null when its day is outside
+ * the range. The day is its person's own, so each person's days are bounded by
+ * their own midnights, not the viewer's (TR-05). A running entry ends at `now`.
  */
-export function rowOf(
-	entry: ReportEntry,
-	range: ReportDays,
-	zone: string,
-	now: number,
-): Row | null {
-	const { from, to } = bounds(range.first, range.last, zone);
-	if (entry.startedAt < from || entry.startedAt >= to) return null;
+export function rowOf(entry: ReportEntry, range: ReportDays, now: number): Row | null {
+	if (entry.day < range.first || entry.day > range.last) return null;
 	const running = entry.endedAt === null;
 	const end = entry.endedAt ?? Math.max(now, entry.startedAt);
 	return {
 		entry,
-		day: dayOf(entry.startedAt, zone),
+		day: entry.day,
 		start: entry.startedAt,
 		end,
 		running,

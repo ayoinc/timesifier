@@ -17,7 +17,7 @@ import {
 } from "~/organisations/access";
 import { clockTime } from "~/schedules/schedules";
 import { canSee } from "~/shell/destinations";
-import { bounds, Day, dayOf, daysFrom } from "~/time/calendar";
+import { Day, dayOf, daysFrom } from "~/time/calendar";
 import { addHours, deleteEntry, editEntry } from "~/time/manual.server";
 
 import { authenticate, type TokenCaller } from "./api-tokens.server";

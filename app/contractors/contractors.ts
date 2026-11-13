@@ -2,7 +2,7 @@ import { type Money, minorDigits, roundHalfUp, totalsByCurrency } from "~/money/
 import type { Role } from "~/organisations/roles";
 import { type RateRow, resolveRate } from "~/rates/rates";
 import type { ReportDays } from "~/reports/query";
-import { type Day, dayOf } from "~/time/calendar";
+import type { Day } from "~/time/calendar";
 
 /**
  * Contractors (TS-079, B15): whether a member is an employee or a contractor,

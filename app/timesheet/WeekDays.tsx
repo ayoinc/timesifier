@@ -4,7 +4,7 @@ import { cx } from "~/components/cx";
 import { StartArrowhead } from "~/components/TimerMark";
 import { type DayRule, overLabel } from "~/leave/rules";
 import { finishRunningTransition } from "~/shell/transitions";
-import { type Day, dayOf } from "~/time/calendar";
+import type { Day } from "~/time/calendar";
 
 import { formatDuration } from "./durations";
 import { useDayFormat } from "./format";
@@ -37,7 +37,6 @@ export function WeekDays({
 	day,
 	today,
 	running,
-	zone,
 	slug,
 }: {
 	week: DayData["week"];
@@ -46,12 +45,11 @@ export function WeekDays({
 	day: Day;
 	today: Day;
 	running: SheetEntry | null;
-	zone: string;
 	slug: string;
 }) {
 	const formatShort = useDayFormat("short");
 	const formatLong = useDayFormat();
-	const runningOn = running ? dayOf(running.startedAt, zone) : null;
+	const runningOn = running?.day ?? null;
 	return (
 		<div className="mt-6 flex max-w-200 flex-col gap-2 medium:flex-row medium:items-stretch">
 			{/* A group, not a landmark: the shell's one navigation landmark is the main one. */}

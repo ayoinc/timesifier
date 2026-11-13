@@ -23,7 +23,7 @@ import {
 	type ReportQuery,
 	rangeDays,
 } from "~/reports/query";
-import { addDays, bounds, dayOf } from "~/time/calendar";
+import { dayOf } from "~/time/calendar";
 
 import {
 	type Contractor,
