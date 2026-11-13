@@ -178,8 +178,14 @@ let journeys = 0;
  */
 export async function signIn(mailbox: Mailbox, email: string, options: RequestOptions = {}) {
 	const from = { ...options, client: options.client ?? `198.51.100.${(journeys++ % 250) + 1}` };
+	// The message is sent after the answer (it reads the platform's brand
+	// first), so wait for this request's own, not one an earlier test left.
+	const sentTo = () =>
+		mailbox.sent().filter(({ to }) => to.toLowerCase() === email.toLowerCase()).length;
+	const before = sentTo();
 	const asked = await requestCode(email, from);
 	expect(asked.status).toBe(200);
+	await vi.waitFor(() => expect(sentTo()).toBeGreaterThan(before));
 	const response = await post(
 		"/sign-in/email-otp",
 		{ email, otp: await mailbox.codeFor(email) },

@@ -8,6 +8,8 @@ import { getTableColumns, is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { expect, it } from "vitest";
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
+import { signInCodeEmail } from "~/auth/sign-in-code-email";
+import { builtInPlatformBrand } from "~/brand/platform-brand.server";
 import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
@@ -390,4 +392,24 @@ it("the home page and the terms say what is built in the present tense", async (
 	const terms = words(await page(TERMS_PATH));
 	expect(terms).not.toContain("being built");
 	expect(terms).toContain("Timesifier is a web application that keeps track of time");
+});
+
+/** What the privacy notice says of the email with a code (TS-100). */
+const CODE_EMAIL =
+	"Nothing is fetched when an email is opened, and nothing tells Timesifier it was. The email with a code holds no link.";
+
+it("the privacy notice says the email with a code fetches nothing, and it does not", async () => {
+	expect(words(await page(PRIVACY_PATH))).toContain(CODE_EMAIL);
+
+	// The platform's brand as migration 0020 starts it (test/brand/platform-brand.test.ts).
+	const message = signInCodeEmail("40817263", builtInPlatformBrand());
+	for (const body of [message.text, message.html]) {
+		expect(body).not.toMatch(/https?:|<a\b|href=|srcset=|url\(|<link|<script/i);
+	}
+	// One image, the logo, and it is the one file attached, inline, by its Content-ID.
+	const sources = [...message.html.matchAll(/\ssrc="([^"]*)"/g)].map(([, src]) => src);
+	expect(sources).toEqual(["cid:timesifier-logo"]);
+	expect(
+		message.attachments?.map(({ disposition, contentId }) => ({ disposition, contentId })),
+	).toEqual([{ disposition: "inline", contentId: "timesifier-logo" }]);
 });

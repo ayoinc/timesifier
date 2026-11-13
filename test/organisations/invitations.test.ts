@@ -433,10 +433,14 @@ describe("inviting a person", () => {
 		expect(message.subject).toBe("You are invited to join an organisation on Timesifier");
 		expect(message.text.split(link)).toHaveLength(2);
 		expect(message.html.split(link)).toHaveLength(2);
-		// Nothing a mail program would fetch, and no address but ours.
+		// Nothing a mail program would fetch, and no address but ours: its one
+		// image, the logo, is attached to it (TS-100).
 		expect(message.text.match(/https?:/g)).toHaveLength(1);
 		expect(message.html.match(/https?:/g)).toHaveLength(1);
-		expect(message.html).not.toMatch(/<img|<link|<script|<style|src=|url\(/i);
+		expect(message.html).not.toMatch(/<link|<script|<style|url\(/i);
+		expect([...message.html.matchAll(/\ssrc="([^"]*)"/g)].map(([, src]) => src)).toEqual([
+			"cid:timesifier-logo",
+		]);
 		expect(message.text).toContain(
 			"ada@example.com has invited you to join “Acme” on Timesifier as an admin.",
 		);
@@ -479,7 +483,8 @@ describe("inviting a person", () => {
 
 		const message = await invitationTo("grace@example.com");
 		expect(message.html).toContain("&lt;img src=&quot;//evil.example/x&quot;&gt; &amp; Co");
-		expect(message.html).not.toContain("<img");
+		expect(message.html).not.toContain('evil.example/x"');
+		expect([...message.html.matchAll(/<img\b/g)]).toHaveLength(1);
 	});
 
 	it("has the same subject whatever the organisation is called: the name is in the body alone", async () => {
