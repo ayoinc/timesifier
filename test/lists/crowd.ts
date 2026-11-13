@@ -36,7 +36,7 @@ export interface Crowd {
 }
 
 /** Rows of one statement each, sent as one D1 batch. */
-async function insertAll(sql: string, rows: unknown[][]): Promise<void> {
+export async function insertAll(sql: string, rows: unknown[][]): Promise<void> {
 	if (rows.length === 0) return;
 	await env.DB.batch(rows.map((values) => env.DB.prepare(sql).bind(...values)));
 }

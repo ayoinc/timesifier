@@ -82,8 +82,8 @@ export interface Member {
 /**
  * Everyone in the organisation with their role, in the order they joined:
  * what the Members page lists. Read here, through the organisation's scope,
- * and not from Better Auth's `list-members`, which reads at most 100 members
- * and names their accounts in a parameter each (TS-112).
+ * and not from Better Auth's `list-members`, which is not offered: it names
+ * the members' accounts in a parameter each, past D1's 100 (TS-112).
  */
 export async function membersByJoining(scope: OrganisationScope): Promise<Member[]> {
 	const memberships = await scope.memberships.select(undefined, {
