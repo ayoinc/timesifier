@@ -1,5 +1,6 @@
 import { data, type To } from "react-router";
 
+import { DownloadLink } from "~/components/DownloadLink";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { EXPENSE_GROUP_LABELS, EXPENSE_GROUPS, type ExpenseGrouping } from "~/expenses/expenses";
 import { expenseReportExportPath } from "~/expenses/paths";
@@ -16,7 +17,7 @@ import { ReportChoice } from "~/reports/ReportChoice";
 import { ReportTabs } from "~/reports/ReportTabs";
 import { viewFrame, viewsFor } from "~/reports/view.server";
 import { destination } from "~/shell/destinations";
-import { TEXT_LINK } from "~/shell/links";
+import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { tagOptions } from "~/tags/tags.server";
 
@@ -167,9 +168,9 @@ export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 							<LedgerTotal label="Total" value={report.total} />
 						</Ledger>
 						<p className="mt-4">
-							<a href={report.exportPath} download className={TEXT_LINK}>
+							<DownloadLink href={report.exportPath} className={ACTION_LINK}>
 								Export as CSV
-							</a>
+							</DownloadLink>
 						</p>
 					</div>
 				</>

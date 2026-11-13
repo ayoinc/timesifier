@@ -41,7 +41,8 @@ export interface ActionFormProps {
 /**
  * A form of a billing page, posted to its own action without leaving the
  * page: the problem of each field shows under it, what was done or why not
- * under the button. A second press while the first is on its way does nothing.
+ * under the button. While it is on its way the button is pending: it says what
+ * it is doing beside the WaitClock, and a second press does nothing.
  */
 export function ActionForm({
 	intent,
@@ -79,7 +80,12 @@ export function ActionForm({
 			))}
 			{children?.(field)}
 			<div>
-				<Button type="submit" variant={variant} aria-label={submitName}>
+				<Button
+					type="submit"
+					variant={variant}
+					aria-label={submitName}
+					isPending={fetcher.state !== "idle"}
+				>
 					{submitLabel}
 				</Button>
 			</div>

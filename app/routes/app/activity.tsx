@@ -5,6 +5,7 @@ import { SubjectType } from "~/activity/actions";
 import { KIND_LABELS, PAGE_RECORDS, SYSTEM } from "~/activity/log";
 import { type LogRow, logRecords, logRequest, logRows, parseLogQuery } from "~/activity/log.server";
 import { activityExportPath, entryHistoryPath } from "~/activity/paths";
+import { DownloadLink } from "~/components/DownloadLink";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Select } from "~/components/Select";
@@ -118,9 +119,9 @@ export default function Activity({ loaderData }: Route.ComponentProps) {
 					</p>
 				)}
 				<p className="mt-2">
-					<a href={loaderData.exportPath} download className={ACTION_LINK}>
+					<DownloadLink href={loaderData.exportPath} className={ACTION_LINK}>
 						Export as CSV
-					</a>
+					</DownloadLink>
 				</p>
 			</div>
 		</>

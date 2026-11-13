@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { Button as AriaButton, type ButtonProps as AriaButtonProps } from "react-aria-components";
 
 import { cx } from "./cx";
+import { doing } from "./doing";
+import { WaitingLabel } from "./WaitingLabel";
 
 // Material 3 Expressive button, small size: 44px tall, 16px either side, label-large.
 // Material draws it 40px; it is drawn 44px so that what is pressed is what is seen
@@ -16,7 +18,7 @@ const BASE =
 	"relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 " +
 	"outline-none state-layer transition-control " +
 	"data-hovered:state-hover data-focus-visible:state-focus data-focus-visible:focus-indicator " +
-	"data-pressed:state-pressed " +
+	"data-pressed:state-pressed data-waiting:cursor-progress " +
 	"data-disabled:cursor-not-allowed data-disabled:text-disabled data-disabled:shadow-none";
 
 const SIZES = {
@@ -82,7 +84,27 @@ export interface ButtonProps
 	icon?: ReactNode;
 	/** The label. */
 	children: ReactNode;
+	/**
+	 * Whether the request the button sent is on its way. A pending button cannot
+	 * be pressed or submit its form again, stays in the focus order, and after
+	 * 400ms says what it is doing beside the WaitClock. Give it (true or false) to
+	 * every button that sends a request: from the start it is as wide as it will
+	 * be while it waits.
+	 */
+	isPending?: boolean;
+	/** What it says while pending. Defaults to the verb of a text label: "Save" says "Saving…". */
+	pendingLabel?: string;
 }
+
+/** A filled button is ink or amber: the clock on it is drawn in its text colour alone. */
+const CLOCK_TONE = {
+	filled: "one",
+	tonal: "one",
+	outlined: "two",
+	text: "two",
+	danger: "one",
+	"outlined-danger": "two",
+} as const;
 
 /**
  * A button with a text label. Inside a `Dialog` or `Sheet`, `slot="close"` makes
@@ -93,11 +115,22 @@ export function Button({
 	size = "small",
 	icon,
 	children,
+	isPending,
+	pendingLabel,
 	...props
 }: ButtonProps) {
+	// Pending is drawn here, not with React Aria's `isPending`: that announces the
+	// button by reference from its live region, and the reference outlives a
+	// button the answer removes, which leaves the region naming nothing.
+	const pending = isPending === true;
 	return (
 		<AriaButton
 			{...props}
+			// A pending submit button submits nothing, by the press or by Enter in a field.
+			type={pending && props.type === "submit" ? "button" : props.type}
+			onPress={pending ? undefined : props.onPress}
+			aria-disabled={pending || undefined}
+			data-waiting={pending || undefined}
 			className={cx(
 				BASE,
 				SIZES[size],
@@ -105,8 +138,21 @@ export function Button({
 				VARIANTS[variant],
 			)}
 		>
-			{icon}
-			{children}
+			{isPending === undefined ? (
+				<>
+					{icon}
+					{children}
+				</>
+			) : (
+				<WaitingLabel
+					waiting={isPending}
+					doing={pendingLabel ?? (typeof children === "string" ? doing(children) : "Sending…")}
+					tone={CLOCK_TONE[variant]}
+				>
+					{icon}
+					{children}
+				</WaitingLabel>
+			)}
 		</AriaButton>
 	);
 }

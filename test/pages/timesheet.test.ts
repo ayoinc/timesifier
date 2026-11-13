@@ -27,6 +27,8 @@ const HOUR = 3_600_000;
 const MINUTE = 60_000;
 /** A Wednesday, 10:00 in London. */
 const T0 = Date.parse("2026-11-11T10:00:00Z");
+/** Submit week, a button that can wait: its words in a span (docs/design-system.md, "While the page waits"). */
+const SUBMIT_WEEK = /<button\b[^>]*>(?:<span[^>]*>){2}Submit week<\/span>/;
 
 let mailbox: Mailbox;
 let ada: Person;
@@ -742,7 +744,7 @@ describe("Track time (TS-056)", () => {
 		].map(([, label]) => textOf(label ?? ""));
 
 		expect(filled).toEqual(["Track time"]);
-		expect(main).toMatch(/>Submit week<\/button>/);
+		expect(main).toMatch(SUBMIT_WEEK);
 		expect(main).not.toContain("Add entry");
 		expect(main).not.toContain(">Start timer</button>");
 	});
@@ -958,14 +960,14 @@ describe("the Day view's foot (TS-056)", () => {
 		);
 		const before = await mainOf(DAY);
 		expect(textOf(before)).toMatch(/9–15 November 2026 Status: Not submitted/);
-		expect(before.match(/>Submit week<\/button>/g)).toHaveLength(1);
+		expect(before.match(new RegExp(SUBMIT_WEEK, "g"))).toHaveLength(1);
 
 		// The Week view's own action, for the period the day is in.
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
 		const after = await mainOf(DAY);
 		expect(textOf(after)).toMatch(/9–15 November 2026 Status: Submitted/);
-		expect(after).toMatch(/>Withdraw submission<\/button>/);
-		expect(after).not.toContain(">Submit week</button>");
+		expect(after).toMatch(/<button\b[^>]*>(?:<span[^>]*>){2}Withdraw submission<\/span>/);
+		expect(after).not.toMatch(SUBMIT_WEEK);
 		expect(await textAt(`${PAGE}?view=week&start=2026-11-09`)).toContain("Status: Submitted");
 	});
 
@@ -982,12 +984,12 @@ describe("the Day view's foot (TS-056)", () => {
 
 		const toCome = await mainOf(`${PAGE}?day=2026-11-17`);
 		expect(textOf(toCome)).toContain("This week can be submitted once it has begun.");
-		expect(toCome).not.toContain(">Submit week</button>");
+		expect(toCome).not.toMatch(SUBMIT_WEEK);
 
 		await seedEntry(ada, T0 - HOUR, null);
 		const running = await mainOf(DAY);
 		expect(textOf(running)).toContain("Stop the timer before you submit the week.");
-		expect(running).not.toContain(">Submit week</button>");
+		expect(running).not.toMatch(SUBMIT_WEEK);
 	});
 });
 

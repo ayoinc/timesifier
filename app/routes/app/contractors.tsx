@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { data, Link } from "react-router";
-
+import { DownloadLink } from "~/components/DownloadLink";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { PeriodStepper } from "~/components/PeriodStepper";
@@ -239,9 +239,9 @@ export default function Contractors({ loaderData }: Route.ComponentProps) {
 							</p>
 						)}
 						<p className="mt-2">
-							<a href={report.exportPath} download className={ACTION_LINK}>
+							<DownloadLink href={report.exportPath} className={ACTION_LINK}>
 								Export as CSV
-							</a>
+							</DownloadLink>
 						</p>
 					</div>
 				</>

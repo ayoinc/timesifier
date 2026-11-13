@@ -2,7 +2,7 @@ import { type FormEvent, type ReactNode, useRef, useState } from "react";
 
 import { Button } from "~/components/Button";
 
-import { type Notice, NoticeLine, problem, progress, useOneAtATime } from "./AuthPage";
+import { type Notice, NoticeLine, problem, useOneAtATime, waiting } from "./AuthPage";
 import { sendCode } from "./client";
 import { RobotCheck, type RobotCheckHandle } from "./RobotCheck";
 
@@ -26,12 +26,12 @@ export interface SendCodeFormProps {
 export function SendCodeForm({ email, siteKey, children, onSent }: SendCodeFormProps) {
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const check = useRef<RobotCheckHandle>(null);
-	const once = useOneAtATime();
+	const { once, running } = useOneAtATime();
 
 	function submit(event: FormEvent) {
 		event.preventDefault();
 		once(async () => {
-			setNotice(progress("Sending the code…"));
+			setNotice(waiting("Sending the code…"));
 			const token = await check.current?.token();
 			if (!token) return setNotice(problem("robot-check"));
 			const outcome = await sendCode(email, token);
@@ -49,7 +49,7 @@ export function SendCodeForm({ email, siteKey, children, onSent }: SendCodeFormP
 			<RobotCheck ref={check} siteKey={siteKey} />
 			<NoticeLine notice={notice} />
 			<div>
-				<Button type="submit" size="large">
+				<Button type="submit" size="large" isPending={running !== null} pendingLabel="Sending…">
 					Continue
 				</Button>
 			</div>

@@ -146,6 +146,7 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 							lastWeek={data.lastWeekProjects.filter((id) => !inGrid.has(id))}
 							onAdd={addRows}
 							canCopyWeek={data.canCopyWeek}
+							copyingWeek={copy.state !== "idle"}
 							onCopyWeek={() =>
 								copy.submit(
 									{ intent: "copy-week", startsOn: period.startsOn },
@@ -572,6 +573,7 @@ function AddRows({
 	lastWeek,
 	onAdd,
 	canCopyWeek,
+	copyingWeek,
 	onCopyWeek,
 }: {
 	addable: WeekData["projects"];
@@ -580,6 +582,8 @@ function AddRows({
 	lastWeek: string[];
 	onAdd: (ids: string[]) => void;
 	canCopyWeek: boolean;
+	/** Whether "Copy last week with hours" is on its way. */
+	copyingWeek: boolean;
 	onCopyWeek: () => void;
 }) {
 	return (
@@ -605,7 +609,7 @@ function AddRows({
 				</Button>
 			)}
 			{canCopyWeek && (
-				<Button variant="text" onPress={onCopyWeek}>
+				<Button variant="text" isPending={copyingWeek} onPress={onCopyWeek}>
 					Copy last week with hours
 				</Button>
 			)}

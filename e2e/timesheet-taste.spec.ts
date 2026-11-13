@@ -197,6 +197,10 @@ test.describe("at 1280px", () => {
 		await page.keyboard.press("?");
 		const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts" });
 		await expect(shortcuts).toContainText("Back to today");
+		// Escape closes the dialog once the focus is in it.
+		await expect
+			.poll(() => shortcuts.evaluate((dialog) => dialog.contains(document.activeElement)))
+			.toBe(true);
 		await page.keyboard.press("Escape");
 		await expect(shortcuts).toBeHidden();
 

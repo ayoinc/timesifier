@@ -1,5 +1,5 @@
 import { data } from "react-router";
-
+import { DownloadLink } from "~/components/DownloadLink";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Select } from "~/components/Select";
@@ -182,9 +182,9 @@ export default function LeaveReport({ loaderData }: Route.ComponentProps) {
 				)}
 			</div>
 			<p className="mt-4">
-				<a href={loaderData.exportPath} download className={ACTION_LINK}>
+				<DownloadLink href={loaderData.exportPath} className={ACTION_LINK}>
 					Export as CSV
-				</a>
+				</DownloadLink>
 			</p>
 		</>
 	);

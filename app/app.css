@@ -624,6 +624,58 @@ html {
 }
 
 /*
+ * A wait that is not a page (app/components/WaitClock.tsx, and a Button or a
+ * DownloadLink while its request is on its way). Nothing changes until the wait
+ * has lasted 400ms (`medium4`), so a quick answer shows nothing; then the words
+ * the control has while it waits and the clock fade in, and its words at rest
+ * fade out, in the same place. Opacity alone, so with reduced motion it is the
+ * same.
+ */
+.wait-appear {
+	animation: wait-appear var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+		var(--md-sys-motion-duration-medium4) backwards;
+}
+
+/* The words at rest go by a transition, which is over once they have gone; at rest again they are back at once. */
+.wait-leave {
+	opacity: 0;
+	transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+		var(--md-sys-motion-duration-medium4);
+}
+
+/* What a control says while it waits, from its `data-doing` (app/components/WaitingLabel.tsx). */
+.waiting-words::before {
+	content: attr(data-doing);
+}
+
+@keyframes wait-appear {
+	from {
+		opacity: 0;
+	}
+}
+
+/*
+ * The clock's amber hand: one turn every 1.2 seconds on the standard easing, so
+ * it sweeps and then slows into twelve, as a station clock's second hand rests
+ * on the minute. It starts as the clock appears, from twelve. A rotation of its
+ * own box, which the compositor draws without the page. With reduced motion it
+ * stands at twelve.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	.wait-clock-hand {
+		animation: wait-clock-turn
+			calc(var(--md-sys-motion-duration-extra-long4) + var(--md-sys-motion-duration-short4))
+			var(--md-sys-motion-easing-standard) var(--md-sys-motion-duration-medium4) infinite;
+	}
+}
+
+@keyframes wait-clock-turn {
+	to {
+		transform: rotate(1turn);
+	}
+}
+
+/*
  * A row an action has just written (taste HT-A, app/timesheet/feedback.tsx): a
  * 2px ink outline over it that fades over 1.2 seconds, by its opacity alone.
  * With reduced motion nothing is drawn: the snackbar and the status line say it.
