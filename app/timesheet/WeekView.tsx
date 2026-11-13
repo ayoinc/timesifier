@@ -45,7 +45,7 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 	// for each week visited, until hours are typed into them.
 	const [addedByWeek, setAddedByWeek] = useState<Record<string, string[]>>({});
 	const added = addedByWeek[period.startsOn] ?? [];
-	const sheet = weekSheet([], days, data.zone, data.now, { addedRows: added });
+	const sheet = weekSheet([], days, data.now, { addedRows: added });
 	const rows = withOvertimeRows(
 		[
 			...data.sheet.rows,

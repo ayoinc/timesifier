@@ -111,8 +111,8 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 		next,
 		today: calendarPath(slug, { scale, zoom }),
 	});
-	const week = weekSheet(data.entries, days, zone, live);
-	const ofMonth = isMonth ? monthSheet(data.entries, days, month, zone, live) : null;
+	const week = weekSheet(data.entries, days, live);
+	const ofMonth = isMonth ? monthSheet(data.entries, days, month, live) : null;
 
 	return (
 		<>
@@ -192,7 +192,7 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 				{entry && (
 					<EntryFields
 						key={`edit-${entry.id}`}
-						data={{ day: dayOf(entry.startedAt, zone), projects }}
+						data={{ zone, projects }}
 						entry={entry}
 						clock={clock}
 					/>

@@ -11,7 +11,6 @@ import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.serv
 import { entryTaskOf } from "~/tasks/tasks.server";
 
 import { bounds, type Day, dayOf } from "./calendar";
-import { entryDay } from "./entries.server";
 import { formatDuration } from "./format";
 import { gridEntryStart, placeOnDay } from "./grid";
 
@@ -109,12 +108,16 @@ export async function editEntry(
 	if (span.projectId !== entry.projectId && !(await findActiveProject(scope, span.projectId))) {
 		return refuse("no-project");
 	}
-	const days = [dayOf(entry.startedAt, zone), dayOf(span.startedAt, zone)];
-	if ((await lockedDays(scope, userId, days)).size > 0) return refuse("locked");
+	// An entry keeps its day unless its start moves (TS-111).
+	const spentOn =
+		span.startedAt === entry.startedAt.getTime() ? entry.spentOn : dayOf(span.startedAt, zone);
+	if ((await lockedDays(scope, userId, [entry.spentOn, spentOn])).size > 0) {
+		return refuse("locked");
+	}
 	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
 	const overtime = span.overtime ?? entry.overtime;
-	const over = await refusalOf(scope, userId, zone, now, {
-		day: dayOf(span.startedAt, zone),
+	const over = await refusalOf(scope, userId, now, {
+		day: spentOn,
 		// An entry that changes kind is new time of its new kind.
 		replaces: overtime === entry.overtime ? id : null,
 		afterMs: span.endedAt - span.startedAt,
@@ -137,11 +140,7 @@ export async function editEntry(
 		description: span.description,
 		startedAt: new Date(span.startedAt),
 		endedAt: new Date(span.endedAt),
-		// An entry keeps its day unless its start moves (TS-111).
-		spentOn:
-			span.startedAt === entry.startedAt.getTime()
-				? entryDay(entry, zone)
-				: dayOf(span.startedAt, zone),
+		spentOn,
 		overtime,
 	};
 	await scope.batch([
@@ -179,16 +178,13 @@ export interface DeletedEntry {
 export async function deleteEntry(
 	scope: OrganisationScope,
 	userId: string,
-	zone: string,
 	id: string,
 	source: ActivitySource = "web",
 ) {
 	const entry = await ownEntry(scope, userId, id);
 	if (!entry) return refuse("not-found");
 	if (entry.endedAt === null) return refuse("running");
-	if ((await lockedDays(scope, userId, [dayOf(entry.startedAt, zone)])).size > 0) {
-		return refuse("locked");
-	}
+	if ((await lockedDays(scope, userId, [entry.spentOn])).size > 0) return refuse("locked");
 	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
 	const tagIds = (await tagsOfEntries(scope, [id])).get(id) ?? [];
 	await scope.batch([
@@ -212,7 +208,7 @@ export async function deleteEntry(
 		endedAt: entry.endedAt.getTime(),
 		tagIds,
 		overtime: entry.overtime,
-		spentOn: entryDay(entry, zone),
+		spentOn: entry.spentOn,
 	};
 	return { ok: true as const, deleted };
 }
@@ -227,16 +223,14 @@ export async function deleteEntry(
 export async function restoreEntry(
 	scope: OrganisationScope,
 	userId: string,
-	zone: string,
 	entry: DeletedEntry,
 	now: number,
 ) {
 	if (await ownEntry(scope, userId, entry.id)) return { ok: true as const };
 	if (!(await findActiveProject(scope, entry.projectId))) return refuse("no-project");
-	const day = dayOf(entry.startedAt, zone);
-	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
-	const over = await refusalOf(scope, userId, zone, now, {
-		day,
+	if ((await lockedDays(scope, userId, [entry.spentOn])).size > 0) return refuse("locked");
+	const over = await refusalOf(scope, userId, now, {
+		day: entry.spentOn,
 		replaces: null,
 		afterMs: entry.endedAt - entry.startedAt,
 		overtime: entry.overtime,
@@ -269,12 +263,9 @@ export async function restoreEntry(
 	return { ok: true as const };
 }
 
-/** The entries of `userId` that belong to `day` in `zone`: those that start on it. */
-export function entriesOfDay(scope: OrganisationScope, userId: string, day: Day, zone: string) {
-	const { from, to } = bounds(day, day, zone);
-	return scope.timeEntries.select((e) =>
-		and(eq(e.userId, userId), gte(e.startedAt, new Date(from)), lt(e.startedAt, new Date(to))),
-	);
+/** The entries of `userId` that belong to `day`: those stored on it (TS-111). */
+export function entriesOfDay(scope: OrganisationScope, userId: string, day: Day) {
+	return scope.timeEntries.select((e) => and(eq(e.userId, userId), eq(e.spentOn, day)));
 }
 
 export interface DayHours {
@@ -320,7 +311,7 @@ export async function addHours(
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
 	const overtime = hours.overtime ?? false;
-	const over = await refusalOf(scope, userId, zone, now, {
+	const over = await refusalOf(scope, userId, now, {
 		day,
 		replaces: null,
 		afterMs: minutes * 60_000,
@@ -331,7 +322,7 @@ export async function addHours(
 	if (!task.ok) return refuse("no-task");
 	if (hours.tagIds && !(await tagsAllowed(scope, [], hours.tagIds))) return refuse("no-tag");
 	const wanted =
-		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day, zone), now);
+		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day), now);
 	const placed = placeOnDay(day, zone, wanted, minutes, now, {
 		keepStart: hours.startedAt !== undefined,
 	});
@@ -391,7 +382,7 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 	const overtime = cell.overtime ?? false;
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
 
-	const ofDay = await entriesOfDay(scope, userId, day, zone);
+	const ofDay = await entriesOfDay(scope, userId, day);
 	const inCell = ofDay.filter(
 		(entry) => entry.projectId === projectId && entry.overtime === overtime,
 	);
@@ -402,7 +393,7 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 	if (entry && (await invoicedIds(scope, "time_entry", [entry.id])).size > 0) {
 		return refuse("invoiced");
 	}
-	const over = await refusalOf(scope, userId, zone, now, {
+	const over = await refusalOf(scope, userId, now, {
 		day,
 		replaces: entry?.id ?? null,
 		afterMs: minutes * 60_000,

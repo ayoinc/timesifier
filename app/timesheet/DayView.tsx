@@ -23,7 +23,7 @@ import { TEXT_LINK } from "~/shell/links";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { EntryChoices } from "~/tasks/EntryChoices";
 import { TrackChoicesContext } from "~/tasks/track";
-import { addDays, type Day } from "~/time/calendar";
+import { addDays, type Day, dayOf } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 
 import { DayPicker } from "./DayPicker";
@@ -390,15 +390,17 @@ function EmptyDay({
 /**
  * The fields of an entry changed by hand: its project, its day and its start
  * and end, read in the person's zone, and a description. Native date and time
- * inputs, which write no `style` attribute (docs/security.md). `day` is the
- * day the entry starts on.
+ * inputs, which write no `style` attribute (docs/security.md). The date is
+ * the one its start reads in the person's zone now, with its clock times, so
+ * a form saved unchanged keeps the entry's start, and its stored day with it
+ * (TS-111), even when the person's zone has changed since it was tracked.
  */
 export function EntryFields({
 	data,
 	entry,
 	clock,
 }: {
-	data: Pick<DayData, "day" | "projects">;
+	data: Pick<DayData, "zone" | "projects">;
 	entry: SheetEntry;
 	clock: (instant: number) => string;
 }) {
@@ -406,7 +408,13 @@ export function EntryFields({
 	return (
 		<>
 			<EntryChoices projects={offered} defaultProjectId={entry.projectId} entryId={entry.id} />
-			<TextField label="Date" name="date" type="date" defaultValue={data.day} isRequired />
+			<TextField
+				label="Date"
+				name="date"
+				type="date"
+				defaultValue={dayOf(entry.startedAt, data.zone)}
+				isRequired
+			/>
 			<div className="grid grid-cols-2 gap-4">
 				<TextField
 					label="Start"
