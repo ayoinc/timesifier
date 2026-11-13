@@ -19,6 +19,7 @@ A productivity and time platform on Cloudflare Workers. The documents and the bo
 
 - Every runtime service is a Cloudflare product.
 - Customer data is reached through the organisation-scoped data layer: `organisationScope` in `app/db/`.
+- A list of ids goes to D1 as one JSON value: `among(column, ids)` from `~/db`, never `inArray` over a list that grows with data (decision 40; `test/node/lists.test.ts` enforces it).
 - Components take colour, size and motion from design tokens.
 - Secrets live in `.dev.vars` locally and in Wrangler secrets when deployed.
 - Nothing that belongs to one deployment is committed: no domain, database id, key or address. The Worker reads it from a variable, the pipeline from a repository variable, and `docs/security.md`, "Secrets", lists each one. A value that is missing fails the request or the deploy; it never has a default.
