@@ -1,19 +1,6 @@
-import {
-	and,
-	asc,
-	count,
-	desc,
-	eq,
-	gte,
-	inArray,
-	isNull,
-	like,
-	lt,
-	max,
-	or,
-	sql,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, max, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import {
 	invitations,
@@ -163,6 +150,14 @@ function countsBy(
 }
 
 /**
+ * Whether the column holds `wanted`, lower-cased, anywhere. Not `LIKE`: D1
+ * refuses a pattern longer than 50 bytes, which a whole address is.
+ */
+function contains(column: SQLiteColumn, wanted: string) {
+	return sql`instr(lower(${column}), ${wanted}) > 0`;
+}
+
+/**
  * Every organisation, or those whose name or address contains `query`, newest
  * first, with its plan, people, use and last activity.
  */
@@ -171,7 +166,7 @@ export async function platformOrganisations(
 	{ query, ids, limit = 200 }: { query?: string; ids?: string[]; limit?: number } = {},
 ): Promise<PlatformOrganisation[]> {
 	const db = drizzle(database);
-	const pattern = query ? `%${query.replace(/[%_]/g, "")}%` : null;
+	const wanted = query?.toLowerCase();
 	const rows = await db
 		.select({
 			id: organisations.id,
@@ -185,8 +180,8 @@ export async function platformOrganisations(
 		.from(organisations)
 		.where(
 			and(
-				pattern
-					? or(like(organisations.name, pattern), like(organisations.slug, pattern))
+				wanted
+					? or(contains(organisations.name, wanted), contains(organisations.slug, wanted))
 					: undefined,
 				ids ? inArray(organisations.id, ids) : undefined,
 			),
@@ -313,11 +308,11 @@ const ACCOUNT_COLUMNS = {
 
 /** Accounts whose address or name contains `query`, newest first; the newest when there is none. */
 export function platformAccounts(database: D1Database, query: string, limit = 50) {
-	const pattern = `%${query.replace(/[%_]/g, "")}%`;
+	const wanted = query.toLowerCase();
 	return drizzle(database)
 		.select(ACCOUNT_COLUMNS)
 		.from(users)
-		.where(query ? or(like(users.email, pattern), like(users.name, pattern)) : undefined)
+		.where(wanted ? or(contains(users.email, wanted), contains(users.name, wanted)) : undefined)
 		.orderBy(desc(users.createdAt))
 		.limit(limit);
 }

@@ -108,7 +108,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 						/>
 						{/* Off until ticked, and read only when the code makes a new account (TS-099). */}
 						<Checkbox name="newsletter" isSelected={newsletter} onChange={setNewsletter}>
-							New here? Email me the Timesifier newsletter. You can stop it at any time.
+							New here? Send me the Timesifier newsletter. You can stop it at any time.
 						</Checkbox>
 					</SendCodeForm>
 				</>

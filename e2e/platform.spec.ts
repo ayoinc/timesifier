@@ -24,9 +24,10 @@ import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation, type Organisation } from "./organisation";
+import { aPlatformOwner } from "./platform-owners";
 
-// The platform console in a browser (TS-099). The platform's owner (the one
-// address playwright.config.ts gives the server in PLATFORM_OWNERS) signs in
+// The platform console in a browser (TS-099). A platform owner (one of the
+// addresses of e2e/platform-owners.ts) signs in
 // and is asked for a second code before the console opens, done with the
 // keyboard alone; an organisation's owner grants support access, and the
 // console then reads the organisation and says until when; a new person asks
@@ -35,7 +36,6 @@ import { createOrganisation, type Organisation } from "./organisation";
 // Wellbeing, at both window sizes in both schemes, with no WCAG 2.2 A or AA
 // violation. The screenshots go where the card's review reads them.
 
-const PLATFORM_OWNER = "platform-owner@example.com";
 const SHOTS =
 	process.env.SHOT_DIR ??
 	"/Users/ayodele.ajayi/Workspace/Personal/cmux-assets/browser/timesifier/TS-099";
@@ -62,7 +62,7 @@ async function tabTo(page: Page, target: Locator, most = 60) {
  * it, Enter. The page is left on Health.
  */
 async function openConsole(page: Page) {
-	await signIn(page, PLATFORM_OWNER);
+	await signIn(page, aPlatformOwner());
 	await openShell(page, PLATFORM_PATH, "header");
 	await expect(page).toHaveURL(VERIFY_PATH);
 	await expect(
@@ -121,7 +121,8 @@ async function grantSupport(page: Page, organisation: Organisation) {
 	await page.keyboard.press("Enter");
 	const sheet = page.getByRole("dialog", { name: "Grant support access" });
 	await expect(sheet).toBeVisible();
-	await sheet.getByRole("radio", { name: "Three days (72 hours)" }).check();
+	await sheet.getByText("Three days (72 hours)", { exact: true }).click();
+	await expect(sheet.getByRole("radio", { name: "Three days (72 hours)" })).toBeChecked();
 	await sheet.getByRole("button", { name: "Grant access" }).press("Enter");
 	await expect(sheet).toBeHidden();
 	await expect(page.getByRole("heading", { name: /^Granted until / })).toBeVisible();
@@ -132,9 +133,7 @@ test("the console asks a signed-in platform owner for a code of its own, and ope
 }) => {
 	await openConsole(page);
 	// The tabs, in order, with Health current; the Brand page comes with TS-100.
-	const tabs = page
-		.getByRole("navigation", { name: "Platform console sections" })
-		.getByRole("link");
+	const tabs = page.getByRole("group", { name: "Platform console sections" }).getByRole("link");
 	await expect(tabs).toHaveText(["Health", "Organisations", "Accounts", "Mail", "Log"]);
 	await expect(tabs.first()).toHaveAttribute("aria-current", "page");
 	await expect(page.getByRole("heading", { level: 1, name: "Health" })).toBeVisible();
@@ -173,7 +172,7 @@ test("an owner grants support access; the console reads the organisation until i
 	).toBeVisible();
 	await page.getByRole("link", { name: "Read the organisation" }).click();
 	await expect(page.getByRole("heading", { level: 1, name: "Support view" })).toBeVisible();
-	await expect(page.getByText(/until/).first()).toBeVisible();
+	await expect(page.getByRole("note")).toContainText("it ends");
 	// It reads; nothing on it changes anything.
 	await expect(page.locator("main form[method='post']")).toHaveCount(0);
 
@@ -200,7 +199,8 @@ test("a new person asks for the newsletter on the sign-in page and finds it on i
 	await page.getByLabel("Email").fill(email);
 	const box = page.getByRole("checkbox", { name: /newsletter/ });
 	await expect(box).not.toBeChecked();
-	await box.check();
+	await page.getByText(/^New here\? Send me the Timesifier newsletter/).click();
+	await expect(box).toBeChecked();
 	const code = await codeSentBy(() => page.getByRole("button", CONTINUE).click());
 	await page.getByLabel("Code").fill(code);
 	await page.getByRole("button", CONTINUE).click();
@@ -266,7 +266,7 @@ for (const viewport of [
 				await openShell(owner.page, accountPath(slug));
 				await check(owner.page, "My account", "my-account", at);
 
-				await signIn(page, PLATFORM_OWNER);
+				await signIn(page, aPlatformOwner());
 				await openShell(page, VERIFY_PATH, "header");
 				await check(page, "Open the platform console", "verify", at);
 				const code = await codeSentBy(() =>

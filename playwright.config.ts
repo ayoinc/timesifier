@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 import { SIGNED_IN } from "./e2e/auth-state";
+import { PLATFORM_OWNERS } from "./e2e/platform-owners";
 
 // Browser tests run against a production build served by `vite preview`, so they
 // see real server rendering, hydration and the Content Security Policy that ships.
@@ -31,8 +32,8 @@ const SETUP = /auth\.setup\.ts/;
 const SEEDS_THE_DATABASE = /[\\/](?:people|projects-search|reports|zz-fixes-shots)\.spec\.ts$/;
 // What the server under test is given. None of it is a secret: the first signs
 // cookies for this run only, the second is Cloudflare's published Turnstile
-// test secret, which passes every check, and the third makes one address of
-// the tests the platform console's owner (TS-099, e2e/platform.spec.ts).
+// test secret, which passes every check, and the third makes the addresses of
+// e2e/platform-owners.ts the platform console's owners (TS-099).
 // https://developers.cloudflare.com/turnstile/troubleshooting/testing/
 // Where the checkout has a `.dev.vars`, Wrangler reads the secrets from it
 // instead; it must hold the same Turnstile secret, as `.dev.vars.example` says.
@@ -40,7 +41,7 @@ const SERVER_ENV = {
 	DESIGN_ROUTE: "1",
 	BETTER_AUTH_SECRET: "browser-tests-only-m4Qx8Zr2Lk7Vt1Nc5Hd9Wb3Yp6Sg0Jf",
 	TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
-	PLATFORM_OWNERS: "platform-owner@example.com",
+	PLATFORM_OWNERS: PLATFORM_OWNERS.join(","),
 };
 
 // The steps that bring the server up, in order:
