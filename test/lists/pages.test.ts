@@ -37,7 +37,7 @@ const PAGES = [
 	"/app/acme/time-off",
 	"/app/acme/time-off?show=requests",
 	"/app/acme/settings",
-	"/app/acme/settings/members",
+	"/app/acme/team/members",
 	"/app/acme/settings/schedules",
 ];
 

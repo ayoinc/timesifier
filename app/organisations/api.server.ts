@@ -19,7 +19,7 @@ import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 import { handleAuthRequest } from "~/auth/auth.server";
 import { users } from "~/db";
-import { InvitedRole, Role } from "./roles";
+import { InvitedRole, type Role } from "./roles";
 
 /** The server said no: its status, and the code that says why when it gave one. */
 export type Refusal = { ok: false; status: number; code: string | null };
@@ -85,25 +85,6 @@ export function renameOrganisation(request: Request, organizationId: string, nam
 /** Deletes the organisation, with its memberships and invitations. */
 export function deleteOrganisation(request: Request, organizationId: string) {
 	return ask(request, "delete", z.unknown(), { body: { organizationId } });
-}
-
-const Member = z.object({
-	id: z.string(),
-	userId: z.string(),
-	role: Role,
-	user: z.object({ name: z.string().nullish(), email: z.string() }),
-});
-export type Member = z.output<typeof Member>;
-
-/** Everyone in the organisation, in the order they joined. */
-export async function listMembers(
-	request: Request,
-	organizationId: string,
-): Promise<Answer<Member[]>> {
-	const answer = await ask(request, "list-members", z.object({ members: z.array(Member) }), {
-		query: { organizationId },
-	});
-	return answer.ok ? { ok: true, data: answer.data.members } : answer;
 }
 
 const Invitation = z.object({
