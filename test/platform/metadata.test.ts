@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope, platformData } from "~/db";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { seedInvitation, seedMembership, seedOrganisation } from "../organisations/harness";
@@ -54,6 +55,7 @@ async function seed() {
 			description: "Private notes about a client",
 			startedAt: new Date(NOW.getTime() - 2 * HOUR),
 			endedAt: new Date(NOW.getTime() - HOUR),
+			spentOn: dayOf(NOW.getTime() - 2 * HOUR, "UTC"),
 		});
 		await scope.expenses.insert({
 			userId,

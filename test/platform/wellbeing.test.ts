@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type OrganisationScope, organisationScope, uuidv7 } from "~/db";
+import { dayOf } from "~/time/calendar";
 import { LEAVE_DAYS, MINIMUM_GROUP, REGULARLY, WEEKS } from "~/wellbeing/wellbeing";
 import { roughShare, wellbeingSignals } from "~/wellbeing/wellbeing.server";
 import { freshDatabase } from "../db/database";
@@ -73,6 +74,7 @@ async function track(seeded: Seeded, userId: string, weeks: number[], minutes: n
 				projectId: seeded.project,
 				startedAt,
 				endedAt: new Date(startedAt.getTime() + Math.ceil(minutes / 6) * MINUTE),
+				spentOn: dayOf(startedAt, "UTC"),
 			});
 		}
 	}
