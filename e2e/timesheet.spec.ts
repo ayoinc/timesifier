@@ -563,9 +563,17 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				await startTimer(page);
 				expect(await problems(page, [EMPTY_INPUT, DIGIT_CHANGING])).toEqual([]);
 
-				// The running entry gives the week a row; an hour typed into another of its days fills it.
+				// The running entry gives the week a row.
 				await openShell(page, `${organisationPath(slug)}?view=week`);
 				expect(await gridProblems(page)).toEqual([]);
+				// An hour typed into the week before fills it: every day of it has passed,
+				// where on a Monday every other day of this week is still to come (W08).
+				await page
+					.getByRole("group", { name: "Weeks" })
+					.getByRole("link", { name: "Previous week" })
+					.click();
+				await expect(page).toHaveURL(/[?&]start=\d{4}-\d{2}-\d{2}$/);
+				await page.getByRole("button", { name: "Add row" }).click();
 				const cell = page.getByRole("textbox", { name: /^Site, / }).first();
 				await cell.fill("1");
 				await cell.press("Tab");

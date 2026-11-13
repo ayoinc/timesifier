@@ -12,7 +12,7 @@ import {
 } from "./axe";
 import { expect, openShell, takenOver, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject, pastWeekday } from "./timesheet";
+import { createProject, mondayOf, pastWeekday, zoneIsTheBrowsers } from "./timesheet";
 
 // The Calendar view of Timesheet in a browser (TS-062): the week on an hour
 // axis and the month of days, their totals against the Day and Week views',
@@ -42,7 +42,7 @@ async function personWithTime(page: Page) {
 	await signIn(page, newPerson().email);
 	const organisation = await createOrganisation(page);
 	await createProject(page, organisation.slug, "Site");
-	await openShell(page, organisationPath(organisation.slug));
+	await zoneIsTheBrowsers(page, organisation.slug);
 	const day = await pastWeekday(page);
 	await openShell(page, `${organisationPath(organisation.slug)}?day=${day}`);
 	await page.getByRole("button", { name: "Track time", exact: true }).click();
@@ -95,7 +95,7 @@ test("the week calendar shows each entry as a block with the Week view's totals;
 	const { slug, day } = await personWithTime(page);
 	await views(page).getByRole("link", { name: "Calendar" }).click();
 	await expect(page).toHaveURL(new RegExp(`${organisationPath(slug)}\\?view=calendar$`));
-	// Yesterday's week, which is this week but on a Monday.
+	// The week of the day with time, which on a Monday is the week before this one.
 	await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 
 	const grid = weekGrid(page);
@@ -123,10 +123,9 @@ test("the week calendar shows each entry as a block with the Week view's totals;
 	await expect(grid.getByRole("button", { name: "Site, 14:00–15:00, 1:00, edit" })).toBeVisible();
 	await expect(dayLink(grid, day)).toContainText("3:30");
 
-	// The Week view of that week adds up the same.
-	await openShell(page, `${organisationPath(slug)}?day=${day}`);
-	await views(page).getByRole("link", { name: "Week" }).click();
-	await expect(page).toHaveURL(/view=week/);
+	// The Week view of that week adds up the same. It is opened at the day's week,
+	// which on a Monday is the week before: the views' Week link opens this one.
+	await openShell(page, `${organisationPath(slug)}?view=week&start=${mondayOf(day)}`);
 	await expect(page.getByRole("table").getByText("3:30").last()).toBeVisible();
 });
 

@@ -31,6 +31,13 @@ function dayFromToday(offset: number): string {
 	return at.toISOString().slice(0, 10);
 }
 
+/** The first Monday to Friday at least `offset` days from today in UTC: a day with work to take leave from. */
+function weekdayFromToday(offset: number): string {
+	const at = new Date(`${dayFromToday(offset)}T00:00:00Z`);
+	while (at.getUTCDay() === 0 || at.getUTCDay() === 6) at.setUTCDate(at.getUTCDate() + 1);
+	return at.toISOString().slice(0, 10);
+}
+
 /** Presses Tab until `target` has the focus. */
 async function tabTo(page: Page, target: Locator, most = 80) {
 	for (let step = 0; step < most; step++) {
@@ -137,8 +144,9 @@ test("annual leave at short notice says so, asks why, and is sent with the reaso
 	await expect(sheet).toContainText(
 		/Annual leave needs 14 days' notice: the earliest well-noticed first day is/,
 	);
-	await sheet.getByRole("textbox", { name: "First day" }).fill(dayFromToday(5));
-	await sheet.getByRole("textbox", { name: "Last day" }).fill(dayFromToday(5));
+	// Five days on, or the weekday after: annual leave on a weekend holds no working day.
+	await sheet.getByRole("textbox", { name: "First day" }).fill(weekdayFromToday(5));
+	await sheet.getByRole("textbox", { name: "Last day" }).fill(weekdayFromToday(5));
 	await expect(sheet).toContainText(/This is short notice \(\d+ days?\)\./);
 	const why = sheet.getByRole("textbox", { name: "Why at short notice?" });
 	await expect(why).toBeVisible();
