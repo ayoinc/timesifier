@@ -306,7 +306,7 @@ describe("the pages record", () => {
 	it("an entry changed, with what it was and what it is, but no description", async () => {
 		const id = uuidv7();
 		await env.DB.prepare(
-			"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, 'Survey', ?, ?, 0, 0)",
+			"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values (?, ?, ?, ?, 'Survey', ?, '2026-11-10', ?, 0, 0)",
 		)
 			.bind(
 				id,

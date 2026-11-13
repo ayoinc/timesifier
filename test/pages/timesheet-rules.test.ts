@@ -711,6 +711,50 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 		expect(await minutesOn(me, WEDNESDAY, "overtime")).toBe(30);
 	});
 
+	describe("a timer cut after midnight keeps its overtime on the day it started", () => {
+		/** The entries of `who` by their stored day (TS-111): day, minutes and kind. */
+		const byDay = async (who: Person) => {
+			const { results } = await env.DB.prepare(
+				"select spent_on, (ended_at - started_at) / 60000 as minutes, overtime from time_entries where user_id = ? order by started_at",
+			)
+				.bind(who.user.id)
+				.all<{ spent_on: string; minutes: number; overtime: number }>();
+			return results.map((row) => [row.spent_on, row.minutes, row.overtime === 1]);
+		};
+
+		it("D1b: Tuesday 20:00 to Wednesday 05:00 is Tuesday's 7:30 and 1:30 overtime, with Wednesday on leave", async () => {
+			await setRules({ overtime: "allowed" });
+			await seedLeave(acme.id, me.user.id, "annual", WEDNESDAY, WEDNESDAY);
+			clockAt(at(TUESDAY, "20:00"));
+			expect((await ask(me, { intent: "track", projectId: site, day: TUESDAY })).status).toBe(200);
+			clockAt(at(WEDNESDAY, "05:00"));
+			const stopped = await ask(me, { intent: "stop" });
+			expect(stopped.status).toBe(200);
+			expect(stopped.said).not.toContain("over by");
+			expect(await byDay(me)).toEqual([
+				[TUESDAY, 450, false],
+				[TUESDAY, 90, true],
+			]);
+			expect((await ask(me, { intent: "submit", startsOn: MONDAY })).status).toBe(200);
+		});
+
+		it("D3c: Friday 20:00 to Saturday 05:00 uses Friday's approved 2:00 of overtime", async () => {
+			await setRules({ overtime: "approval", weekend: "none" });
+			await seedWork(me, "overtime", FRIDAY, FRIDAY, 120);
+			clockAt(at(FRIDAY, "20:00"));
+			expect((await ask(me, { intent: "track", projectId: site, day: FRIDAY })).status).toBe(200);
+			clockAt(at("2026-11-14", "05:00"));
+			const stopped = await ask(me, { intent: "stop" });
+			expect(stopped.status).toBe(200);
+			expect(stopped.said).not.toContain("over by");
+			expect(await byDay(me)).toEqual([
+				[FRIDAY, 450, false],
+				[FRIDAY, 90, true],
+			]);
+			expect((await ask(me, { intent: "submit", startsOn: MONDAY })).status).toBe(200);
+		});
+	});
+
 	it("a timer started by starting another is cut as it stops", async () => {
 		await setRules({ overtime: "allowed" });
 		await seedEntry(acme.id, me.user.id, site, at(WEDNESDAY, "02:00"), at(WEDNESDAY, "09:00"));

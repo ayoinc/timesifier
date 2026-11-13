@@ -21,6 +21,7 @@ import {
 } from "../organisations/harness";
 import { open, type Person, person, submit, textOf } from "./harness";
 import { kindOf, seedLeave } from "./leave-seed";
+import { markOvertime, seedEntry, seedPeriod } from "./periods-seed";
 
 // The lock date and the timesheet deadline (TS-065): set by owners and admins
 // in Workspace settings, binding everyone, owner included, on every write of
@@ -82,7 +83,7 @@ async function post(path: string, fields: Record<string, string>, who: Person) {
 async function entryOn(who: Person, day: string) {
 	const id = uuidv7();
 	await env.DB.prepare(
-		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, 'Survey', ?, ?, 0, 0)",
+		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values (?, ?, ?, ?, 'Survey', ?, ?, ?, 0, 0)",
 	)
 		.bind(
 			id,
@@ -90,6 +91,7 @@ async function entryOn(who: Person, day: string) {
 			who.user.id,
 			site,
 			Date.parse(`${day}T09:00:00Z`),
+			day,
 			Date.parse(`${day}T10:00:00Z`),
 		)
 		.run();
@@ -310,6 +312,60 @@ describe("the lock date binds everyone", () => {
 			).toBe(409);
 		},
 	);
+
+	it("a change of zone leaves locked time locked", async () => {
+		// P2 (TR-03): Grace's approved week of 2-8 November, 37:30 and 3:00 of
+		// overtime on Sunday 8 from 20:00 to 23:00 in London, the lock date the 8th.
+		const grace = await joined("grace@example.com", "member");
+		await env.DB.prepare("update users set time_zone = ? where id = ?")
+			.bind(LONDON, grace.user.id)
+			.run();
+		for (const day of ["02", "03", "04", "05", "06"]) {
+			await seedEntry(
+				acme.id,
+				grace.user.id,
+				site,
+				`2026-11-${day}T09:00:00Z`,
+				`2026-11-${day}T16:30:00Z`,
+			);
+		}
+		const sunday = await seedEntry(
+			acme.id,
+			grace.user.id,
+			site,
+			"2026-11-08T20:00:00Z",
+			"2026-11-08T23:00:00Z",
+		);
+		await markOvertime(sunday);
+		await seedPeriod(acme.id, grace.user.id, "2026-11-02", "approved");
+		await post(settings, { intent: "lock-date", lockedThrough: "2026-11-08" }, ada);
+		const history = `/app/${acme.slug}?view=history`;
+		const edit = {
+			intent: "edit",
+			entryId: sunday,
+			projectId: site,
+			date: "2026-11-09",
+			start: "05:00",
+			end: "07:00",
+		};
+
+		for (const zone of ["Asia/Tokyo", "America/Los_Angeles"]) {
+			expect(
+				await post(`/app/${acme.slug}/account`, { intent: "time-zone", timeZone: zone }, grace),
+			).toBe(200);
+			expect(await post(sheet, edit, grace), zone).toBe(409);
+			expect(await post(sheet, { intent: "delete", entryId: sunday }, grace), zone).toBe(409);
+			expect(await value("select spent_on from time_entries where id = ?", sunday), zone).toBe(
+				"2026-11-08",
+			);
+			const text = textOf(await (await open(history, grace)).text());
+			expect(text, zone).toContain("40:30");
+			expect(text, zone).toContain("3:00 overtime");
+		}
+		expect(await value("select status from periods where user_id = ?", grace.user.id)).toBe(
+			"approved",
+		);
+	});
 
 	it("tells the person why on the Day view", async () => {
 		await post(

@@ -11,6 +11,7 @@ import { freshDatabase } from "../db/database";
 import { createOrganisation, type Role, seedMembership, seedTeam } from "../organisations/harness";
 import { open, openData, type Person, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
+import { entryDay } from "./periods-seed";
 
 // The limits of each day (TS-090) as the Timesheet's Day, Week and Calendar
 // views read them: a half-day of leave leaves the other half of the day, a
@@ -75,9 +76,17 @@ async function memberOfAcme(role: Role, email: string): Promise<Person> {
 async function seedEntry(who: Person, day: Day, startHour: number, hours: number) {
 	const startedAt = instantAt(day, startHour * 60, LONDON);
 	await env.DB.prepare(
-		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, null, ?, ?, 0, 0)",
+		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values (?, ?, ?, ?, null, ?, ?, ?, 0, 0)",
 	)
-		.bind(uuidv7(), acme.id, who.user.id, site, startedAt, startedAt + hours * HOUR)
+		.bind(
+			uuidv7(),
+			acme.id,
+			who.user.id,
+			site,
+			startedAt,
+			await entryDay(acme.id, who.user.id, startedAt),
+			startedAt + hours * HOUR,
+		)
 		.run();
 }
 
