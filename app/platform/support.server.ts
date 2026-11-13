@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { record } from "~/activity/activity.server";
 import { type OrganisationScope, organisationScope, platformData, users } from "~/db";
 import { nameOrEmail } from "~/organisations/people";
+import type { SupportHours } from "./limits";
 
 // Support access (TS-099, docs/security.md, "The platform console"). An
 // organisation's owner grants the platform's owners leave to read the
@@ -14,10 +15,6 @@ import { nameOrEmail } from "~/organisations/people";
 // the support view has a loader and no action. Granting, revoking and every
 // opening of the view are recorded in the organisation's activity log and in
 // the platform's.
-
-/** The lengths an owner chooses from, in hours. */
-export const SUPPORT_HOURS = [24, 72] as const;
-export type SupportHours = (typeof SUPPORT_HOURS)[number];
 
 const HOUR = 3_600_000;
 

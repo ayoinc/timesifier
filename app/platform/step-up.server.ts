@@ -8,6 +8,7 @@ import { platformData } from "~/db";
 import { required } from "~/lib/deployment";
 
 import { STEP_UP_CODE_SECONDS, stepUpCodeEmail } from "./emails";
+import { STEP_UP_ATTEMPTS, STEP_UP_HOURS, STEP_UP_SENDS } from "./limits";
 
 // The platform console's step-up (TS-099, docs/security.md, "The platform
 // console"). Signing in is not enough to open the console: each session must
@@ -16,13 +17,6 @@ import { STEP_UP_CODE_SECONDS, stepUpCodeEmail } from "./emails";
 // works once, for five minutes, against three wrong tries; a session may ask
 // for five. A proved session stays open for twelve hours at most, and ends
 // with the session.
-
-/** Wrong codes a waiting code survives. */
-export const STEP_UP_ATTEMPTS = 3;
-/** Codes one session may ask for. */
-export const STEP_UP_SENDS = 5;
-/** How long a proved session keeps the console open. */
-export const STEP_UP_HOURS = 12;
 
 const PURPOSE = "platform-step-up";
 

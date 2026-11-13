@@ -1,21 +1,13 @@
 import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 
 import type { OrganisationScope } from "~/db";
+import { LEAVE_DAYS, MINIMUM_GROUP, REGULARLY, WEEKS } from "./wellbeing";
 
 // Anonymised wellbeing signals for one organisation (TS-099). Two shares of
 // its people, shown to its owners and to nobody else, the platform included:
 // those regularly over their hours, and those who have taken no leave. No name
 // is ever shown, and below `MINIMUM_GROUP` people nothing is shown at all, so
 // that no share can point at one person.
-
-/** The fewest people a share is shown for. */
-export const MINIMUM_GROUP = 5;
-/** Weeks looked back over for hours. */
-export const WEEKS = 4;
-/** Weeks over the working week that make "regularly". */
-export const REGULARLY = 3;
-/** Days looked back over for leave. */
-export const LEAVE_DAYS = 182;
 
 const DAY = 86_400_000;
 const WEEK = 7 * DAY;
