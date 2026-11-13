@@ -503,12 +503,22 @@ test.describe("the Week view", () => {
 			.getByRole("link", { name: "Week" })
 			.click();
 		const weeks = page.getByRole("group", { name: "Weeks" });
+		const next = weeks.getByRole("link", { name: "Next week" });
+		// The address changes before the view transition draws the week that
+		// arrives, so each step waits for Next week to lead somewhere new: a press
+		// before then is on the week that is leaving.
+		let leadsTo = (await next.getAttribute("href")) ?? "";
 
 		await tabTo(page, weeks.getByRole("link", { name: "Previous week" }));
 		await page.keyboard.press("Enter");
 		await expect(page).toHaveURL(/view=week&start=\d{4}-\d{2}-\d{2}$/);
-		await weeks.getByRole("link", { name: "Next week" }).click();
-		await weeks.getByRole("link", { name: "Next week" }).click();
+		await expect(next).not.toHaveAttribute("href", leadsTo);
+		for (const step of ["this week", "next week"]) {
+			leadsTo = (await next.getAttribute("href")) ?? "";
+			await next.click();
+			await expect(next, step).not.toHaveAttribute("href", leadsTo);
+			await expect(page, step).toHaveURL((url) => `${url.pathname}${url.search}` === leadsTo);
+		}
 		await weeks.getByRole("link", { name: "Back to this week" }).click();
 		await expect(page).toHaveURL(/view=week$/);
 	});

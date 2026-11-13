@@ -77,6 +77,8 @@ for (const viewport of [
 			test.use({ viewport, chosenScheme: colorScheme });
 
 			test("Projects, empty and filled, its tabs and its sheets", async ({ page }) => {
+				// A sign-in, which can wait its turn at the mailbox, and a scan by axe of each view.
+				test.slow();
 				const slug = await ownNewOrganisation(page);
 				await openShell(page, destinationPath(slug, "projects"));
 				await expect(
@@ -114,6 +116,8 @@ for (const viewport of [
 			});
 
 			test("Clients and Workspace settings, with their sheets", async ({ page }) => {
+				// A sign-in, which can wait its turn at the mailbox, and a scan by axe of each view.
+				test.slow();
 				const slug = await ownNewOrganisation(page);
 				await openShell(page, destinationPath(slug, "clients"));
 				await expect(page.getByRole("heading", { level: 2, name: "No clients yet" })).toBeVisible();
