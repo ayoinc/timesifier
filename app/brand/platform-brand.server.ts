@@ -48,7 +48,7 @@ type Texts = Pick<PlatformBrand, "senderName" | "replyTo" | "tagline" | "emailFo
 type ImageName = "logo" | "markLight" | "markDark";
 const IMAGE_NAMES: readonly ImageName[] = ["logo", "markLight", "markDark"];
 
-/** What the platform's brand says until it is changed; migration 0018 starts the row at the same. */
+/** What the platform's brand says until it is changed; migration 0020 starts the row at the same. */
 export const PLATFORM_BRAND_DEFAULTS: Readonly<Texts> = {
 	senderName: "Timesifier",
 	replyTo: null,
