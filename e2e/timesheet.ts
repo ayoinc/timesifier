@@ -44,6 +44,8 @@ export async function workEveryDay(page: Page, slug: string) {
 	await sheet.getByRole("button", { name: "Save" }).click();
 	await expect(sheet).toBeHidden();
 	await expect(page.getByRole("status").first()).toContainText("Standard is saved, from");
+	// Seven days of 7:30 each.
+	await expect(page.getByRole("list", { name: "Schedules" })).toContainText("52:30 a week");
 	await zoneIsTheBrowsers(page, slug);
 }
 

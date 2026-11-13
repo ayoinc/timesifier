@@ -60,7 +60,6 @@ async function adaAndBob(page: Page, browser: Browser, baseURL: string | undefin
 
 	// Every day of the week is a working day here, so today is one, whatever day the test runs.
 	await workEveryDay(page, slug);
-	await expect(page.getByRole("list", { name: "Schedules" })).toContainText("52:30 a week");
 
 	await openShell(page, invitationsPath(slug));
 	await page.getByRole("button", { name: "Invite a person" }).click();
