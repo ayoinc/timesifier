@@ -13,7 +13,7 @@ const read = (path: string) => readFileSync(join(repository, path), "utf8");
 
 describe("browser specs that write to the database themselves", () => {
 	it("all run in the seeded project", () => {
-		const match = read("playwright.config.ts").match(/const SEEDS_THE_DATABASE = (\/.+\/);/);
+		const match = read("playwright.config.ts").match(/const SEEDS_THE_DATABASE =\s*(\/.+\/);/);
 		expect(match, "SEEDS_THE_DATABASE in playwright.config.ts").not.toBeNull();
 		const source = (match?.[1] ?? "").slice(1, -1);
 		const seeded = new RegExp(source);
