@@ -1,10 +1,11 @@
-import { asc, inArray, isNull } from "drizzle-orm";
+import { asc, isNull } from "drizzle-orm";
 import { Link, redirect } from "react-router";
 import * as z from "zod";
 
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
+import { among } from "~/db";
 import { ActionForm } from "~/invoices/ActionForm";
 import { BillingTabs } from "~/invoices/BillingTabs";
 import { billingOf } from "~/invoices/context.server";
@@ -16,7 +17,6 @@ import { parseMoney } from "~/money/typed";
 import { notFound } from "~/organisations/membership.server";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { formatDay } from "~/time/format";
-
 import type { Route } from "./+types/invoices.retainers";
 
 // Retainers (TS-078): money a client pays ahead and the organisation holds
@@ -57,7 +57,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const movements =
 		ids.length === 0
 			? []
-			: await scope.retainerMovements.select((m) => inArray(m.retainerId, ids), {
+			: await scope.retainerMovements.select((m) => among(m.retainerId, ids), {
 					orderBy: (m) => [asc(m.occurredOn), asc(m.createdAt)],
 				});
 	const clientName = new Map(clients.map((c) => [c.id, c.name]));

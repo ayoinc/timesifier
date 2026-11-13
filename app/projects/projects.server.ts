@@ -2,11 +2,11 @@ import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { findActiveClient } from "~/clients/clients.server";
-import { type OrganisationScope, uuidv7 } from "~/db";
+import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import type { TimeScope } from "~/organisations/access";
 
-import { among, nameHas } from "./search.server";
+import { nameHas } from "./search.server";
 
 /**
  * The projects of one organisation, as more than one destination reads them:

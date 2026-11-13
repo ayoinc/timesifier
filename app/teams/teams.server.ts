@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, uuidv7 } from "~/db";
+import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { nameKey } from "~/lib/names";
 
 /**
@@ -31,7 +31,7 @@ export async function managedPeople(
 ): Promise<Set<string>> {
 	const teams = await managedTeams(scope, userId);
 	if (teams.length === 0) return new Set();
-	const rows = await scope.teamMembers.select((t) => inArray(t.teamId, teams));
+	const rows = await scope.teamMembers.select((t) => among(t.teamId, teams));
 	return new Set(rows.map((row) => row.userId));
 }
 
@@ -49,10 +49,10 @@ export async function teamsWithMembers(
 ): Promise<TeamWithMembers[]> {
 	if (only?.length === 0) return [];
 	const [teams, places] = await Promise.all([
-		scope.teams.select((t) => (only ? inArray(t.id, [...only]) : undefined), {
+		scope.teams.select((t) => (only ? among(t.id, only) : undefined), {
 			orderBy: (t) => [asc(t.nameKey)],
 		}),
-		scope.teamMembers.select((t) => (only ? inArray(t.teamId, [...only]) : undefined)),
+		scope.teamMembers.select((t) => (only ? among(t.teamId, only) : undefined)),
 	]);
 	return teams.map((team) => ({
 		id: team.id,

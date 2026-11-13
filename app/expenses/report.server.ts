@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
-import { users } from "~/db";
+import { among, users } from "~/db";
 import { type Money, totalsByCurrency } from "~/money/money";
 import type { Membership } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
@@ -14,7 +14,6 @@ import type { Day } from "~/time/calendar";
 
 import { categoriesById } from "./categories.server";
 import { amountText, type ExpenseGrouping, expenseGrouping, quantityText } from "./expenses";
-import { among } from "./expenses.server";
 
 /**
  * The Expenses view of Reports (TS-070, B9): the expenses dated in a range,

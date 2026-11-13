@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { type OrganisationScope, users } from "~/db";
+import { among, type OrganisationScope, users } from "~/db";
 import { pricingOf } from "~/projects/money.server";
 import { rateFor, wholeMinutes } from "~/rates/price";
 import { addDays, bounds, type Day, dayOf } from "~/time/calendar";
@@ -93,7 +93,7 @@ export async function billableProjectsOf(
 		const lines = await scope.invoiceLines.select((l) =>
 			and(
 				eq(l.kind, "fixed"),
-				inArray(l.projectId, fixedIds),
+				among(l.projectId, fixedIds),
 				scope.invoices.exists((i) => and(eq(i.id, l.invoiceId), ne(i.status, "void"))),
 			),
 		);
@@ -138,7 +138,7 @@ export async function uninvoicedTime(
 	const [entries, pricing, tasks, projects] = await Promise.all([
 		scope.timeEntries.select((t) =>
 			and(
-				inArray(t.projectId, [...projectIds]),
+				among(t.projectId, projectIds),
 				eq(t.billable, true),
 				isNotNull(t.endedAt),
 				range ? gte(t.startedAt, new Date(range.from)) : undefined,
@@ -148,14 +148,19 @@ export async function uninvoicedTime(
 		),
 		pricingOf(scope, organisation.currency),
 		scope.tasks.select(),
-		scope.projects.select((p) => inArray(p.id, [...projectIds])),
+		scope.projects.select((p) => among(p.id, projectIds)),
 	]);
 	if (entries.length === 0) return [];
 
 	const people = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name, timeZone: users.timeZone })
 		.from(users)
-		.where(inArray(users.id, [...new Set(entries.map((e) => e.userId))]));
+		.where(
+			among(
+				users.id,
+				entries.map((e) => e.userId),
+			),
+		);
 	const personById = new Map(people.map((p) => [p.id, p]));
 	const taskName = new Map(tasks.map((t) => [t.id, t.name]));
 	const projectName = new Map(projects.map((p) => [p.id, p.name]));
@@ -194,7 +199,7 @@ export async function uninvoicedTime(
 	const dayList = items.map((item) => item.day).sort();
 	const approved = await scope.periods.select((p) =>
 		and(
-			inArray(p.userId, [...personById.keys()]),
+			among(p.userId, personById.keys()),
 			eq(p.status, "approved"),
 			lte(p.startsOn, dayList.at(-1) ?? ""),
 			gte(p.endsOn, dayList[0] ?? ""),
@@ -223,7 +228,7 @@ export async function uninvoicedExpenses(
 	const [rows, categories, projects] = await Promise.all([
 		scope.expenses.select((x) =>
 			and(
-				inArray(x.projectId, [...projectIds]),
+				among(x.projectId, projectIds),
 				eq(x.billable, true),
 				days ? gte(x.spentOn, days.first) : undefined,
 				lte(x.spentOn, days ? days.last : today),
@@ -231,7 +236,7 @@ export async function uninvoicedExpenses(
 			),
 		),
 		scope.expenseCategories.select(),
-		scope.projects.select((p) => inArray(p.id, [...projectIds])),
+		scope.projects.select((p) => among(p.id, projectIds)),
 	]);
 	const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 	const projectName = new Map(projects.map((p) => [p.id, p.name]));

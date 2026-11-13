@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
-import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { and, eq, isNotNull, ne } from "drizzle-orm";
 
-import { organisationScope, platformData } from "~/db";
+import { among, organisationScope, platformData } from "~/db";
 import { deleteReceipt } from "~/expenses/receipts.server";
 
 // Deleting an account on request (TS-099, docs/decisions.md entry 36). The
@@ -37,16 +37,16 @@ async function deletePersonReceipts(organisationId: string, userId: string): Pro
 	);
 	if (expenses.length === 0) return 0;
 	const ids = expenses.map((e) => e.id);
-	const sources = await scope.invoiceLineSources.select((s) => inArray(s.expenseId, ids));
+	const sources = await scope.invoiceLineSources.select((s) => among(s.expenseId, ids));
 	const lineIds = [...new Set(sources.map((s) => s.lineId))];
 	const lines =
-		lineIds.length === 0 ? [] : await scope.invoiceLines.select((l) => inArray(l.id, lineIds));
+		lineIds.length === 0 ? [] : await scope.invoiceLines.select((l) => among(l.id, lineIds));
 	const invoiceIds = [...new Set(lines.map((l) => l.invoiceId))];
 	const issued = new Set(
 		invoiceIds.length === 0
 			? []
 			: (
-					await scope.invoices.select((i) => and(inArray(i.id, invoiceIds), ne(i.status, "draft")))
+					await scope.invoices.select((i) => and(among(i.id, invoiceIds), ne(i.status, "draft")))
 				).map((i) => i.id),
 	);
 	const issuedLines = new Set(lines.filter((l) => issued.has(l.invoiceId)).map((l) => l.id));
@@ -60,7 +60,7 @@ async function deletePersonReceipts(organisationId: string, userId: string): Pro
 	if (going.length > 0) {
 		await scope.expenses.update(
 			{ receiptKey: null, receiptName: null, receiptType: null, updatedAt: new Date() },
-			(e) => inArray(e.id, going),
+			(e) => among(e.id, going),
 		);
 	}
 	return going.length;

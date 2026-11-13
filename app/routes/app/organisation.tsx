@@ -4,7 +4,6 @@ import { Link, Outlet, useParams } from "react-router";
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
 import { logoPath } from "~/brand/paths";
 import { organisationCountOf } from "~/db";
-import { pendingLeaveOf } from "~/leave/leave.server";
 import { maySeeRates } from "~/organisations/access";
 import {
 	membershipContext,
@@ -98,9 +97,8 @@ export function meta({ error }: Route.MetaArgs) {
 export async function loader({ context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { organisation, role } = membership;
-	const [periods, leave, timer, organisationCount] = await Promise.all([
+	const [pendingApprovals, timer, organisationCount] = await Promise.all([
 		pendingApprovalsOf(membership),
-		pendingLeaveOf(membership),
 		navigationTimer(membership),
 		organisationCountOf(env.DB, membership.user.id),
 	]);
@@ -118,7 +116,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		 * What waits for this person's decision, for the Approvals link: the
 		 * periods (TS-047) and the requests for leave (TS-061).
 		 */
-		pendingApprovals: periods === null ? null : periods + (leave ?? 0),
+		pendingApprovals,
 		timer,
 		/** For "My time report" in the profile menu: Reports with this person's time. */
 		userId: membership.user.id,

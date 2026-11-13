@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { type OrganisationScope, organisationScope, organisations, users } from "~/db";
+import { among, type OrganisationScope, organisationScope, organisations, users } from "~/db";
 import type { Access } from "~/organisations/access";
 import { Role } from "~/organisations/roles";
 import type { Viewer } from "~/shell/destinations";
@@ -72,7 +72,7 @@ export async function callerOf(organisationId: string, userId: string): Promise<
 	if (!organisation || !user || !role.success) return null;
 	const managed = managing.filter((place) => place.isManager).map((place) => place.teamId);
 	const people =
-		managed.length === 0 ? [] : await scope.teamMembers.select((t) => inArray(t.teamId, managed));
+		managed.length === 0 ? [] : await scope.teamMembers.select((t) => among(t.teamId, managed));
 	return {
 		scope,
 		organisation,

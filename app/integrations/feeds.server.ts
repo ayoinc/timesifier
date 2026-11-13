@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { keyedHash } from "~/auth/keyed-hash.server";
-import { calendarFeedByHash, type OrganisationScope, organisationScope, users } from "~/db";
+import { among, calendarFeedByHash, type OrganisationScope, organisationScope, users } from "~/db";
 import { halfDaysTaken, leaveMinutes } from "~/leave/days";
 import { halfDaysLabel } from "~/leave/kinds";
 import { calendarOf, leaveContext } from "~/leave/leave.server";
@@ -66,7 +66,7 @@ export async function listFeeds(scope: OrganisationScope, userId: string) {
 export async function teamsToFollow(scope: OrganisationScope, userId: string) {
 	const managed = await managedTeams(scope, userId);
 	if (managed.length === 0) return [];
-	const teams = await scope.teams.select((t) => inArray(t.id, managed), {
+	const teams = await scope.teams.select((t) => among(t.id, managed), {
 		orderBy: (t) => [t.name],
 	});
 	return teams.map((team) => ({ id: team.id, name: team.name }));
@@ -230,7 +230,7 @@ function halfDays(request: { startsHalf: boolean; endsHalf: boolean }) {
 function approvedLeave(scope: OrganisationScope, people: string[], from: string) {
 	if (people.length === 0) return Promise.resolve([]);
 	return scope.leaveRequests.select(
-		(l) => and(inArray(l.userId, people), eq(l.status, "approved"), gte(l.endsOn, from)),
+		(l) => and(among(l.userId, people), eq(l.status, "approved"), gte(l.endsOn, from)),
 		{ orderBy: (l) => [l.startsOn] },
 	);
 }
@@ -240,6 +240,6 @@ async function namesOf(ids: string[]) {
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name })
 		.from(users)
-		.where(inArray(users.id, ids));
+		.where(among(users.id, ids));
 	return new Map(rows.map((row) => [row.id, row.name]));
 }

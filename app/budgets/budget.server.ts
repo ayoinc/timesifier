@@ -5,7 +5,7 @@ import { sendEmail } from "~/auth/email.server";
 import { compose, type PlatformLook } from "~/auth/email-frame";
 import { billableMinuteMinor } from "~/billing/billable";
 import { getPlatformBrand } from "~/brand/platform-brand.server";
-import { type OrganisationScope, users } from "~/db";
+import { among, type OrganisationScope, users } from "~/db";
 import { roundHalfUp } from "~/money/money";
 import type { OrganisationMoney, Pricing } from "~/projects/money.server";
 import { priceTime, wholeMinutes } from "~/rates/price";
@@ -293,11 +293,11 @@ async function alertRecipients(
 		);
 		const people = tracked.map(({ key }) => key);
 		if (people.length > 0) {
-			const places = await scope.teamMembers.select((t) => inArray(t.userId, people.slice(0, 90)));
+			const places = await scope.teamMembers.select((t) => among(t.userId, people));
 			const teamIds = [...new Set(places.map((t) => t.teamId))];
 			if (teamIds.length > 0) {
 				const managers = await scope.teamMembers.select((t) =>
-					and(inArray(t.teamId, teamIds.slice(0, 90)), eq(t.isManager, true)),
+					and(among(t.teamId, teamIds), eq(t.isManager, true)),
 				);
 				for (const manager of managers) ids.add(manager.userId);
 			}
@@ -307,7 +307,7 @@ async function alertRecipients(
 	const rows = await drizzle(env.DB)
 		.select({ email: users.email })
 		.from(users)
-		.where(inArray(users.id, [...ids].slice(0, 90)));
+		.where(among(users.id, ids));
 	return rows.map((row) => row.email).sort();
 }
 

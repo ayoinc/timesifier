@@ -17,8 +17,3 @@ import { nameKey } from "~/lib/names";
 export function nameHas(column: SQLiteColumn, typed: string): SQL {
 	return sql`instr(${column}, ${nameKey(typed)}) > 0`;
 }
-
-/** `column` is one of `values`, as one bound parameter however many they are. */
-export function among(column: SQLiteColumn, values: readonly string[]): SQL {
-	return sql`${column} in (select value from json_each(${JSON.stringify(values)}))`;
-}

@@ -1,4 +1,4 @@
-import { desc, inArray } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { Link, useNavigate } from "react-router";
 
 import { Button } from "~/components/Button";
@@ -6,6 +6,7 @@ import { cx } from "~/components/cx";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Select } from "~/components/Select";
+import { among } from "~/db";
 import { BillingTabs } from "~/invoices/BillingTabs";
 import { billingOf } from "~/invoices/context.server";
 import { settledOf } from "~/invoices/invoices.server";
@@ -17,7 +18,6 @@ import { destination } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { formatDay } from "~/time/format";
-
 import type { Route } from "./+types/invoices";
 
 // Invoices (TS-073, TS-074): what the organisation charges its clients, with
@@ -55,7 +55,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const show: Shown = SHOWN.find((each) => each === asked) ?? "open";
 	const statuses = STATUSES[show];
 	const [rows, clients, receivables, any] = await Promise.all([
-		scope.invoices.select((i) => (statuses ? inArray(i.status, [...statuses]) : undefined), {
+		scope.invoices.select((i) => (statuses ? among(i.status, statuses) : undefined), {
 			orderBy: (i) => [desc(i.issuedOn), desc(i.createdAt)],
 		}),
 		scope.clients.select(),

@@ -1,11 +1,9 @@
-import { inArray } from "drizzle-orm";
 import * as z from "zod";
 
-import type { OrganisationScope } from "~/db";
+import { among, type OrganisationScope } from "~/db";
 import { type Money, totalsByCurrency } from "~/money/money";
 import { moneyText } from "~/money/typed";
 import { addDays, Day } from "~/time/calendar";
-
 import { agedOf, invoicedIn, openInvoicesOf, paymentsIn } from "./receivables.server";
 import { AGE_LABELS, type Age } from "./status";
 
@@ -86,7 +84,7 @@ export async function billingReportOf(
 	} else if (report === "payments") {
 		const payments = await paymentsIn(scope, days);
 		const ids = [...new Set(payments.map((p) => p.invoiceId))];
-		const invoices = ids.length === 0 ? [] : await scope.invoices.select((i) => inArray(i.id, ids));
+		const invoices = ids.length === 0 ? [] : await scope.invoices.select((i) => among(i.id, ids));
 		const invoiceOf = new Map(invoices.map((i) => [i.id, i]));
 		rows = payments.flatMap((payment) => {
 			const invoice = invoiceOf.get(payment.invoiceId);
