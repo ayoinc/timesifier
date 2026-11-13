@@ -9,7 +9,7 @@ import {
 	seedMembership,
 	value,
 } from "../organisations/harness";
-import { open, type Person, pageBody, person, submit, textOf } from "../pages/harness";
+import { open, openData, type Person, pageBody, person, submit, textOf } from "../pages/harness";
 import { platformOwner } from "./harness";
 
 // Accounts in the platform console (TS-099): the list, one account's page,
@@ -64,6 +64,19 @@ describe("the list of accounts", () => {
 		expect(textOf(found)).toContain("ada@example.com");
 		expect(textOf(found)).not.toContain("root@timesifier.example");
 		expect(found).toContain(`href="/platform/accounts/${ada.user.id}"`);
+	});
+
+	it("finds an account by a whole long address, in any letter case", async () => {
+		// D1 refuses a LIKE pattern over 50 bytes; a whole address often is.
+		const long = "ada-a6da3b29-5040-4e84-ab03-c9d5c9beb1b5@example.com";
+		const somebody = await person(mailbox, long);
+		const query = encodeURIComponent(long.toUpperCase());
+		const response = await open(`/platform/accounts?q=${query}`, root);
+		expect(response.status).toBe(200);
+		const found = await pageBody(response);
+		expect(found).toContain(`href="/platform/accounts/${somebody.user.id}"`);
+		expect(textOf(found)).not.toContain("root@timesifier.example");
+		expect((await openData(`/platform/accounts?q=${query}`, root)).status).toBe(200);
 	});
 
 	it("is the same 404 to anyone who is not a platform owner", async () => {

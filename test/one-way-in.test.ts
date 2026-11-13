@@ -165,7 +165,7 @@ describe("the words", () => {
 		const box = inputs.find((input) => /type="checkbox"/.test(input));
 		expect(box).toMatch(/name="newsletter"/);
 		expect(box).not.toMatch(/\bchecked\b/);
-		expect(text).toContain("New here? Email me the Timesifier newsletter.");
+		expect(text).toContain("New here? Send me the Timesifier newsletter.");
 		// Where script does not run, the page says so.
 		expect(html).toMatch(/<noscript>.*Signing in needs JavaScript\..*<\/noscript>/s);
 	});
