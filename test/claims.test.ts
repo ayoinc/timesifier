@@ -289,6 +289,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 			"an invoice or an estimate, as a PDF, to the billing contacts of a client",
 			"a reminder of an overdue invoice, with its PDF, to the client's billing contacts",
 		],
+		"../app/platform/brand.server.ts": [
+			"a test of Timesifier's brand, to the platform owner who asked for it",
+		],
 		"../app/platform/mail.server.ts": [
 			"a product announcement, to every account that has not turned them off, and the newsletter, to those who asked for it",
 		],
