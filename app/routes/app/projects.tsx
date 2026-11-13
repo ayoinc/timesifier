@@ -1,6 +1,11 @@
 import { env } from "cloudflare:workers";
-import { useState } from "react";
-import { Link, type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
+import { useEffect, useState } from "react";
+import {
+	Link,
+	type ShouldRevalidateFunctionArgs,
+	useRevalidator,
+	useSearchParams,
+} from "react-router";
 import * as z from "zod";
 
 import { activeClients } from "~/clients/clients.server";
@@ -12,7 +17,7 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
-import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
+import { nameKey, RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import {
 	mayManageClients,
@@ -30,7 +35,9 @@ import {
 	groupedByClient,
 	keptTab,
 	NO_CLIENT,
+	onlySearchChanged,
 	onlyTabChanged,
+	projectMatches,
 	projectPath,
 	SEARCH_PARAM,
 	searchIn,
@@ -47,6 +54,7 @@ import { hoursAndMinutes } from "~/reports/format";
 import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { onlyQueryMoved } from "~/shell/revalidation";
 
 import type { Route } from "./+types/projects";
 import { FormSheet } from "./FormSheet";
@@ -104,14 +112,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	};
 }
 
-/** Moving between the tabs reads nothing again: the loader sent both lists. */
-export function shouldRevalidate({
-	currentUrl,
-	nextUrl,
-	formMethod,
-	defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
+/**
+ * Moving between the tabs reads nothing again: the loader sent both lists. Nor
+ * does a search typed with script (TS-114): the page filters the list it holds
+ * with each key, and asks again itself when the words no longer narrow the
+ * ones it was sent (`useRevalidator` in the page).
+ */
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+	const { currentUrl, nextUrl, formMethod, defaultShouldRevalidate } = args;
 	if (!formMethod && onlyTabChanged(currentUrl, nextUrl)) return false;
+	if (onlyQueryMoved(args) && onlySearchChanged(currentUrl, nextUrl)) return false;
 	return defaultShouldRevalidate;
 }
 
@@ -200,8 +210,21 @@ const HOURS_SAID: Record<HoursOf, string> = {
 };
 
 export default function Projects({ loaderData }: Route.ComponentProps) {
-	const { projects, clients, givesClients, query, showsClients, hoursOf } = loaderData;
+	const { clients, givesClients, showsClients, hoursOf } = loaderData;
 	const organisation = useOrganisation();
+	const [search] = useSearchParams();
+	// The words in the address, which the field writes with each key. The list
+	// the server sent is filtered here while they narrow the words it was sent
+	// for; words that do not are asked of the server.
+	const query = searchIn(search);
+	const narrows = nameKey(query).includes(nameKey(loaderData.query));
+	const { revalidate, state } = useRevalidator();
+	useEffect(() => {
+		if (!narrows && state === "idle") void revalidate();
+	}, [narrows, state, revalidate]);
+	const projects = narrows
+		? loaderData.projects.filter((each) => projectMatches(each, query, showsClients))
+		: loaderData.projects;
 
 	const [task, setTask] = useState<Task | null>(null);
 	// Which project the open sheet is about. Kept after it closes, so the sheet
@@ -209,7 +232,6 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 	const [project, setProject] = useState<Project | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
-	const [search] = useSearchParams();
 
 	const create = <Button onPress={() => setTask("create")}>Create project</Button>;
 
@@ -336,6 +358,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 								<FilterField
 									label={showsClients ? "Search projects or clients" : "Search projects"}
 									param={SEARCH_PARAM}
+									live
 								/>
 							</FilterBar>
 						</div>

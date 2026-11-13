@@ -14,6 +14,7 @@ import { finishRunningTransition } from "~/shell/transitions";
 import { TrackChoicesContext } from "~/tasks/track";
 import { trackChoices } from "~/tasks/track.server";
 import { timesheetAction } from "~/timesheet/actions.server";
+import { aimOfData, stepsAround, useAim, useWarmNeighbours } from "~/timesheet/aim";
 import { CalendarView } from "~/timesheet/CalendarView";
 import { DayView } from "~/timesheet/DayView";
 import { markCookie, readMarks } from "~/timesheet/getting-started.server";
@@ -55,24 +56,33 @@ export async function loader({ request, url, context }: Route.LoaderArgs) {
 	const chosen = chosenView(url.searchParams, membership.organisation.weekStartsOn);
 	const cookie = request.headers.get("Cookie");
 	const marks = readMarks(cookie, membership.user.id);
-	const sheet = await timesheetData(membership, chosen, Date.now(), marks);
-	const shown = "entries" in sheet ? sheet.entries.map((e) => e.id) : [];
+	const now = Date.now();
+	// The view and what Track time offers are read side by side (TS-114): the
+	// choices wait for the view only for the ids of the entries it shows.
+	const reading = timesheetData(membership, chosen, now, marks);
+	const [sheet, track] = await Promise.all([
+		reading,
+		// The tasks, tags and budget warnings Track time and an entry's sheet offer (TS-066, TS-085, TS-069).
+		trackChoices(
+			organisationScope(env.DB, membership.organisation.id),
+			membership,
+			reading.then((read) => ("entries" in read ? read.entries.map((e) => e.id) : [])),
+			now,
+		),
+	]);
 	const page = {
 		welcome: url.searchParams.has(WELCOME_PARAM) && membership.role === "owner",
 		data: sheet,
-		// The tasks, tags and budget warnings Track time and an entry's sheet offer (TS-066, TS-085, TS-069).
-		track: await trackChoices(
-			organisationScope(env.DB, membership.organisation.id),
-			membership,
-			shown,
-			Date.now(),
-		),
+		track,
 	};
 	if (chosen.view !== "week" || marks.week) return page;
 	return data(page, {
 		headers: { "Set-Cookie": markCookie(cookie, membership.user.id, "week") },
 	});
 }
+
+/** The Timesheet's answer: what its page draws, and what the reads of its neighbours keep (`timesheet/aim.ts`). */
+export type TimesheetAnswer = Route.ComponentProps["loaderData"];
 
 /** Track time, the timer's Stop, entries by hand, a cell of the grid, a week's submission and getting started (`timesheet/actions.server.ts`). */
 export async function action({ request, context }: Route.ActionArgs) {
@@ -85,8 +95,18 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function Timesheet({ loaderData }: Route.ComponentProps) {
-	const { data } = loaderData;
 	const organisation = useOrganisation();
+	const { slug } = organisation;
+	const loaded = loaderData.data;
+	// A press on a step or a tab is answered before the server answers it: from
+	// the answer kept for its address, or else by its label alone (`timesheet/aim.ts`).
+	const { aim, held } = useAim(slug, loaded.today, loaded.weekStartsOn);
+	const page = held ?? loaderData;
+	const { data } = page;
+	const here = aimOfData(loaded);
+	const steps = here.view === "history" ? null : stepsAround(slug, here, loaded.weekStartsOn);
+	useWarmNeighbours(loaderData, steps ? [steps.previous, steps.next] : []);
+	const shownView = aim?.view ?? data.view;
 	// The moment is marked once. The mark comes off the address at once, so that
 	// reloading the page or coming back to it does not mark it again, and the
 	// welcome stays until the person leaves the page.
@@ -117,11 +137,12 @@ export default function Timesheet({ loaderData }: Route.ComponentProps) {
 			)}
 
 			{/* The views, as links: each is an address of its own. A group, not a
-			    landmark: the shell has one navigation landmark, the main one. */}
+			    landmark: the shell has one navigation landmark, the main one. The
+			    tab pressed is the current one from the press, before the server answers. */}
 			<fieldset className="mt-6 flex max-w-200 border-b border-outline-variant">
 				<legend className="sr-only">Timesheet views</legend>
 				{VIEWS.map((view) => {
-					const isCurrent = data.view === view;
+					const isCurrent = shownView === view;
 					return (
 						<Link
 							key={view}
@@ -145,11 +166,11 @@ export default function Timesheet({ loaderData }: Route.ComponentProps) {
 				})}
 			</fieldset>
 
-			<TrackChoicesContext value={loaderData.track}>
-				{data.view === "day" && <DayView data={data} slug={organisation.slug} />}
-				{data.view === "week" && <WeekView data={data} slug={organisation.slug} />}
-				{data.view === "calendar" && <CalendarView data={data} slug={organisation.slug} />}
-				{data.view === "history" && <HistoryView data={data} slug={organisation.slug} />}
+			<TrackChoicesContext value={page.track}>
+				{data.view === "day" && <DayView data={data} slug={slug} aim={aim} />}
+				{data.view === "week" && <WeekView data={data} slug={slug} aim={aim} />}
+				{data.view === "calendar" && <CalendarView data={data} slug={slug} aim={aim} />}
+				{data.view === "history" && <HistoryView data={data} slug={slug} aim={aim} />}
 			</TrackChoicesContext>
 		</>
 	);

@@ -16,7 +16,8 @@ import { TextField } from "./TextField";
 
 // A list's filters: a search form that applies itself. There is no Apply button
 // for anyone with JavaScript: a field applies 300ms after typing stops and at
-// once on Enter, a Select as soon as it changes. Without JavaScript the form is
+// once on Enter, a Select as soon as it changes; a field over a list the page
+// already holds applies with each key (`live`). Without JavaScript the form is
 // a plain GET form with an Apply button in <noscript>.
 
 /** How long a field waits after the last keystroke before it applies. */
@@ -92,6 +93,12 @@ export interface FilterFieldProps {
 	label: string;
 	/** The query parameter it writes: "q". */
 	param: string;
+	/**
+	 * Applies with each key, not after typing stops: for a list the page holds
+	 * whole and filters itself, whose route reads nothing again when only this
+	 * parameter changes (TS-114).
+	 */
+	live?: boolean;
 }
 
 /**
@@ -99,7 +106,7 @@ export interface FilterFieldProps {
  * link to a filtered list show what is applied. A Clear button appears while it
  * holds something; it empties the field and applies at once.
  */
-export function FilterField({ label, param }: FilterFieldProps) {
+export function FilterField({ label, param, live = false }: FilterFieldProps) {
 	const apply = useApplyFilters();
 	const [params] = useSearchParams();
 	const applied = params.get(param) ?? "";
@@ -129,7 +136,8 @@ export function FilterField({ label, param }: FilterFieldProps) {
 					onChange={(next) => {
 						setValue(next);
 						clearTimeout(timer.current);
-						timer.current = setTimeout(apply, DEBOUNCE_MS);
+						// Applied once React has written the new value into the input.
+						timer.current = setTimeout(apply, live ? 0 : DEBOUNCE_MS);
 					}}
 					onKeyDown={(event) => {
 						if (event.key === "Enter") {

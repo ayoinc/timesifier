@@ -707,6 +707,18 @@ html {
 }
 
 /*
+ * What a press on the Timesheet is replacing (TS-114, app/timesheet/aim.ts): a
+ * step or a view tab whose answer the page does not hold yet. The stepper and
+ * the tab already say what is coming; the content they replace dims to the
+ * skeleton's lightest, at once, until the answer takes its place. Opacity
+ * alone, so with reduced motion it is the same.
+ */
+.awaiting {
+	opacity: 0.55;
+	transition: opacity var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+}
+
+/*
  * A shape that holds the place of something on its way (app/components/Skeleton.tsx):
  * it breathes, slowly, between full and a little more than half its strength.
  * With reduced motion it stands still.
@@ -807,4 +819,15 @@ html {
 	from {
 		translate: 0 calc(var(--md-sys-spacing-unit) * 2);
 	}
+}
+
+/*
+ * Escape dismisses at once (app/components/motion.ts, `settleOnEscape`): while
+ * the document carries the mark, nothing transitions, so what closes is gone in
+ * the next frame and the control the focus returns to takes its state at once.
+ */
+:root[data-escaping] *,
+:root[data-escaping] *::before,
+:root[data-escaping] *::after {
+	transition: none;
 }

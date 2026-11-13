@@ -19,16 +19,21 @@ import type { TrackChoices } from "./track";
 export async function trackChoices(
 	scope: OrganisationScope,
 	membership: Membership,
-	shownEntryIds: readonly string[],
+	shownEntryIds: readonly string[] | Promise<readonly string[]>,
 	now: number,
 ): Promise<TrackChoices> {
+	// The entries shown may still be on their way: the Timesheet reads them
+	// beside these (TS-114), and only the two reads of the entries wait for them.
+	const shown = Promise.resolve(shownEntryIds);
 	const [byProject, tags, overBudget, entries, entryTags, recent, withClient, clients] =
 		await Promise.all([
 			tasksOfProjects(scope),
 			tagOptions(scope),
 			warnedOverBudget(scope, membership, now),
-			shownEntryIds.length === 0 ? [] : scope.timeEntries.select((e) => among(e.id, shownEntryIds)),
-			tagsOfEntries(scope, shownEntryIds),
+			shown.then((ids) =>
+				ids.length === 0 ? [] : scope.timeEntries.select((e) => among(e.id, ids)),
+			),
+			shown.then((ids) => tagsOfEntries(scope, ids)),
 			recentProjectIds(scope, membership.user.id),
 			scope.projects.select((p) => and(isNull(p.archivedAt), isNotNull(p.clientId))),
 			scope.clients.select(),
