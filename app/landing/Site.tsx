@@ -18,6 +18,13 @@ import "./public.css";
 export const PRIVACY_PATH = "/privacy";
 export const TERMS_PATH = "/terms";
 
+/**
+ * Every page anyone may open without an account, in the order the sitemap lists
+ * them (routes/sitemap.ts). Each carries `pageMeta`, so its canonical address and
+ * description; test/claims.test.ts holds the list to the pages that exist.
+ */
+export const PUBLIC_PAGES = ["/", SIGN_IN_PATH, PRIVACY_PATH, TERMS_PATH] as const;
+
 /** Where a person writes about their data until the controls are in the product. */
 export const PRIVACY_EMAIL = "privacy@timesifier.com";
 
@@ -39,10 +46,12 @@ export const SOCIAL_IMAGE = {
 };
 
 /**
- * A public page's title and description, for the browser and for wherever its
- * link is shared (Open Graph and the tags X reads). A preview of a page shared
- * elsewhere has to name its image in full, so the page's own origin comes from
- * the root loader (`rootOrigin`): no host is written in the code.
+ * A public page's title and description, for the browser, for search engines
+ * (the canonical address: one address per page, whatever query it was opened
+ * with) and for wherever its link is shared (Open Graph and the tags X reads).
+ * A preview of a page shared elsewhere has to name its image in full, so the
+ * page's own origin comes from the root loader (`rootOrigin`): no host is
+ * written in the code.
  */
 export function pageMeta({
 	origin,
@@ -56,12 +65,14 @@ export function pageMeta({
 	description: string;
 }) {
 	const image = `${origin}${SOCIAL_IMAGE.path}`;
+	const url = `${origin}${path}`;
 	return [
 		{ title },
 		{ name: "description", content: description },
+		{ tagName: "link", rel: "canonical", href: url },
 		{ property: "og:type", content: "website" },
 		{ property: "og:site_name", content: "Timesifier" },
-		{ property: "og:url", content: `${origin}${path}` },
+		{ property: "og:url", content: url },
 		{ property: "og:title", content: title },
 		{ property: "og:description", content: description },
 		{ property: "og:image", content: image },
