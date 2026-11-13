@@ -3,14 +3,14 @@ import { env } from "cloudflare:workers";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { platformData } from "~/db";
 import { consoleDay } from "~/platform/console-words";
-import { capLeft, DAILY_MAIL_CAP } from "~/platform/mail.server";
+import { DAILY_MAIL_CAP } from "~/platform/limits";
+import { capLeft } from "~/platform/mail.server";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
-
 import type { Route } from "./+types/health";
 
 // The console's first page (TS-099): how the platform is doing, in counts
-// alone. Accounts and sign-ups, people active lately, how many of a month's
-// sign-ups came back, organisations, and the day's mail against its cap.
+// alone. Accounts and new accounts, people active lately, how many of a
+// month's new accounts came back, organisations, and the day's mail against its cap.
 
 const HEADING = "Health";
 
@@ -73,8 +73,8 @@ export default function Health({ loaderData }: Route.ComponentProps) {
 			</Section>
 
 			<Section
-				id="sign-ups"
-				heading="Sign-ups by week"
+				id="new-accounts"
+				heading="New accounts by week"
 				lead="New accounts in each of the last eight weeks, oldest first."
 			>
 				<Ledger heading="Weeks">

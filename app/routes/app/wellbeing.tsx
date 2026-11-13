@@ -4,14 +4,8 @@ import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { organisationScope } from "~/db";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
-import {
-	LEAVE_DAYS,
-	MINIMUM_GROUP,
-	REGULARLY,
-	WEEKS,
-	wellbeingSignals,
-} from "~/wellbeing/wellbeing.server";
-
+import { LEAVE_DAYS, MINIMUM_GROUP, REGULARLY, WEEKS } from "~/wellbeing/wellbeing";
+import { wellbeingSignals } from "~/wellbeing/wellbeing.server";
 import type { Route } from "./+types/wellbeing";
 
 // Wellbeing (TS-099): two rough shares of the organisation's people, for its

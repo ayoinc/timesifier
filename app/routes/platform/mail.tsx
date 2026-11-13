@@ -30,10 +30,10 @@ import type { Outcome } from "~/organisations/problems";
 import { consoleMoment } from "~/platform/console-words";
 import { MAIL_KIND_LABELS, type MailKind, mailingEmail } from "~/platform/emails";
 import { platformOwnerContext } from "~/platform/guard.server";
-import { DAILY_MAIL_CAP, MAIL_BATCH, mailOrigin, unsubscribePath } from "~/platform/mail.server";
+import { DAILY_MAIL_CAP, MAIL_BATCH } from "~/platform/limits";
+import { mailOrigin, unsubscribePath } from "~/platform/mail.server";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
-
 import type { Route } from "./+types/mail";
 
 // Mail to account holders in the platform console (TS-099, decision 36). A

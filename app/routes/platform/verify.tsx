@@ -11,16 +11,15 @@ import { declined, done } from "~/organisations/outcome.server";
 import type { Outcome } from "~/organisations/problems";
 import { STEP_UP_CODE_SECONDS } from "~/platform/emails";
 import { platformOwnerContext } from "~/platform/guard.server";
+import { STEP_UP_ATTEMPTS } from "~/platform/limits";
 import { safeConsoleNext } from "~/platform/paths";
 import {
 	isSteppedUp,
 	proveStepUp,
-	STEP_UP_ATTEMPTS,
 	type StepUpOutcome,
 	sendStepUpCode,
 } from "~/platform/step-up.server";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
-
 import type { Route } from "./+types/verify";
 
 // The step-up (TS-099, docs/security.md, "The platform console"): before the

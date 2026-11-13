@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
-import { MINIMUM_GROUP } from "~/wellbeing/wellbeing.server";
+import { MINIMUM_GROUP } from "~/wellbeing/wellbeing";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {

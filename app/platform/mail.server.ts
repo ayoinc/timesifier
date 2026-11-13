@@ -7,6 +7,7 @@ import { platformData } from "~/db";
 import { required, setting } from "~/lib/deployment";
 
 import { type MailKind, mailingEmail } from "./emails";
+import { DAILY_MAIL_CAP, MAIL_BATCH } from "./limits";
 
 // Mail to account holders (TS-099). A platform owner writes a mailing; one
 // waiting delivery is made for each person it goes to; the scheduled work
@@ -15,11 +16,6 @@ import { type MailKind, mailingEmail } from "./emails";
 // was closed since. Every message carries a signed link that turns its kind
 // off in one press, with the headers that let a mail program do the same
 // (RFC 8058); the link needs no session.
-
-/** The most mailing messages sent in one day (UTC), whatever is waiting. */
-export const DAILY_MAIL_CAP = 1000;
-/** The most sent in one run of the scheduled work: one a minute, kept under a Worker's limits. */
-export const MAIL_BATCH = 40;
 
 const PURPOSE = "unsubscribe";
 

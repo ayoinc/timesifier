@@ -488,11 +488,11 @@ Decided by the owner on 2026-11-12 (TS-099).
 - **Deleting an account on request.** The person's own data goes: name and address (the `users` row stays as "Deleted person" at `<id>@deleted.invalid`), sessions, sign-in history, mail choices, memberships and what hangs on them, invitations they sent; an organisation they were alone in goes with them. The organisations' records stay: time entries and expenses keep their `user_id` and amounts so reports, invoices and payroll still add up. Receipts of the person's expenses are deleted from R2 and from the expense unless the expense is on an issued (non-draft) invoice. Refused while the person is the only owner of an organisation with other members. A person's data export is a ZIP of JSON and CSV the person downloads themselves; the platform can only send them the link.
 - **Wellbeing.** Two anonymised shares per organisation, shown to its owners only and never to the platform: people over the working week in 3 of the last 4 weeks, and people with no approved leave in 182 days; rounded to 10%, hidden below 5 people.
 
-| Option                                      | Evidence                                                                                                                         |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Option                                      | Evidence                                                                                                                          |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Allowlist secret plus step-up (chosen)      | Nothing the application or a copy of the database does makes somebody an owner; a stolen session alone does not open the console. |
-| A `platform_role` column on `users`         | One write to the database makes an owner; an injection or a support slip escalates to every organisation.                        |
-| Platform owners read organisations directly | Simplest, and what the owner refused: an organisation's data is its own unless it grants access.                                 |
+| A `platform_role` column on `users`         | One write to the database makes an owner; an injection or a support slip escalates to every organisation.                         |
+| Platform owners read organisations directly | Simplest, and what the owner refused: an organisation's data is its own unless it grants access.                                  |
 
 ### 38. The brand everywhere: images attached to the message, documents in the organisation's name
 
