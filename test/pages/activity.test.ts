@@ -33,6 +33,9 @@ beforeEach(async () => {
 	mailbox = captureEmail();
 	ada = await person(mailbox, "ada@example.com");
 	acme = await createOrganisation(ada.cookie, "Acme");
+	// The log these tests read starts after the organisation was made, with the
+	// system's records of its usual expense categories (TS-119).
+	await env.DB.prepare("delete from activity_records").run();
 	await env.DB.prepare("update users set name = 'Ada Lovelace' where id = ?")
 		.bind(ada.user.id)
 		.run();
