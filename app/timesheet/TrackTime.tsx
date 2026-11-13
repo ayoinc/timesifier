@@ -182,12 +182,13 @@ function TrackTimeSheet({
 	// whole one.
 	const asked = /^\d{4}-\d{2}-\d{2}$/.test(date) ? (date as Day) : undefined;
 	const held = heldDay(page, asked);
-	const holds = held !== undefined;
+	// Whether the page holds the day and its answer is younger than the refresh. A
+	// yes or no, not a time, so the read below runs once for each change of it.
+	const heldRecently = held !== undefined && Date.now() - heldAt <= REFRESH_EVERY_MS;
 	useEffect(() => {
-		if (!isOpen) return;
-		if (holds && Date.now() - heldAt <= REFRESH_EVERY_MS) return;
+		if (!isOpen || heldRecently) return;
 		load(trackDayPath(slug, asked));
-	}, [isOpen, slug, asked, load, holds, heldAt]);
+	}, [isOpen, slug, asked, load, heldRecently]);
 
 	const fetched =
 		fetcher.data && (asked === undefined || fetcher.data.day === asked) ? fetcher.data : undefined;
