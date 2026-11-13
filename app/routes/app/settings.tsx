@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { redirect, useFetcher } from "react-router";
 import * as z from "zod";
 
+import { BrandSettings } from "~/brand/BrandSettings";
+import { BRAND_FORMS, brandAction, brandData, SETTINGS_MAX_BYTES } from "~/brand/settings.server";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Radio, RadioGroup } from "~/components/Radio";
@@ -72,7 +74,9 @@ import { FormSheet } from "./FormSheet";
 // kinds of leave with their allowances and notice, and the public holidays,
 // which apply to everyone in the organisation (TS-061), then the timesheet
 // rules: overtime, weekend work and short-notice leave (TS-090), then the
-// expense categories (TS-070). The person's own account is on My account.
+// expense categories (TS-070). Brand, under General, holds the logo and colour
+// that lead the documents the organisation sends (TS-100). The person's own
+// account is on My account.
 
 const { label } = destination("settings");
 
@@ -128,6 +132,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 		locking,
 		/** The currency, and whether non-billable hours count against budgets (TS-067, TS-069). */
 		money: await organisationMoney(organisation.id),
+		/** The logo and colour that lead the organisation's documents (TS-100). */
+		brand: await brandData(organisation),
 	};
 }
 
@@ -227,6 +233,7 @@ const form = z.discriminatedUnion("intent", [
 		categoryId: z.string().min(1).max(64),
 	}),
 	...LOCK_FORMS,
+	...BRAND_FORMS,
 ]);
 
 /**
@@ -235,7 +242,8 @@ const form = z.discriminatedUnion("intent", [
  * layout read it; no form names one.
  */
 export async function action({ request, context }: Route.ActionArgs) {
-	const input = await parseRequest(request, form);
+	// A logo, and the PNG drawn from it, need more room than any other form here.
+	const input = await parseRequest(request, form, { maxBytes: SETTINGS_MAX_BYTES });
 	const membership = context.get(membershipContext);
 	const { organisation, role, user } = membership;
 	switch (input.intent) {
@@ -341,6 +349,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "lock-date":
 		case "remove-lock-date":
 			return lockAction(input, membership, Date.now());
+		case "brand-logo":
+		case "remove-logo":
+		case "brand-colour":
+			return brandAction(input, membership, Date.now());
 		case "delete": {
 			if (input.confirmation.trim() !== organisation.name) {
 				return declined("That is not the organisation's name. Type it exactly as it is shown.");
@@ -417,6 +429,12 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 					</LedgerRows>
 				</Ledger>
 			</Section>
+
+			<BrandSettings
+				data={loaderData.brand}
+				organisationName={organisation.name}
+				onDone={setSaid}
+			/>
 
 			<MoneySettings
 				currency={loaderData.money.currency}

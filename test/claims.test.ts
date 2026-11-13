@@ -8,6 +8,8 @@ import { getTableColumns, is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { expect, it } from "vitest";
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
+import { signInCodeEmail } from "~/auth/sign-in-code-email";
+import { builtInPlatformBrand } from "~/brand/platform-brand.server";
 import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
@@ -107,6 +109,18 @@ it("the pages say the database is in the EU because that is how the databases ar
 	const created = (readme ?? "").split("\n").filter((line) => line.includes("wrangler d1 create"));
 	expect(created.length).toBeGreaterThan(0);
 	for (const command of created) expect(command).toContain("--jurisdiction eu");
+	// So is an R2 bucket's: the receipts' and the logos' (TS-070, TS-100), each
+	// named as `wrangler.jsonc` binds it.
+	const buckets = (readme ?? "")
+		.split("\n")
+		.filter((line) => line.includes("wrangler r2 bucket create"));
+	expect(buckets.map((line) => line.match(/bucket create (\S+)/)?.[1])).toEqual([
+		"timesifier-receipts",
+		"timesifier-receipts-preview",
+		"timesifier-brand",
+		"timesifier-brand-preview",
+	]);
+	for (const command of buckets) expect(command).toContain("--jurisdiction eu");
 
 	for (const path of ["/", PRIVACY_PATH]) {
 		expect(words(await page(path)), path).toContain("runs and stores its data only inside the EU");
@@ -208,7 +222,7 @@ it("deleting an organisation deletes everything in it, as the notice says: every
 		).toContain("cascade");
 	}
 	expect(words(await page(PRIVACY_PATH))).toContain(
-		"Everything in it goes at once: its memberships, invitations and all its work, and first its receipts.",
+		"Everything in it goes at once: its memberships, invitations and all its work, and first its receipts and its logo.",
 	);
 });
 
@@ -294,13 +308,15 @@ it("the notice says what a webhook is sent and when it stops, and how far a cale
 	expect(text).toContain(`of the last ${ENTRY_DAYS_BACK} days`);
 });
 
-it("the pages say receipts are kept in the EU because their bucket has the EU jurisdiction", async () => {
-	const buckets = [...(wrangler ?? "").matchAll(/\{ "binding": "RECEIPTS",[^}]*\}/g)].map(
+it("the pages say receipts and logos are kept in the EU because their buckets have the EU jurisdiction", async () => {
+	const buckets = [...(wrangler ?? "").matchAll(/\{ "binding": "(?:RECEIPTS|BRAND)",[^}]*\}/g)].map(
 		([b]) => b,
 	);
-	expect(buckets.length).toBeGreaterThan(0);
+	expect(buckets.length).toBe(4);
 	for (const bucket of buckets) expect(bucket).toContain('"jurisdiction": "eu"');
-	expect(words(await page(PRIVACY_PATH))).toContain("in a bucket restricted to the EU");
+	expect(words(await page(PRIVACY_PATH))).toContain(
+		"Receipts and organisations' logos are kept in Cloudflare R2, in buckets restricted to the EU",
+	);
 	expect(words(await page("/"))).toContain("Receipts are kept in storage restricted to the EU.");
 });
 
@@ -390,4 +406,24 @@ it("the home page and the terms say what is built in the present tense", async (
 	const terms = words(await page(TERMS_PATH));
 	expect(terms).not.toContain("being built");
 	expect(terms).toContain("Timesifier is a web application that keeps track of time");
+});
+
+/** What the privacy notice says of the email with a code (TS-100). */
+const CODE_EMAIL =
+	"Nothing is fetched when an email is opened, and nothing tells Timesifier it was. The email with a code holds no link.";
+
+it("the privacy notice says the email with a code fetches nothing, and it does not", async () => {
+	expect(words(await page(PRIVACY_PATH))).toContain(CODE_EMAIL);
+
+	// The platform's brand as migration 0020 starts it (test/brand/platform-brand.test.ts).
+	const message = signInCodeEmail("40817263", builtInPlatformBrand());
+	for (const body of [message.text, message.html]) {
+		expect(body).not.toMatch(/https?:|<a\b|href=|srcset=|url\(|<link|<script/i);
+	}
+	// One image, the logo, and it is the one file attached, inline, by its Content-ID.
+	const sources = [...message.html.matchAll(/\ssrc="([^"]*)"/g)].map(([, src]) => src);
+	expect(sources).toEqual(["cid:timesifier-logo"]);
+	expect(
+		message.attachments?.map(({ disposition, contentId }) => ({ disposition, contentId })),
+	).toEqual([{ disposition: "inline", contentId: "timesifier-logo" }]);
 });

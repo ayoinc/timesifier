@@ -1,5 +1,6 @@
 import { index, type RouteConfig, route } from "@react-router/dev/routes";
 import { ACTIVITY_EXPORT_SEGMENT, HISTORY_SEGMENT } from "./activity/paths";
+import { LOGO_SEGMENT } from "./brand/paths";
 import { CONTRACTORS_EXPORT_SEGMENT } from "./contractors/paths";
 import { EXPENSE_REPORT_EXPORT_SEGMENT, RECEIPT_SEGMENT } from "./expenses/paths";
 import {
@@ -58,6 +59,7 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(INVOICES_EXPORT_SEGMENT, "routes/app/integrations.invoices-export.ts"),
 	route(EXPENSE_REPORT_EXPORT_SEGMENT, "routes/app/reports.expenses.export.ts"),
 	route(RECEIPT_SEGMENT, "routes/app/expenses.receipt.ts"),
+	route(LOGO_SEGMENT, "routes/app/logo.ts"),
 	route(CONTRACTORS_EXPORT_SEGMENT, "routes/app/contractors.export.ts"),
 	route(ACTIVITY_EXPORT_SEGMENT, "routes/app/activity.export.ts"),
 	route(HISTORY_SEGMENT, "routes/app/history.tsx"),
@@ -110,6 +112,7 @@ export default [
 	app,
 	// An estimate's link, opened by the client without signing in (TS-077).
 	route(`${ESTIMATE_LINK_SEGMENT}/:id/:token`, "routes/estimate.$id.$token.tsx"),
+	route(`${ESTIMATE_LINK_SEGMENT}/:id/:token/logo`, "routes/estimate.$id.$token.logo.ts"),
 	route("invitations/:id", "routes/invitations.$id.tsx"),
 	route("api/auth/*", "routes/api.auth.$.ts"),
 	// The public API (TS-081) and calendar feeds (TS-089): a token, not a

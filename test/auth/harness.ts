@@ -86,6 +86,19 @@ const SentEmail = z.object({
 	subject: z.string(),
 	text: z.string(),
 	html: z.string(),
+	replyTo: z.string().optional(),
+	/** The files sent with it: the images its HTML shows, inline, and any PDF (TS-100). */
+	attachments: z
+		.array(
+			z.object({
+				disposition: z.enum(["inline", "attachment"]),
+				contentId: z.string().optional(),
+				filename: z.string(),
+				type: z.string(),
+				content: z.instanceof(Uint8Array),
+			}),
+		)
+		.default([]),
 });
 
 /** What the Worker tried to send while `EMAIL.send` was replaced. */
@@ -165,8 +178,14 @@ let journeys = 0;
  */
 export async function signIn(mailbox: Mailbox, email: string, options: RequestOptions = {}) {
 	const from = { ...options, client: options.client ?? `198.51.100.${(journeys++ % 250) + 1}` };
+	// The message is sent after the answer (it reads the platform's brand
+	// first), so wait for this request's own, not one an earlier test left.
+	const sentTo = () =>
+		mailbox.sent().filter(({ to }) => to.toLowerCase() === email.toLowerCase()).length;
+	const before = sentTo();
 	const asked = await requestCode(email, from);
 	expect(asked.status).toBe(200);
+	await vi.waitFor(() => expect(sentTo()).toBeGreaterThan(before));
 	const response = await post(
 		"/sign-in/email-otp",
 		{ email, otp: await mailbox.codeFor(email) },

@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { record } from "~/activity/activity.server";
 import { sendEmail } from "~/auth/email.server";
 import { compose } from "~/auth/email-frame";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 import {
 	type ActivitySummary,
 	activityAfter,
@@ -609,14 +610,17 @@ async function tellMaker(scope: OrganisationScope, makerId: string, url: string)
 	const link = host
 		? `https://${host}${destinationPath(caller.organisation.slug, "integrations")}`
 		: null;
-	const message = compose({
-		subject: "A webhook was switched off",
-		heading: "A webhook was switched off",
-		parts: [
-			`Timesifier stopped sending events to ${url} after ${SWITCH_OFF_AFTER} deliveries in a row failed. Nothing more is sent until it is switched on again on Integrations.`,
-			...(link ? [{ action: "Open Integrations", link }] : []),
-		],
-		reason: `You are getting this because you added this webhook in ${caller.organisation.name}.`,
-	});
+	const message = compose(
+		{
+			subject: "A webhook was switched off",
+			heading: "A webhook was switched off",
+			parts: [
+				`Timesifier stopped sending events to ${url} after ${SWITCH_OFF_AFTER} deliveries in a row failed. Nothing more is sent until it is switched on again on Integrations.`,
+				...(link ? [{ action: "Open Integrations", link }] : []),
+			],
+			reason: `You are getting this because you added this webhook in ${caller.organisation.name}.`,
+		},
+		await getPlatformBrand(env),
+	);
 	await sendEmail({ to: maker.email, ...message });
 }

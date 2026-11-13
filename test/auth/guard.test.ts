@@ -179,11 +179,12 @@ describe("with a session", () => {
 		expect((await ask(`${address}.data`, {}, cookie)).status).toBe(200);
 	});
 
-	it.each(files)("$id: $address is served as a file, not a page", async ({ address }) => {
+	it.each(files)("$id: $address is served as a file, not a page", async (route) => {
 		const { cookie } = await signIn(mailbox, "ada@example.com");
-		expect((await createOrganisation(cookie, "Acme")).slug).toBe(ORGANISATION);
+		const acme = await createOrganisation(cookie, "Acme");
+		expect(acme.slug).toBe(ORGANISATION);
 
-		const file = await ask(address, {}, cookie);
+		const file = await ask(await addressFor(route, acme.id), {}, cookie);
 		expect(file.status).toBe(200);
 		expect(file.headers.get("Content-Type")).not.toContain("text/html");
 	});

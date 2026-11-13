@@ -1,10 +1,12 @@
 import { data } from "react-router";
 
+import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
-import { daysCell, LEAVE_CSV_COLUMNS, leaveCsvFilename, leaveYearOf } from "~/reports/leave";
+import { daysCell, LEAVE_CSV_COLUMNS, leaveYearOf } from "~/reports/leave";
 import { leaveBalances } from "~/reports/leave.server";
 import { reportRequest } from "~/reports/reports.server";
+import { dayOf } from "~/time/calendar";
 
 import type { Route } from "./+types/reports.leave.export";
 
@@ -37,7 +39,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	return new Response(body, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",
-			"Content-Disposition": `attachment; filename="${leaveCsvFilename(membership.organisation.slug, year)}"`,
+			"Content-Disposition": `attachment; filename="${exportFilename(membership.organisation.name, `leave-${year}`, dayOf(Date.now(), membership.organisation.timeZone), "csv")}"`,
 			"Cache-Control": "no-store",
 		},
 	});

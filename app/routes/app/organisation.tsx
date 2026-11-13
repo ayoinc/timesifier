@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { Link, Outlet, useParams } from "react-router";
 
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
+import { logoPath } from "~/brand/paths";
 import { organisationCountOf } from "~/db";
 import { pendingLeaveOf } from "~/leave/leave.server";
 import { maySeeRates } from "~/organisations/access";
@@ -106,6 +107,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 	return {
 		name: organisation.name,
 		slug: organisation.slug,
+		/** The organisation's logo, for the band beside its name; null for none (TS-100). */
+		logo:
+			organisation.logoVersion === null
+				? null
+				: logoPath(organisation.slug, organisation.logoVersion),
 		role,
 		destinations: visibleDestinations(viewerOf(membership)),
 		/**

@@ -1,3 +1,5 @@
+import { MADE_WITH } from "~/brand/made-with";
+
 /**
  * A PDF of an invoice or an estimate, written on the Worker (TS-074, TS-077).
  * Nothing is fetched or installed: the file uses the two Helvetica faces
@@ -6,8 +8,38 @@
  * are the numbers on screen.
  *
  * The file is PDF 1.4 with uncompressed content streams, so its text can be
- * read back by a test.
+ * read back by a test. The images in it, the organisation's logo and the
+ * product's mark (TS-100), are prepared before it is written (`PdfArt`) and
+ * embedded whole: a JPEG as it is, a PNG's pixels compressed, its alpha apart.
  */
+
+/** An image ready to embed: its samples, already in the filter named. */
+export interface PdfImage {
+	width: number;
+	height: number;
+	filter: "DCTDecode" | "FlateDecode";
+	space: "DeviceRGB" | "DeviceGray";
+	data: Uint8Array;
+	/** One opacity byte a pixel, Flate-compressed; null where the image is opaque. */
+	alpha: Uint8Array | null;
+}
+
+/**
+ * The brand a document is printed in (TS-100): the organisation's logo and
+ * colour lead it, and the product's mark stands at the foot of each page
+ * beside `MADE_WITH`.
+ */
+export interface PdfArt {
+	/** The organisation, named as the file's author. */
+	author: string | null;
+	logo: PdfImage | null;
+	/** Three channels from 0 to 1: a band across the top of each page. */
+	colour: [number, number, number] | null;
+	mark: PdfImage | null;
+}
+
+/** A document without a brand: no logo, no band, the foot's words alone. */
+export const PLAIN_ART: PdfArt = { author: null, logo: null, colour: null, mark: null };
 
 /** What is printed: every value already in words, as the page shows it. */
 export interface PrintedDocument {
@@ -37,6 +69,15 @@ const HELVETICA_WIDTHS = [
 	222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
 ];
 
+/** Widths of the Helvetica-Bold glyphs from space to tilde, in thousandths of the size (its AFM). */
+const HELVETICA_BOLD_WIDTHS = [
+	278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+	556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667,
+	611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+	667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556,
+	278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+];
+
 /** The WinAnsi codes of the characters outside ASCII that money and names use. */
 const WIN_ANSI: Record<string, number> = {
 	"€": 0x80,
@@ -62,10 +103,11 @@ export function winAnsi(text: string): number[] {
 	});
 }
 
-/** How wide `text` is at `size` points. */
-function widthOf(text: string, size: number): number {
+/** How wide `text` is at `size` points, in Helvetica or, `bold`, Helvetica-Bold. */
+function widthOf(text: string, size: number, bold = false): number {
+	const widths = bold ? HELVETICA_BOLD_WIDTHS : HELVETICA_WIDTHS;
 	const units = winAnsi(text).reduce(
-		(sum, code) => sum + (code >= 32 && code <= 126 ? (HELVETICA_WIDTHS[code - 32] ?? 556) : 556),
+		(sum, code) => sum + (code >= 32 && code <= 126 ? (widths[code - 32] ?? 556) : 556),
 		0,
 	);
 	return (units * size) / 1000;
@@ -83,22 +125,22 @@ function literal(text: string): string {
 }
 
 /** `text` broken into lines no wider than `width` at `size`, at spaces where it can be. */
-function wrap(text: string, width: number, size: number): string[] {
+function wrap(text: string, width: number, size: number, bold = false): string[] {
 	const lines: string[] = [];
 	for (const paragraph of text.split(/\r?\n/)) {
 		let line = "";
 		for (const word of paragraph.split(" ")) {
 			const tried = line ? `${line} ${word}` : word;
-			if (widthOf(tried, size) <= width) {
+			if (widthOf(tried, size, bold) <= width) {
 				line = tried;
 				continue;
 			}
 			if (line) lines.push(line);
 			// A word wider than the column is cut where it reaches the edge.
 			let rest = word;
-			while (widthOf(rest, size) > width && rest.length > 1) {
+			while (widthOf(rest, size, bold) > width && rest.length > 1) {
 				let cut = rest.length - 1;
-				while (cut > 1 && widthOf(rest.slice(0, cut), size) > width) cut--;
+				while (cut > 1 && widthOf(rest.slice(0, cut), size, bold) > width) cut--;
 				lines.push(rest.slice(0, cut));
 				rest = rest.slice(cut);
 			}
@@ -124,7 +166,7 @@ class Page {
 	y = PAGE_HEIGHT - MARGIN;
 
 	text(x: number, text: string, size = 10, { bold = false, right = false } = {}) {
-		const left = right ? x - widthOf(text, size) : x;
+		const left = right ? x - widthOf(text, size, bold) : x;
 		this.ops.push(
 			`BT /${bold ? "F2" : "F1"} ${size} Tf ${left.toFixed(2)} ${this.y.toFixed(2)} Td ${literal(text)} Tj ET`,
 		);
@@ -135,21 +177,69 @@ class Page {
 		this.ops.push(`${width} w ${MARGIN} ${y} m ${RIGHT} ${y} l S`);
 	}
 
+	/** The image named `name` in the page's resources, its lower left corner at `x`, `y`. */
+	image(name: string, x: number, y: number, width: number, height: number) {
+		this.ops.push(
+			`q ${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /${name} Do Q`,
+		);
+	}
+
 	down(points: number) {
 		this.y -= points;
 	}
 }
 
-/** The pages of `document`, laid out on A4. */
-function layout(document: PrintedDocument): Page[] {
-	const pages: Page[] = [new Page()];
+/** The most room the organisation's logo takes at the top of the first page, in points. */
+const LOGO_BOX = { width: 180, height: 48 } as const;
+/** How tall the band of the organisation's colour is across the top of each page. */
+const BAND_HEIGHT = 10;
+/** How tall the mark is at the foot of each page, and where the foot's words stand. */
+const MARK_HEIGHT = 9;
+const FOOT_Y = 36;
+
+/** `image` scaled to fit `box`, keeping its shape. */
+function fitted(image: PdfImage, box: { width: number; height: number }) {
+	const scale = Math.min(box.width / image.width, box.height / image.height);
+	return { width: image.width * scale, height: image.height * scale };
+}
+
+/** The pages of `document`, laid out on A4 in `art`. */
+function layout(document: PrintedDocument, art: PdfArt): Page[] {
+	/** A page with the band across its top and the mark and `MADE_WITH` at its foot. */
+	const branded = () => {
+		const fresh = new Page();
+		if (art.colour) {
+			const [red, green, blue] = art.colour.map((channel) => channel.toFixed(3));
+			fresh.ops.push(
+				`${red} ${green} ${blue} rg 0 ${PAGE_HEIGHT - BAND_HEIGHT} ${PAGE_WIDTH} ${BAND_HEIGHT} re f 0 g`,
+			);
+		}
+		let x = MARGIN;
+		if (art.mark) {
+			const { width, height } = fitted(art.mark, { width: 40, height: MARK_HEIGHT });
+			fresh.image("Mark", x, FOOT_Y - 1.5, width, height);
+			x += width + 5;
+		}
+		const y = fresh.y;
+		fresh.y = FOOT_Y;
+		fresh.text(x, MADE_WITH, 8);
+		fresh.y = y;
+		return fresh;
+	};
+	const pages: Page[] = [branded()];
 	let page = pages[0] as Page;
 	const room = (points: number) => {
 		if (page.y - points >= BOTTOM) return;
-		page = new Page();
+		page = branded();
 		pages.push(page);
 	};
 
+	if (art.logo) {
+		const { width, height } = fitted(art.logo, LOGO_BOX);
+		const top = PAGE_HEIGHT - MARGIN + 16;
+		page.image("Logo", MARGIN, top - height, width, height);
+		page.y = top - height - 30;
+	}
 	page.text(MARGIN, document.title, 22, { bold: true });
 	page.text(RIGHT, document.number, 12, { bold: true, right: true });
 	page.down(36);
@@ -176,7 +266,7 @@ function layout(document: PrintedDocument): Page[] {
 	}
 	if (document.subject) {
 		page.down(6);
-		for (const line of wrap(document.subject, RIGHT - MARGIN, 11)) {
+		for (const line of wrap(document.subject, RIGHT - MARGIN, 11, true)) {
 			page.text(MARGIN, line, 11, { bold: true });
 			page.down(15);
 		}
@@ -233,41 +323,90 @@ function layout(document: PrintedDocument): Page[] {
 	return pages;
 }
 
-/** `document` as the bytes of a PDF file. */
-export function pdfOf(document: PrintedDocument): Uint8Array<ArrayBuffer> {
-	const pages = layout(document);
-	const objects: string[] = [];
-	const pageIds = pages.map((_, index) => 5 + index * 2);
-	objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
-	objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`;
-	objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
-	objects[4] =
-		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
-	pages.forEach((page, index) => {
-		const pageId = pageIds[index] as number;
-		const stream = page.ops.join("\n");
-		objects[pageId] =
-			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${pageId + 1} 0 R >>`;
-		objects[pageId + 1] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
-	});
-	const infoId = objects.length;
-	objects[infoId] =
-		`<< /Title ${literal(`${document.title} ${document.number}`)} /Producer (Timesifier) >>`;
+/** One object of the file: a dictionary, or a dictionary with the bytes of its stream. */
+type PdfObject = string | { dictionary: string; stream: Uint8Array };
 
-	// Every byte is ASCII, so a string's length is its length in bytes.
-	let file = "%PDF-1.4\n";
+/** The objects that embed `image`: its samples, and its alpha as a soft mask. Answers the image's id. */
+function embed(objects: PdfObject[], image: PdfImage): number {
+	let mask = "";
+	if (image.alpha) {
+		const maskId = objects.push({
+			dictionary: `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.alpha.length} >>`,
+			stream: image.alpha,
+		});
+		mask = ` /SMask ${maskId} 0 R`;
+	}
+	return objects.push({
+		dictionary: `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace /${image.space} /BitsPerComponent 8 /Filter /${image.filter}${mask} /Length ${image.data.length} >>`,
+		stream: image.data,
+	});
+}
+
+/** `document` as the bytes of a PDF file, in the brand of `art`. */
+export function pdfOf(document: PrintedDocument, art: PdfArt): Uint8Array<ArrayBuffer> {
+	const pages = layout(document, art);
+	const encoder = new TextEncoder();
+	// Ids count from 1: the catalog, the page tree and the two fonts are the first four.
+	const objects: PdfObject[] = [
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+	];
+	const images = [
+		...(art.logo ? [`/Logo ${embed(objects, art.logo)} 0 R`] : []),
+		...(art.mark ? [`/Mark ${embed(objects, art.mark)} 0 R`] : []),
+	];
+	const xObjects = images.length > 0 ? ` /XObject << ${images.join(" ")} >>` : "";
+	const pageIds = pages.map((page) => {
+		const contents = encoder.encode(page.ops.join("\n"));
+		const contentsId = objects.push({
+			dictionary: `<< /Length ${contents.length} >>`,
+			stream: contents,
+		});
+		return objects.push(
+			`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xObjects} >> /Contents ${contentsId} 0 R >>`,
+		);
+	});
+	objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`;
+	const infoId = objects.push(
+		`<< /Title ${literal(`${document.title} ${document.number}`)}${art.author ? ` /Author ${literal(art.author)}` : ""} /Producer (Timesifier) >>`,
+	);
+
+	const parts: Uint8Array[] = [];
+	let length = 0;
+	const write = (part: string | Uint8Array) => {
+		const bytes = typeof part === "string" ? encoder.encode(part) : part;
+		parts.push(bytes);
+		length += bytes.length;
+	};
+	// The second line's bytes past ASCII tell a reader the file holds binary data.
+	write("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
 	const offsets: number[] = [];
-	for (let id = 1; id < objects.length; id++) {
-		offsets[id] = file.length;
-		file += `${id} 0 obj\n${objects[id]}\nendobj\n`;
+	objects.forEach((object, index) => {
+		offsets.push(length);
+		write(`${index + 1} 0 obj\n`);
+		if (typeof object === "string") write(object);
+		else {
+			write(`${object.dictionary}\nstream\n`);
+			write(object.stream);
+			write("\nendstream");
+		}
+		write("\nendobj\n");
+	});
+	const xref = length;
+	write(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`);
+	for (const offset of offsets) write(`${String(offset).padStart(10, "0")} 00000 n \n`);
+	write(
+		`trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${infoId} 0 R >>\nstartxref\n${xref}\n%%EOF\n`,
+	);
+	const file = new Uint8Array(length);
+	let at = 0;
+	for (const part of parts) {
+		file.set(part, at);
+		at += part.length;
 	}
-	const xref = file.length;
-	file += `xref\n0 ${objects.length}\n0000000000 65535 f \n`;
-	for (let id = 1; id < objects.length; id++) {
-		file += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
-	}
-	file += `trailer\n<< /Size ${objects.length} /Root 1 0 R /Info ${infoId} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-	return new TextEncoder().encode(file);
+	return file;
 }
 
 /** A file name for the document: "invoice-42.pdf". */

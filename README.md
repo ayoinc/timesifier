@@ -99,11 +99,15 @@ The repository holds nothing of the deployment at `timesifier.com`: no domain, d
 
 You need a Cloudflare account with your domain on it as a zone, Workers with a `workers.dev` subdomain, and Wrangler signed in (`pnpm exec wrangler login`). Then, in a clone of your fork:
 
-1. **Two databases.** Each command prints the id you need in step 6.
+1. **Two databases and four buckets.** Each database command prints the id you need in step 6. The buckets are the ones `wrangler.jsonc` binds: expense receipts (`RECEIPTS`, TS-070) and organisations' logos (`BRAND`, TS-100), each for production and for previews.
 
    ```sh
    pnpm exec wrangler d1 create timesifier --jurisdiction eu
    pnpm exec wrangler d1 create timesifier-preview --jurisdiction eu
+   pnpm exec wrangler r2 bucket create timesifier-receipts --jurisdiction eu
+   pnpm exec wrangler r2 bucket create timesifier-receipts-preview --jurisdiction eu
+   pnpm exec wrangler r2 bucket create timesifier-brand --jurisdiction eu
+   pnpm exec wrangler r2 bucket create timesifier-brand-preview --jurisdiction eu
    ```
 
 2. **A Turnstile widget** for your host, in the Cloudflare dashboard under Turnstile. It gives a site key, which is public, and a secret key.

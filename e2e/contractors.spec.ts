@@ -133,8 +133,8 @@ test("time tracked on the Timesheet is on the Contractors report, unrounded, wit
 	const downloading = page.waitForEvent("download");
 	await page.getByRole("link", { name: "Export as CSV" }).click();
 	const download = await downloading;
-	expect(download.suggestedFilename()).toBe(
-		`timesifier-${slug}-contractors-${FIRST}-to-${LAST}.csv`,
+	expect(download.suggestedFilename()).toMatch(
+		new RegExp(`^${slug}-contractors-${FIRST}-to-${LAST}-exported-\\d{4}-\\d{2}-\\d{2}\\.csv$`),
 	);
 	const lines = readFileSync(await download.path())
 		.subarray(3)

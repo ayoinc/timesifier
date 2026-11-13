@@ -87,6 +87,7 @@ export const ActivityAction = z.enum([
 	"leave.withdrawn",
 	"lock_date.changed",
 	"timesheet_rules.changed",
+	"brand.changed",
 	"deadline.changed",
 	"work_schedule.created",
 	"work_schedule.updated",

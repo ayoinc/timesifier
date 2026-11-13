@@ -1,9 +1,11 @@
 import { data } from "react-router";
 
+import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
-import { BYTE_ORDER_MARK, CSV_COLUMNS, csvFilename, csvLine, rowCells } from "~/reports/csv";
+import { BYTE_ORDER_MARK, CSV_COLUMNS, csvLine, rowCells } from "~/reports/csv";
 import { rowOf } from "~/reports/report";
 import { entryPages, type ReportRequest, reportRequest } from "~/reports/reports.server";
+import { dayOf } from "~/time/calendar";
 
 import type { Route } from "./+types/reports.export";
 
@@ -45,7 +47,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			await chunks.return(undefined);
 		},
 	});
-	const filename = csvFilename(membership.organisation.slug, report.days.first, report.days.last);
+	const { organisation } = membership;
+	const filename = exportFilename(
+		organisation.name,
+		`time-${report.days.first}-to-${report.days.last}`,
+		dayOf(Date.now(), organisation.timeZone),
+		"csv",
+	);
 	return new Response(body, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",

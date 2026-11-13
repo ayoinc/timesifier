@@ -1,12 +1,13 @@
 import {
 	EXPENSE_CSV_COLUMNS,
 	expenseCells,
-	expenseCsvFilename,
 	expenseExportRequest,
 	reportedExpenses,
 } from "~/expenses/report.server";
+import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
+import { dayOf } from "~/time/calendar";
 
 import type { Route } from "./+types/reports.expenses.export";
 
@@ -23,10 +24,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const expenses = await reportedExpenses(report);
 	let body = BYTE_ORDER_MARK + csvLine(EXPENSE_CSV_COLUMNS);
 	for (const expense of expenses) body += csvLine(expenseCells(expense, report.showClients));
-	const filename = expenseCsvFilename(
-		membership.organisation.slug,
-		report.days.first,
-		report.days.last,
+	const { organisation } = membership;
+	const filename = exportFilename(
+		organisation.name,
+		`expenses-${report.days.first}-to-${report.days.last}`,
+		dayOf(Date.now(), organisation.timeZone),
+		"csv",
 	);
 	return new Response(body, {
 		headers: {

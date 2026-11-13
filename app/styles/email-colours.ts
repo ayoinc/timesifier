@@ -16,4 +16,6 @@ export const EMAIL_COLOURS = {
 	action: "#252a2f",
 	/** The words of the one action. The `on-primary` role. */
 	onAction: "#fead05",
+	/** White: the words of an organisation's action on its own colour, which is checked dark enough for them. The `on-error` role. */
+	onBrand: "#ffffff",
 } as const;

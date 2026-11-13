@@ -3,8 +3,9 @@ import { and, asc, eq } from "drizzle-orm";
 
 import { recordStatement } from "~/activity/activity.server";
 import { sendEmail } from "~/auth/email.server";
-import { compose } from "~/auth/email-frame";
+import { compose, type OrganisationLook, type PlatformLook } from "~/auth/email-frame";
 import { takeOne } from "~/auth/quota.server";
+import { documentBrand } from "~/brand/document-brand.server";
 import type { OrganisationScope, ScopedStatement } from "~/db";
 
 import { formatDayWithYear } from "~/time/format";
@@ -118,8 +119,17 @@ export function fillTemplate(template: string, values: Record<string, string | u
 	return template.replace(/\{([a-z_]+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
 
-/** The message for `words`, framed as every message of the application is. */
-export function documentMessage(words: DocumentMessage) {
+/**
+ * The message for `words`, framed as every message of the application is, in
+ * the organisation's look: its logo, name and colour lead, and the platform's
+ * mark stands at the foot (TS-100).
+ */
+export function documentMessage(
+	words: DocumentMessage,
+	platform: PlatformLook,
+	look: OrganisationLook | null,
+) {
+	const organisation = look ?? { name: words.organisationName, colour: null, logo: null };
 	const values = {
 		organisation: words.organisationName,
 		client: words.clientName,
@@ -131,53 +141,65 @@ export function documentMessage(words: DocumentMessage) {
 	const note = words.note ? [words.note] : [];
 	switch (words.kind) {
 		case "invoice":
-			return compose({
-				subject,
-				heading: fillTemplate("Invoice {number}", values),
-				parts: [
-					...note,
-					fillTemplate(
-						"{organisation} has sent you invoice {number} for {amount}, due on {due_date}. It is attached as a PDF.",
+			return compose(
+				{
+					subject,
+					heading: fillTemplate("Invoice {number}", values),
+					parts: [
+						...note,
+						fillTemplate(
+							"{organisation} has sent you invoice {number} for {amount}, due on {due_date}. It is attached as a PDF.",
+							values,
+						),
+					],
+					reason: fillTemplate(
+						"You are a billing contact of {client} at {organisation}. If this is not for you, tell {organisation}: a reply to this email does not reach them.",
 						values,
 					),
-				],
-				reason: fillTemplate(
-					"You are a billing contact of {client} at {organisation}. If this is not for you, tell {organisation}: a reply to this email does not reach them.",
-					values,
-				),
-			});
+				},
+				platform,
+				organisation,
+			);
 		case "reminder":
-			return compose({
-				subject,
-				heading: fillTemplate("Invoice {number} is overdue", values),
-				parts: [
-					fillTemplate(
-						"Invoice {number} from {organisation} was due on {due_date}, and {amount} is still owed. It is attached as a PDF.",
+			return compose(
+				{
+					subject,
+					heading: fillTemplate("Invoice {number} is overdue", values),
+					parts: [
+						fillTemplate(
+							"Invoice {number} from {organisation} was due on {due_date}, and {amount} is still owed. It is attached as a PDF.",
+							values,
+						),
+					],
+					reason: fillTemplate(
+						"You are a billing contact of {client} at {organisation}. Reminders stop once the invoice is paid.",
 						values,
 					),
-				],
-				reason: fillTemplate(
-					"You are a billing contact of {client} at {organisation}. Reminders stop once the invoice is paid.",
-					values,
-				),
-			});
+				},
+				platform,
+				organisation,
+			);
 		case "estimate":
-			return compose({
-				subject,
-				heading: fillTemplate("Estimate {number}", values),
-				parts: [
-					...note,
-					fillTemplate(
-						"{organisation} has sent you estimate {number} for {amount}. It is attached as a PDF. Read it and accept or decline it at the link below; you do not need an account.",
+			return compose(
+				{
+					subject,
+					heading: fillTemplate("Estimate {number}", values),
+					parts: [
+						...note,
+						fillTemplate(
+							"{organisation} has sent you estimate {number} for {amount}. It is attached as a PDF. Read it and accept or decline it at the link below; you do not need an account.",
+							values,
+						),
+						{ action: "Read the estimate", link: words.link ?? "" },
+					],
+					reason: fillTemplate(
+						"You are a billing contact of {client} at {organisation}. Anyone with the link can accept or decline the estimate, so do not forward it.",
 						values,
 					),
-					{ action: "Read the estimate", link: words.link ?? "" },
-				],
-				reason: fillTemplate(
-					"You are a billing contact of {client} at {organisation}. Anyone with the link can accept or decline the estimate, so do not forward it.",
-					values,
-				),
-			});
+				},
+				platform,
+				organisation,
+			);
 	}
 }
 
@@ -202,8 +224,9 @@ export async function sendDocument(
 			return { ok: false, problem: TOO_MANY_EMAILS };
 		}
 	}
-	const message = documentMessage(words);
-	const pdf = pdfOf(printed);
+	const brand = await documentBrand(scope.organisationId);
+	const message = documentMessage(words, brand.platform, brand.look);
+	const pdf = pdfOf(printed, brand.art);
 	const filename = pdfFilename(printed.title, printed.number);
 	await Promise.all(
 		to.map((address) =>
@@ -211,6 +234,7 @@ export async function sendDocument(
 				to: address,
 				...message,
 				attachments: [
+					...(message.attachments ?? []),
 					{ disposition: "attachment", filename, type: "application/pdf", content: pdf },
 				],
 			}),

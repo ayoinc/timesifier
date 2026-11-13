@@ -61,14 +61,28 @@ describe("the sign-in code email", () => {
 		expect(message?.subject).not.toContain(code);
 	});
 
-	it("has no link, image or other remote content", async () => {
+	it("has no link and no remote content: its one image, the logo, is attached to it", async () => {
 		await requestCode(EMAIL);
 		await mailbox.codeFor(EMAIL);
 
 		const [message] = mailbox.sent();
 		for (const body of [message?.text ?? "", message?.html ?? ""]) {
-			expect(body).not.toMatch(/https?:|<img|<a\b|<link|<script|src=|href=/i);
+			expect(body).not.toMatch(/https?:|<a\b|<link|<script|href=|srcset=|url\(/i);
 		}
+		expect(message?.text).not.toMatch(/<img|src=/i);
+		expect([...(message?.html ?? "").matchAll(/\ssrc="([^"]*)"/g)].map(([, src]) => src)).toEqual([
+			"cid:timesifier-logo",
+		]);
+		expect(
+			message?.attachments.map(({ disposition, contentId, type }) => ({
+				disposition,
+				contentId,
+				type,
+			})),
+		).toEqual([{ disposition: "inline", contentId: "timesifier-logo", type: "image/png" }]);
+		// Sent in the platform brand's name, with no Reply-To until one is set.
+		expect(message?.from.name).toBe("Timesifier");
+		expect(message?.replyTo).toBeUndefined();
 	});
 });
 

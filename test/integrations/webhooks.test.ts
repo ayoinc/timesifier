@@ -236,6 +236,10 @@ describe("deliveries", () => {
 			.filter((message) => message.subject === "A webhook was switched off");
 		expect(told.map((message) => message.to)).toEqual(["ada@example.com"]);
 		expect(told[0]?.text).toContain(HOOK);
+		// Its one image, the logo, is attached to it: nothing is fetched (TS-100).
+		expect([...(told[0]?.html ?? "").matchAll(/\ssrc="([^"]*)"/g)].map(([, src]) => src)).toEqual([
+			"cid:timesifier-logo",
+		]);
 
 		// Off: nothing more is sent.
 		await track(ada.user.id, "After");

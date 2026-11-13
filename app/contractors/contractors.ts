@@ -225,8 +225,3 @@ export function contractorCsvRows(line: ContractorLine): string[][] {
 	}
 	return rows;
 }
-
-/** The file's name: "timesifier-acme-contractors-2026-11-02-to-2026-11-08.csv". */
-export function contractorsCsvFilename(slug: string, first: Day, last: Day): string {
-	return `timesifier-${slug}-contractors-${first}-to-${last}.csv`;
-}

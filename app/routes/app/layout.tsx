@@ -131,11 +131,24 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 					end={
 						<div className="flex min-w-0 items-center gap-3 medium:gap-6">
 							{organisationData && (
-								// Two lines before it is cut, and a size smaller under 600px, so a
-								// long name still reads in full in the band (audit W17).
-								<p className="line-clamp-2 min-w-0 wrap-anywhere text-title-small medium:text-title-medium">
-									{organisationData.name}
-								</p>
+								<div className="flex min-w-0 items-center gap-2 medium:gap-3">
+									{/* The organisation's logo (TS-100) on a tile of paper, so any logo reads
+									    on the amber. The name beside it says whose it is, so the image says nothing. */}
+									{organisationData.logo && (
+										<span className="flex h-9 shrink-0 items-center rounded-small bg-surface px-1.5">
+											<img
+												src={organisationData.logo}
+												alt=""
+												className="h-7 w-auto max-w-24 object-contain"
+											/>
+										</span>
+									)}
+									{/* Two lines before it is cut, and a size smaller under 600px, so a
+									    long name still reads in full in the band (audit W17). */}
+									<p className="line-clamp-2 min-w-0 wrap-anywhere text-title-small medium:text-title-medium">
+										{organisationData.name}
+									</p>
+								</div>
 							)}
 							<ProfileMenu
 								name={loaderData.name}

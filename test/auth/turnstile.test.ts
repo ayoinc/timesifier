@@ -35,7 +35,8 @@ describe("Turnstile on the request that sends a sign-in code", () => {
 
 		expect(response.status).toBe(200);
 		expect(await countRows("codes")).toBe(1);
-		expect(mailbox.sent()).toHaveLength(1);
+		// Sent after the answer, once the platform's brand is read.
+		await vi.waitFor(() => expect(mailbox.sent()).toHaveLength(1));
 	});
 
 	it("refuses a token Turnstile rejects, and creates and sends no code", async () => {

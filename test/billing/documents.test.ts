@@ -13,7 +13,7 @@ import {
 } from "~/invoices/invoices.server";
 import type { DraftLine } from "~/invoices/lines";
 import { addContact, contactsOf, fillTemplate, SUBJECTS } from "~/invoices/mail.server";
-import { pdfFilename, pdfOf } from "~/invoices/pdf";
+import { PLAIN_ART, pdfFilename, pdfOf } from "~/invoices/pdf";
 import {
 	addTax,
 	MOST_ACTIVE_TAXES,
@@ -294,7 +294,7 @@ describe("the PDF", () => {
 			[euro, "de-DE"],
 		] as const) {
 			const document = await printed(id, locale);
-			const text = pdfText(pdfOf(document));
+			const text = pdfText(pdfOf(document, PLAIN_ART));
 			const expected = [
 				document.title,
 				document.number,
@@ -326,7 +326,17 @@ describe("the PDF", () => {
 
 		const served = await open(`${INVOICES}/${pound}/pdf`, owner);
 		expect(served.status).toBe(200);
-		expect(pdfText(new Uint8Array(await served.arrayBuffer()))).toEqual(pdfText(pdfOf(document)));
+		expect(pdfText(new Uint8Array(await served.arrayBuffer()))).toEqual(
+			pdfText(pdfOf(document, PLAIN_ART)),
+		);
+	});
+
+	it("ends a bold heading on its column's right edge, measured in the bold face", async () => {
+		const id = await draft([manual(12_345, "Design")]);
+		const file = new TextDecoder("latin1").decode(pdfOf(await printed(id), PLAIN_ART));
+		// Helvetica-Bold's "Amount" is 3777 thousandths wide; at 9 points that is 33.993,
+		// so it starts 33.99 points before the right margin, 595 - 56 = 539.
+		expect(file).toMatch(/BT \/F2 9 Tf 505\.01 [\d.]+ Td \(Amount\) Tj ET/);
 	});
 });
 
@@ -358,7 +368,7 @@ describe("sending", () => {
 		expect(row.status).toBe("sent");
 		expect(row.sentAt?.getTime()).toBe(NOW);
 
-		const pdf = pdfOf(await printed(id, "en-GB"));
+		const pdf = pdfOf(await printed(id, "en-GB"), PLAIN_ART);
 		const messages = mailbox.send.mock.calls.slice(already).map(
 			([message]) =>
 				message as unknown as {
@@ -381,8 +391,11 @@ describe("sending", () => {
 			expect(message.subject).toBe("Invoice 1 from Acme");
 			expect(message.text).toContain("£123.45");
 			expect(message.text).toContain("Initech");
-			expect(message.attachments).toHaveLength(1);
-			const [attachment] = message.attachments;
+			// The PDF, and the mark the message shows at its foot, attached inline (TS-100).
+			const files = message.attachments.filter((file) => file.disposition === "attachment");
+			expect(files).toHaveLength(1);
+			expect(message.attachments.filter((file) => file.disposition === "inline")).toHaveLength(1);
+			const [attachment] = files;
 			expect(attachment?.disposition).toBe("attachment");
 			expect(attachment?.type).toBe("application/pdf");
 			expect(attachment?.filename).toBe(pdfFilename("Invoice", "1"));

@@ -25,6 +25,8 @@ export type Membership = {
 		/** The day its timesheet periods start on: 1 is Monday, 7 is Sunday. */
 		weekStartsOn: number;
 		clientsEnabled: boolean;
+		/** When its logo was uploaded, for the logo's address in the band; null for no logo (TS-100). */
+		logoVersion: number | null;
 	};
 	role: Role;
 	/** Whether the person manages at least one of the organisation's teams (TS-038). */
@@ -65,6 +67,7 @@ export async function membershipOf(
 			timeZone: organisations.timeZone,
 			weekStartsOn: organisations.weekStartsOn,
 			clientsEnabled: organisations.clientsEnabled,
+			logoVersion: organisations.brandLogoVersion,
 		})
 		.from(organisations)
 		.where(eq(organisations.slug, slug))
