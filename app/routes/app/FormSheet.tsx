@@ -62,7 +62,8 @@ export interface FormSheetProps {
  *
  * While the server is refusing, the sheet stays open and says why in the
  * server's place; when the task is done it closes and hands the page what to
- * say. A second press while the first request is on its way does nothing.
+ * say. While the request is on its way the primary action is pending: it says
+ * what it is doing beside the WaitClock, and a second press does nothing.
  */
 export function FormSheet({
 	title,
@@ -111,7 +112,13 @@ export function FormSheet({
 					<Button variant="text" slot="close">
 						{cancelLabel}
 					</Button>
-					<Button type="submit" form={form} variant={submitVariant} isDisabled={isSubmitDisabled}>
+					<Button
+						type="submit"
+						form={form}
+						variant={submitVariant}
+						isDisabled={isSubmitDisabled}
+						isPending={fetcher.state !== "idle"}
+					>
 						{submitLabel}
 					</Button>
 				</>

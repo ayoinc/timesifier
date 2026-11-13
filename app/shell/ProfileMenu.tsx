@@ -57,7 +57,7 @@ export function ProfileMenu({
 	const [notice, setNotice] = useState<Notice | null>(null);
 	// Where Account settings leads, held until the menu has gone (`WhenGone`).
 	const pending = useRef<string | null>(null);
-	const once = useOneAtATime();
+	const { once } = useOneAtATime();
 
 	function leave() {
 		setNotice(null);

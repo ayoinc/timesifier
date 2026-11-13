@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { Form, useNavigation } from "react-router";
+import { Form } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
@@ -21,6 +21,7 @@ import { notFound } from "~/organisations/membership.server";
 import { negotiateLocale } from "~/shell/locale";
 import { OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { useSubmitting } from "~/shell/submitting";
 
 import type { Route } from "./+types/estimate.$id.$token";
 
@@ -88,7 +89,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 export default function EstimateLink({ loaderData, actionData, params }: Route.ComponentProps) {
 	const { printed, status } = loaderData;
-	const busy = useNavigation().state !== "idle";
+	const submitting = useSubmitting();
 	return (
 		<div className={OUTSIDE_FRAME}>
 			<SiteHeader current={estimateLinkPath(params.id, params.token)} end={null} />
@@ -102,7 +103,12 @@ export default function EstimateLink({ loaderData, actionData, params }: Route.C
 				</div>
 				{status === "sent" && !actionData?.ok && (
 					<Form method="post" className="mt-8 flex flex-wrap gap-4">
-						<Button type="submit" name="decision" value="accepted" isDisabled={busy}>
+						<Button
+							type="submit"
+							name="decision"
+							value="accepted"
+							{...submitting("decision", "accepted")}
+						>
 							Accept estimate
 						</Button>
 						<Button
@@ -110,7 +116,7 @@ export default function EstimateLink({ loaderData, actionData, params }: Route.C
 							name="decision"
 							value="declined"
 							variant="outlined"
-							isDisabled={busy}
+							{...submitting("decision", "declined")}
 						>
 							Decline estimate
 						</Button>

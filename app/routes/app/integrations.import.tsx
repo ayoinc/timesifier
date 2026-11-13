@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
-import { Form, Link, redirect, useNavigation } from "react-router";
+import { Form, Link, redirect } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
@@ -26,6 +26,7 @@ import { declined, done } from "~/organisations/outcome.server";
 import { destinationPath } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
+import { useSubmitting } from "~/shell/submitting";
 import { formatDayAndTime, formatDayWithYear, formatDuration } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
 
@@ -185,8 +186,7 @@ function Problem({ said }: { said: string | undefined }) {
 export default function Import({ loaderData, actionData }: Route.ComponentProps) {
 	const { kind, job, preview, imports } = loaderData;
 	const organisation = useOrganisation();
-	const navigation = useNavigation();
-	const busy = navigation.state !== "idle";
+	const submitting = useSubmitting();
 	const [said, setSaid] = useState<string | null>(null);
 	const [reverting, setReverting] = useState<(typeof imports)[number] | null>(null);
 	const refusal =
@@ -232,7 +232,13 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 							))}
 						</div>
 						<div className="flex flex-wrap gap-2">
-							<Button type="submit" name="intent" value="map" variant="outlined" isDisabled={busy}>
+							<Button
+								type="submit"
+								name="intent"
+								value="map"
+								variant="outlined"
+								{...submitting("intent", "map")}
+							>
 								Read these columns
 							</Button>
 						</div>
@@ -287,7 +293,8 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 									type="submit"
 									name="intent"
 									value="import"
-									isDisabled={busy || preview.toImport === 0}
+									isPending={submitting("intent", "import").isPending}
+									isDisabled={submitting("intent", "import").isDisabled || preview.toImport === 0}
 								>
 									{`Import ${preview.toImport} ${kind === "time" ? (preview.toImport === 1 ? "entry" : "entries") : kind === "clients" ? (preview.toImport === 1 ? "client" : "clients") : preview.toImport === 1 ? "project" : "projects"}`}
 								</Button>
@@ -296,7 +303,7 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 									name="intent"
 									value="discard"
 									variant="text"
-									isDisabled={busy}
+									{...submitting("intent", "discard")}
 								>
 									Discard
 								</Button>
@@ -394,7 +401,12 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 							/>
 						</label>
 						<div>
-							<Button type="submit" name="intent" value="upload" isDisabled={busy}>
+							<Button
+								type="submit"
+								name="intent"
+								value="upload"
+								{...submitting("intent", "upload")}
+							>
 								Upload and preview
 							</Button>
 						</div>

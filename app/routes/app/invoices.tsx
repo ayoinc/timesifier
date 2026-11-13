@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
+import { DownloadLink } from "~/components/DownloadLink";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Select } from "~/components/Select";
@@ -160,9 +161,9 @@ export default function Invoices({ loaderData }: Route.ComponentProps) {
 					<>
 						<div className="flex flex-wrap items-center gap-4">
 							{create}
-							<a href={xeroExportPath(slug)} className={ACTION_LINK}>
+							<DownloadLink href={xeroExportPath(slug)} className={ACTION_LINK}>
 								Export for Xero
-							</a>
+							</DownloadLink>
 						</div>
 						<div className="mt-6">
 							<FilterBar name="Filter invoices">

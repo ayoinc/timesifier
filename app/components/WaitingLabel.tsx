@@ -20,17 +20,16 @@ export interface WaitingLabelProps {
  * The inside of a control that waits on the network: a Button or a
  * DownloadLink. Its words at rest and its words while waiting, with the clock,
  * stand in the same place, so the control is as wide as the wider of the two
- * from the start and never changes size. Only the words in use are read: the
- * other are hidden from assistive technology. The change shows only once the
- * wait has lasted 400ms (app/app.css, `.wait-appear`).
+ * from the start and never changes size. The change shows only once the wait
+ * has lasted 400ms (app/app.css, `.wait-appear`). The control's name stays its
+ * words at rest: a name that changed under the focus would not be read again,
+ * and React Aria says "pending" of a pending button itself.
  */
 export function WaitingLabel({ waiting, children, doing, tone = "two" }: WaitingLabelProps) {
 	return (
-		<span className="grid">
-			<span aria-hidden={waiting || undefined} className={cx(FACE, waiting && "wait-leave")}>
-				{children}
-			</span>
-			<span aria-hidden={!waiting || undefined} className={cx(FACE, !waiting && "invisible")}>
+		<span className="inline-grid">
+			<span className={cx(FACE, waiting && "wait-leave")}>{children}</span>
+			<span aria-hidden="true" className={cx(FACE, !waiting && "invisible")}>
 				{waiting ? <WaitClock tone={tone} /> : <span className="size-5 shrink-0" />}
 				<span className={waiting ? "wait-appear" : undefined}>{doing}</span>
 			</span>

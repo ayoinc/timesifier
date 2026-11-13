@@ -72,7 +72,7 @@ export function SecretFormSheet({
 						<Button variant="text" slot="close">
 							Cancel
 						</Button>
-						<Button type="submit" form={form}>
+						<Button type="submit" form={form} isPending={fetcher.state !== "idle"}>
 							{submitLabel}
 						</Button>
 					</>

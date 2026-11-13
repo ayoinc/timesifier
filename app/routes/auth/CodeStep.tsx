@@ -43,7 +43,7 @@ export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: 
 	const [code, setCode] = useState("");
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const check = useRef<RobotCheckHandle>(null);
-	const once = useOneAtATime();
+	const { once, running } = useOneAtATime<"check" | "send">();
 
 	function submit(event: FormEvent) {
 		event.preventDefault();
@@ -52,7 +52,7 @@ export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: 
 			const outcome = await signInWithCode(email, code);
 			if (outcome.ok) return onSignedIn();
 			setNotice(problem(outcome.problem));
-		});
+		}, "check");
 	}
 
 	function sendAnother() {
@@ -65,7 +65,7 @@ export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: 
 			setCode("");
 			onSent();
 			setNotice(progress("A new code has been asked for. Use the newest one you receive."));
-		});
+		}, "send");
 	}
 
 	return (
@@ -103,13 +103,18 @@ export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: 
 				<RobotCheck ref={check} siteKey={siteKey} />
 				<NoticeLine notice={notice} />
 				<div>
-					<Button type="submit" size="large">
+					<Button
+						type="submit"
+						size="large"
+						isPending={running === "check"}
+						pendingLabel="Checking…"
+					>
 						Continue
 					</Button>
 				</div>
 				{/* The ways out stand under the action, ruled off from it, and never beside it. */}
 				<div className="flex flex-wrap items-center gap-2 border-t border-outline-variant pt-4">
-					<Button variant="text" onPress={sendAnother}>
+					<Button variant="text" isPending={running === "send"} onPress={sendAnother}>
 						{SEND_ANOTHER}
 					</Button>
 					<Button variant="text" onPress={onChangeEmail}>

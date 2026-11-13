@@ -48,7 +48,7 @@ interface LeavingProps {
 
 function Leaving({ id, title, end, children }: LeavingProps) {
 	const [notice, setNotice] = useState<Notice | null>(null);
-	const once = useOneAtATime();
+	const { once, running } = useOneAtATime();
 
 	function leave() {
 		once(async () => {
@@ -63,7 +63,7 @@ function Leaving({ id, title, end, children }: LeavingProps) {
 		<Section id={id} heading={title} lead={children} className="max-w-200">
 			<div className="flex flex-col items-start gap-4">
 				<NoticeLine notice={notice} />
-				<Button variant="outlined" onPress={leave}>
+				<Button variant="outlined" isPending={running !== null} onPress={leave}>
 					{title}
 				</Button>
 			</div>

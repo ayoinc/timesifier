@@ -532,7 +532,7 @@ function Timer({
 					<p role="timer" aria-label="Elapsed" className="text-display-small tabular-nums">
 						<Digits value={formatElapsed(elapsedSeconds(running.startedAt, now))} />
 					</p>
-					<Button type="submit" variant="tonal">
+					<Button type="submit" variant="tonal" isPending={fetcher.state !== "idle"}>
 						Stop timer
 					</Button>
 				</fetcher.Form>

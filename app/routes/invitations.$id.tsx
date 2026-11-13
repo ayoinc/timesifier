@@ -18,6 +18,7 @@ import { APP_PATH, organisationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { useSubmitting } from "~/shell/submitting";
 import type { Route } from "./+types/invitations.$id";
 import { SignedInAs } from "./app/SignedInAs";
 
@@ -111,6 +112,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function InvitationPage({ loaderData, params }: Route.ComponentProps) {
 	const { invitation } = loaderData;
 	const busy = useNavigation().state !== "idle";
+	const submitting = useSubmitting();
 
 	if (!invitation) {
 		return (
@@ -156,10 +158,16 @@ export default function InvitationPage({ loaderData, params }: Route.ComponentPr
 							if (busy) event.preventDefault();
 						}}
 					>
-						<Button type="submit" name="intent" value="join">
+						<Button type="submit" name="intent" value="join" {...submitting("intent", "join")}>
 							Join
 						</Button>
-						<Button type="submit" name="intent" value="decline" variant="text">
+						<Button
+							type="submit"
+							name="intent"
+							value="decline"
+							variant="text"
+							{...submitting("intent", "decline")}
+						>
 							Decline
 						</Button>
 					</Form>

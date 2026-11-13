@@ -23,7 +23,7 @@ export interface SignedInAsProps {
  */
 export function SignedInAs({ email, next = APP_PATH }: SignedInAsProps) {
 	const [notice, setNotice] = useState<Notice | null>(null);
-	const once = useOneAtATime();
+	const { once, running } = useOneAtATime();
 
 	function leave() {
 		once(async () => {
@@ -40,7 +40,12 @@ export function SignedInAs({ email, next = APP_PATH }: SignedInAsProps) {
 					Signed in as <strong className="text-on-surface">{email}</strong>
 				</p>
 				<NoticeLine notice={notice} />
-				<Button variant="text" onPress={leave}>
+				<Button
+					variant="text"
+					isPending={running !== null}
+					pendingLabel="Signing out…"
+					onPress={leave}
+				>
 					Use a different email
 				</Button>
 			</div>
