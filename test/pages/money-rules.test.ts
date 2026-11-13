@@ -84,12 +84,12 @@ async function send(path: string, fields: Record<string, string>, who: Person = 
 	return { status: response.status, said: await response.text() };
 }
 
-/** An entry of `who` on Site, as the database holds it. */
+/** An entry of `who` on Site, as the database holds it: its day the one it starts on in `zone` (TS-111). */
 async function seedEntry(
 	who: Person,
 	from: string,
 	to: string,
-	more: { taskId?: string | null; billable?: boolean; projectId?: string } = {},
+	more: { taskId?: string | null; billable?: boolean; projectId?: string; zone?: string } = {},
 ) {
 	const [entry] = await scope.timeEntries.insert({
 		userId: who.user.id,
@@ -98,7 +98,7 @@ async function seedEntry(
 		billable: more.billable ?? true,
 		description: "Work",
 		startedAt: new Date(from),
-		spentOn: dayOf(Date.parse(from), "UTC"),
+		spentOn: dayOf(Date.parse(from), more.zone ?? "UTC"),
 		endedAt: new Date(to),
 	});
 	if (!entry) throw new Error("No entry was made.");
@@ -433,9 +433,11 @@ describe("a monthly budget", () => {
 	beforeEach(async () => {
 		await budgetSite("total_hours", 600, { resetsMonthly: true });
 		// 23:30 and 00:30 in Auckland (UTC+13), either side of its midnight into
-		// December; both on 30 November in UTC.
-		await seedEntry(people.member, "2026-11-30T10:30:00Z", "2026-11-30T11:00:00Z");
-		await seedEntry(people.member, "2026-11-30T11:30:00Z", "2026-11-30T12:00:00Z");
+		// December; both on 30 November in UTC. Tracked in Auckland, they are on
+		// the days they start on there.
+		const inAuckland = { zone: AUCKLAND };
+		await seedEntry(people.member, "2026-11-30T10:30:00Z", "2026-11-30T11:00:00Z", inAuckland);
+		await seedEntry(people.member, "2026-11-30T11:30:00Z", "2026-11-30T12:00:00Z", inAuckland);
 	});
 
 	it("starts again at the organisation's own midnight on the first of the month", async () => {
@@ -449,10 +451,11 @@ describe("a monthly budget", () => {
 		expect(after?.period).toEqual({ startsOn: "2026-12-01", endsOn: "2026-12-31" });
 		expect(after?.total?.spent).toBe(30);
 
-		// In UTC both are 30 November's.
+		// Read in UTC, each stays on the day it was tracked on (decision 39):
+		// November's budget holds the first alone.
 		const utc = await siteBudget(Date.parse("2026-11-30T23:00:00Z"));
 		expect(utc?.period.startsOn).toBe("2026-11-01");
-		expect(utc?.total?.spent).toBe(60);
+		expect(utc?.total?.spent).toBe(30);
 	});
 });
 
@@ -565,7 +568,7 @@ describe("a budget's spent, for random entries (property)", () => {
 	const FROM = Date.parse("2026-11-28T00:00:00Z");
 	const SPAN = 6 * 86_400_000;
 
-	it("is every whole minute of the entries that start in the period, in the organisation's zone", async () => {
+	it("is every whole minute of the entries whose stored day is in the period, tracked in the organisation's zone", async () => {
 		const next = random(66_069);
 		for (let run = 0; run < 25; run++) {
 			await scope.timeEntries.delete((e) => eq(e.projectId, site));
@@ -582,7 +585,7 @@ describe("a budget's spent, for random entries (property)", () => {
 					people.member,
 					new Date(at).toISOString(),
 					new Date(at + seconds * 1000).toISOString(),
-					{ billable: next() < 0.5 },
+					{ billable: next() < 0.5, zone },
 				);
 			}
 			const now = FROM + Math.floor(next() * SPAN);

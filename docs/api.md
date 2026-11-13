@@ -87,7 +87,7 @@ The token's maker, organisation, role and scopes.
 
 ### `GET /time_entries` — `time:read`
 
-Query: `from`, `to` (days, at most 366 apart, in the organisation's zone), `user_id`, `project_id`, `per_page`, `cursor`. Newest first.
+Query: `from`, `to` (days, at most 366 apart, both included, matched against each entry's `spent_date`), `user_id`, `project_id`, `per_page`, `cursor`. Newest first.
 
 ```json
 {
@@ -110,7 +110,7 @@ Query: `from`, `to` (days, at most 366 apart, in the organisation's zone), `user
 }
 ```
 
-`spent_date` is the day it starts in its person's zone; `description` is there only with `descriptions:read`. `overtime` says whether the entry is overtime rather than regular time (TS-095).
+`spent_date` is the entry's stored day: the day it started on in its person's zone when it was tracked, which a later change of zone does not move (decision 39); `description` is there only with `descriptions:read`. `overtime` says whether the entry is overtime rather than regular time (TS-095).
 
 ### `GET /time_entries/{id}` — `time:read`
 

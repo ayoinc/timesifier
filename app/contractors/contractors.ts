@@ -2,14 +2,14 @@ import { type Money, minorDigits, roundHalfUp, totalsByCurrency } from "~/money/
 import type { Role } from "~/organisations/roles";
 import { type RateRow, resolveRate } from "~/rates/rates";
 import type { ReportDays } from "~/reports/query";
-import { type Day, dayOf } from "~/time/calendar";
+import type { Day } from "~/time/calendar";
 
 /**
  * Contractors (TS-079, B15): whether a member is an employee or a contractor,
  * and what each contractor tracked in a range of days and what it cost. Hours
  * are not rounded: a length is whole seconds, as Reports counts them. Cost is
- * the hours at the person's cost rate in force on the day the entry starts, in
- * their own zone (`resolveRate`, kind `cost`); amounts are added exactly and
+ * the hours at the person's cost rate in force on the entry's day, the one
+ * stored with it (`resolveRate`, kind `cost`); amounts are added exactly and
  * rounded half up once, to the person's total in each currency. Amounts in
  * different currencies are never added together. Time with no cost rate costs
  * nothing and is counted apart, so the page can say which rate is missing.
@@ -35,14 +35,14 @@ export interface ContractorEntry {
 	taskId: string | null;
 	startedAt: number;
 	endedAt: number | null;
+	/** The day it belongs to, stored when it was tracked (TS-111). */
+	day: Day;
 }
 
 /** A person the report lists: a contractor now, or one who left the organisation as one. */
 export interface Contractor {
 	id: string;
 	name: string;
-	/** The zone their days are counted in: their own, or the organisation's. */
-	zone: string;
 	/** Whether they are no longer a member. */
 	left: boolean;
 }
@@ -81,9 +81,9 @@ export function entrySeconds(entry: Pick<ContractorEntry, "startedAt" | "endedAt
 const SECONDS_AN_HOUR = 3600;
 
 /**
- * Each contractor who has an entry starting on one of `days` in their own
- * zone, with that time and its cost, ordered by name. An entry belongs to the
- * day it starts on, whole.
+ * Each contractor who has an entry on one of `days`, with that time and its
+ * cost, ordered by name. An entry belongs whole to its stored day, the day it
+ * started on in the person's zone when it was tracked.
  */
 export function contractorLines(
 	contractors: readonly Contractor[],
@@ -104,7 +104,7 @@ export function contractorLines(
 	for (const entry of entries) {
 		const person = people.get(entry.userId);
 		if (!person) continue;
-		const day: Day = dayOf(entry.startedAt, person.zone);
+		const { day } = entry;
 		if (day < days.first || day > days.last) continue;
 
 		const tally = tallies.get(person.id) ?? { seconds: 0, missingSeconds: 0, priced: new Map() };

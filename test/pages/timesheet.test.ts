@@ -10,6 +10,7 @@ import { freshDatabase } from "../db/database";
 import { createOrganisation, type Role, seedMembership, value } from "../organisations/harness";
 import { open, openData, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
+import { entryDay } from "./periods-seed";
 import { seedDefaultWeek } from "./schedule-seed";
 
 // Timesheet, /app/<slug>: the timer (TS-012a), the Day and Week views
@@ -64,9 +65,18 @@ async function seedEntry(
 ) {
 	const id = uuidv7();
 	await env.DB.prepare(
-		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, 0, 0)",
+		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)",
 	)
-		.bind(id, organisationId, who.user.id, project, description, startedAt, endedAt)
+		.bind(
+			id,
+			organisationId,
+			who.user.id,
+			project,
+			description,
+			startedAt,
+			await entryDay(organisationId, who.user.id, startedAt),
+			endedAt,
+		)
 		.run();
 	return id;
 }
@@ -792,7 +802,7 @@ describe("Track time (TS-056)", () => {
 			const second = gridEntryStart(
 				day,
 				LONDON,
-				[{ startedAt: first, endedAt: first + 90 * MINUTE }],
+				[{ startedAt: first, endedAt: first + 90 * MINUTE, spentOn: day }],
 				T0,
 			);
 			expect(second).toBe(first + 90 * MINUTE);

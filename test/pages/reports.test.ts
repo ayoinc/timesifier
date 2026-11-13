@@ -38,13 +38,15 @@ async function track(
 	from: string,
 	to: string | null,
 	description = "Work",
+	zone = "UTC",
 ) {
+	// Its day, as its writer stores it: the one it starts on in `zone` (TS-111).
 	await scope.timeEntries.insert({
 		userId: who.user.id,
 		projectId,
 		description,
 		startedAt: new Date(from),
-		spentOn: dayOf(Date.parse(from), "UTC"),
+		spentOn: dayOf(Date.parse(from), zone),
 		endedAt: to === null ? null : new Date(to),
 	});
 }
@@ -295,27 +297,63 @@ describe("a report", () => {
 		expect(page.match(/Late/g)).toHaveLength(1);
 	});
 
-	it("counts its days in the viewer's zone, not the organisation's", async () => {
+	it("counts each entry on its stored day, whatever the zone of whoever reads it now", async () => {
 		await env.DB.prepare("update organisations set time_zone = 'Pacific/Auckland' where id = ?")
 			.bind(acme.id)
 			.run();
 		await env.DB.prepare("update users set time_zone = 'America/New_York' where id = ?")
 			.bind(linus.user.id)
 			.run();
-		// 23:00 to 01:00 UTC starts at 19:00 on the 6th in New York: one row, on the Tuesday.
+		// 23:00 to 01:00 UTC, stored on Tuesday the 6th: one row, on the Tuesday.
 		const { rows } = await exported(linus, WEEK);
 		expect(rows.map((row) => row.duration_seconds)).toEqual(["7200"]);
 		const inNewYork = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=day`, linus)));
 		expect(inNewYork).toContain("Tuesday 6 October 2:00");
 		expect(inNewYork).toContain("America/New_York");
 
-		// The same entry, seen from Auckland, starts at midday on the 7th.
+		// A change of zone moves nothing already tracked (decision 39).
 		await env.DB.prepare("update users set time_zone = 'Pacific/Auckland' where id = ?")
 			.bind(linus.user.id)
 			.run();
-		expect(textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=day`, linus)))).toContain(
-			"Wednesday 7 October 2:00",
-		);
+		const inAuckland = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=day`, linus)));
+		expect(inAuckland).toContain("Tuesday 6 October 2:00");
+		expect(inAuckland).not.toContain("Wednesday 7 October");
+	});
+
+	it("the report of a week holds, for a person in another zone, the week they submitted", async () => {
+		// P3 (TR-05): Kiri, in Auckland, works 08:00 to 15:30 Monday 9 to Friday
+		// 13 November, and 08:00 to 12:00 the Monday after; Ada reads in London.
+		const AUCKLAND = "Pacific/Auckland";
+		await env.DB.prepare("update users set time_zone = ? where id = ?")
+			.bind(AUCKLAND, mallory.user.id)
+			.run();
+		await env.DB.prepare("update users set time_zone = 'Europe/London' where id = ?")
+			.bind(ada.user.id)
+			.run();
+		// Auckland is UTC+13 in November: 08:00 there is 19:00 UTC the day before.
+		for (const day of ["08", "09", "10", "11", "12"]) {
+			const start = `2026-11-${day}T19:00:00Z`;
+			const end = new Date(Date.parse(start) + 7.5 * HOUR * 1000).toISOString();
+			await track(mallory, site, start, end, "Kiri", AUCKLAND);
+		}
+		await track(mallory, site, "2026-11-15T19:00:00Z", "2026-11-15T23:00:00Z", "Kiri", AUCKLAND);
+		const week = `range=custom&from=2026-11-09&to=2026-11-15&person=${mallory.user.id}`;
+
+		expect(await pageTotal(ada, week)).toBe("37:30");
+		const byDay = textOf(await pageBody(await open(`${REPORTS}?${week}&group=day`, ada)));
+		for (const day of ["Monday 9", "Tuesday 10", "Wednesday 11", "Thursday 12", "Friday 13"]) {
+			expect(byDay).toContain(`${day} November 7:30`);
+		}
+		expect(byDay).not.toContain("Sunday 15 November");
+		const { rows } = await exported(ada, week);
+		expect(rows.map((row) => row.started_at).sort()).toEqual([
+			"2026-11-08T19:00:00Z",
+			"2026-11-09T19:00:00Z",
+			"2026-11-10T19:00:00Z",
+			"2026-11-11T19:00:00Z",
+			"2026-11-12T19:00:00Z",
+		]);
+		expect(secondsOf(rows)).toBe(37.5 * HOUR);
 	});
 
 	it("groups by project and by client, the time with no client last", async () => {

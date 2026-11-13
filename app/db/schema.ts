@@ -317,8 +317,10 @@ export const timeEntries = sqliteTable(
 		/**
 		 * The local date, `YYYY-MM-DD`, the entry belongs to: the day it starts on
 		 * in its person's zone when it is tracked (TS-111, amending decision 26).
-		 * Every writer sets it, so it has no default here; migration 0020 added it
-		 * with an empty default, which an entry tracked before TS-111b still has.
+		 * Written once by every writer and never worked out again on reading, so a
+		 * change of zone moves nothing already tracked (decision 39). Migration
+		 * 0020 added it with an empty default; 0021 filled every entry tracked
+		 * before TS-111b, and its triggers refuse a row without a real date.
 		 */
 		spentOn: text("spent_on").notNull(),
 		/**
@@ -352,6 +354,13 @@ export const timeEntries = sqliteTable(
 			table.organisationId,
 			table.userId,
 			table.startedAt,
+		),
+		// Every reader bounds and groups entries by their day (TS-111).
+		index("time_entries_organisation_id_spent_on_idx").on(table.organisationId, table.spentOn),
+		index("time_entries_organisation_id_user_id_spent_on_idx").on(
+			table.organisationId,
+			table.userId,
+			table.spentOn,
 		),
 		index("time_entries_organisation_id_project_id_started_at_idx").on(
 			table.organisationId,

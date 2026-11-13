@@ -1,12 +1,11 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, organisationScope, organisations, users, uuidv7 } from "~/db";
+import { type OrganisationScope, organisationScope, organisations, uuidv7 } from "~/db";
 import { locksEntries, PeriodStatus, periodAfter, periodContaining } from "~/periods/periods";
-import { addDays, bounds, type Day, dayOf } from "~/time/calendar";
-import { zoneOf } from "~/time/zones";
+import { addDays, type Day, dayOf } from "~/time/calendar";
 
 import { autoLock, type Deadline, deadlineOf } from "./deadline";
 import { type LockNotice, type LockReason, lockOf } from "./locks";
@@ -357,19 +356,10 @@ export async function submitUnsubmitted(
 	const scope = organisationScope(env.DB, organisation.id);
 	const members = await scope.memberships.select();
 	if (members.length === 0) return 0;
-	const people = await drizzle(env.DB)
-		.select({ id: users.id, timeZone: users.timeZone })
-		.from(users)
-		.where(
-			inArray(
-				users.id,
-				members.map((m) => m.userId),
-			),
-		);
+	const people = members.map((m) => ({ id: m.userId }));
 	const at = new Date(now);
 	let submitted = 0;
 	for (const person of people) {
-		const zone = zoneOf(person, organisation);
 		// The last period that ends on or before `through`.
 		const holding = periodContaining(through, organisation.weekStartsOn);
 		const last = holding.endsOn > through ? periodAfter(holding, -1) : holding;
@@ -378,19 +368,16 @@ export async function submitUnsubmitted(
 				? null
 				: periodContaining(addDays(since, 1), organisation.weekStartsOn).startsOn;
 		if (firstDay !== null && firstDay > last.startsOn) continue;
-		const to = bounds(last.endsOn, last.endsOn, zone).to;
-		const from = firstDay === null ? null : bounds(firstDay, firstDay, zone).from;
+		// Each entry's stored day (decision 39).
 		const entries = await scope.timeEntries.select((e) =>
 			and(
 				eq(e.userId, person.id),
-				lt(e.startedAt, new Date(to)),
-				from === null ? undefined : gte(e.startedAt, new Date(from)),
+				lte(e.spentOn, last.endsOn),
+				firstDay === null ? undefined : gte(e.spentOn, firstDay),
 			),
 		);
 		const starts = new Set(
-			entries.map(
-				(e) => periodContaining(dayOf(e.startedAt, zone), organisation.weekStartsOn).startsOn,
-			),
+			entries.map((e) => periodContaining(e.spentOn, organisation.weekStartsOn).startsOn),
 		);
 		if (starts.size === 0) continue;
 		const rows = await scope.periods.select((p) =>

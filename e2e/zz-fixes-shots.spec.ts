@@ -12,6 +12,10 @@ import { newPerson, ownAddress, setName, signIn } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { createOrganisation } from "./organisation";
 
+// The day an entry is stored with: the one it starts on in the browser's zone,
+// which the person's becomes (TS-111).
+const dayIn = (instant: number) => new Date(instant).toLocaleDateString("en-CA");
+
 // The before and after screenshots of TS-091, the wonky audit's fixes
 // (research/wonky-audit.md). Not a test of the product: it photographs the
 // defects the audit lists, so the same steps run once on `main` (before) and
@@ -90,7 +94,7 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	const org = `(select id from organisations where slug = '${slug}')`;
 	const user = `(select id from users where email = '${email}')`;
 	const entry = (project: string, description: string, from: string, to: string) =>
-		`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values ('${randomUUID()}', ${org}, ${user}, '${project}', '${description}', ${Date.parse(from)}, ${Date.parse(to)}, 0, 0);`;
+		`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values ('${randomUUID()}', ${org}, ${user}, '${project}', '${description}', ${Date.parse(from)}, '${dayIn(Date.parse(from))}', ${Date.parse(to)}, 0, 0);`;
 	execute(
 		[
 			`insert into clients (id, organisation_id, name, name_key, created_at, updated_at) values ('${client}', ${org}, 'AI Coding', 'ai coding', 0, 0);`,

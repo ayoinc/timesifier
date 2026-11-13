@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
@@ -16,8 +16,7 @@ import {
 	type ReportQuery,
 	rangeDays,
 } from "~/reports/query";
-import { addDays, bounds, dayOf } from "~/time/calendar";
-import { zoneOf } from "~/time/zones";
+import { dayOf } from "~/time/calendar";
 
 import {
 	type Contractor,
@@ -86,11 +85,9 @@ export async function contractorReport(
 	const { organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
 	const days = rangeDays(query, dayOf(now, organisation.timeZone), organisation.weekStartsOn);
-	// Each person's days are in their own zone, which is within a day of UTC:
-	// the days with one more on each side, in UTC, hold every entry that starts
-	// on one of them in anybody's zone. `contractorLines` keeps the right ones.
-	const { from, to } = bounds(addDays(days.first, -1), addDays(days.last, 1), "UTC");
-	const span = { from: new Date(from), to: new Date(to) };
+	// Each entry's day is stored with it, in its person's zone (TS-111).
+	const inDays = (e: { spentOn: SQLiteColumn }) =>
+		and(gte(e.spentOn, days.first), lte(e.spentOn, days.last));
 
 	const [members, [held]] = await Promise.all([
 		scope.memberships.select(),
@@ -107,18 +104,11 @@ export async function contractorReport(
 	const [theirs, othersEntries, rates] = await Promise.all([
 		contractorsNow.length === 0
 			? Promise.resolve([])
-			: scope.timeEntries.select((e) =>
-					and(
-						gte(e.startedAt, span.from),
-						lt(e.startedAt, span.to),
-						among(e.userId, contractorsNow),
-					),
-				),
+			: scope.timeEntries.select((e) => and(inDays(e), among(e.userId, contractorsNow))),
 		// The entries of people who are no longer members.
 		scope.timeEntries.select((e) =>
 			and(
-				gte(e.startedAt, span.from),
-				lt(e.startedAt, span.to),
+				inDays(e),
 				sql`${e.userId} not in (select value from json_each(${JSON.stringify(memberIds)}))`,
 			),
 		),
@@ -129,7 +119,7 @@ export async function contractorReport(
 		...new Set(othersEntries.map(({ userId }) => userId)),
 	]);
 	const left = new Set(departed);
-	const contractors = await peopleOf([...contractorsNow, ...departed], organisation, left);
+	const contractors = await peopleOf([...contractorsNow, ...departed], left);
 	const entries: ContractorEntry[] = [
 		...theirs,
 		...othersEntries.filter((e) => left.has(e.userId)),
@@ -139,6 +129,7 @@ export async function contractorReport(
 		taskId: e.taskId,
 		startedAt: e.startedAt.getTime(),
 		endedAt: e.endedAt?.getTime() ?? null,
+		day: e.spentOn,
 	}));
 	const costRates: RateRow[] = rates.map((r) => ({
 		kind: "cost",
@@ -181,24 +172,19 @@ async function leftAsContractors(
 	return people.filter((id) => latest.get(id) === true);
 }
 
-/** Each of `ids` by name (their address when they have given none), in their own zone. */
-async function peopleOf(
-	ids: readonly string[],
-	organisation: Membership["organisation"],
-	left: ReadonlySet<string>,
-): Promise<Contractor[]> {
+/** Each of `ids` by name (their address when they have given none). */
+async function peopleOf(ids: readonly string[], left: ReadonlySet<string>): Promise<Contractor[]> {
 	const people: Contractor[] = [];
 	const db = drizzle(env.DB);
 	for (let at = 0; at < ids.length; at += IDS_A_QUERY) {
 		const rows = await db
-			.select({ id: users.id, name: users.name, email: users.email, timeZone: users.timeZone })
+			.select({ id: users.id, name: users.name, email: users.email })
 			.from(users)
 			.where(inArray(users.id, ids.slice(at, at + IDS_A_QUERY)));
 		for (const row of rows) {
 			people.push({
 				id: row.id,
 				name: nameOrEmail(row),
-				zone: zoneOf(row, organisation),
 				left: left.has(row.id),
 			});
 		}

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sendEmail } from "~/auth/email.server";
 import { compose } from "~/auth/email-frame";
@@ -8,7 +8,7 @@ import { type OrganisationScope, users } from "~/db";
 import { roundHalfUp } from "~/money/money";
 import type { OrganisationMoney, Pricing } from "~/projects/money.server";
 import { priceTime, wholeMinutes } from "~/rates/price";
-import { addDays, dayOf, startOfDay } from "~/time/calendar";
+import { dayOf } from "~/time/calendar";
 
 import {
 	BudgetKind,
@@ -95,16 +95,14 @@ export async function projectBudget(
 		resetsMonthly: project.budgetResetsMonthly,
 		today: dayOf(now, zone),
 	});
-	// From the period's first local midnight to the one after its last day.
-	const from =
-		period.startsOn === LIFETIME_START ? null : new Date(startOfDay(period.startsOn, zone));
-	const to = period.endsOn === null ? null : new Date(startOfDay(addDays(period.endsOn, 1), zone));
+	// The entries whose day is in the period (TS-111).
+	const { startsOn, endsOn } = period;
 	const [entries, lines] = await Promise.all([
 		scope.timeEntries.select((e) =>
 			and(
 				eq(e.projectId, project.id),
-				from === null ? undefined : gte(e.startedAt, from),
-				to === null ? undefined : lt(e.startedAt, to),
+				startsOn === LIFETIME_START ? undefined : gte(e.spentOn, startsOn),
+				endsOn === null ? undefined : lte(e.spentOn, endsOn),
 			),
 		),
 		kind === "total_hours" || kind === "total_fees"
@@ -132,7 +130,7 @@ export async function projectBudget(
 					userId: entry.userId,
 					taskId: entry.taskId,
 					billable: entry.billable,
-					day: dayOf(entry.startedAt, zone),
+					day: entry.spentOn,
 					minutes: wholeMinutes(seconds),
 				}),
 			]);

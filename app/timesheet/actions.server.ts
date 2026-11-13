@@ -205,10 +205,9 @@ export async function timesheetAction(request: Request, membership: Membership) 
 		// it is kept and the day flagged over until an entry is trimmed or
 		// moved (TS-090).
 		case "stop": {
-			const stopped = await stopTimer(scope, user.id, zone, now);
+			const stopped = await stopTimer(scope, user.id, now);
 			if (!stopped) return done("No timer was running.");
-			const day = dayOf(stopped.startedAt, zone);
-			const [over] = await daysOver(scope, user.id, day, day, zone, now);
+			const [over] = await daysOver(scope, user.id, stopped.spentOn, stopped.spentOn, now);
 			const ended = stopped.endedAt?.getTime() ?? now;
 			const split =
 				ended < now
@@ -218,7 +217,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 						: "";
 			return done(
 				over
-					? `Timer stopped.${split} ${formatDay(day, "short")} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
+					? `Timer stopped.${split} ${formatDay(stopped.spentOn, "short")} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
 					: `Timer stopped.${split}`,
 			);
 		}
@@ -247,7 +246,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 		}
 
 		case "delete": {
-			const deleted = await deleteEntry(scope, user.id, zone, input.entryId);
+			const deleted = await deleteEntry(scope, user.id, input.entryId);
 			if (!deleted.ok) return refusal(deleted);
 			const who = { organisationId: organisation.id, userId: user.id };
 			return {
@@ -260,7 +259,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			const who = { organisationId: organisation.id, userId: user.id };
 			const entry = await entryOfUndo(env.BETTER_AUTH_SECRET, input.token, who, now);
 			if (!entry) return declined("That deletion can no longer be undone.", 409);
-			const restored = await restoreEntry(scope, user.id, zone, entry, now);
+			const restored = await restoreEntry(scope, user.id, entry, now);
 			return restored.ok ? { ...done("Entry restored."), changed: [entry.id] } : refusal(restored);
 		}
 

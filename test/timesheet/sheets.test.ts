@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { periodContaining } from "~/periods/periods";
-import { type Day, daysFrom, exactInstantAt, instantAt } from "~/time/calendar";
+import { type Day, dayOf, daysFrom, exactInstantAt, instantAt } from "~/time/calendar";
 import { cellText, formatDuration, formatElapsed, TypedHours } from "~/timesheet/durations";
 import {
 	historyRows,
@@ -22,9 +22,16 @@ const LONDON = "Europe/London";
 const AUCKLAND = "Pacific/Auckland";
 
 let ids = 0;
-function entry(startedAt: number, endedAt: number | null, projectId = "p1"): SheetEntry {
+/** An entry as its writer stores it: its day is the one it starts on in `zone` (TS-111). */
+function entry(
+	startedAt: number,
+	endedAt: number | null,
+	projectId = "p1",
+	zone = LONDON,
+): SheetEntry {
 	ids += 1;
-	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt, overtime: false };
+	const day = dayOf(startedAt, zone);
+	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt, overtime: false, day };
 }
 
 /** A small seeded generator, so a failing case can be run again. */
@@ -50,7 +57,7 @@ describe("the week's sheet", () => {
 				const running = next(20) === 0;
 				return entry(start, running ? null : start + next(600) * MINUTE, `p${next(4)}`);
 			});
-			const sheet = weekSheet(entries, days, LONDON, now);
+			const sheet = weekSheet(entries, days, now);
 
 			sheet.days.forEach(({ total }, index) => {
 				expect(total).toBe(
@@ -70,7 +77,7 @@ describe("the week's sheet", () => {
 
 	it("puts an entry whole in the local day it starts in: 23:30 to 00:30 in London counts under the first day", () => {
 		const start = instantAt("2026-11-10", 23 * 60 + 30, LONDON);
-		const sheet = weekSheet([entry(start, start + HOUR)], days, LONDON, start + 2 * HOUR);
+		const sheet = weekSheet([entry(start, start + HOUR)], days, start + 2 * HOUR);
 
 		expect(sheet.days.find((d) => d.day === "2026-11-10")?.total).toBe(HOUR);
 		expect(sheet.days.find((d) => d.day === "2026-11-11")?.total).toBe(0);
@@ -78,7 +85,7 @@ describe("the week's sheet", () => {
 
 	it("counts a running entry from its start to the time of the request", () => {
 		const start = instantAt("2026-11-11", 9 * 60, LONDON);
-		const sheet = weekSheet([entry(start, null)], days, LONDON, start + 90 * MINUTE);
+		const sheet = weekSheet([entry(start, null)], days, start + 90 * MINUTE);
 
 		expect(sheet.total).toBe(90 * MINUTE);
 		expect(sheet.rows[0]?.cells.find((c) => c.day === "2026-11-11")?.running).toBe(true);
@@ -86,9 +93,12 @@ describe("the week's sheet", () => {
 
 	it("puts the same entry on different days for a person in Auckland and one in London", () => {
 		const start = Date.parse("2026-11-11T20:00:00Z");
-		const one = [entry(start, start + HOUR)];
-		const inLondon = weekSheet(one, days, LONDON, start + 2 * HOUR);
-		const inAuckland = weekSheet(one, days, AUCKLAND, start + 2 * HOUR);
+		const inLondon = weekSheet([entry(start, start + HOUR)], days, start + 2 * HOUR);
+		const inAuckland = weekSheet(
+			[entry(start, start + HOUR, "p1", AUCKLAND)],
+			days,
+			start + 2 * HOUR,
+		);
 
 		expect(inLondon.days.find((d) => d.day === "2026-11-11")?.total).toBe(HOUR);
 		expect(inAuckland.days.find((d) => d.day === "2026-11-12")?.total).toBe(HOUR);
@@ -99,7 +109,7 @@ describe("the week's sheet", () => {
 		const sunday = daysFrom(clockChange.startsOn, clockChange.endsOn);
 		expect(sunday.at(-1)).toBe("2026-03-29");
 		const start = Date.parse("2026-03-29T00:30:00Z");
-		const sheet = weekSheet([entry(start, start + HOUR)], sunday, LONDON, start + 2 * HOUR);
+		const sheet = weekSheet([entry(start, start + HOUR)], sunday, start + 2 * HOUR);
 
 		expect(sheet.days.at(-1)).toEqual({ day: "2026-03-29", total: HOUR, overtime: 0 });
 		// The day after the period starts at 00:00 on 30 March, 23 hours after the Sunday began.
@@ -111,7 +121,6 @@ describe("the week's sheet", () => {
 		const sheet = weekSheet(
 			[entry(start, start + HOUR, "b"), entry(start + 2 * HOUR, start + 3 * HOUR, "a")],
 			days,
-			LONDON,
 			start + 4 * HOUR,
 			{ projectOrder: ["a", "b", "c"], addedRows: ["c", "a"] },
 		);
@@ -131,7 +140,6 @@ describe("the week's sheet", () => {
 				entry(start, null, "running"),
 			],
 			days,
-			LONDON,
 			start + 3 * HOUR,
 		);
 		const monday = (id: string) => {
@@ -154,7 +162,6 @@ describe("the week's sheet", () => {
 		const sheet = weekSheet(
 			[entry(start, start + 7 * HOUR, "a"), overtime, entry(start, start + HOUR, "b")],
 			days,
-			LONDON,
 			start + 10 * HOUR,
 			{ projectOrder: ["a", "b"] },
 		);
@@ -220,7 +227,6 @@ describe("History", () => {
 				{ startsOn: "2026-11-02", endsOn: "2026-11-08", status: "returned", comment: "Add Friday" },
 			],
 			[entry(start, start + 2 * HOUR)],
-			LONDON,
 			now,
 		);
 

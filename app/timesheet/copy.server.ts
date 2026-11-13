@@ -1,14 +1,14 @@
-import { and, eq, gte, isNull, lt } from "drizzle-orm";
+import { and, eq, gte, isNull, lte } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
 import { daysOf } from "~/leave/leave.server";
 import { refusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
-import { type PeriodDays, periodAfter, periodBounds } from "~/periods/periods";
+import { type PeriodDays, periodAfter } from "~/periods/periods";
 import { entryTagStatements, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
-import { addDays, bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { gridEntryStart, placeOnDay } from "~/time/grid";
 import { ENTRY_FIELDS, entriesOfDay, subject } from "~/time/manual.server";
 
@@ -30,9 +30,10 @@ import { formatDuration } from "./durations";
 /** How far back a copy looks: three weeks (Harvest's "Copy your last timesheet"). */
 export const COPY_LOOKBACK_DAYS = 21;
 
-/** One entry to copy: what it was, without its day. */
+/** One entry to copy: what it was, and the day it was on. */
 export interface CopySource {
 	id: string;
+	day: Day;
 	projectId: string;
 	taskId: string | null;
 	description: string | null;
@@ -44,15 +45,12 @@ export interface CopySource {
 async function sourcesIn(
 	scope: OrganisationScope,
 	userId: string,
-	span: { from: number; to: number },
+	first: Day,
+	last: Day,
 ): Promise<CopySource[]> {
 	const [rows, active] = await Promise.all([
 		scope.timeEntries.select((e) =>
-			and(
-				eq(e.userId, userId),
-				gte(e.startedAt, new Date(span.from)),
-				lt(e.startedAt, new Date(span.to)),
-			),
+			and(eq(e.userId, userId), gte(e.spentOn, first), lte(e.spentOn, last)),
 		),
 		scope.projects.select((p) => isNull(p.archivedAt)),
 	]);
@@ -61,6 +59,7 @@ async function sourcesIn(
 		.filter((row) => row.endedAt !== null && live.has(row.projectId))
 		.map((row) => ({
 			id: row.id,
+			day: row.spentOn,
 			projectId: row.projectId,
 			taskId: row.taskId,
 			description: row.description,
@@ -80,12 +79,11 @@ export async function copySourceDay(
 	scope: OrganisationScope,
 	userId: string,
 	day: Day,
-	zone: string,
 ): Promise<{ day: Day; entries: CopySource[] } | null> {
 	const first = addDays(day, -COPY_LOOKBACK_DAYS);
 	const last = addDays(day, -1);
 	const [sources, statuses] = await Promise.all([
-		sourcesIn(scope, userId, bounds(first, last, zone)),
+		sourcesIn(scope, userId, first, last),
 		daysOf(scope, userId, first, last),
 	]);
 	const working = new Set(
@@ -95,7 +93,7 @@ export async function copySourceDay(
 	);
 	for (const candidate of daysFrom(first, last).reverse()) {
 		if (!working.has(candidate)) continue;
-		const entries = sources.filter((s) => dayOf(s.startedAt, zone) === candidate);
+		const entries = sources.filter((s) => s.day === candidate);
 		if (entries.length > 0) return { day: candidate, entries };
 	}
 	return null;
@@ -106,20 +104,12 @@ export async function copySourceWeek(
 	scope: OrganisationScope,
 	userId: string,
 	period: PeriodDays,
-	zone: string,
 ): Promise<{ period: PeriodDays; entries: CopySource[] } | null> {
 	const oldest = periodAfter(period, -3);
-	const sources = await sourcesIn(
-		scope,
-		userId,
-		periodBounds({ startsOn: oldest.startsOn, endsOn: addDays(period.startsOn, -1) }, zone),
-	);
+	const sources = await sourcesIn(scope, userId, oldest.startsOn, addDays(period.startsOn, -1));
 	for (const back of [1, 2, 3]) {
 		const week = periodAfter(period, -back);
-		const entries = sources.filter((s) => {
-			const day = dayOf(s.startedAt, zone);
-			return week.startsOn <= day && day <= week.endsOn;
-		});
+		const entries = sources.filter((s) => week.startsOn <= s.day && s.day <= week.endsOn);
 		if (entries.length > 0) return { period: week, entries };
 	}
 	return null;
@@ -136,14 +126,14 @@ async function copyOnto(
 	zone: string,
 	now: number,
 ): Promise<{ ok: true; statements: Statement[]; ids: string[] } | { ok: false; problem: string }> {
-	if ((await entriesOfDay(scope, userId, day, zone)).length > 0) {
+	if ((await entriesOfDay(scope, userId, day)).length > 0) {
 		return { ok: false, problem: "That day already has time: nothing was copied onto it." };
 	}
 	if ((await lockedDays(scope, userId, [day])).size > 0) {
 		return { ok: false, problem: "That day is locked: nothing can be copied onto it." };
 	}
 	const totalMs = sources.reduce((sum, s) => sum + s.lengthMs, 0);
-	const over = await refusalOf(scope, userId, zone, now, {
+	const over = await refusalOf(scope, userId, now, {
 		day,
 		replaces: null,
 		afterMs: totalMs,
@@ -211,7 +201,7 @@ export async function copyDay(
 	zone: string,
 	now: number,
 ): Promise<{ ok: true; from: Day; ids: string[] } | { ok: false; problem: string }> {
-	const source = await copySourceDay(scope, userId, day, zone);
+	const source = await copySourceDay(scope, userId, day);
 	if (!source) return { ok: false, problem: "No working day in the last three weeks has time." };
 	const onto = await copyOnto(scope, userId, day, source.entries, zone, now);
 	if (!onto.ok) return onto;
@@ -233,7 +223,7 @@ export async function copyWeek(
 	zone: string,
 	now: number,
 ): Promise<{ ok: true; days: number; ids: string[] } | { ok: false; problem: string }> {
-	const source = await copySourceWeek(scope, userId, period, zone);
+	const source = await copySourceWeek(scope, userId, period);
 	if (!source) return { ok: false, problem: "No week in the last three has time." };
 	const today = dayOf(now, zone);
 	const statements: Statement[] = [];
@@ -242,7 +232,7 @@ export async function copyWeek(
 	for (const [index, day] of daysFrom(period.startsOn, period.endsOn).entries()) {
 		if (day > today) continue;
 		const from = addDays(source.period.startsOn, index);
-		const ofDay = source.entries.filter((s) => dayOf(s.startedAt, zone) === from);
+		const ofDay = source.entries.filter((s) => s.day === from);
 		if (ofDay.length === 0) continue;
 		const onto = await copyOnto(scope, userId, day, ofDay, zone, now);
 		if (!onto.ok || onto.ids.length === 0) continue;

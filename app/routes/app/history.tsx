@@ -10,7 +10,6 @@ import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
-import { dayOf } from "~/time/calendar";
 import { zoneOfMember } from "~/time/zones.server";
 import { dayPath } from "~/timesheet/views";
 
@@ -54,10 +53,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		deleted: !entry,
 		owner: rows.find((row) => row.owner)?.owner ?? null,
 		/** The Day view of the entry, for the person whose entry it is. */
-		back:
-			entry && entry.userId === user.id
-				? dayPath(organisation.slug, dayOf(entry.startedAt, zone))
-				: null,
+		back: entry && entry.userId === user.id ? dayPath(organisation.slug, entry.spentOn) : null,
 	};
 }
 

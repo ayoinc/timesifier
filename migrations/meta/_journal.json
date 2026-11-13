@@ -141,6 +141,13 @@
 			"when": 1794585056391,
 			"tag": "0020_entry_day_column",
 			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "6",
+			"when": 1794586610631,
+			"tag": "0021_entry_day_backfill",
+			"breakpoints": true
 		}
 	]
 }

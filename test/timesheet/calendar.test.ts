@@ -26,9 +26,16 @@ const LONDON = "Europe/London";
 const AUCKLAND = "Pacific/Auckland";
 
 let ids = 0;
-function entry(startedAt: number, endedAt: number | null, projectId = "p1"): SheetEntry {
+/** An entry as its writer stores it: its day is the one it starts on in `zone` (TS-111). */
+function entry(
+	startedAt: number,
+	endedAt: number | null,
+	projectId = "p1",
+	zone = LONDON,
+): SheetEntry {
 	ids += 1;
-	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt, overtime: false };
+	const day = dayOf(startedAt, zone);
+	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt, overtime: false, day };
 }
 
 /** A small seeded generator, so a failing case can be run again. */
@@ -51,7 +58,7 @@ function randomEntries(
 	return Array.from({ length: next(60) }, () => {
 		const start = from + next((spanDays + 1) * 24 * 60) * MINUTE;
 		const running = next(25) === 0;
-		return entry(start, running ? null : start + next(20 * 60) * MINUTE, `p${next(4)}`);
+		return entry(start, running ? null : start + next(20 * 60) * MINUTE, `p${next(4)}`, zone);
 	});
 }
 
@@ -65,7 +72,7 @@ describe("the calendar's totals", () => {
 					const { days } = calendarDays("month", month, weekStartsOn);
 					const entries = randomEntries(next, days[0] as Day, days.length, zone);
 					const now = instantAt(days.at(-1) as Day, 12 * 60, zone);
-					const sheet = monthSheet(entries, days, month, zone, now);
+					const sheet = monthSheet(entries, days, month, now);
 
 					for (const week of sheet.weeks) {
 						const first = week.days[0]?.day as Day;
@@ -74,7 +81,7 @@ describe("the calendar's totals", () => {
 						const periodDays = daysFrom(period.startsOn, period.endsOn);
 						// The Week view reads only the entries that start in the period.
 						const ofPeriod = entries.filter((e) => periodDays.includes(dayOf(e.startedAt, zone)));
-						expect(week.total).toBe(weekSheet(ofPeriod, periodDays, zone, now).total);
+						expect(week.total).toBe(weekSheet(ofPeriod, periodDays, now).total);
 						for (const { day, total } of week.days) {
 							// The Day view: the entries that start on the day, added up.
 							const ofDay = entries.filter((e) => dayOf(e.startedAt, zone) === day);
@@ -100,7 +107,6 @@ describe("the calendar's totals", () => {
 			[entry(start, start + 3 * HOUR), entry(start + 24 * HOUR, start + 25 * HOUR)],
 			days,
 			"2026-11-01",
-			LONDON,
 			start,
 		);
 		expect(sheet.weeks[0]?.days.map((d) => d.inMonth)).toEqual([

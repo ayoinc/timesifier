@@ -127,21 +127,34 @@ describe("an hour typed into the week's grid (TS-052)", () => {
 
 	it("starts when the day's last entry ends", () => {
 		const entries = [
-			{ startedAt: at("2026-11-10T09:00:00Z"), endedAt: at("2026-11-10T12:00:00Z") },
-			{ startedAt: at("2026-11-10T13:00:00Z"), endedAt: at("2026-11-10T14:30:00Z") },
+			{
+				startedAt: at("2026-11-10T09:00:00Z"),
+				endedAt: at("2026-11-10T12:00:00Z"),
+				spentOn: "2026-11-10",
+			},
+			{
+				startedAt: at("2026-11-10T13:00:00Z"),
+				endedAt: at("2026-11-10T14:30:00Z"),
+				spentOn: "2026-11-10",
+			},
 			// Another day's entry, which ends later, does not count.
-			{ startedAt: at("2026-11-11T08:00:00Z"), endedAt: at("2026-11-11T10:00:00Z") },
+			{
+				startedAt: at("2026-11-11T08:00:00Z"),
+				endedAt: at("2026-11-11T10:00:00Z"),
+				spentOn: "2026-11-11",
+			},
 		];
 		expect(gridEntryStart("2026-11-10", zone, entries, now)).toBe(at("2026-11-10T14:30:00Z"));
 	});
 
-	it("counts an entry by the day it starts on, and a running one as ending now", () => {
+	it("counts an entry by its stored day, the day it started on, and a running one as ending now", () => {
 		const entries = [
 			{
 				startedAt: new Date(at("2026-11-10T23:30:00Z")),
 				endedAt: new Date(at("2026-11-11T00:30:00Z")),
+				spentOn: "2026-11-10",
 			},
-			{ startedAt: at("2026-11-11T13:00:00Z"), endedAt: null },
+			{ startedAt: at("2026-11-11T13:00:00Z"), endedAt: null, spentOn: "2026-11-11" },
 		];
 		expect(gridEntryStart("2026-11-10", zone, entries, now)).toBe(at("2026-11-11T00:30:00Z"));
 		expect(gridEntryStart("2026-11-11", zone, entries, now)).toBe(now);

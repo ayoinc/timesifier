@@ -166,10 +166,11 @@ export async function feedCalendar(token: string, now: number): Promise<string |
 		allDay: { first: request.startsOn, last: request.endsOn },
 	}));
 	if (feed.includeEntries) {
-		const since = new Date(now - ENTRY_DAYS_BACK * 86_400_000);
+		// Bounded by each entry's stored day (decision 39).
+		const since = addDays(today, -ENTRY_DAYS_BACK);
 		const [entries, projects, tasks] = await Promise.all([
 			scope.timeEntries.select(
-				(e) => and(eq(e.userId, caller.user.id), gte(e.startedAt, since), isNotNull(e.endedAt)),
+				(e) => and(eq(e.userId, caller.user.id), gte(e.spentOn, since), isNotNull(e.endedAt)),
 				{ orderBy: (e) => [e.startedAt], limit: 2000 },
 			),
 			scope.projects.select(),

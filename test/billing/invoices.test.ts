@@ -177,24 +177,20 @@ describe("billed time", () => {
 	it("is locked while on an invoice and let go by deleting the line, the draft or voiding", async () => {
 		const a = await entry(9);
 		const b = await entry(11);
-		// `a` was tracked before TS-111b, and has no day.
-		await env.DB.prepare("update time_entries set spent_on = '' where id = ?").bind(a).run();
 		const id = await draft([timeLine([a, b])]);
 		const change = () =>
 			env.DB.prepare("update time_entries set description = 'changed' where id = ?").bind(a).run();
 		await expect(change()).rejects.toThrow(/invoiced entry does not change/);
-		// Its empty day may be written once, with a real date and nothing else
-		// (migration 0020, TS-111), and then not again.
-		const day = (spentOn: string, extra = "") =>
-			env.DB.prepare(`update time_entries set spent_on = ?${extra} where id = ?`)
-				.bind(spentOn, a)
+		// Every entry has its day (migration 0021, TS-111), so an invoiced
+		// entry's day does not change either, and no entry's may be emptied.
+		const day = (entryId: string, spentOn: string) =>
+			env.DB.prepare("update time_entries set spent_on = ? where id = ?")
+				.bind(spentOn, entryId)
 				.run();
-		await expect(day("2026-02-30")).rejects.toThrow(/invoiced entry does not change/);
-		await expect(day("2026-11-02", ", updated_at = 1")).rejects.toThrow(
-			/invoiced entry does not change/,
-		);
-		await day("2026-11-02");
-		await expect(day("2026-11-03")).rejects.toThrow(/invoiced entry does not change/);
+		await expect(day(a, "2026-11-03")).rejects.toThrow(/invoiced entry does not change/);
+		const unbilled = await entry(13);
+		await expect(day(unbilled, "")).rejects.toThrow(/an entry has the date of its day/);
+		await expect(day(unbilled, "2026-02-30")).rejects.toThrow(/an entry has the date of its day/);
 
 		// The same time on a second invoice is refused.
 		const again = await createDraft(scope, owner.user.id, {

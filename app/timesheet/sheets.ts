@@ -1,12 +1,13 @@
 import { locksEntries, type PeriodDays, type PeriodStatus, periodAfter } from "~/periods/periods";
-import { type Day, dayOf } from "~/time/calendar";
+import type { Day } from "~/time/calendar";
 
 /**
  * What the views of Timesheet add up (TS-013, TS-046, TS-052). Nothing here
- * reads the database or the clock: the loader passes the person's entries, the
- * zone their days are counted in and the time of the request, so a total is
- * the same sum wherever it is worked out. An entry belongs whole to the local
- * day it starts in, and a running entry counts up to `now`.
+ * reads the database or the clock: the loader passes the person's entries and
+ * the time of the request, so a total is the same sum wherever it is worked
+ * out. An entry belongs whole to its day, the local day it started in, stored
+ * with it when it was tracked (decision 39), and a running entry counts up to
+ * `now`.
  */
 
 /** An entry as the sheets read it: times in milliseconds, `endedAt` null while it runs. */
@@ -18,6 +19,8 @@ export interface SheetEntry {
 	endedAt: number | null;
 	/** Whether the entry is overtime rather than regular time (TS-095). */
 	overtime: boolean;
+	/** The day it belongs to, stored when it was tracked (TS-111). */
+	day: Day;
 }
 
 /** How long `entry` has lasted by `now`. */
@@ -73,7 +76,6 @@ export interface WeekSheet {
 export function weekSheet(
 	entries: readonly SheetEntry[],
 	days: readonly Day[],
-	zone: string,
 	now: number,
 	{
 		projectOrder = [],
@@ -83,7 +85,7 @@ export function weekSheet(
 	const byRow = new Map<string, Map<Day, SheetEntry[]>>();
 	const projectIds: string[] = [];
 	for (const entry of entries) {
-		const day = dayOf(entry.startedAt, zone);
+		const { day } = entry;
 		if (!days.includes(day)) continue;
 		const key = rowKey(entry.projectId, entry.overtime);
 		let ofRow = byRow.get(key);
@@ -193,13 +195,12 @@ export function historyRows(
 	current: PeriodDays,
 	periods: readonly (PeriodDays & { status: PeriodStatus; comment: string | null })[],
 	entries: readonly SheetEntry[],
-	zone: string,
 	now: number,
 ): HistoryRow[] {
-	const earliestEntry = entries.reduce<Day | null>((first, entry) => {
-		const day = dayOf(entry.startedAt, zone);
-		return first === null || day < first ? day : first;
-	}, null);
+	const earliestEntry = entries.reduce<Day | null>(
+		(first, { day }) => (first === null || day < first ? day : first),
+		null,
+	);
 	const earliestPeriod = periods.reduce<Day | null>(
 		(first, period) => (first === null || period.startsOn < first ? period.startsOn : first),
 		null,
@@ -215,10 +216,7 @@ export function historyRows(
 		period = periodAfter(period, -1)
 	) {
 		const row = periods.find((each) => each.startsOn === period.startsOn) ?? null;
-		const inPeriod = entries.filter((entry) => {
-			const day = dayOf(entry.startedAt, zone);
-			return period.startsOn <= day && day <= period.endsOn;
-		});
+		const inPeriod = entries.filter(({ day }) => period.startsOn <= day && day <= period.endsOn);
 		rows.push({
 			...period,
 			state: periodState(row?.status ?? null),

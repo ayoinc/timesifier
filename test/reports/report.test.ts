@@ -20,18 +20,26 @@ import {
 	steppedRange,
 } from "~/reports/query";
 import { type ReportEntry, type Row, rowOf, totalsOf } from "~/reports/report";
-import { bounds } from "~/time/calendar";
+import { bounds, dayOf } from "~/time/calendar";
 import { parseCsv } from "./csv";
 
 // The arithmetic of a report (TS-014a) and of its export (TS-014b), without the
-// database: the range an address asks for, an entry counted whole on the day it
-// starts in the viewer's zone (decision 26, TS-091), a running entry counted to
+// database: the range an address asks for, an entry counted whole on its stored
+// day, the one it started on in its person's zone (decision 39), a running entry counted to
 // now, the totals by project, client and day in whole minutes, and the cells of
 // the CSV.
 
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const LONDON = "Europe/London";
+
+/**
+ * `entry` as a report counts it once its writer, a person in `zone`, stored
+ * its day (TS-111): the day it starts on there.
+ */
+function rowIn(each: ReportEntry, range: ReportDays, zone: string, now: number): Row | null {
+	return rowOf({ ...each, day: dayOf(each.startedAt, zone) }, range, now);
+}
 
 let ids = 0;
 function entry(
@@ -49,6 +57,7 @@ function entry(
 		clientId: "c1",
 		client: "Initech",
 		description: "Work",
+		day: dayOf(typeof startedAt === "number" ? startedAt : Date.parse(startedAt), "UTC"),
 		startedAt: typeof startedAt === "number" ? startedAt : Date.parse(startedAt),
 		endedAt: endedAt === null ? null : typeof endedAt === "number" ? endedAt : Date.parse(endedAt),
 		taskId: null,
@@ -294,18 +303,18 @@ describe("an entry in a report", () => {
 
 	it("is counted on the day it starts, for its whole minutes", () => {
 		expect(
-			counted(rowOf(entry("2026-11-03T09:00:00Z", "2026-11-03T10:30:59Z"), week, "UTC", 0)),
+			counted(rowIn(entry("2026-11-03T09:00:00Z", "2026-11-03T10:30:59Z"), week, "UTC", 0)),
 		).toEqual(["2026-11-03", 90, false]);
 	});
 
 	it("21:33 to 02:33 counts whole on its start day, never cut at midnight", () => {
-		const row = rowOf(entry("2026-11-03T21:33:00Z", "2026-11-04T02:33:00Z"), week, LONDON, 0);
+		const row = rowIn(entry("2026-11-03T21:33:00Z", "2026-11-04T02:33:00Z"), week, LONDON, 0);
 		expect(counted(row)).toEqual(["2026-11-03", 300, false]);
 	});
 
-	it("belongs to the day it starts in the viewer's zone, not in UTC", () => {
+	it("belongs to the day it starts in its person's zone, not in UTC", () => {
 		// 20:00 UTC on the 3rd is 09:00 on the 4th in Auckland (UTC+13).
-		const row = rowOf(
+		const row = rowIn(
 			entry("2026-11-03T20:00:00Z", "2026-11-04T00:00:00Z"),
 			week,
 			"Pacific/Auckland",
@@ -317,18 +326,18 @@ describe("an entry in a report", () => {
 	it("is in the range when it starts in it, whole, even when it ends after", () => {
 		const day: ReportDays = { first: "2026-11-08", last: "2026-11-08" };
 		expect(
-			counted(rowOf(entry("2026-11-08T22:00:00Z", "2026-11-09T02:00:00Z"), day, "UTC", 0)),
+			counted(rowIn(entry("2026-11-08T22:00:00Z", "2026-11-09T02:00:00Z"), day, "UTC", 0)),
 		).toEqual(["2026-11-08", 240, false]);
 	});
 
 	it("is not in the range when it starts outside it, even when it ends in it", () => {
-		expect(rowOf(entry("2026-11-10T09:00:00Z", "2026-11-10T10:00:00Z"), week, "UTC", 0)).toBeNull();
-		expect(rowOf(entry("2026-11-01T22:00:00Z", "2026-11-02T02:00:00Z"), week, "UTC", 0)).toBeNull();
+		expect(rowIn(entry("2026-11-10T09:00:00Z", "2026-11-10T10:00:00Z"), week, "UTC", 0)).toBeNull();
+		expect(rowIn(entry("2026-11-01T22:00:00Z", "2026-11-02T02:00:00Z"), week, "UTC", 0)).toBeNull();
 	});
 
 	it("counts a running entry whole up to now, and says it runs", () => {
 		const now = Date.parse("2026-11-05T01:15:30Z");
-		expect(counted(rowOf(entry("2026-11-04T23:00:00Z", null), week, "UTC", now))).toEqual([
+		expect(counted(rowIn(entry("2026-11-04T23:00:00Z", null), week, "UTC", now))).toEqual([
 			"2026-11-04",
 			135,
 			true,
@@ -337,7 +346,7 @@ describe("an entry in a report", () => {
 
 	it("is no time when it has no length", () => {
 		expect(
-			counted(rowOf(entry("2026-11-02T00:00:00Z", "2026-11-02T00:00:00Z"), week, "UTC", 0)),
+			counted(rowIn(entry("2026-11-02T00:00:00Z", "2026-11-02T00:00:00Z"), week, "UTC", 0)),
 		).toEqual(["2026-11-02", 0, false]);
 	});
 });
@@ -358,7 +367,7 @@ describe("the totals of a report", () => {
 			clientId: "c2",
 			client: "acme",
 		}),
-	].flatMap((each) => rowOf(each, week, "UTC", 0) ?? []);
+	].flatMap((each) => rowIn(each, week, "UTC", 0) ?? []);
 
 	it("by project, in the order of the names", () => {
 		expect(totalsOf(rows, "project")).toEqual({
@@ -389,14 +398,14 @@ describe("the totals of a report", () => {
 
 	it("hold the overtime of each group and of all apart, within its time (TS-095)", () => {
 		const mixed = [
-			rowOf(entry("2026-11-02T09:00:00Z", "2026-11-02T16:30:00Z"), week, "UTC", 0),
-			rowOf(
+			rowIn(entry("2026-11-02T09:00:00Z", "2026-11-02T16:30:00Z"), week, "UTC", 0),
+			rowIn(
 				entry("2026-11-02T16:30:00Z", "2026-11-02T17:45:00Z", { overtime: true }),
 				week,
 				"UTC",
 				0,
 			),
-			rowOf(
+			rowIn(
 				entry("2026-11-03T09:00:00Z", "2026-11-03T09:30:00Z", {
 					projectId: "p2",
 					project: "Billing",
@@ -470,7 +479,7 @@ describe("a property of every report (W07)", () => {
 				});
 			});
 
-			const rows = entries.flatMap((each) => rowOf(each, RANGE, zone, now) ?? []);
+			const rows = entries.flatMap((each) => rowIn(each, RANGE, zone, now) ?? []);
 			// Read back what the page writes: "H:MM" to minutes.
 			const read = (written: string) => {
 				const [hours, minutes] = written.split(":").map(Number) as [number, number];
@@ -586,7 +595,7 @@ describe("a row of the CSV", () => {
 	const week: ReportDays = { first: "2026-11-02", last: "2026-11-08" };
 
 	it("is one entry, across midnight too: times in UTC to the second, its whole minutes in seconds", () => {
-		const row = rowOf(
+		const row = rowIn(
 			entry("2026-11-03T23:30:00.400Z", "2026-11-04T00:30:59Z", { id: "e1", description: "=1+1" }),
 			week,
 			"UTC",
@@ -610,7 +619,7 @@ describe("a row of the CSV", () => {
 
 	it("has no end while its entry runs", () => {
 		const now = Date.parse("2026-11-04T10:00:00Z");
-		const row = rowOf(
+		const row = rowIn(
 			entry("2026-11-04T09:00:00Z", null, { description: null, clientId: null, client: null }),
 			week,
 			"UTC",
