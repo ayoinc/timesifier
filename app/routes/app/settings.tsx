@@ -263,6 +263,7 @@ const form = z.discriminatedUnion("intent", [
 		intent: z.enum(["archive-category", "restore-category"]),
 		categoryId: z.string().min(1).max(64),
 	}),
+	z.object({ intent: z.literal("add-usual-categories") }),
 	...LOCK_FORMS,
 	...BRAND_FORMS,
 ]);
@@ -364,7 +365,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "add-category":
 		case "change-category":
 		case "archive-category":
-		case "restore-category": {
+		case "restore-category":
+		case "add-usual-categories": {
 			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
 			const kept = await keepCategory(
 				organisationScope(env.DB, organisation.id),

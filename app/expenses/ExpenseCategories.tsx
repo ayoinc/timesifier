@@ -6,10 +6,18 @@ import { TextField } from "~/components/TextField";
 import { RECORD_NAME_MAX_LENGTH } from "~/lib/names";
 import { formatMoney } from "~/money/money";
 import { FormSheet } from "~/routes/app/FormSheet";
+import { TEXT_LINK } from "~/shell/links";
 import { Section } from "~/shell/PageHeading";
 import { dayLabel } from "~/teams/words";
 
 import { amountText, type DatedPrice, UNIT_NAME_MAX_LENGTH } from "./expenses";
+import {
+	HMRC_CAR_MILEAGE_PENCE,
+	HMRC_MILEAGE_RATES,
+	MILE,
+	MILEAGE_RATE_CURRENCY,
+	USUAL_CATEGORIES,
+} from "./starter";
 
 // Workspace settings for expenses (TS-070, B9): the categories people record
 // expenses in. Owners and admins add, rename, archive and restore them; a
@@ -31,7 +39,7 @@ export interface ExpenseCategoriesData {
 	}[];
 }
 
-type Task = "add" | "change" | "archive" | "restore";
+type Task = "usual" | "add" | "change" | "archive" | "restore";
 type Category = ExpenseCategoriesData["categories"][number];
 
 export function ExpenseCategories({
@@ -61,8 +69,8 @@ export function ExpenseCategories({
 			>
 				{data.categories.length === 0 ? (
 					<p className="text-body-large text-on-surface-variant">
-						No categories yet. Add one, such as Travel, Meals or Mileage, and people can record
-						expenses in it.
+						No categories yet. Add the usual ones a UK business pays back, or your own one at a
+						time, and people can record expenses in them.
 					</p>
 				) : (
 					<Ledger heading="Categories" note={`${data.categories.length}`}>
@@ -111,12 +119,24 @@ export function ExpenseCategories({
 						</LedgerRows>
 					</Ledger>
 				)}
-				<div className="mt-4">
+				<div className="mt-4 flex flex-wrap gap-2">
+					{data.categories.length === 0 && (
+						<Button variant="outlined" onPress={() => open("usual", null)}>
+							Add the usual categories
+						</Button>
+					)}
 					<Button variant="outlined" onPress={() => open("add", null)}>
 						Add category
 					</Button>
 				</div>
 			</Section>
+
+			<UsualCategoriesSheet
+				currency={data.currency}
+				isOpen={task === "usual"}
+				onClose={close}
+				onDone={onDone}
+			/>
 
 			<FormSheet
 				title="Add an expense category"
@@ -201,6 +221,65 @@ export function ExpenseCategories({
 				<p>It is offered for new expenses again.</p>
 			</FormSheet>
 		</>
+	);
+}
+
+/**
+ * The sheet that adds the usual categories (TS-119) to an organisation with
+ * none: it names each, and says how Mileage is priced before anything is
+ * added. `action` is Workspace settings' address when another page opens it.
+ */
+export function UsualCategoriesSheet({
+	currency,
+	isOpen,
+	onClose,
+	onDone,
+	action,
+}: {
+	currency: string;
+	isOpen: boolean;
+	onClose: () => void;
+	onDone: (said: string) => void;
+	action?: string;
+}) {
+	const pence = HMRC_CAR_MILEAGE_PENCE;
+	const [before, now] = [pence.at(-2), pence.at(-1)];
+	const pounds = (minor: number) => formatMoney(minor, MILEAGE_RATE_CURRENCY, "en-GB");
+	return (
+		<FormSheet
+			title="Add the usual categories"
+			intent="add-usual-categories"
+			submitLabel="Add them"
+			isOpen={isOpen}
+			onClose={onClose}
+			onDone={onDone}
+			action={action}
+		>
+			<ul aria-label="The usual categories" className="list-disc ps-6 text-body-large">
+				{USUAL_CATEGORIES.map((name) => (
+					<li key={name}>{name}</li>
+				))}
+			</ul>
+			{currency === MILEAGE_RATE_CURRENCY && before && now ? (
+				<p className="text-body-medium text-on-surface-variant">
+					Mileage is priced per {MILE} at{" "}
+					<a href={HMRC_MILEAGE_RATES} className={TEXT_LINK}>
+						HMRC&rsquo;s approved rate for cars and vans
+					</a>
+					: {pounds(now.unitPriceMinor)} from {dayLabel(now.effectiveFrom)}, and{" "}
+					{pounds(before.unitPriceMinor)} before. That is the rate for the first 10,000 business
+					miles of a tax year; change the price if you pay another.
+				</p>
+			) : (
+				<p className="text-body-medium text-on-surface-variant">
+					Mileage is recorded as an amount: HMRC&rsquo;s rate per mile is in pounds, and amounts
+					here are in {currency}. Change it to give it a price per {MILE}.
+				</p>
+			)}
+			<p className="text-body-medium text-on-surface-variant">
+				Each is an ordinary category: rename, reprice or archive it in Workspace settings.
+			</p>
+		</FormSheet>
 	);
 }
 

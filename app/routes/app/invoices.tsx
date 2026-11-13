@@ -9,8 +9,9 @@ import { Select } from "~/components/Select";
 import { BillingTabs } from "~/invoices/BillingTabs";
 import { billingOf } from "~/invoices/context.server";
 import { settledOf } from "~/invoices/invoices.server";
+import { Overview, overviewData } from "~/invoices/Overview";
+import { invoiceOverview } from "~/invoices/overview.server";
 import { invoicePath, invoiceSettingsPath, newInvoicePath, xeroExportPath } from "~/invoices/paths";
-import { receivablesOf } from "~/invoices/receivables.server";
 import { balanceOf, type InvoiceStatus, OWING, STATE_LABELS, stateOf } from "~/invoices/status";
 import { formatMoney } from "~/money/money";
 import { destination } from "~/shell/destinations";
@@ -22,8 +23,10 @@ import type { Route } from "./+types/invoices";
 
 // Invoices (TS-073, TS-074): what the organisation charges its clients, with
 // what is owed on each. Owners, admins and Finance are shown it; everyone
-// else gets the organisation layout's 404. The headline is what clients owe
-// now, and how much of it is overdue; the list is the invoices of one state.
+// else gets the organisation layout's 404. It opens on the overview (TS-119):
+// what clients owe now and how much of it is overdue, what they paid this
+// year, and a year of what was issued against what was paid, above the open
+// invoices. The other views are the invoices of one state.
 
 const { label } = destination("invoices");
 
@@ -32,9 +35,10 @@ export function meta() {
 }
 
 /** Which invoices the list shows, in the address as `?show=`. */
-const SHOWN = ["open", "draft", "paid", "void", "all"] as const;
+const SHOWN = ["overview", "open", "draft", "paid", "void", "all"] as const;
 type Shown = (typeof SHOWN)[number];
 const SHOWN_LABELS: Record<Shown, string> = {
+	overview: "Overview",
 	open: "Open",
 	draft: "Drafts",
 	paid: "Paid",
@@ -42,6 +46,7 @@ const SHOWN_LABELS: Record<Shown, string> = {
 	all: "All",
 };
 const STATUSES: Record<Shown, readonly InvoiceStatus[] | null> = {
+	overview: OWING,
 	open: OWING,
 	draft: ["draft"],
 	paid: ["paid"],
@@ -52,14 +57,14 @@ const STATUSES: Record<Shown, readonly InvoiceStatus[] | null> = {
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const { scope, organisation, today, locale } = await billingOf(context, request);
 	const asked = new URL(request.url).searchParams.get("show");
-	const show: Shown = SHOWN.find((each) => each === asked) ?? "open";
+	const show: Shown = SHOWN.find((each) => each === asked) ?? "overview";
 	const statuses = STATUSES[show];
-	const [rows, clients, receivables, any] = await Promise.all([
+	const [rows, clients, overview, any] = await Promise.all([
 		scope.invoices.select((i) => (statuses ? inArray(i.status, [...statuses]) : undefined), {
 			orderBy: (i) => [desc(i.issuedOn), desc(i.createdAt)],
 		}),
 		scope.clients.select(),
-		receivablesOf(scope, today),
+		show === "overview" ? invoiceOverview(scope, organisation.currency, today) : null,
 		scope.invoices.select(undefined, { limit: 1 }),
 	]);
 	const settled = await settledOf(
@@ -72,11 +77,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		show,
 		hasInvoices: any.length > 0,
 		hasClients: clients.length > 0,
-		receivables: receivables.map((r) => ({
-			currency: r.currency,
-			outstanding: formatMoney(r.outstandingMinor, r.currency, locale),
-			overdue: r.overdueMinor > 0 ? formatMoney(r.overdueMinor, r.currency, locale) : null,
-		})),
+		overview: overview && overviewData(overview, today, locale),
 		invoices: rows.map((row) => {
 			const sums = settled.get(row.id) ?? { paidMinor: 0, writtenOffMinor: 0 };
 			const state = stateOf(row, sums, today);
@@ -104,7 +105,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Invoices({ loaderData }: Route.ComponentProps) {
-	const { slug, show, invoices, receivables, hasInvoices, hasClients } = loaderData;
+	const { slug, show, invoices, overview, hasInvoices, hasClients } = loaderData;
+	// The overview lists the open invoices under its figures.
+	const listed = show === "overview" ? SHOWN_LABELS.open : SHOWN_LABELS[show];
 	const navigate = useNavigate();
 	const create = (
 		<Button onPress={() => navigate(newInvoicePath(slug))} isDisabled={!hasClients}>
@@ -124,24 +127,7 @@ export default function Invoices({ loaderData }: Route.ComponentProps) {
 			</PageLead>
 			<BillingTabs slug={slug} current="invoices" />
 
-			{/* The one big number: what clients owe now. */}
-			<div className="mt-8 max-w-200">
-				{receivables.length === 0 ? (
-					<p className="text-title-large text-on-surface-variant">Nothing is owed to you now.</p>
-				) : (
-					<dl className="flex flex-wrap gap-x-12 gap-y-4">
-						{receivables.map((r) => (
-							<div key={r.currency}>
-								<dt className="text-label-large text-on-surface-variant">Outstanding</dt>
-								<dd className="text-display-small tabular-nums">{r.outstanding}</dd>
-								{r.overdue && (
-									<dd className="mt-1 text-body-large text-error">{r.overdue} overdue</dd>
-								)}
-							</div>
-						))}
-					</dl>
-				)}
-			</div>
+			{hasInvoices && overview && <Overview slug={slug} data={overview} />}
 
 			<div className="mt-8 max-w-200">
 				{!hasInvoices ? (
@@ -170,13 +156,13 @@ export default function Invoices({ loaderData }: Route.ComponentProps) {
 							</FilterBar>
 						</div>
 						<div className="mt-4">
-							<Ledger heading={`${SHOWN_LABELS[show]} invoices`} note={invoices.length}>
+							<Ledger heading={`${listed} invoices`} note={invoices.length}>
 								{invoices.length === 0 ? (
 									<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
-										No {SHOWN_LABELS[show].toLowerCase()} invoices.
+										No {listed.toLowerCase()} invoices.
 									</p>
 								) : (
-									<LedgerRows label={`${SHOWN_LABELS[show]} invoices`}>
+									<LedgerRows label={`${listed} invoices`}>
 										{invoices.map((invoice) => (
 											<LedgerRow
 												key={invoice.id}
