@@ -66,6 +66,8 @@ for (const viewport of [
 			test("tokens and webhooks, made and shown once, with the keyboard alone", async ({
 				page,
 			}) => {
+				// A sign-in, which can wait its turn at the mailbox, and eight scans by axe.
+				test.slow();
 				const { slug } = await ownNewOrganisation(page);
 				await page.goto(destinationPath(slug, "integrations"));
 				await expectNoProblems(page, "Integrations");
