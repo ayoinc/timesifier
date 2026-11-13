@@ -4,7 +4,12 @@ import { platformData } from "~/db";
 import { nameOrEmail } from "~/organisations/people";
 
 import { actionWords, consoleMoment, type PlatformLogRow } from "./console-words";
-import { accountConsolePath, MAIL_PATH, organisationConsolePath } from "./paths";
+import {
+	accountConsolePath,
+	MAIL_PATH,
+	organisationConsolePath,
+	PLATFORM_BRAND_PATH,
+} from "./paths";
 
 // The platform log as the console's pages show it (TS-099): each step with
 // when, who took it by name, what it was in words, what it was done to, and
@@ -44,6 +49,7 @@ export async function platformLog({
 			return { label: personName.get(id) ?? "An account", href: accountConsolePath(id) };
 		}
 		if (type === "mailing") return { label: "A mailing", href: MAIL_PATH };
+		if (type === "brand") return { label: "The brand", href: PLATFORM_BRAND_PATH };
 		return { label: "The console", href: null };
 	};
 

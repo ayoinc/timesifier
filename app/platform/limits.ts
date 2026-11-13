@@ -17,3 +17,6 @@ export const STEP_UP_HOURS = 12;
 /** The lengths of support access an owner chooses from, in hours. */
 export const SUPPORT_HOURS = [24, 72] as const;
 export type SupportHours = (typeof SUPPORT_HOURS)[number];
+
+/** Test emails of the brand one platform owner may send in any hour (TS-120). */
+export const BRAND_TESTS_PER_HOUR = 5;

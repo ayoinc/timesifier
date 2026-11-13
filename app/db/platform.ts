@@ -572,7 +572,7 @@ export async function deleteOldSignIns(database: D1Database, now: Date): Promise
 export type PlatformEventInput = {
 	actorId: string | null;
 	action: string;
-	subjectType: "account" | "organisation" | "mailing" | "console";
+	subjectType: "account" | "organisation" | "mailing" | "brand" | "console";
 	subjectId?: string | null;
 	reason?: string | null;
 	detail?: Record<string, string | number | boolean | null>;

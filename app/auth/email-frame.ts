@@ -163,7 +163,7 @@ function partAsText(part: string | Figure | Action): string {
 }
 
 /** The name every message from the platform is headed with: the product's, as on every page. */
-const PRODUCT = "Timesifier";
+export const PRODUCT = "Timesifier";
 
 /** The Content-IDs a message names its attached images by. */
 export const CONTENT_IDS = {

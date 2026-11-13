@@ -3,11 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	builtInPlatformBrand,
 	getPlatformBrand,
-	IMAGE_SIDE,
-	MOST_IMAGE_BYTES,
 	PLATFORM_BRAND_DEFAULTS,
 	setPlatformBrand,
 } from "~/brand/platform-brand.server";
+import { IMAGE_SIDE, MOST_IMAGE_BYTES } from "~/brand/platform-brand-limits";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { person } from "../pages/harness";

@@ -417,6 +417,7 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 							<li>
 								a code that opens the platform console, to the platform owner who asked for it;
 							</li>
+							<li>a test of Timesifier's brand, to the platform owner who asked for it;</li>
 							<li>
 								a link to download your data, when you ask Timesifier for it, to your account's
 								address;

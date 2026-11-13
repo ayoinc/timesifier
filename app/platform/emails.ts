@@ -100,3 +100,23 @@ export function dataExportEmail(link: string, platform: PlatformLook): Omit<Emai
 		platform,
 	);
 }
+
+/**
+ * The console's test of the platform's brand (TS-120): a message in the saved
+ * brand, to the platform owner who asked for it and nobody else.
+ */
+export function brandTestEmail(platform: PlatformLook): Omit<Email, "to"> {
+	return compose(
+		{
+			subject: "A test of Timesifier's brand",
+			heading: "A test of the brand",
+			parts: [
+				"This is how every message Timesifier sends in its own name looks now: the band in the brand's colour, the logo and the name at the top, and the footer line and the tagline at the foot.",
+				"The sender name and the reply-to address are the ones this message came with.",
+			],
+			reason:
+				"You got this email because you asked the platform console for a test of the brand. It goes only to the platform owner who asks for it.",
+		},
+		platform,
+	);
+}

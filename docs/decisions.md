@@ -510,3 +510,19 @@ Every message carries its images attached to it, inline, and refers to each by i
 An organisation's logo may be an SVG, which is refused, not cleaned, when it could do more than draw; mail programs and PDFs get the PNG the browser drew from it, never the SVG. Its colour must carry white words at 4.5 to 1, because its action does.
 
 **What it costs.** Each message is larger by its images, and an organisation's logo is read from R2 for every document it sends. A logo uploaded as an SVG or a WebP without the PNG drawn from it (a browser without script) appears on the pages but not in messages and PDFs. Deleting an organisation must delete its logos in R2 first, and is refused, to be asked again, when one cannot be.
+
+### 45. The console's Brand page: four images, a colour ink or white reads on, a test to oneself
+
+Decided on 2026-11-13 (TS-120), within decisions 36 and 38.
+
+- **Where.** `/platform/brand`, the console's last tab, behind the same `PLATFORM_OWNERS` allowlist and step-up as every console page. A save goes through `setPlatformBrand` with the platform owner as the actor and writes `brand.changed` to the platform log with the fields that changed; a save that changes nothing writes nothing.
+- **Images.** The logo and the mark, each for a light ground and a dark one: four PNGs of at most 64 KB and 16 to 1,024 pixels a side. `platform_brand` gains `logo_dark` (migration `0022_platform_brand_dark_logo`); the logo's built-in tile stands for both logos. Messages are drawn on paper, so they carry the light logo and, on what an organisation sends, the light mark; the dark logo and the dark mark are kept for a dark ground and the page says nothing carries them yet. An SVG or a WebP is drawn as a PNG in the browser, as the organisation's Brand section does (`app/brand/rendition.ts`), and only the PNG reaches the server.
+- **Colour.** The platform's colour is the band and carries no type in a message, but it is the product's `sheet` role, the amber that ink stands on. It must carry ink or white at 4.5 to 1 (`platformColourProblem` in `app/brand/colour.ts`), which refuses only a muddy middle; the amber carries ink at 7.7 to 1.
+- **Test email.** "Send me a test email" sends the saved brand, not the form, to the signed-in platform owner's own address and nobody else, five an hour (`takeOne` under `platform-brand-test:<user id>`), each logged as `brand.test_sent`.
+
+| Option                                  | Evidence                                                                                                                      |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Ink or white at 4.5 to 1 (chosen)       | Keeps the amber and any dark colour; refuses a grey neither reads on. One rule for the band and for anything later set on it. |
+| White at 4.5 to 1, as an organisation's | Refuses the amber the product starts with, which carries ink, not white.                                                      |
+| The band against the paper at 3 to 1    | The amber against the paper is 1.8 to 1, so it would refuse the product's own colour.                                         |
+| A test to any address typed             | Lets a stolen console session mail anyone in the platform's name; the owner's own inbox proves the message without that risk. |

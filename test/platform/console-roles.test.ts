@@ -94,6 +94,7 @@ describe("the console's routes", () => {
 			"routes/platform/account",
 			"routes/platform/mail",
 			"routes/platform/log",
+			"routes/platform/brand",
 			"routes/platform/not-found",
 		]) {
 			expect(ids).toContain(page);
