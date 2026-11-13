@@ -109,6 +109,18 @@ it("the pages say the database is in the EU because that is how the databases ar
 	const created = (readme ?? "").split("\n").filter((line) => line.includes("wrangler d1 create"));
 	expect(created.length).toBeGreaterThan(0);
 	for (const command of created) expect(command).toContain("--jurisdiction eu");
+	// So is an R2 bucket's: the receipts' and the logos' (TS-070, TS-100), each
+	// named as `wrangler.jsonc` binds it.
+	const buckets = (readme ?? "")
+		.split("\n")
+		.filter((line) => line.includes("wrangler r2 bucket create"));
+	expect(buckets.map((line) => line.match(/bucket create (\S+)/)?.[1])).toEqual([
+		"timesifier-receipts",
+		"timesifier-receipts-preview",
+		"timesifier-brand",
+		"timesifier-brand-preview",
+	]);
+	for (const command of buckets) expect(command).toContain("--jurisdiction eu");
 
 	for (const path of ["/", PRIVACY_PATH]) {
 		expect(words(await page(path)), path).toContain("runs and stores its data only inside the EU");

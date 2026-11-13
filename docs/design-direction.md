@@ -89,6 +89,10 @@ The owner's mark: a charcoal letter T cut on a slant into two rounded bars, with
 
 Run `pnpm icons` after any change to the outlines, the seed or the typefaces, and commit what it writes.
 
+**In what Timesifier sends** (TS-100). A message and a PDF cannot draw the outlines, so `pnpm icons` also writes the platform brand's built-in images, as PNGs at twice the size they are shown, into `app/brand/built-in-images.ts`: the logo (the mark in white and amber on the charcoal tile, 56 by 56, shown at 28) and the mark for a light ground and for a dark one (48 tall, shown 14px tall in a message and 9pt on a PDF). The platform console may replace each with a PNG of its own (`platform_brand`); until it does, these are what every message carries.
+
+**Organisation first.** What an organisation sends its clients is its own: an invoice, an estimate, their PDFs, the estimate's page and the messages that carry them lead with the organisation's logo and name, on a band of its colour where it has one, and the product steps back to one line at the foot, the mark beside "Made with Timesifier", small. The organisation's colour is accepted only where white words read on it at 4.5 to 1 or more, since its action carries white words. Its logo stands in the band of every page of the product too, on a tile of paper beside the organisation's name, so any logo reads on the amber; the product's own lockup stays where it was.
+
 ## The mindset, on every screen
 
 The owner's instruction: the mindset of Benji Taylor's essay ["Family Values"](https://benji.org/family-values) on every screen. Its three principles are simplicity, fluidity and delight: "Simplicity ensures accessibility, fluidity maintains continuity of experience, and delight fosters meaningful connections." Below is what each demands of this product, as rules a reviewer or a test can check. A rule with no screen yet is for the card that builds the screen.
@@ -340,17 +344,17 @@ All but the last are in the component gallery (`/design`) with their tests. What
 
 ## Email
 
-A message from Timesifier is the same product as the page that sent the person to their inbox. Every message the application sends, the sign-in code, the invitation, an invoice, a reminder, an estimate, a budget alert and the notice that a webhook was switched off, is built by one frame, `compose` in `app/auth/email-frame.ts`; a new message uses it, so it cannot drift. The privacy notice names each, with whom it goes to. What a mail program can render decides the rest.
+A message from Timesifier is the same product as the page that sent the person to their inbox. Every message the application sends, the platform's own (the sign-in code, the invitation, a budget alert, a webhook switched off) and an organisation's to its clients (an invoice, a reminder, an estimate), is built by one frame, `compose` in `app/auth/email-frame.ts`; a new message uses it, so it cannot drift. The privacy notice names each, with whom it goes to. What a mail program can render decides the rest.
 
-- **The band.** An 8px amber rule at the top, then the product's name in the condensed heavy face, ink on paper, with a 2px ink rule under it: the home page's top band, settled. The name is type, not the mark: the mark would have to be an image, which a mail program either blocks or uses to tell its host that the message was opened (`docs/security.md`, "Email").
+- **The band.** An 8px rule at the top in the brand's colour, the amber for the platform's messages and the organisation's colour for its own, with nothing on it; then the logo and the name, ink on paper, with a 2px ink rule under them: the home page's top band, settled. The platform's messages carry its logo, 28px, with the product's name in the condensed heavy face beside it; an organisation's carry its logo, at most 40px tall and 200 wide, named for the organisation, or its name in type where it has none.
 - **One column** of paper, at most 560px, 20px at the sides. Tables only where mail programs need them for layout.
 - **Type.** No web font loads in a mail program, so each stack names Sofia Sans first, for a reader who has it, then the system faces nearest to it: a condensed grotesque for the name and the heading, a humanist sans for the text.
 - **The heading** says what the message is ("Your sign-in code", "You are invited to …"). Under it, at most two short paragraphs.
 - **A figure**, where there is one, sits in the day sheet's frame: 2px ink, 8px corners, a label above, the figure in large tabular type with space between characters, so a code can be read aloud and copied in one press.
-- **At most one action**, drawn as the product's filled button: ink, square-cornered, its words saying what it does. The sign-in code has none, and no link of any kind.
-- **The footer**, under a 1px rule: why the person got the message, and what to do if they did not ask for it.
+- **At most one action**, drawn as a filled button, square-cornered, its words saying what it does: ink for the platform's messages, the organisation's colour with white words for its own. The sign-in code has none, and no link of any kind.
+- **The footer**, under a 1px rule: why the person got the message, and what to do if they did not ask for it; for the platform, its footer line and tagline, and for an organisation, the mark beside "Made with Timesifier".
 - **Colours** are literal values, because a mail program knows no custom properties. They are written from the light scheme's roles by `pnpm tokens` into `app/styles/email-colours.ts`, the one file of raw colours `pnpm check:tokens` lets through besides the tokens, and a test holds them equal. Every cell that sets a colour of type also sets the ground it stands on, so a mail program that forces a dark scheme inverts the pair together and loses nothing.
-- **Nothing is fetched**: no image, font, style sheet or tracking. The only address in a message is its one action's link, and the sign-in code has none. The plain-text part says everything the HTML part says, in the same order. `test/auth/email-frame.test.ts` holds all of this.
+- **Nothing is fetched**: no remote image, font, style sheet or tracking. Each image a message shows is attached to it, inline, a PNG or a JPEG, and named by its Content-ID (`cid:`), so a mail program shows it without asking anybody, and an opened message tells nobody (`docs/security.md`, "Email"). The only address in a message is its one action's link. The plain-text part says everything the HTML part says, in the same order. `test/auth/email-frame.test.ts` holds all of this.
 
 Screenshots of both messages at 390px and 600px, light and forced dark: `email-code-*.png` and `email-invitation-*.png` in the session's browser assets.
 
