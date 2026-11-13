@@ -345,14 +345,16 @@ html {
 	--state-layer-pressed: var(--md-sys-state-pressed-state-layer-opacity);
 }
 
-/* What a control animates when its state changes; a pressed shape settles on the spring. */
+/* What a control animates when its state changes; a pressed shape settles on the spring,
+   and a control that gives under the press (`motion-safe:active:scale-97`) comes back quickly. */
 @utility transition-control {
 	transition:
 		color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
 		background-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
 		border-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
 		box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
-		border-radius var(--md-sys-motion-spring-duration) var(--md-sys-motion-spring-easing);
+		border-radius var(--md-sys-motion-spring-duration) var(--md-sys-motion-spring-easing),
+		scale var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
 }
 
 /* A link's hover: its underline comes in, thickens or takes the ink, on the same
