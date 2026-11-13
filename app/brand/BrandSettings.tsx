@@ -7,41 +7,13 @@ import { FormSheet } from "~/routes/app/FormSheet";
 import { Section } from "~/shell/PageHeading";
 
 import { contrastWithWhite, HEX_COLOUR, LEAST_CONTRAST, normaliseColour } from "./colour";
-import { toBase64 } from "./images";
+import { needsRendition, rendition } from "./rendition";
 import type { BrandData } from "./settings.server";
 
 /** What the file field offers: the four kinds a logo may be. */
 const LOGO_ACCEPT = ".png,.svg,.jpg,.jpeg,.webp,image/png,image/svg+xml,image/jpeg,image/webp";
 /** The longest side of the PNG drawn from an SVG or a WebP. */
 const RENDITION_SIDE = 512;
-
-/**
- * An SVG or a WebP drawn as a PNG, for the mail programs and PDFs that cannot
- * show either. It is drawn by an image element from a data address, where an
- * SVG runs nothing, at most `RENDITION_SIDE` pixels on its longest side. Null
- * where the browser cannot draw it; the logo is then saved without one.
- */
-async function rendition(file: File): Promise<File | null> {
-	const image = new Image();
-	image.src = `data:${file.type || "image/svg+xml"};base64,${toBase64(new Uint8Array(await file.arrayBuffer()))}`;
-	try {
-		await image.decode();
-	} catch {
-		return null;
-	}
-	const natural = {
-		width: image.naturalWidth || RENDITION_SIDE,
-		height: image.naturalHeight || RENDITION_SIDE,
-	};
-	const scale = RENDITION_SIDE / Math.max(natural.width, natural.height);
-	const canvas = document.createElement("canvas");
-	canvas.width = Math.max(1, Math.round(natural.width * scale));
-	canvas.height = Math.max(1, Math.round(natural.height * scale));
-	canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-	// The app's library predates `Promise.withResolvers`; `toBlob` answers by callback.
-	const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-	return blob ? new File([blob], "logo.png", { type: "image/png" }) : null;
-}
 
 /**
  * Workspace settings' Brand (TS-100): the organisation's logo and colour, which
@@ -74,8 +46,8 @@ export function BrandSettings({
 		if (!field) return;
 		const transfer = new DataTransfer();
 		const file = input.files?.[0];
-		if (file && /svg|webp/i.test(file.type || file.name)) {
-			const drawn = await rendition(file).catch(() => null);
+		if (file && needsRendition(file)) {
+			const drawn = await rendition(file, RENDITION_SIDE, "logo.png").catch(() => null);
 			if (drawn) transfer.items.add(drawn);
 		}
 		field.files = transfer.files;

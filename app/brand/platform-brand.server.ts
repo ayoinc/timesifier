@@ -3,8 +3,15 @@ import { drizzle } from "drizzle-orm/d1";
 import { platformBrand } from "~/db";
 import { EMAIL_COLOURS } from "~/styles/email-colours";
 import { BUILT_IN_IMAGES } from "./built-in-images";
-import { HEX_COLOUR, normaliseColour } from "./colour";
+import { normaliseColour, platformColourProblem } from "./colour";
 import { fromBase64, imageSize, imageTypeOf, toBase64 } from "./images";
+import {
+	IMAGE_SIDE,
+	MOST_CHARACTERS,
+	MOST_IMAGE_BYTES,
+	PLATFORM_IMAGE_NAMES,
+	type PlatformImageName,
+} from "./platform-brand-limits";
 
 /**
  * The platform's brand (TS-100): what every email and export says of
@@ -31,10 +38,12 @@ export interface PlatformBrand {
 	tagline: string;
 	/** The line at the foot of every message sent in the platform's own name. */
 	emailFooter: string;
-	/** `#rrggbb`: the band at the top of the platform's messages. No type stands on it. */
+	/** `#rrggbb`: the band at the top of the platform's messages. No type stands on it in a message, but ink or white must read on it (TS-120). */
 	colour: string;
-	/** The logo at the top of every message, attached to it. */
+	/** The logo at the top of every message, attached to it: for a light ground. */
 	logo: BrandImage;
+	/** The logo for a dark ground. Messages are drawn on paper and do not carry it (TS-120). */
+	logoDark: BrandImage;
 	/** The mark on a light ground: at the foot of a client's document and message. */
 	markLight: BrandImage;
 	/** The mark on a dark ground. */
@@ -45,8 +54,15 @@ export interface PlatformBrand {
 }
 
 type Texts = Pick<PlatformBrand, "senderName" | "replyTo" | "tagline" | "emailFooter" | "colour">;
-type ImageName = "logo" | "markLight" | "markDark";
-const IMAGE_NAMES: readonly ImageName[] = ["logo", "markLight", "markDark"];
+type ImageName = PlatformImageName;
+
+/** The built-in image each stands for until it is set: the logo's tile reads on either ground. */
+const BUILT_IN_OF: Record<ImageName, keyof typeof BUILT_IN_IMAGES> = {
+	logo: "logo",
+	logoDark: "logo",
+	markLight: "markLight",
+	markDark: "markDark",
+};
 
 /** What the platform's brand says until it is changed; migration 0020 starts the row at the same. */
 export const PLATFORM_BRAND_DEFAULTS: Readonly<Texts> = {
@@ -59,8 +75,9 @@ export const PLATFORM_BRAND_DEFAULTS: Readonly<Texts> = {
 
 const ROW = "platform";
 
-function builtIn(name: ImageName): BrandImage {
-	const { base64, width, height } = BUILT_IN_IMAGES[name];
+/** The built-in image that stands for `name` until it is set. */
+export function builtIn(name: ImageName): BrandImage {
+	const { base64, width, height } = BUILT_IN_IMAGES[BUILT_IN_OF[name]];
 	return { bytes: fromBase64(base64), width, height, builtIn: true };
 }
 
@@ -77,6 +94,7 @@ export function builtInPlatformBrand(): PlatformBrand {
 	return {
 		...PLATFORM_BRAND_DEFAULTS,
 		logo: builtIn("logo"),
+		logoDark: builtIn("logoDark"),
 		markLight: builtIn("markLight"),
 		markDark: builtIn("markDark"),
 		updatedAt: null,
@@ -103,6 +121,7 @@ export async function getPlatformBrand(env: { DB: D1Database }): Promise<Platfor
 				}
 			: {}),
 		logo: imageOf("logo", row?.logo ?? null),
+		logoDark: imageOf("logoDark", row?.logoDark ?? null),
 		markLight: imageOf("markLight", row?.markLight ?? null),
 		markDark: imageOf("markDark", row?.markDark ?? null),
 		updatedAt: row?.updatedAt ? new Date(row.updatedAt) : null,
@@ -122,16 +141,12 @@ export interface PlatformBrandInput {
 	emailFooter?: string;
 	colour?: string;
 	logo?: Uint8Array | null;
+	logoDark?: Uint8Array | null;
 	markLight?: Uint8Array | null;
 	markDark?: Uint8Array | null;
 }
 
 export type PlatformBrandProblems = Partial<Record<keyof PlatformBrandInput, string>>;
-
-/** The most bytes one of the brand's images may have: each is sent with every message. */
-export const MOST_IMAGE_BYTES = 64 * 1024;
-/** The fewest and the most pixels on each side of one of the brand's images. */
-export const IMAGE_SIDE = { least: 16, most: 1024 } as const;
 
 /** A name a header carries as it is: nothing that ends it, quotes it or starts an address. */
 const SENDER_NAME = /^[^<>"@,;:\\\r\n]+$/;
@@ -176,7 +191,7 @@ export async function setPlatformBrand(
 	if (input.senderName !== undefined) {
 		const name = input.senderName.trim();
 		const problem =
-			lineProblem(name, "sender name", 60) ??
+			lineProblem(name, "sender name", MOST_CHARACTERS.senderName) ??
 			(SENDER_NAME.test(name) ? null : 'The sender name has none of < > " @ , ; : or \\.');
 		if (problem) problems.senderName = problem;
 		else texts.senderName = name;
@@ -184,13 +199,13 @@ export async function setPlatformBrand(
 	if (input.replyTo !== undefined) {
 		const address = input.replyTo?.trim() ?? "";
 		if (address === "") texts.replyTo = null;
-		else if (address.length > 254 || !ADDRESS.test(address)) {
+		else if (address.length > MOST_CHARACTERS.replyTo || !ADDRESS.test(address)) {
 			problems.replyTo = "Enter one email address, like help@example.com.";
 		} else texts.replyTo = address;
 	}
 	for (const [field, label, most] of [
-		["tagline", "tagline", 120],
-		["emailFooter", "email footer", 200],
+		["tagline", "tagline", MOST_CHARACTERS.tagline],
+		["emailFooter", "email footer", MOST_CHARACTERS.emailFooter],
 	] as const) {
 		const value = input[field];
 		if (value === undefined) continue;
@@ -200,11 +215,12 @@ export async function setPlatformBrand(
 	}
 	if (input.colour !== undefined) {
 		const colour = normaliseColour(input.colour);
-		if (HEX_COLOUR.test(colour)) texts.colour = colour;
-		else problems.colour = "Enter a colour as # followed by six hexadecimal digits.";
+		const problem = platformColourProblem(colour, EMAIL_COLOURS);
+		if (problem) problems.colour = problem;
+		else texts.colour = colour;
 	}
 	const images: Partial<Record<ImageName, string | null>> = {};
-	for (const name of IMAGE_NAMES) {
+	for (const name of PLATFORM_IMAGE_NAMES) {
 		const bytes = input[name];
 		if (bytes === undefined) continue;
 		if (bytes === null) {
