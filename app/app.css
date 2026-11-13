@@ -633,22 +633,18 @@ html {
  */
 .wait-appear {
 	animation: wait-appear var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
-		var(--md-sys-motion-duration-medium4) both;
+		var(--md-sys-motion-duration-medium4) backwards;
 }
 
+/* The words at rest go by a transition, which is over once they have gone; at rest again they are back at once. */
 .wait-leave {
-	animation: wait-leave var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
-		var(--md-sys-motion-duration-medium4) both;
+	opacity: 0;
+	transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+		var(--md-sys-motion-duration-medium4);
 }
 
 @keyframes wait-appear {
 	from {
-		opacity: 0;
-	}
-}
-
-@keyframes wait-leave {
-	to {
 		opacity: 0;
 	}
 }

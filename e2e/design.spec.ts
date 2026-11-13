@@ -27,6 +27,7 @@ const COMPONENTS = [
 	"TimerMark",
 	"Ledger",
 	"Dates",
+	"WaitClock",
 ];
 
 async function style(element: Locator, property: string): Promise<string> {

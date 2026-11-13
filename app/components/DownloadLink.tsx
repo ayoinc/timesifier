@@ -88,7 +88,7 @@ export function DownloadLink({
 			data-pending={waiting || undefined}
 			onClick={fetchFile}
 		>
-			<WaitingLabel waiting={waiting} doing={pendingLabel}>
+			<WaitingLabel waiting={waiting} doing={pendingLabel} align="start">
 				{children}
 			</WaitingLabel>
 		</a>
