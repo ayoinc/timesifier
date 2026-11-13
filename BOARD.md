@@ -40,6 +40,18 @@ Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the busin
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-096 · Loading and motion like Royal London
+
+Builder: AI sessions on branch `ts-096-motion` (PR #57). In review: the placement's effect is proven on the preview and again in production after the merge. No migration. `docs/design-system.md` ("While the page waits", "How a page loads"), decision 34.
+
+- [x] No blink on a load or a reload: times are simply there, metric-matched fallback faces, `/assets/` kept a year, the scheme from the server, no whole-page view transition (`e2e/shell-loading.spec.ts`).
+- [x] A move to another destination shows the pending bar after 150ms, then the destination's shape in `Skeleton` blocks; the frame never unmounts; the page arrives with its sections revealed in turn, and stands still with reduced motion (`e2e/shell-loading.spec.ts`, `e2e/shell-pending.spec.ts`).
+- [x] The Timesheet keeps the conventions: Track time's fields held by their shape while it reads, the Day view's sections revealed in turn, a timer's start and stop shown at once from the navigation, the Day view and Track time, put back with the reason when refused (`e2e/timesheet-motion.spec.ts`).
+- [ ] The Worker placed beside D1 (`placement` in `wrangler.jsonc`): the `cf-placement` header and the time to first byte measured on the preview and in production against the 'before' (decision 34). Preview, 2026-11-12: every request `remote-FRA`; one D1 query 42ms from Frankfurt against 130ms from Newark, the journey there about 115ms (`scripts/placement-ttfb.sh`, decision 34, "Measured"). Production: after the merge.
+- [x] The public pages say where a request is handled now that it is placed: it reaches the nearest data centre and is passed to Frankfurt (`app/routes/home.tsx`, `app/routes/privacy.tsx`; `test/claims.test.ts` ties the sentence to `wrangler.jsonc`; `docs/design-direction.md` rule 3).
+- [x] The page does not stretch past its top or bottom when pulled (the owner, 2026-11-12: bare canvas showed above the band): `overscroll-behavior: none` on the document; a box that scrolls inside the page keeps `overscroll-contain` (`app/app.css`).
+- [x] Photographers are named once, in the Credits at the foot of the page after the Privacy notice and Terms, never under their photographs, which carry their place alone (the owner, 2026-11-12; `SiteFooter` `photos`, `app/landing/photos.ts`; `test/claims.test.ts`).
+
 ### TS-095 · Expected hours as a ceiling, overtime recorded as such
 
 Builder: an AI session on branch `ts-095-overtime`. Decided by the owner on 2026-11-12 (`docs/decisions.md` entry 33), amending TS-090: a day takes at most its expected hours, and time past them is overtime, entered as such, only where an admin allows it. Migration `0017_overtime`. In review: the pull request against `main`, built on TS-093's Track time sheet, Day view and Week grid.

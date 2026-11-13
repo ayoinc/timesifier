@@ -51,3 +51,31 @@
 		U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
 		U+A720-A7FF;
 }
+
+/*
+ * The stand-ins while a face loads (TS-096): Arial, or Helvetica or Roboto where
+ * Arial is missing, resized to Sofia Sans's widths and line box, so a word drawn
+ * in the stand-in takes the space the real face will take and nothing moves when
+ * it arrives. Measured in Chrome at weights 400 and 500 against Arial with
+ * English text (`timesifier/research/blink/font-metrics.mjs`, beside the
+ * repository): size-adjust is the ratio of the widths, and the overrides are
+ * Sofia Sans's ascent and descent at that size. scripts/tokens.ts puts each one
+ * after its face in the families.
+ */
+@font-face {
+	font-family: "Sofia Sans Fallback";
+	src: local("Arial"), local("ArialMT"), local("Helvetica"), local("Roboto");
+	size-adjust: 96%;
+	ascent-override: 93.7%;
+	descent-override: 31.2%;
+	line-gap-override: 0%;
+}
+
+@font-face {
+	font-family: "Sofia Sans Condensed Fallback";
+	src: local("Arial"), local("ArialMT"), local("Helvetica"), local("Roboto");
+	size-adjust: 75%;
+	ascent-override: 119.4%;
+	descent-override: 39.8%;
+	line-gap-override: 0%;
+}

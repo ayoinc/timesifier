@@ -2,7 +2,7 @@
 
 Every photograph on the site is a file in this directory, served from our own host. Each was downloaded from Unsplash on 11 November 2026, when its page read "Free to use under the Unsplash License".
 
-The [Unsplash License](https://unsplash.com/license) allows the photographs to be downloaded and used for free, for commercial and non-commercial purposes, with no permission needed and no attribution required. We credit the photographers anyway, here and in the footer of the home page.
+The [Unsplash License](https://unsplash.com/license) allows the photographs to be downloaded and used for free, for commercial and non-commercial purposes, with no permission needed and no attribution required. We credit the photographers anyway: here, and in the Credits at the foot of each page that shows one (`SiteFooter`), never under the photograph itself.
 
 | Files                                                                                      | Subject                                                                  | Author                                                  | Source                                                                                        | Changes                             |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------- |

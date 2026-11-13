@@ -1,8 +1,19 @@
-import { createContext, type ReactNode, use, useCallback, useEffect, useState } from "react";
+import {
+	createContext,
+	type ReactNode,
+	use,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { Link, useFetcher } from "react-router";
 
+import { Skeleton } from "~/components/Skeleton";
+import { showSnackbar } from "~/components/Snackbar";
 import { TextField } from "~/components/TextField";
 import { LOCK_LABELS, lockSentence } from "~/locks/locks";
+import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
 import type { loader as trackDayLoader } from "~/routes/app/timesheet.day";
 import { destinationPath } from "~/shell/destinations";
@@ -15,6 +26,7 @@ import { refusalOfDay, takesOvertimeOnly } from "./DayRules";
 import { formatDuration } from "./durations";
 import { useReport } from "./feedback";
 import { useDayFormat } from "./format";
+import { PENDING_PROJECT_NAME } from "./pending";
 import { timerAction, trackDayPath } from "./views";
 
 /**
@@ -36,6 +48,11 @@ import { timerAction, trackDayPath } from "./views";
  * overtime asks for Overtime instead of Hours, and its time is sent as
  * overtime; a timer started on it runs as overtime (TS-095). The server
  * refuses the same, whatever is sent.
+ *
+ * While the day's rules are read, the sheet holds the shape of its fields
+ * (`Skeleton`). "Start timer" is a quick action (TS-096): the sheet closes at
+ * once and every timer on the page runs (`usePendingTimer`); a refusal stops
+ * them again and the snackbar says why.
  */
 
 /** What the sheet is opened with: the day to start at, and a start from a calendar slot. */
@@ -62,6 +79,24 @@ export function TrackTimeProvider({ slug, children }: { slug: string; children: 
 		setShown(next);
 		setRequest(next);
 	}, []);
+
+	// A timer's start, sent once the sheet has closed: it outlives the sheet.
+	const report = useReport();
+	const start = useFetcher<Outcome>();
+	const { submit } = start;
+	const started = start.state === "idle" ? start.data : undefined;
+	const handled = useRef<Outcome | undefined>(undefined);
+	useEffect(() => {
+		if (!started || handled.current === started) return;
+		handled.current = started;
+		if (started.ok) report(started);
+		else showSnackbar(started.problem);
+	}, [started, report]);
+	const startTimer = useCallback(
+		(form: FormData) => submit(form, { method: "post", action: timerAction(slug) }),
+		[slug, submit],
+	);
+
 	return (
 		<TrackTimeContext value={open}>
 			{children}
@@ -71,6 +106,7 @@ export function TrackTimeProvider({ slug, children }: { slug: string; children: 
 				request={shown}
 				isOpen={request !== null}
 				onClose={() => setRequest(null)}
+				onStartTimer={startTimer}
 			/>
 		</TrackTimeContext>
 	);
@@ -81,11 +117,14 @@ function TrackTimeSheet({
 	request,
 	isOpen,
 	onClose,
+	onStartTimer,
 }: {
 	slug: string;
 	request: TrackTimeRequest;
 	isOpen: boolean;
 	onClose: () => void;
+	/** Sends a timer's start on its own, so the sheet can close at once. */
+	onStartTimer: (form: FormData) => void;
 }) {
 	const report = useReport();
 	const formatDay = useDayFormat();
@@ -132,9 +171,16 @@ function TrackTimeSheet({
 			isOpen={isOpen}
 			onClose={onClose}
 			onDone={(_said, answer) => report(answer)}
+			onSubmitAtOnce={(form) => {
+				if (!startsTimer) return false;
+				const project = active.find((p) => p.id === form.get("projectId"));
+				if (project) form.set(PENDING_PROJECT_NAME, project.name);
+				onStartTimer(form);
+				return true;
+			}}
 		>
 			{loading ? (
-				<p className="text-body-large text-on-surface-variant">Reading your projects…</p>
+				<FieldsSkeleton />
 			) : active.length === 0 ? (
 				<p className="text-body-large text-on-surface-variant">
 					Time is tracked against a project, and this organisation has none yet.{" "}
@@ -217,6 +263,24 @@ function overtimeNote(limitMinutes: number, leftMinutes: number | null): string 
 			: `This day's ${formatDuration(limitMinutes * 60_000)} of regular time is tracked`;
 	const left = leftMinutes === null ? "" : `, ${formatDuration(leftMinutes * 60_000)} of it left`;
 	return `${why}: more is overtime${left}.`;
+}
+
+/**
+ * The sheet's fields while the day's rules are read: project, description,
+ * hours and date, each the height of its field, so nothing moves when they
+ * come. Said once to assistive technology.
+ */
+function FieldsSkeleton() {
+	return (
+		<div role="status" aria-label="Loading your projects" className="flex flex-col gap-4">
+			<Skeleton className="h-14 w-full" />
+			<Skeleton className="h-14 w-full" />
+			<Skeleton className="h-14 w-full" />
+			<div className="grid grid-cols-2 gap-4">
+				<Skeleton className="h-14" />
+			</div>
+		</div>
+	);
 }
 
 /** What the sheet says of the date chosen: which day it is, and why it takes nothing or how much. */

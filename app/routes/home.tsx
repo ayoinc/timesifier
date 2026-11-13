@@ -179,7 +179,6 @@ export default function Home() {
 							photo={PHOTOS.workshop}
 							alt="Gloved hands working a piece of metal on a workbench covered in filings."
 							sizes="(min-width: 75rem) 470px, (min-width: 52.5rem) 40vw, 100vw"
-							caption="A workshop in Utrecht. Photograph: Bob van Aubel."
 							className="expanded:order-first expanded:col-span-5 expanded:row-start-1"
 							frame="max-medium:aspect-square"
 						/>
@@ -223,9 +222,10 @@ export default function Home() {
 									Your account and your organisation are kept in a database that runs and stores its
 									data only inside the EU. Your time entries will be kept there too.
 								</Fact>
-								<Fact term="Answered from the nearest data centre">
-									A request is answered by the Cloudflare data centre nearest to you, wherever you
-									are. Cloudflare’s log of requests, its record of each email sent, and what its
+								<Fact term="Run near the database">
+									Your request reaches the Cloudflare data centre nearest to you, wherever you are,
+									and is passed to Frankfurt, near the database, where the application runs.
+									Cloudflare’s log of requests, its record of each email sent, and what its
 									Turnstile check and Web Analytics collect are not restricted to the EU.
 								</Fact>
 								<Fact term="Closed to other organisations">
@@ -247,7 +247,6 @@ export default function Home() {
 							photo={PHOTOS.platform}
 							alt="An empty railway platform in the rain, with a yellow-rimmed station clock above a departure screen."
 							sizes="(min-width: 75rem) 560px, (min-width: 52.5rem) 48vw, 100vw"
-							caption="Amsterdam Sloterdijk. Photograph: Nikolai Kolosov."
 							className="max-medium:hidden expanded:order-first expanded:col-span-6 expanded:row-start-1"
 						/>
 					</div>
@@ -276,16 +275,13 @@ export default function Home() {
 							photo={PHOTOS.departure}
 							alt="A yellow underground train blurred by its speed as it passes a station clock."
 							sizes="(min-width: 75rem) 660px, (min-width: 52.5rem) 55vw, 100vw"
-							caption="U-Bahn, Berlin-Tempelhof. Photograph: Karri Heiskanen."
 							className="expanded:col-span-7"
 						/>
 					</div>
 				</section>
 			</main>
 
-			<SiteFooter current="/">
-				<p>Photographs by Karri Heiskanen, Bob van Aubel and Nikolai Kolosov, from Unsplash.</p>
-			</SiteFooter>
+			<SiteFooter current="/" photos={[PHOTOS.workshop, PHOTOS.platform, PHOTOS.departure]} />
 		</RunningDayProvider>
 	);
 }

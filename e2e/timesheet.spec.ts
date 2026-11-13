@@ -200,14 +200,18 @@ test.describe("the timer", () => {
 		// One row of 56px straight above the 64px bar, and nothing else fixed across the page.
 		expect(drawn.height).toBe(56);
 		expect(drawn.y + drawn.height).toBe(bar.y);
-		const fixed = await page.evaluate(() =>
-			[...document.querySelectorAll<HTMLElement>("body *")]
-				.filter((element) => getComputedStyle(element).position === "fixed")
-				.map((element) => element.getBoundingClientRect())
-				.filter(({ width, height }) => height > 0 && width >= window.innerWidth * 0.9)
-				.reduce((sum, { height }) => sum + height, 0),
-		);
-		expect(fixed).toBe(120);
+		// Polled: the pending bar is a fixed row too, for as long as a load runs.
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					[...document.querySelectorAll<HTMLElement>("body *")]
+						.filter((element) => getComputedStyle(element).position === "fixed")
+						.map((element) => element.getBoundingClientRect())
+						.filter(({ width, height }) => height > 0 && width >= window.innerWidth * 0.9)
+						.reduce((sum, { height }) => sum + height, 0),
+				),
+			)
+			.toBe(120);
 		await expect(
 			navigation(page).getByRole("button", { name: "Track time", exact: true }),
 		).toHaveCount(0);
@@ -507,8 +511,13 @@ test.describe("the Week view", () => {
 		await tabTo(page, weeks.getByRole("link", { name: "Previous week" }));
 		await page.keyboard.press("Enter");
 		await expect(page).toHaveURL(/view=week&start=\d{4}-\d{2}-\d{2}$/);
-		await weeks.getByRole("link", { name: "Next week" }).click();
-		await weeks.getByRole("link", { name: "Next week" }).click();
+		// Each step waits for its page: a press made while the last step's view
+		// transition plays lands on the transition's picture and is lost.
+		for (const _ of [1, 2]) {
+			const before = page.url();
+			await weeks.getByRole("link", { name: "Next week" }).click();
+			await expect(page).not.toHaveURL(before);
+		}
 		await weeks.getByRole("link", { name: "Back to this week" }).click();
 		await expect(page).toHaveURL(/view=week$/);
 	});

@@ -18,6 +18,12 @@
 	// Selected by create-cloudflare on the day the project was scaffolded.
 	"compatibility_date": "2026-11-09",
 	"compatibility_flags": ["nodejs_compat"],
+	// The Worker runs beside the database, not beside the visitor: every page asks
+	// D1 several questions in turn, and the database runs in Eastern Europe (the
+	// `eu` jurisdiction, EEUR). Previews inherit it. Static assets are still served
+	// from the data centre nearest the visitor. docs/decisions.md, "Placement".
+	// https://developers.cloudflare.com/workers/configuration/placement/
+	"placement": { "region": "aws:eu-central-1" },
 	// Production is served only on its own domain. The pipeline adds `routes`:
 	// the deployment's host and `www.` in front of it, as custom domains. Wrangler
 	// creates the DNS records for those two names and touches no other record.

@@ -69,6 +69,16 @@ const TYPEFACES = {
 };
 const FONT_STYLESHEET = "./fonts.css";
 const FALLBACK_FONTS = 'system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+/**
+ * Each typeface's stand-in while its file loads: a face that is Arial (or
+ * Helvetica, or Roboto) resized to Sofia Sans's widths and line box, declared in
+ * fonts.css. Words drawn in it take the space the real face will take, so
+ * nothing moves when the real face arrives.
+ */
+const METRIC_FALLBACK = {
+	brand: "Sofia Sans Condensed Fallback",
+	plain: "Sofia Sans Fallback",
+};
 
 /** Material 3 Expressive "default spatial" spring, with a mass of 1. */
 const SPRING = { stiffness: 380, dampingRatio: 0.8 };
@@ -241,7 +251,8 @@ function rem(px: number): string {
 
 function typeScale(): string[] {
 	const lines = Object.entries(TYPEFACES).map(
-		([name, family]) => `--md-ref-typeface-${name}: "${family}", ${FALLBACK_FONTS};`,
+		([name, family]) =>
+			`--md-ref-typeface-${name}: "${family}", "${METRIC_FALLBACK[name as keyof typeof TYPEFACES]}", ${FALLBACK_FONTS};`,
 	);
 	for (const [role, size, lineHeight, weight, tracking, typeface] of TYPE_SCALE) {
 		const name = `--md-sys-typescale-${role}`;

@@ -1,4 +1,11 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, ViewTransition } from "react";
+import {
+	Activity,
+	type ReactNode,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	ViewTransition,
+} from "react";
 import {
 	Outlet,
 	useLocation,
@@ -11,10 +18,11 @@ import { cx } from "~/components/cx";
 import { SnackbarRegion } from "~/components/Snackbar";
 import { PAGE, SiteHeader } from "~/landing/Site";
 import { requireSession, signedInContext } from "~/routes/auth/session.server";
+import { useArrival } from "~/shell/arrival";
+import { DestinationSkeleton } from "~/shell/DestinationSkeleton";
 import {
 	APP_PATH,
 	accountPath,
-	destinationIndex,
 	destinationPath,
 	NEW_ORGANISATION_PATH,
 	ORGANISATION_PARAM,
@@ -64,8 +72,11 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 	const { pathname } = useLocation();
 	const organisation = useParams()[ORGANISATION_PARAM];
 	// No destination is on screen outside an organisation. Arriving in one from
-	// there is a move forward, and leaving one for there a move back.
-	const index = organisation ? destinationIndex(organisation, pathname) : -1;
+	// there is a move forward, and leaving one for there a move back. While a move
+	// to another destination waits, that destination is drawn as its shape
+	// (app/shell/arrival.ts).
+	const arrival = useArrival(organisation, pathname);
+	const { index } = arrival;
 	const travel = useTravel(index);
 	const main = useRef<HTMLElement>(null);
 
@@ -178,15 +189,20 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 								id={MAIN_ID}
 								ref={main}
 								tabIndex={-1}
+								data-reveal={arrival.revealing === null ? undefined : ""}
 								className={cx(
 									"outline-none focus-visible:focus-indicator-inner",
 									organisation ? "min-w-0 flex-1 pt-10 pb-24 medium:ms-32" : OUTSIDE_MAIN,
 								)}
 							>
 								{/* One column for every page of the organisation: 800px at most, so
-							    headings, tabs, rules, sheets and grids share one right edge (audit W22). */}
+								    headings, tabs, rules, sheets and grids share one right edge (audit W22).
+								    The page left stays mounted, hidden, under a destination's shape. */}
 								<div className={organisation ? INSIDE_COLUMN : OUTSIDE_COLUMN}>
-									<Outlet />
+									<Activity mode={arrival.waitingFor === null ? "visible" : "hidden"}>
+										<Outlet />
+									</Activity>
+									{arrival.waitingFor !== null && <DestinationSkeleton id={arrival.waitingFor} />}
 								</div>
 							</main>
 						</ViewTransition>

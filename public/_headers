@@ -5,3 +5,14 @@
   X-Content-Type-Options: nosniff
   Strict-Transport-Security: max-age=63072000
   Content-Security-Policy: default-src 'none'; frame-ancestors 'none'
+
+# Every file under /assets/ is written by Vite with a hash of its content in its
+# name, so a file at one address never changes: the browser keeps it for a year
+# and never asks again. Without this, each page load revalidated every script,
+# stylesheet and font (about 60 requests), and the stylesheet's round trip held
+# back the first paint. Everything else here (the icons, the manifest, the
+# images) keeps its name across deploys and is still revalidated. Pages and
+# their .data answers come from the Worker and stay `private, no-store`
+# (workers/no-copy.ts). docs/decisions.md, "Placement and caching".
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

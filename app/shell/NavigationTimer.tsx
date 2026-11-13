@@ -10,6 +10,7 @@ import type { loader as organisationLoader } from "~/routes/app/organisation";
 import { formatElapsed } from "~/timesheet/durations";
 import { useReportAnswer } from "~/timesheet/feedback";
 import { elapsedSeconds, useNow, useRefreshEvery30Seconds } from "~/timesheet/live";
+import { usePendingTimer } from "~/timesheet/pending";
 import { useTrackTime } from "~/timesheet/TrackTime";
 import { timerAction } from "~/timesheet/views";
 
@@ -57,15 +58,23 @@ export function NavigationTimer({
 	const stop = useFetcher<Outcome>();
 	useReportAnswer(stop.state === "idle" ? stop.data : undefined);
 	const openTrackTime = useTrackTime();
-	const running = timer?.running ?? null;
+	// A start or a stop on its way, from here or any form of the Timesheet, already
+	// shows as done (TS-096); a refusal leaves the data as it was, so it goes back.
+	const pending = usePendingTimer(organisation);
+	const running = pending.starting
+		? {
+				projectName: pending.starting.projectName ?? "",
+				startedAt: pending.starting.startedAt,
+			}
+		: pending.stopping || stop.state !== "idle"
+			? null
+			: (timer?.running ?? null);
 	const now = useNow(running !== null, timer?.now ?? 0);
-	// While the stop is on its way the control already reads as stopped.
-	const stopping = stop.state !== "idle";
 
-	if (onTimesheet && !(running && !stopping)) return null;
+	if (onTimesheet && !running) return null;
 	return (
 		<div className={cx("medium:mb-6 medium:ps-4", onTimesheet && "max-medium:hidden")}>
-			{running && !stopping ? (
+			{running ? (
 				<section
 					aria-label="Timer"
 					className={
@@ -101,7 +110,7 @@ export function NavigationTimer({
 						"medium:min-h-12"
 					}
 				>
-					<span className="rounded-extra-small py-1 underline-offset-4 group-data-hovered:underline medium:group-data-focus-visible:focus-indicator">
+					<span className="rounded-extra-small py-1 hover-underline transition-link group-data-hovered:decoration-current medium:group-data-focus-visible:focus-indicator">
 						Track time
 					</span>
 				</AriaButton>

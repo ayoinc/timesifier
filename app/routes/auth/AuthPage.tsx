@@ -113,14 +113,11 @@ export function AuthPage({ step, children }: AuthPageProps) {
 					photo={PHOTOS.platform}
 					alt="An empty railway platform in the rain, with a yellow-rimmed station clock above a departure screen."
 					sizes="(min-width: 75rem) 560px, (min-width: 52.5rem) 48vw, 100vw"
-					caption="Amsterdam Sloterdijk. Photograph: Nikolai Kolosov."
 					className="max-expanded:hidden expanded:col-span-6 expanded:col-start-7"
 				/>
 			</main>
 
-			<SiteFooter current={SIGN_IN_PATH}>
-				<p>Photograph by Nikolai Kolosov, from Unsplash.</p>
-			</SiteFooter>
+			<SiteFooter current={SIGN_IN_PATH} photos={[PHOTOS.platform]} />
 		</div>
 	);
 }

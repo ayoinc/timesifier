@@ -232,6 +232,13 @@ body {
 	@apply bg-surface text-on-surface;
 }
 
+/* The page ends where it ends: pulling past the top or the bottom does not
+   stretch it and show bare canvas above the band (the owner, 2026-11-12). A box
+   that scrolls inside the page keeps its own rule (`overscroll-contain`). */
+html {
+	overscroll-behavior: none;
+}
+
 /* Selected text takes the sheet's yellow, in both schemes. */
 ::selection {
 	background-color: var(--md-sys-color-primary-container);
@@ -346,6 +353,25 @@ body {
 		border-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
 		box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
 		border-radius var(--md-sys-motion-spring-duration) var(--md-sys-motion-spring-easing);
+}
+
+/* A link's hover: its underline comes in, thickens or takes the ink, on the same
+   short curve a control's state layer does. The line is always drawn, so the
+   change is one of colour and thickness, which can move; with reduced motion the
+   change is the same, as it is a change of colour. */
+@utility transition-link {
+	transition:
+		color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+		text-decoration-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+		text-decoration-thickness var(--md-sys-motion-duration-short3)
+		var(--md-sys-motion-easing-standard);
+}
+
+/* An underline that appears on hover, as a link standing alone in a bar has. */
+@utility hover-underline {
+	text-decoration-line: underline;
+	text-decoration-color: transparent;
+	text-underline-offset: calc(var(--md-sys-spacing-unit));
 }
 
 /* Disabled: the on-surface colour at Material's disabled opacities. */
@@ -548,15 +574,16 @@ body {
 
 /*
  * A time that changes while it is looked at (app/components/Digits.tsx). A digit
- * that changes arrives from below, as a clock's does; a digit that stays is the
- * same element and does not move. With reduced motion the digit simply changes.
+ * that replaces another arrives from below, as a clock's does (`tick-in`); a digit
+ * that stays is the same element and does not move, and the digits a time is
+ * first drawn with are simply there. With reduced motion the digit simply changes.
  */
 .tick-digit {
 	display: inline-block;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.tick-digit {
+	.tick-in {
 		animation: tick-in var(--md-sys-motion-duration-short4)
 			var(--md-sys-motion-easing-emphasized-decelerate);
 	}
@@ -624,5 +651,108 @@ body {
 	}
 	to {
 		opacity: 0;
+	}
+}
+
+/*
+ * A shape that holds the place of something on its way (app/components/Skeleton.tsx):
+ * it breathes, slowly, between full and a little more than half its strength.
+ * With reduced motion it stands still.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	.skeleton-pulse {
+		animation: skeleton-pulse calc(var(--md-sys-motion-duration-extra-long4) * 1.6)
+			var(--md-sys-motion-easing-standard) infinite alternate;
+	}
+}
+
+@keyframes skeleton-pulse {
+	to {
+		opacity: 0.55;
+	}
+}
+
+/*
+ * A page that takes the place of its shape (app/shell/arrival.ts) brings its
+ * sections in one after another: each rises 8px and fades in, 40ms after the one
+ * before, the fifth and later together. A page that arrives without having
+ * waited slides in whole instead (the transitions above), and a page loaded or
+ * reloaded whole is simply there. With reduced motion the sections fade in
+ * together and nothing moves.
+ *
+ * The fill is `backwards` and not `both`: each section is hidden through its
+ * delay, and once its animation ends it lets go. A filled animation would hold
+ * the section as a stacking context and a containing block for anything fixed
+ * inside it, for as long as the page stays.
+ */
+[data-reveal] > * > * {
+	animation: shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+		backwards;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	[data-reveal] > * > * {
+		--reveal-step: 0;
+		animation:
+			shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+			calc(var(--reveal-step) * 40ms) backwards,
+			reveal-rise var(--md-sys-motion-duration-medium2)
+			var(--md-sys-motion-easing-emphasized-decelerate) calc(var(--reveal-step) * 40ms) backwards;
+	}
+
+	[data-reveal] > * > :nth-child(2) {
+		--reveal-step: 1;
+	}
+
+	[data-reveal] > * > :nth-child(3) {
+		--reveal-step: 2;
+	}
+
+	[data-reveal] > * > :nth-child(4) {
+		--reveal-step: 3;
+	}
+
+	[data-reveal] > * > :nth-child(n + 5) {
+		--reveal-step: 4;
+	}
+}
+
+/*
+ * A page whose sections stand inside one block of their own (the Day view's,
+ * which moves as one between days) marks that block `data-reveal-sections`:
+ * when the page takes its shape's place, those sections come in one after
+ * another too, after the block's place in the page. With reduced motion they
+ * do not move; the block fades in whole, as above.
+ */
+@media (prefers-reduced-motion: no-preference) {
+	[data-reveal] [data-reveal-sections] > * {
+		--reveal-step: 2;
+		animation:
+			shell-fade-in var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard)
+			calc(var(--reveal-step) * 40ms) backwards,
+			reveal-rise var(--md-sys-motion-duration-medium2)
+			var(--md-sys-motion-easing-emphasized-decelerate) calc(var(--reveal-step) * 40ms) backwards;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(2) {
+		--reveal-step: 3;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(3) {
+		--reveal-step: 4;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(4) {
+		--reveal-step: 5;
+	}
+
+	[data-reveal] [data-reveal-sections] > :nth-child(n + 5) {
+		--reveal-step: 6;
+	}
+}
+
+@keyframes reveal-rise {
+	from {
+		translate: 0 calc(var(--md-sys-spacing-unit) * 2);
 	}
 }

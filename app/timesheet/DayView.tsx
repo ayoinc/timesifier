@@ -33,6 +33,7 @@ import { ChangedMark, useReport, useReportAnswer, useReported } from "./feedback
 import { dayNumber, useClockFormat, useDayFormat, usePeriodFormat } from "./format";
 import { GettingStartedList, usePutAwayAnswer } from "./GettingStarted";
 import { elapsedSeconds, useNow } from "./live";
+import { PENDING_PROJECT_NAME, usePendingTimer } from "./pending";
 import { PeriodHeader } from "./Submission";
 import { durationOf, type SheetEntry } from "./sheets";
 import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
@@ -80,7 +81,8 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 	const clock = useClockFormat(zone);
 	const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
 	const travel = useTravel(dayNumber(day));
-	const live = useNow(data.running !== null, now);
+	const starting = usePendingTimer(slug).starting !== null;
+	const live = useNow(data.running !== null || starting, now);
 	// The day's limit (TS-090): why nothing can be tracked on it, if nothing can.
 	const rule = data.rules.find((r) => r.day === day);
 	const blocked = refusalOfDay(rule);
@@ -115,6 +117,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 		const form = new FormData();
 		form.set("intent", "track");
 		form.set("projectId", each.projectId);
+		form.set(PENDING_PROJECT_NAME, projectName(each.projectId));
 		form.set("description", each.description ?? "");
 		form.set("day", today);
 		if (own?.taskId) form.set("taskId", own.taskId);
@@ -153,7 +156,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 			    as one, as on the Week and Calendar views: the boundary starts just
 			    below the stepper, so it is in view whenever it is used. */}
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-				<div>
+				<div data-reveal-sections="">
 					<div className="mt-6">
 						<PeriodHeader
 							title={formatPeriod(submission.period.startsOn, submission.period.endsOn)}
@@ -353,20 +356,21 @@ function EmptyDay({
 }) {
 	const formatDay = useDayFormat();
 	const formatShort = useDayFormat("short");
-	const when = isToday ? "today" : formatDay(day);
+	// "today", or "on Tuesday 10 November": never "on today".
+	const when = isToday ? "today" : `on ${formatDay(day)}`;
 	return (
 		<div className="px-4 pb-4 @sm:px-5">
 			<p className="text-body-large text-on-surface-variant">
 				{onTrack
-					? `Nothing yet on ${when}. Track time${copyFrom ? `, or copy ${formatShort(copyFrom)}'s entries` : ""}.`
-					: `Nothing tracked on ${when}.`}
+					? `Nothing yet ${when}. Track time${copyFrom ? `, or copy ${formatShort(copyFrom)}'s entries` : ""}.`
+					: `Nothing tracked ${when}.`}
 			</p>
 			{onTrack && (
 				<div className="mt-2 flex flex-wrap gap-2">
 					<Button
 						variant="text"
 						icon={<AddIcon size="medium" />}
-						aria-label={`Track time on ${when}`}
+						aria-label={`Track time ${when}`}
 						onPress={onTrack}
 					>
 						Track time
@@ -463,7 +467,17 @@ function Timer({
 	useReportAnswer(answer);
 	const clock = useClockFormat(data.zone);
 	const hasActive = data.projects.some((p) => !p.archived);
-	const { running } = data;
+	const pending = usePendingTimer(slug);
+	// A start or a stop on its way already shows as done (TS-096); a refusal puts it back.
+	const running = pending.starting
+		? {
+				projectId: pending.starting.projectId,
+				description: pending.starting.description || null,
+				startedAt: pending.starting.startedAt,
+			}
+		: pending.stopping
+			? null
+			: data.running;
 	const whyId = useId();
 	const why =
 		blocked ??
