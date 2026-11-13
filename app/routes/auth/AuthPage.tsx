@@ -159,25 +159,30 @@ export function DoneMark() {
 	);
 }
 
-/** What a step has to say about its last action: progress, or what went wrong. */
-export type Notice = { tone: "progress" | "problem"; text: string };
+/**
+ * What a step has to say about its last action: what it is waiting for,
+ * progress, or what went wrong.
+ */
+export type Notice = { tone: "waiting" | "progress" | "problem"; text: string };
+
+const NOTICE_LOOK = {
+	problem: "text-body-medium text-error empty:hidden",
+	progress: "text-body-medium text-on-surface-variant empty:hidden",
+	// The pending button already shows the wait (docs/design-system.md, "While the
+	// page waits"), and its waiting words are hidden from assistive technology:
+	// this is the one place a screen reader hears them, and it is not seen.
+	waiting: "sr-only",
+} as const;
 
 /**
  * Says it under the step's fields. A problem is an alert, read out at once;
- * progress is a status, read when the screen reader is next idle. The element
- * is always there, so what is put in it is announced.
+ * progress and a wait are a status, read when the screen reader is next idle.
+ * The element is always there, so what is put in it is announced.
  */
 export function NoticeLine({ notice }: { notice: Notice | null }) {
 	const problem = notice?.tone === "problem";
 	return (
-		<p
-			role={problem ? "alert" : "status"}
-			className={
-				problem
-					? "text-body-medium text-error empty:hidden"
-					: "text-body-medium text-on-surface-variant empty:hidden"
-			}
-		>
+		<p role={problem ? "alert" : "status"} className={NOTICE_LOOK[notice?.tone ?? "progress"]}>
 			{notice?.text}
 		</p>
 	);
@@ -215,6 +220,11 @@ export function problem(kind: Problem, again = "Continue"): Notice {
 
 export function progress(text: string): Notice {
 	return { tone: "progress", text };
+}
+
+/** What a pending button is waiting for, said to a screen reader alone. */
+export function waiting(text: string): Notice {
+	return { tone: "waiting", text };
 }
 
 /**

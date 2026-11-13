@@ -13,6 +13,7 @@ import {
 	StepHeading,
 	StepLead,
 	useOneAtATime,
+	waiting,
 } from "./AuthPage";
 import { sendCode, signInWithCode } from "./client";
 import { RobotCheck, type RobotCheckHandle } from "./RobotCheck";
@@ -57,7 +58,7 @@ export function CodeStep({
 	function submit(event: FormEvent) {
 		event.preventDefault();
 		once(async () => {
-			setNotice(progress("Checking the code…"));
+			setNotice(waiting("Checking the code…"));
 			const outcome = await signInWithCode(email, code, newsletter);
 			if (outcome.ok) return onSignedIn();
 			setNotice(problem(outcome.problem));
@@ -66,7 +67,7 @@ export function CodeStep({
 
 	function sendAnother() {
 		once(async () => {
-			setNotice(progress("Sending a new code…"));
+			setNotice(waiting("Sending a new code…"));
 			const token = await check.current?.token();
 			if (!token) return setNotice(problem("robot-check", SEND_ANOTHER));
 			const outcome = await sendCode(email, token);
