@@ -1,4 +1,5 @@
 // Relative: routes.ts reads this file when the routes are built, without the `~` alias.
+import { nameKey } from "../lib/names";
 import { destinationPath } from "../shell/destinations";
 
 /**
@@ -27,13 +28,40 @@ export function shownIn(search: URLSearchParams): Shown {
 /**
  * The query that narrows a list to the records whose name has the words
  * typed, kept in the address so a search can be linked to and reloaded:
- * `?q=acme` (TS-057). The list is narrowed on the server.
+ * `?q=acme` (TS-057). The list is narrowed on the server, and with script in
+ * the page as each key is typed (TS-114, `projectMatches`).
  */
 export const SEARCH_PARAM = "q";
 
 /** The words an address searches for, the space round them cut: "" when it searches for nothing. */
 export function searchIn(search: URLSearchParams): string {
 	return search.get(SEARCH_PARAM)?.trim() ?? "";
+}
+
+/**
+ * Whether a project is one the words `query` find, as `listProjects` finds it:
+ * by its name, or by its client's while the organisation shows clients.
+ */
+export function projectMatches(
+	project: { name: string; client: { key: string } | null },
+	query: string,
+	byClient: boolean,
+): boolean {
+	const key = nameKey(query);
+	return (
+		nameKey(project.name).includes(key) ||
+		(byClient && (project.client?.key.includes(key) ?? false))
+	);
+}
+
+/** Whether a move from `current` to `next` changes the words searched for and nothing else. */
+export function onlySearchChanged(current: URL, next: URL): boolean {
+	if (current.pathname !== next.pathname) return false;
+	const a = new URLSearchParams(current.search);
+	const b = new URLSearchParams(next.search);
+	a.delete(SEARCH_PARAM);
+	b.delete(SEARCH_PARAM);
+	return a.toString() === b.toString();
 }
 
 /**

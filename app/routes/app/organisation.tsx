@@ -25,6 +25,7 @@ import {
 import { errorWords } from "~/shell/error-words";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { layoutShouldRevalidate } from "~/shell/revalidation";
 import { finishRunningTransition } from "~/shell/transitions";
 import { navigationTimer } from "~/timesheet/navigation.server";
 
@@ -88,6 +89,9 @@ export const middleware: Route.MiddlewareFunction[] = [requireOrganisation, requ
 export function meta({ error }: Route.MetaArgs) {
 	return error ? [{ title: `${errorWords(error, "organisation").heading} · Timesifier` }] : [];
 }
+
+/** A move of the query alone reads nothing here again (`app/shell/revalidation.ts`). */
+export const shouldRevalidate = layoutShouldRevalidate;
 
 /**
  * What every page of the organisation may show: its name, its slug, the

@@ -30,6 +30,7 @@ import {
 import { Navigation } from "~/shell/Navigation";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { ProfileMenu } from "~/shell/ProfileMenu";
+import { layoutShouldRevalidate } from "~/shell/revalidation";
 import { finishRunningTransition, TRANSITION, useTravel } from "~/shell/transitions";
 import { FeedbackProvider } from "~/timesheet/feedback";
 import { TrackTimeProvider } from "~/timesheet/TrackTime";
@@ -63,6 +64,9 @@ export function loader({ context }: Route.LoaderArgs) {
 	const { user } = context.get(signedInContext);
 	return { name: user.name?.trim() || null, email: user.email };
 }
+
+/** A move of the query alone reads nothing here again (`app/shell/revalidation.ts`). */
+export const shouldRevalidate = layoutShouldRevalidate;
 
 const MAIN_ID = "main";
 /** The column every page of an organisation is drawn in (docs/design-system.md, "Shell"). */

@@ -1,5 +1,6 @@
 import { useEffect, useState, ViewTransition } from "react";
 import { useNavigate } from "react-router";
+import { cx } from "~/components/cx";
 import { IconButton } from "~/components/IconButton";
 import { AddIcon } from "~/components/icons/AddIcon";
 import { RemoveIcon } from "~/components/icons/RemoveIcon";
@@ -7,13 +8,14 @@ import { PeriodStepper } from "~/components/PeriodStepper";
 import { Tooltip } from "~/components/Tooltip";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TRANSITION, useTravel } from "~/shell/transitions";
-import { addDays, type Day, dayOf } from "~/time/calendar";
+import { type Day, dayOf } from "~/time/calendar";
 import { formatMonth } from "~/time/format";
 
+import { type Aim, stepsAround } from "./aim";
 import { CalendarMonth } from "./CalendarMonth";
 import { CalendarWeek } from "./CalendarWeek";
 import {
-	monthAfter,
+	calendarDays,
 	monthSheet,
 	ZOOM_LABELS,
 	type ZoomLevel,
@@ -44,7 +46,15 @@ import { calendarPath, timerAction } from "./views";
  * on the week's scale. A day that takes no time offers no slot to add time
  * and says why; a day over its limit says by how much (TS-090).
  */
-export function CalendarView({ data, slug }: { data: CalendarData; slug: string }) {
+export function CalendarView({
+	data,
+	slug,
+	aim,
+}: {
+	data: CalendarData;
+	slug: string;
+	aim: Aim | null;
+}) {
 	const { scale, zoom, date, days, today, zone, projects } = data;
 	const month = data.month;
 	const first = days[0] as Day;
@@ -99,42 +109,50 @@ export function CalendarView({ data, slug }: { data: CalendarData; slug: string 
 	}, [navigate, zoomIn, zoomOut]);
 
 	const title = isMonth ? formatMonth(month) : formatPeriod(first, last);
-	const previous = isMonth
-		? calendarPath(slug, { scale, date: monthAfter(month, -1) })
-		: calendarPath(slug, { date: addDays(first, -7), zoom });
-	const next = isMonth
-		? calendarPath(slug, { scale, date: monthAfter(month, 1) })
-		: calendarPath(slug, { date: addDays(first, 7), zoom });
+
+	// A press answered before the server (TS-114): the week or the month it asks
+	// for is the one the stepper names at once, and what it replaces dims.
+	const leaving = aim !== null && aim.view !== "calendar";
+	const aimed = aim?.view === "calendar" ? aim : ({ view: "calendar", scale, date, zoom } as const);
+	const aimedDays = calendarDays(aimed.scale, aimed.date, data.weekStartsOn);
+	const aimedFirst = aimedDays.days[0] as Day;
+	const aimedLast = aimedDays.days.at(-1) as Day;
+	const aimedMonth = aimed.scale === "month" ? aimedDays.month : null;
+	const awaiting = leaving || aimed.scale !== scale || aimed.zoom !== zoom || aimedFirst !== first;
+	const aimedThisOne = aimedMonth
+		? today.startsWith(aimedMonth.slice(0, 7))
+		: aimedFirst <= today && today <= aimedLast;
+	const steps = stepsAround(slug, aimed, data.weekStartsOn);
 	const keys = useTimesheetKeys({
 		onNew: canTrack ? () => openTrackTime({ day: thisOne ? today : date }) : undefined,
-		previous,
-		next,
-		today: calendarPath(slug, { scale, zoom }),
+		previous: steps.previous,
+		next: steps.next,
+		today: calendarPath(slug, { scale: aimed.scale, zoom: aimed.zoom }),
 	});
 	const week = weekSheet(data.entries, days, zone, live);
 	const ofMonth = isMonth ? monthSheet(data.entries, days, month, zone, live) : null;
 
 	return (
 		<>
-			<div className="mt-6">
+			<div className={cx("mt-6", leaving && "awaiting")}>
 				<PeriodStepper
-					label={isMonth ? "Months" : "Weeks"}
-					period={title}
-					previous={{ to: previous, label: isMonth ? "Previous month" : "Previous week" }}
-					next={{ to: next, label: isMonth ? "Next month" : "Next week" }}
+					label={aimedMonth ? "Months" : "Weeks"}
+					period={aimedMonth ? formatMonth(aimedMonth) : formatPeriod(aimedFirst, aimedLast)}
+					previous={{ to: steps.previous, label: aimedMonth ? "Previous month" : "Previous week" }}
+					next={{ to: steps.next, label: aimedMonth ? "Next month" : "Next week" }}
 					current={
-						thisOne
+						aimedThisOne
 							? undefined
 							: {
-									to: calendarPath(slug, { scale, zoom }),
-									label: isMonth ? "Back to this month" : "Back to this week",
+									to: calendarPath(slug, { scale: aimed.scale, zoom: aimed.zoom }),
+									label: aimedMonth ? "Back to this month" : "Back to this week",
 								}
 					}
 				/>
 			</div>
 
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-				<div className="mt-6">
+				<div className={cx("mt-6", awaiting && "awaiting")}>
 					<PeriodHeader
 						title={title}
 						submission={data.submission}

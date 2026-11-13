@@ -9,7 +9,6 @@ import { dayRulesOf } from "~/leave/rules.server";
 import type { LockNotice, LockReason } from "~/locks/locks";
 import { lockNoticeOf, lockReasonsOn } from "~/locks/locks.server";
 import type { Membership } from "~/organisations/membership.server";
-import { lockedDays } from "~/periods/locks.server";
 import {
 	type PeriodDays,
 	PeriodStatus,
@@ -131,7 +130,16 @@ export interface TimesheetBase {
 	projects: ProjectName[];
 	/** The person's running entry, wherever it started, for the timer. */
 	running: SheetEntry | null;
+	/** The weekday the organisation's weeks start on, 0 for Sunday: the browser draws a period from it before the server answers (TS-114). */
+	weekStartsOn: number;
 }
+
+/**
+ * Why each locked day of those a view shows is locked, by day; a day that is
+ * not locked is not here. Track time opened on one of these days reads it from
+ * the page instead of asking the server (TS-114).
+ */
+export type LockReasons = Partial<Record<Day, LockReason>>;
 
 /** Where a period stands, and what its one submission action reads (TS-046): the Day, Week and Calendar views'. */
 export interface PeriodSubmission {
@@ -201,6 +209,8 @@ export interface DayData extends TimesheetBase {
 	locked: boolean;
 	/** Why the day is locked, or null when it is not (`app/locks/locks.ts`). */
 	lockReason: LockReason | null;
+	/** Why each locked day of the period is locked. */
+	lockReasons: LockReasons;
 	/** The organisation's lock date and its reason, or null when it has none (TS-065). */
 	lockDate: LockNotice | null;
 	/** The seven days of the period the day is in, each with its total, and the period's: the Week view's sums (TS-056). */
@@ -231,6 +241,8 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	canCopyWeek: boolean;
 	/** The days of the week in a submitted or approved period, or on or before the lock date. */
 	lockedDays: Day[];
+	/** Why each of them is locked. */
+	lockReasons: LockReasons;
 	/** The organisation's lock date and its reason, or null when it has none (TS-065). */
 	lockDate: LockNotice | null;
 	/** The days of the week as leave sees them, and the time expected over it (TS-061). */
@@ -262,6 +274,8 @@ export interface CalendarData extends TimesheetBase {
 	entries: SheetEntry[];
 	/** The days shown that are in a submitted or approved period. */
 	lockedDays: Day[];
+	/** Why each of them is locked. */
+	lockReasons: LockReasons;
 	/** The days shown as leave sees them (TS-061), which Track time reads as the Day view does. */
 	away: WeekAway;
 	/** What each day is besides its time: leave, a public holiday or a day not worked, muted when nothing is expected on it. */
@@ -289,7 +303,14 @@ export async function timesheetData(
 	const zone = await zoneOfMember(membership);
 	const today = dayOf(now, zone);
 	const { projects, running } = await common(scope, user.id);
-	const base: TimesheetBase = { zone, now, today, projects, running };
+	const base: TimesheetBase = {
+		zone,
+		now,
+		today,
+		projects,
+		running,
+		weekStartsOn: organisation.weekStartsOn,
+	};
 
 	switch (chosen.view) {
 		case "day": {
@@ -314,9 +335,9 @@ export async function timesheetData(
 			const { days, month } = calendarDays(chosen.scale, date, organisation.weekStartsOn);
 			const first = days[0] as Day;
 			const last = days.at(-1) as Day;
-			const [entries, locked, away] = await Promise.all([
+			const [entries, reasons, away] = await Promise.all([
 				entriesStartingIn(scope, user.id, bounds(addDays(first, -1), last, zone)),
-				lockedDays(scope, user.id, days),
+				lockReasonsOn(scope, user.id, days),
 				weekAway(scope, user.id, { startsOn: first, endsOn: last }),
 			]);
 			const period = month === null ? { startsOn: first, endsOn: last } : null;
@@ -333,7 +354,8 @@ export async function timesheetData(
 				days,
 				month,
 				entries,
-				lockedDays: days.filter((day) => locked.has(day)),
+				lockedDays: days.filter((day) => reasons.has(day)),
+				lockReasons: Object.fromEntries(reasons),
 				away,
 				statuses: Object.fromEntries(
 					away.days.flatMap(({ day, label, expectedMinutes }) =>
@@ -406,7 +428,7 @@ async function dayData(
 ): Promise<Omit<DayData, keyof TimesheetBase | "gettingStarted">> {
 	const [{ entries: ofPeriod, rules, submission }, reasons, lockDate, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
-		lockReasonsOn(scope, userId, [day]),
+		lockReasonsOn(scope, userId, daysFrom(period.startsOn, period.endsOn)),
 		lockNoticeOf(scope.organisationId),
 		weekAway(scope, userId, period),
 	]);
@@ -428,6 +450,7 @@ async function dayData(
 		total: totalOf(entries, now),
 		locked: reasons.has(day),
 		lockReason: reasons.get(day) ?? null,
+		lockReasons: Object.fromEntries(reasons),
 		lockDate,
 		week: { days, total },
 		submission,
@@ -446,15 +469,15 @@ async function weekData(
 ): Promise<Omit<WeekData, keyof TimesheetBase>> {
 	const days = daysFrom(period.startsOn, period.endsOn);
 	const before = periodAfter(period, -1);
-	const [{ entries, rules, submission }, previous, locked, lockDate, away] = await Promise.all([
+	const [{ entries, rules, submission }, previous, reasons, lockDate, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
 		entriesStartingIn(scope, userId, periodBounds(before, zone)),
-		lockedDays(scope, userId, days),
+		lockReasonsOn(scope, userId, days),
 		lockNoticeOf(scope.organisationId),
 		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
-	const open = days.some((day) => !locked.has(day) && day <= dayOf(now, zone));
+	const open = days.some((day) => !reasons.has(day) && day <= dayOf(now, zone));
 	const source = open ? await copySourceWeek(scope, userId, period, zone) : null;
 	return {
 		view: "week" as const,
@@ -463,7 +486,8 @@ async function weekData(
 		days,
 		sheet: weekSheet(entries, days, zone, now, { projectOrder: projects.map((p) => p.id) }),
 		lastWeekProjects: [...new Set(previous.map((e) => e.projectId))].filter((id) => active.has(id)),
-		lockedDays: days.filter((day) => locked.has(day)),
+		lockedDays: days.filter((day) => reasons.has(day)),
+		lockReasons: Object.fromEntries(reasons),
 		lockDate,
 		away,
 		rules,

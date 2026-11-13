@@ -7,7 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { Link, useFetcher } from "react-router";
+import { Link, useFetcher, useRouteLoaderData } from "react-router";
 
 import { Skeleton } from "~/components/Skeleton";
 import { showSnackbar } from "~/components/Snackbar";
@@ -15,6 +15,7 @@ import { TextField } from "~/components/TextField";
 import { LOCK_LABELS, lockSentence } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
+import type { TimesheetAnswer, loader as timesheetLoader } from "~/routes/app/timesheet";
 import type { loader as trackDayLoader } from "~/routes/app/timesheet.day";
 import { destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
@@ -26,6 +27,7 @@ import { refusalOfDay, takesOvertimeOnly } from "./DayRules";
 import { formatDuration } from "./durations";
 import { useReport } from "./feedback";
 import { useDayFormat } from "./format";
+import { REFRESH_EVERY_MS } from "./live";
 import { PENDING_PROJECT_NAME } from "./pending";
 import { timerAction, trackDayPath } from "./views";
 
@@ -49,8 +51,13 @@ import { timerAction, trackDayPath } from "./views";
  * overtime; a timer started on it runs as overtime (TS-095). The server
  * refuses the same, whatever is sent.
  *
- * While the day's rules are read, the sheet holds the shape of its fields
- * (`Skeleton`). "Start timer" is a quick action (TS-096): the sheet closes at
+ * On the Timesheet the sheet opens from what the page already holds (TS-114,
+ * harvest sweep S2-02): its projects and choices, and the rules and locks of
+ * every day the view shows, so a day among them asks the server nothing. Only
+ * when what the page holds is older than the pages' own refresh is it read
+ * again, behind the sheet. Another day, or the sheet opened from another page,
+ * is read from the server, and while it is the sheet holds the shape of its
+ * fields (`Skeleton`). "Start timer" is a quick action (TS-096): the sheet closes at
  * once and every timer on the page runs (`usePendingTimer`); a refusal stops
  * them again and the snackbar says why.
  */
@@ -97,6 +104,13 @@ export function TrackTimeProvider({ slug, children }: { slug: string; children: 
 		[slug, submit],
 	);
 
+	// The Timesheet's answer while it is on screen, and when it came.
+	const page = useRouteLoaderData<typeof timesheetLoader>(TIMESHEET_ROUTE);
+	const [heldSince, setHeldSince] = useState<{ page: TimesheetAnswer; at: number } | null>(null);
+	useEffect(() => {
+		if (page) setHeldSince({ page, at: Date.now() });
+	}, [page]);
+
 	return (
 		<TrackTimeContext value={open}>
 			{children}
@@ -107,9 +121,31 @@ export function TrackTimeProvider({ slug, children }: { slug: string; children: 
 				isOpen={request !== null}
 				onClose={() => setRequest(null)}
 				onStartTimer={startTimer}
+				page={page}
+				// An answer not yet marked has only just come.
+				heldAt={heldSince !== null && heldSince.page === page ? heldSince.at : Date.now()}
 			/>
 		</TrackTimeContext>
 	);
+}
+
+/** The Timesheet's route, whose answer the sheet reads while it is on screen. */
+const TIMESHEET_ROUTE = "routes/app/timesheet";
+
+/** What the sheet needs of `day`, from the Timesheet's answer: when the view on screen shows that day. */
+function heldDay(page: TimesheetAnswer | undefined, day: Day | undefined) {
+	if (page === undefined || page.data.view === "history" || day === undefined) return undefined;
+	const { data } = page;
+	const rule = data.rules.find((each) => each.day === day);
+	if (rule === undefined) return undefined;
+	return {
+		today: data.today,
+		day,
+		projects: data.projects,
+		rule,
+		lockReason: data.lockReasons[day] ?? null,
+		track: page.track,
+	};
 }
 
 function TrackTimeSheet({
@@ -118,6 +154,8 @@ function TrackTimeSheet({
 	isOpen,
 	onClose,
 	onStartTimer,
+	page,
+	heldAt,
 }: {
 	slug: string;
 	request: TrackTimeRequest;
@@ -125,22 +163,35 @@ function TrackTimeSheet({
 	onClose: () => void;
 	/** Sends a timer's start on its own, so the sheet can close at once. */
 	onStartTimer: (form: FormData) => void;
+	/** The Timesheet's answer, while the Timesheet is on screen. */
+	page: TimesheetAnswer | undefined;
+	/** When `page` came. */
+	heldAt: number;
 }) {
 	const report = useReport();
 	const formatDay = useDayFormat();
 	const fetcher = useFetcher<typeof trackDayLoader>();
 	const { load } = fetcher;
-	const [date, setDate] = useState<string>(request.day ?? "");
+	// No day asked for is today; the Timesheet on screen knows which day that is.
+	const [date, setDate] = useState<string>(request.day ?? page?.data.today ?? "");
 	const [hours, setHours] = useState("");
 
-	// The day's rules are read when the sheet opens and each time the date changes to a whole one.
+	// The day's rules: from the page when it shows the day, read again behind
+	// the sheet only when the page's answer is older than its refresh; from the
+	// server otherwise, when the sheet opens and each time the date changes to a
+	// whole one.
 	const asked = /^\d{4}-\d{2}-\d{2}$/.test(date) ? (date as Day) : undefined;
+	const held = heldDay(page, asked);
+	const holds = held !== undefined;
 	useEffect(() => {
 		if (!isOpen) return;
+		if (holds && Date.now() - heldAt <= REFRESH_EVERY_MS) return;
 		load(trackDayPath(slug, asked));
-	}, [isOpen, slug, asked, load]);
+	}, [isOpen, slug, asked, load, holds, heldAt]);
 
-	const data = fetcher.data;
+	const fetched =
+		fetcher.data && (asked === undefined || fetcher.data.day === asked) ? fetcher.data : undefined;
+	const data = fetched ?? held ?? fetcher.data;
 	// The date the data is for, once it has come: today when none was asked for.
 	useEffect(() => {
 		if (data && date === "") setDate(data.day);

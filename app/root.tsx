@@ -13,6 +13,7 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { settleOnEscape } from "./components/motion";
 import condensedFont from "./fonts/sofia-sans-condensed-latin-wght-normal.woff2?url";
 import plainFont from "./fonts/sofia-sans-latin-wght-normal.woff2?url";
 import { MAIN_ID, SiteHeader } from "./landing/Site";
@@ -25,6 +26,7 @@ import { DEFAULT_LOCALE, negotiateLocale } from "./shell/locale";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "./shell/Outside";
 import { PendingBar } from "./shell/PendingBar";
 import { useRequestColorScheme } from "./shell/request-scheme";
+import { onlyQueryMoved } from "./shell/revalidation";
 import { ignoreSkippedTransitions } from "./shell/transitions";
 import { THEME_COLOUR } from "./styles/theme-colour";
 
@@ -72,15 +74,14 @@ export function meta({ error }: Route.MetaArgs) {
 }
 
 /**
- * Moving to another page changes neither value, so it asks the server nothing.
- * A submitted form may have changed the colour scheme; the answer to one arrives
- * as a load of the page it was sent from.
+ * Moving to another page changes neither value, so it asks the server nothing;
+ * nor does a move of the query alone (`onlyQueryMoved`). A submitted form may
+ * have changed the colour scheme; the answer to one arrives as a load of the
+ * page it was sent from.
  */
-export function shouldRevalidate({
-	formMethod,
-	currentUrl,
-	nextUrl,
-}: ShouldRevalidateFunctionArgs) {
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+	const { formMethod, currentUrl, nextUrl } = args;
+	if (onlyQueryMoved(args)) return false;
 	const submitted = formMethod !== undefined && formMethod.toUpperCase() !== "GET";
 	return submitted || currentUrl.pathname === nextUrl.pathname;
 }
@@ -134,6 +135,7 @@ export default function App() {
 	useFreshOnReturn();
 	// A view transition the browser skips is the shell's design, not an error (transitions.ts).
 	useEffect(ignoreSkippedTransitions, []);
+	useEffect(settleOnEscape, []);
 	return <Outlet />;
 }
 

@@ -178,6 +178,7 @@ describe("the Timesheet's week of days, rendered", () => {
 						today: "2026-11-11",
 						running: null,
 						zone: "Europe/London",
+						awaiting: false,
 						slug: "acme",
 					}),
 				),

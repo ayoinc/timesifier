@@ -8,10 +8,10 @@ import { Select } from "~/components/Select";
 import { type DayRule, leftMessage, overLabel, wholeMinutes } from "~/leave/rules";
 import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
-import { periodAfter } from "~/periods/periods";
 import { TRANSITION, useTravel } from "~/shell/transitions";
-import type { Day } from "~/time/calendar";
+import { addDays, type Day } from "~/time/calendar";
 
+import { type Aim, stepsAround } from "./aim";
 import { ClosedDays, OvertimeTag, RuleLine } from "./DayRules";
 import { cellText, formatDuration, minutesToMs, TypedHours } from "./durations";
 import { useReportAnswer } from "./feedback";
@@ -33,11 +33,17 @@ import { dayPath, timerAction, weekPath } from "./views";
  * project has some, each project has an overtime row under its regular time,
  * whose cells are its overtime on each day (TS-095).
  */
-export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
+export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; aim: Aim | null }) {
 	const { period, days, lockedDays, lockDate, projects, today } = data;
 	const formatPeriod = usePeriodFormat();
 	const formatDay = useDayFormat();
 	const travel = useTravel(dayNumber(period.startsOn));
+	// A press answered before the server (TS-114): the week it asks for is the
+	// one the stepper shows at once, and what it replaces dims.
+	const leaving = aim !== null && aim.view !== "week";
+	const shownStart = aim?.view === "week" ? aim.start : period.startsOn;
+	const awaiting = leaving || shownStart !== period.startsOn;
+	const steps = stepsAround(slug, { view: "week", start: shownStart }, data.weekStartsOn);
 	const [said, setSaid] = useState<string | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
 
@@ -57,9 +63,8 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 	const inGrid = new Set(rows.map((row) => row.projectId));
 	const addable = projects.filter((p) => !p.archived && !inGrid.has(p.id));
 	const editable = lockedDays.length < days.length;
-	const thisWeek = period.startsOn <= today && today <= period.endsOn;
-	const previousWeek = weekPath(slug, periodAfter(period, -1).startsOn);
-	const nextWeek = weekPath(slug, periodAfter(period, 1).startsOn);
+	const shownEnd = addDays(shownStart, 6);
+	const thisWeek = shownStart <= today && today <= shownEnd;
 
 	// N adds a row (taste HT-D): the project chosen to add, or the first not in the grid, with its first open cell focused.
 	const [chosen, setChosen] = useState<string | null>(null);
@@ -84,8 +89,8 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 	};
 	const keys = useTimesheetKeys({
 		onNew: editable && pick ? () => addRows([pick]) : undefined,
-		previous: previousWeek,
-		next: nextWeek,
+		previous: steps.previous,
+		next: steps.next,
 		today: weekPath(slug),
 	});
 
@@ -99,18 +104,18 @@ export function WeekView({ data, slug }: { data: WeekData; slug: string }) {
 
 	return (
 		<>
-			<div className="mt-6">
+			<div className={cx("mt-6", leaving && "awaiting")}>
 				<PeriodStepper
 					label="Weeks"
-					period={formatPeriod(period.startsOn, period.endsOn)}
-					previous={{ to: previousWeek, label: "Previous week" }}
-					next={{ to: nextWeek, label: "Next week" }}
+					period={formatPeriod(shownStart, shownEnd)}
+					previous={{ to: steps.previous, label: "Previous week" }}
+					next={{ to: steps.next, label: "Next week" }}
 					current={thisWeek ? undefined : { to: weekPath(slug), label: "Back to this week" }}
 				/>
 			</div>
 
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
-				<div className="mt-6">
+				<div className={cx("mt-6", awaiting && "awaiting")}>
 					<PeriodHeader
 						title={formatPeriod(period.startsOn, period.endsOn)}
 						submission={data}

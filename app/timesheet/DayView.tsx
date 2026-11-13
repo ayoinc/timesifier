@@ -23,9 +23,10 @@ import { TEXT_LINK } from "~/shell/links";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { EntryChoices } from "~/tasks/EntryChoices";
 import { TrackChoicesContext } from "~/tasks/track";
-import { addDays, type Day } from "~/time/calendar";
+import type { Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 
+import { type Aim, stepsAround } from "./aim";
 import { DayPicker } from "./DayPicker";
 import { OvertimeTag, refusalOfDay } from "./DayRules";
 import { formatDuration, formatElapsed } from "./durations";
@@ -61,7 +62,7 @@ import { WeekDays } from "./WeekDays";
  * and says why. A day over its limit says by how much, and marks its entries
  * as the ones to trim or move: changing and deleting them stay open.
  */
-export function DayView({ data, slug }: { data: DayData; slug: string }) {
+export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim: Aim | null }) {
 	const {
 		day,
 		today,
@@ -81,6 +82,14 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 	const clock = useClockFormat(zone);
 	const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
 	const travel = useTravel(dayNumber(day));
+	// A press answered before the server (TS-114): the day it asks for is the
+	// one the stepper and the chips show at once, and what it replaces dims.
+	const leaving = aim !== null && aim.view !== "day";
+	const aimedDay = aim?.view === "day" ? aim.day : day;
+	const awaitingDay = leaving || aimedDay !== day;
+	const awaitingWeek =
+		leaving || aimedDay < submission.period.startsOn || aimedDay > submission.period.endsOn;
+	const steps = stepsAround(slug, { view: "day", day: aimedDay }, data.weekStartsOn);
 	const starting = usePendingTimer(slug).starting !== null;
 	const live = useNow(data.running !== null || starting, now);
 	// The day's limit (TS-090): why nothing can be tracked on it, if nothing can.
@@ -127,26 +136,28 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 
 	const keys = useTimesheetKeys({
 		onNew: track ?? undefined,
-		previous: dayPath(slug, addDays(day, -1)),
-		next: dayPath(slug, addDays(day, 1)),
+		previous: steps.previous,
+		next: steps.next,
 		today: dayPath(slug),
 	});
 
 	return (
 		<>
-			<div className="mt-6">
+			<div className={cx("mt-6", leaving && "awaiting")}>
 				<PeriodStepper
 					label="Days"
 					period={
 						<DayPicker
 							slug={slug}
-							day={day}
-							label={day === today ? `Today, ${formatShort(day)}` : formatDay(day)}
+							day={aimedDay}
+							today={today}
+							weekStartsOn={data.weekStartsOn}
+							label={aimedDay === today ? `Today, ${formatShort(aimedDay)}` : formatDay(aimedDay)}
 						/>
 					}
-					previous={{ to: dayPath(slug, addDays(day, -1)), label: "Previous day" }}
-					next={{ to: dayPath(slug, addDays(day, 1)), label: "Next day" }}
-					current={day === today ? undefined : { to: dayPath(slug), label: "Back to today" }}
+					previous={{ to: steps.previous, label: "Previous day" }}
+					next={{ to: steps.next, label: "Next day" }}
+					current={aimedDay === today ? undefined : { to: dayPath(slug), label: "Back to today" }}
 				/>
 			</div>
 
@@ -157,7 +168,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 			    below the stepper, so it is in view whenever it is used. */}
 			<ViewTransition default="none" update={travel ? TRANSITION[travel] : "none"}>
 				<div data-reveal-sections="">
-					<div className="mt-6">
+					<div className={cx("mt-6", awaitingWeek && "awaiting")}>
 						<PeriodHeader
 							title={formatPeriod(submission.period.startsOn, submission.period.endsOn)}
 							submission={submission}
@@ -169,11 +180,12 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 						week={data.week}
 						away={data.away}
 						rules={data.rules}
-						day={day}
+						day={aimedDay}
 						today={today}
 						running={data.running}
 						zone={zone}
 						slug={slug}
+						awaiting={awaitingWeek}
 					/>
 
 					<Timer
@@ -184,6 +196,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 						rule={locked ? undefined : rule}
 						blocked={locked ? null : blocked}
 						now={live}
+						awaiting={awaitingDay}
 					/>
 
 					{/* What the last task did. Always here, so what is put in it is read out. */}
@@ -194,7 +207,7 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 						{acted && !acted.ok ? acted.problem : null}
 					</p>
 
-					<div className="mt-6 max-w-200">
+					<div className={cx("mt-6 max-w-200", awaitingDay && "awaiting")}>
 						<Ledger
 							heading={day === today ? `Today, ${formatDay(day)}` : formatDay(day)}
 							note={lockReason ? LOCK_LABELS[lockReason] : over > 0 ? overLabel(over) : undefined}
@@ -451,6 +464,7 @@ function Timer({
 	rule,
 	blocked,
 	now,
+	awaiting,
 }: {
 	data: DayData;
 	slug: string;
@@ -462,6 +476,8 @@ function Timer({
 	/** Why nothing can be tracked on the shown day, when it is its limit that says so. */
 	blocked: string | null;
 	now: number;
+	/** Whether another day is on its way, so this one dims. */
+	awaiting: boolean;
 }) {
 	const fetcher = useFetcher<Outcome>();
 	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
@@ -489,7 +505,7 @@ function Timer({
 	return (
 		<section
 			aria-labelledby="timer-heading"
-			className="mt-8 flex max-w-200 flex-col items-start gap-4"
+			className={cx("mt-8 flex max-w-200 flex-col items-start gap-4", awaiting && "awaiting")}
 		>
 			{hasActive ? (
 				<h2 id="timer-heading" className="sr-only">

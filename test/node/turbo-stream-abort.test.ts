@@ -27,9 +27,7 @@ async function unhandledDuring(run: () => Promise<void>): Promise<unknown[]> {
 		await run();
 		// Node reports a rejection unhandled only once a turn of its event loop has
 		// passed with none attached, so the check waits for one: there is no event to await.
-		const { promise, resolve } = Promise.withResolvers<void>();
-		setTimeout(resolve, 20);
-		await promise;
+		await new Promise((resolve) => setTimeout(resolve, 20));
 	} finally {
 		process.off("unhandledRejection", listen);
 	}

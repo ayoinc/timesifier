@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { cx } from "~/components/cx";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 
+import type { Aim } from "./aim";
 import { formatDuration } from "./durations";
 import { usePeriodFormat } from "./format";
 import { PERIOD_STATE_LABELS } from "./sheets";
@@ -15,10 +16,19 @@ import { weekPath } from "./views";
  * returned one says why. Each opens its Week view. The period that holds
  * today is amber (taste HT-B).
  */
-export function HistoryView({ data, slug }: { data: HistoryData; slug: string }) {
+export function HistoryView({
+	data,
+	slug,
+	aim,
+}: {
+	data: HistoryData;
+	slug: string;
+	/** Another view on its way, pressed before the server answers it: History dims until it comes (TS-114). */
+	aim: Aim | null;
+}) {
 	const formatPeriod = usePeriodFormat();
 	return (
-		<div className="mt-8 max-w-200">
+		<div className={cx("mt-8 max-w-200", aim !== null && aim.view !== "history" && "awaiting")}>
 			<Ledger heading="Your periods" note={data.rows.length}>
 				<LedgerRows label="Periods">
 					{data.rows.map((row) => {
