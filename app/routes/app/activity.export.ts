@@ -9,8 +9,10 @@ import {
 	parseLogQuery,
 } from "~/activity/log.server";
 import { organisationScope } from "~/db";
+import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine, isoInstant } from "~/reports/csv";
+import { dayOf } from "~/time/calendar";
 
 import type { Route } from "./+types/activity.export";
 
@@ -83,7 +85,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			await chunks.return(undefined);
 		},
 	});
-	const filename = `timesifier-${organisation.slug}-activity-${log.first}-to-${log.last}.csv`;
+	const filename = exportFilename(
+		organisation.name,
+		`activity-${log.first}-to-${log.last}`,
+		dayOf(Date.now(), organisation.timeZone),
+		"csv",
+	);
 	return new Response(body, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",

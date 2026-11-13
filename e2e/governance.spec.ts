@@ -171,7 +171,9 @@ test("the Activity log holds the lock date's change, narrows to its kind, and do
 	await page.getByRole("link", { name: "Export as CSV" }).click();
 	const download = await downloading;
 	expect(download.suggestedFilename()).toMatch(
-		new RegExp(`^timesifier-${slug}-activity-\\d{4}-\\d{2}-\\d{2}-to-\\d{4}-\\d{2}-\\d{2}\\.csv$`),
+		new RegExp(
+			`^${slug}-activity-\\d{4}-\\d{2}-\\d{2}-to-\\d{4}-\\d{2}-\\d{2}-exported-\\d{4}-\\d{2}-\\d{2}\\.csv$`,
+		),
 	);
 	const lines = readFileSync(await download.path())
 		.subarray(3)

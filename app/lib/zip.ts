@@ -3,7 +3,9 @@
 // file is deflated (`CompressionStream("deflate-raw")`) and kept that way when
 // it is smaller, else stored. Names are marked UTF-8 (general purpose bit 11).
 // Sizes are known before a file's header is written, so there are no data
-// descriptors. Used by the export of every invoice as a PDF (TS-076).
+// descriptors. The end record carries the archive's comment, in UTF-8, which an
+// archive tool shows on opening it. Used by the export of every invoice as a
+// PDF (TS-076, TS-100).
 
 /** A file to put in the ZIP. */
 export interface ZipEntry {
@@ -77,7 +79,10 @@ interface Written {
 	offset: number;
 }
 
-async function* chunks(entries: AsyncIterable<ZipEntry>): AsyncGenerator<Uint8Array<ArrayBuffer>> {
+async function* chunks(
+	entries: AsyncIterable<ZipEntry>,
+	comment: Uint8Array,
+): AsyncGenerator<Uint8Array<ArrayBuffer>> {
 	const encoder = new TextEncoder();
 	const written: Written[] = [];
 	let offset = 0;
@@ -149,21 +154,32 @@ async function* chunks(entries: AsyncIterable<ZipEntry>): AsyncGenerator<Uint8Ar
 		yield header;
 	}
 	if (offset > MAX_U32) throw new Error("This ZIP would need ZIP64, which is not written.");
-	yield record([
-		[4, 0x0605_4b50],
-		[2, 0],
-		[2, 0],
-		[2, written.length],
-		[2, written.length],
-		[4, offset - start],
-		[4, start],
-		[2, 0],
-	]);
+	yield record(
+		[
+			[4, 0x0605_4b50],
+			[2, 0],
+			[2, 0],
+			[2, written.length],
+			[2, written.length],
+			[4, offset - start],
+			[4, start],
+			[2, comment.length],
+		],
+		comment,
+	);
 }
 
-/** `entries` as the bytes of a ZIP file, written as they are read; nothing is kept but the directory. */
-export function zip(entries: AsyncIterable<ZipEntry>): ReadableStream<Uint8Array<ArrayBuffer>> {
-	const source = chunks(entries);
+/**
+ * `entries` as the bytes of a ZIP file, written as they are read, with
+ * `comment` as the archive's; nothing is kept but the directory.
+ */
+export function zip(
+	entries: AsyncIterable<ZipEntry>,
+	comment = "",
+): ReadableStream<Uint8Array<ArrayBuffer>> {
+	const encoded = new TextEncoder().encode(comment);
+	if (encoded.length > MAX_U16) throw new Error("A ZIP's comment is at most 65,535 bytes.");
+	const source = chunks(entries, encoded);
 	return new ReadableStream<Uint8Array<ArrayBuffer>>({
 		async pull(controller) {
 			const next = await source.next();

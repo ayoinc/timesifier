@@ -419,8 +419,8 @@ describe("the export", () => {
 	it("is a UTF-8 CSV attachment named for the organisation and the range, never stored", async () => {
 		const { response } = await exported(ada, WEEK);
 		expect(response.headers.get("Content-Type")).toBe("text/csv; charset=utf-8; header=present");
-		expect(response.headers.get("Content-Disposition")).toBe(
-			'attachment; filename="timesifier-acme-2026-10-05-to-2026-10-11.csv"',
+		expect(response.headers.get("Content-Disposition")).toMatch(
+			/^attachment; filename="acme-time-2026-10-05-to-2026-10-11-exported-\d{4}-\d{2}-\d{2}\.csv"$/,
 		);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 	});

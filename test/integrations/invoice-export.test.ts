@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { type OrganisationScope, organisationScope } from "~/db";
 import { createDraft, issueInvoice, voidInvoice } from "~/invoices/invoices.server";
 import { crc32 } from "~/lib/zip";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, seedTeam } from "../organisations/harness";
@@ -66,6 +67,22 @@ async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
 }
 
 /**
+ * The end record, found as an unzipper finds it: searching back from the end
+ * for its signature, at the place where the comment it gives the length of
+ * ends the file. With the archive's comment.
+ */
+function endRecord(file: Uint8Array<ArrayBuffer>): { end: number; comment: string } {
+	const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
+	for (let end = file.length - 22; end >= 0; end--) {
+		if (view.getUint32(end, true) !== 0x0605_4b50) continue;
+		const length = view.getUint16(end + 20, true);
+		if (end + 22 + length !== file.length) continue;
+		return { end, comment: new TextDecoder().decode(file.subarray(end + 22)) };
+	}
+	throw new Error("no end record");
+}
+
+/**
  * Reads a ZIP the way an unzipper does: the end record, then each entry of the
  * central directory, then its local header and data. Checks that the two
  * headers agree, that the sizes are right and that each CRC is the CRC of the
@@ -73,8 +90,7 @@ async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
  */
 async function unzip(file: Uint8Array<ArrayBuffer>): Promise<Unzipped[]> {
 	const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
-	const end = file.length - 22;
-	expect(view.getUint32(end, true)).toBe(0x0605_4b50);
+	const { end } = endRecord(file);
 	const count = view.getUint16(end + 10, true);
 	const size = view.getUint32(end + 12, true);
 	let at = view.getUint32(end + 16, true);
@@ -136,11 +152,19 @@ describe("exporting every invoice as a PDF", () => {
 		const response = await open(EXPORT, owner);
 		expect(response.status).toBe(200);
 		expect(response.headers.get("Content-Type")).toBe("application/zip");
+		// Named for the organisation and the day it was exported, which the archive's comment says too (TS-100).
+		const zone = await env.DB.prepare("select time_zone from organisations").first<string>(
+			"time_zone",
+		);
+		const today = dayOf(Date.now(), zone ?? "UTC");
 		expect(response.headers.get("Content-Disposition")).toBe(
-			'attachment; filename="acme-all-invoices.zip"',
+			`attachment; filename="acme-all-invoices-exported-${today}.zip"`,
 		);
 		const file = await bytesOf(response);
 		expect(new TextDecoder().decode(file.subarray(0, 2))).toBe("PK");
+		expect(endRecord(file).comment).toBe(
+			`Acme: all invoices, exported ${today}. Made with Timesifier.`,
+		);
 		const entries = await unzip(file);
 
 		// Oldest first, as the ids sort; each the invoice's own PDF, byte for byte.
@@ -175,7 +199,11 @@ describe("exporting every invoice as a PDF", () => {
 
 	it("is an empty ZIP for an organisation with no invoices", async () => {
 		const file = await bytesOf(await open(EXPORT, owner));
-		expect(file.length).toBe(22);
+		// The end record alone, with the archive's comment.
+		expect(endRecord(file)).toEqual({
+			end: 0,
+			comment: expect.stringMatching(/^Acme: all invoices, exported \d{4}-\d{2}-\d{2}\. /),
+		});
 		expect(await unzip(file)).toEqual([]);
 	});
 

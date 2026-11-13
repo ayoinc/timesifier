@@ -1,5 +1,3 @@
-import type { Day } from "~/time/calendar";
-
 import type { Row } from "./report";
 
 /**
@@ -75,9 +73,4 @@ export function rowCells(row: Row, showClients: boolean): string[] {
 		String(row.minutes * 60),
 		entry.overtime ? "yes" : "no",
 	];
-}
-
-/** The file's name: the organisation and the range, "timesifier-acme-2026-11-02-to-2026-11-08.csv". */
-export function csvFilename(slug: string, first: Day, last: Day): string {
-	return `timesifier-${slug}-${first}-to-${last}.csv`;
 }

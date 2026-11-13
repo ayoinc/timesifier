@@ -4,7 +4,6 @@ import {
 	BYTE_ORDER_MARK,
 	CSV_COLUMNS,
 	csvCell,
-	csvFilename,
 	csvLine,
 	isoInstant,
 	rowCells,
@@ -627,10 +626,7 @@ describe("a row of the CSV", () => {
 		]);
 	});
 
-	it("is in a file named for the organisation and the range", () => {
-		expect(csvFilename("acme", "2026-11-02", "2026-11-08")).toBe(
-			"timesifier-acme-2026-11-02-to-2026-11-08.csv",
-		);
+	it("writes an instant to the second, in UTC", () => {
 		expect(isoInstant(Date.parse("2026-11-02T09:00:00.999Z"))).toBe("2026-11-02T09:00:00Z");
 	});
 });

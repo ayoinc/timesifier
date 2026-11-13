@@ -263,8 +263,3 @@ export function expenseCells(expense: ReportedExpense, showClients: boolean): st
 		expense.tags.join("; "),
 	];
 }
-
-/** The file's name: "timesifier-acme-expenses-2026-11-02-to-2026-11-08.csv". */
-export function expenseCsvFilename(slug: string, first: Day, last: Day): string {
-	return `timesifier-${slug}-expenses-${first}-to-${last}.csv`;
-}

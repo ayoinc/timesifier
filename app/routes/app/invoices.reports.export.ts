@@ -5,6 +5,7 @@ import {
 	billingReportRequest,
 } from "~/invoices/billing-reports.server";
 import { billingOf } from "~/invoices/context.server";
+import { exportFilename } from "~/organisations/export-filename";
 import { csvLine } from "~/reports/csv";
 
 import type { Route } from "./+types/invoices.reports.export";
@@ -18,14 +19,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const { rows } = await billingReportOf(scope, report, days, today);
 	let file = csvLine(BILLING_CSV_COLUMNS[report]);
 	for (const row of rows) file += csvLine(billingCsvCells(report, row));
-	const name =
-		report === "receivables"
-			? `timesifier-${organisation.slug}-receivables-${today}.csv`
-			: `timesifier-${organisation.slug}-${report}-${days.first}-to-${days.last}.csv`;
+	const holds =
+		report === "receivables" ? "receivables" : `${report}-${days.first}-to-${days.last}`;
 	return new Response(file, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",
-			"Content-Disposition": `attachment; filename="${name}"`,
+			"Content-Disposition": `attachment; filename="${exportFilename(organisation.name, holds, today, "csv")}"`,
 			"Cache-Control": "no-store",
 		},
 	});
