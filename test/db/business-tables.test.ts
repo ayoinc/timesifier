@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it } from "vitest";
 import { organisationScope } from "~/db";
 import { memberships, organisations, users } from "~/db/schema";
+import { dayOf } from "~/time/calendar";
 import { freshDatabase } from "./database";
 
 // The tables of the business features (TS-064). They need migration 0008. A
@@ -72,6 +73,7 @@ async function seed() {
 			billable: true,
 			description: null,
 			startedAt: new Date(T0),
+			spentOn: dayOf(T0, "UTC"),
 			endedAt: new Date(T0 + HOUR),
 		});
 		const [expense] = await scope.expenses.insert({

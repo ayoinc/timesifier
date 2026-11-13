@@ -184,6 +184,7 @@ async function copyOnto(
 			description: source.description,
 			startedAt: new Date(at),
 			endedAt: new Date(at + source.lengthMs),
+			spentOn: day,
 		};
 		statements.push(
 			scope.timeEntries.statements.insert(added),

@@ -4,6 +4,7 @@ import { organisationScope } from "~/db";
 import { timeScopeOf } from "~/organisations/access";
 import { groupedByClient } from "~/projects/projects";
 import { activeProjects, projectHours } from "~/projects/projects.server";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -383,6 +384,7 @@ async function track(who: Person, projectId: string, minutes: number, endedAgo: 
 		userId: who.user.id,
 		projectId,
 		startedAt: new Date(end - minutes * 60_000),
+		spentOn: dayOf(end - minutes * 60_000, "UTC"),
 		endedAt: endedAgo === null ? null : new Date(end),
 	});
 }
@@ -595,6 +597,7 @@ describe("hours to date (TS-057)", () => {
 			userId: grace.user.id,
 			projectId: their?.id ?? "",
 			startedAt: new Date(Date.now() - 600 * 60_000),
+			spentOn: dayOf(Date.now() - 600 * 60_000, "UTC"),
 			endedAt: new Date(),
 		});
 		expect(await mainText(PROJECTS)).toMatch(/Design 1:00/);
@@ -656,13 +659,14 @@ describe("hours to date (TS-057)", () => {
 					end: runs ? null : start + Math.floor(next() * 10 * 3_600_000),
 				});
 			}
-			// Ten rows at a time: D1 binds at most 100 values to a statement.
-			for (let at = 0; at < entries.length; at += 10) {
+			// Nine rows at a time: D1 binds at most 100 values to a statement.
+			for (let at = 0; at < entries.length; at += 9) {
 				await scope.timeEntries.insert(
-					entries.slice(at, at + 10).map((e) => ({
+					entries.slice(at, at + 9).map((e) => ({
 						userId: e.userId,
 						projectId: e.projectId,
 						startedAt: new Date(e.start),
+						spentOn: dayOf(e.start, "UTC"),
 						endedAt: e.end === null ? null : new Date(e.end),
 					})),
 				);

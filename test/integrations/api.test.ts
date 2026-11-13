@@ -367,6 +367,42 @@ describe("the same role rules as the pages", () => {
 		).toBe(3);
 	});
 
+	it("stores each entry's day: the date sent, or the start's day in the maker's zone, kept unless the start moves (TS-111)", async () => {
+		const { max, apollo } = await people();
+		await env.DB.prepare("update users set time_zone = 'Pacific/Auckland' where id = ?")
+			.bind(max.user.id)
+			.run();
+		const token = await tokenFor(max);
+		const dayOf = (id: unknown) => value("select spent_on from time_entries where id = ?", id);
+
+		const dated = await json(
+			await api("/time_entries", token, {
+				method: "POST",
+				body: { project_id: apollo, spent_date: "2026-11-03", hours: 1 },
+			}),
+		);
+		expect(await dayOf(dated.id)).toBe("2026-11-03");
+		// 20:00 UTC on Wednesday 4 is 09:00 on Thursday 5 in Auckland.
+		const started = await json(
+			await api("/time_entries", token, {
+				method: "POST",
+				body: { project_id: apollo, started_at: "2026-11-04T20:00:00Z", hours: 1 },
+			}),
+		);
+		expect(await dayOf(started.id)).toBe("2026-11-05");
+
+		// The maker moves to London: a change of hours keeps the day, a new start takes its own.
+		await env.DB.prepare("update users set time_zone = 'Europe/London' where id = ?")
+			.bind(max.user.id)
+			.run();
+		const patch = (body: Record<string, unknown>) =>
+			api(`/time_entries/${started.id}`, token, { method: "PATCH", body });
+		expect((await patch({ hours: 2 })).status).toBe(200);
+		expect(await dayOf(started.id)).toBe("2026-11-05");
+		expect((await patch({ started_at: "2026-11-06T09:00:00Z" })).status).toBe(200);
+		expect(await dayOf(started.id)).toBe("2026-11-06");
+	});
+
 	it("holds overtime to the organisation's rules, as the Timesheet does, for every role (TS-095)", async () => {
 		const { ben, fin, max, apollo } = await people();
 		for (const who of [ada, ben, fin, max]) {

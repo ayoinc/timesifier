@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type OrganisationScope, organisationScope } from "~/db";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, seedTeam } from "../organisations/harness";
@@ -43,6 +44,7 @@ async function track(who: Person, projectId: string, from: string, to: string, b
 		projectId,
 		description: "Work",
 		startedAt: new Date(from),
+		spentOn: dayOf(Date.parse(from), "UTC"),
 		endedAt: new Date(to),
 		billable,
 	});

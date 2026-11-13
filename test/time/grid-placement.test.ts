@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type OrganisationScope, organisationScope, organisations, users } from "~/db";
-import { instantAt, startOfDay } from "~/time/calendar";
+import { dayOf, instantAt, startOfDay } from "~/time/calendar";
 import { placeOnDay } from "~/time/grid";
 import { setCellHours } from "~/time/manual.server";
 import { freshDatabase } from "../db/database";
@@ -123,6 +123,7 @@ describe("hours typed into a cell", () => {
 			projectId,
 			description: null,
 			startedAt: new Date(at(WEDNESDAY, 21, 33)),
+			spentOn: dayOf(at(WEDNESDAY, 21, 33), LONDON),
 			endedAt: new Date(at(WEDNESDAY, 21, 50)),
 		});
 		expect(await cell(5 * 60, at(WEDNESDAY, 22))).toEqual({ ok: true });
@@ -135,6 +136,7 @@ describe("hours typed into a cell", () => {
 			projectId,
 			description: null,
 			startedAt: new Date(at(WEDNESDAY, 9)),
+			spentOn: dayOf(at(WEDNESDAY, 9), LONDON),
 			endedAt: new Date(at(WEDNESDAY, 10)),
 		});
 		expect(await cell(3 * 60, at(WEDNESDAY, 22))).toEqual({ ok: true });

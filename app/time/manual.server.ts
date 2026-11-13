@@ -11,6 +11,7 @@ import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.serv
 import { entryTaskOf } from "~/tasks/tasks.server";
 
 import { bounds, type Day, dayOf } from "./calendar";
+import { entryDay } from "./entries.server";
 import { formatDuration } from "./format";
 import { gridEntryStart, placeOnDay } from "./grid";
 
@@ -136,6 +137,11 @@ export async function editEntry(
 		description: span.description,
 		startedAt: new Date(span.startedAt),
 		endedAt: new Date(span.endedAt),
+		// An entry keeps its day unless its start moves (TS-111).
+		spentOn:
+			span.startedAt === entry.startedAt.getTime()
+				? entryDay(entry, zone)
+				: dayOf(span.startedAt, zone),
 		overtime,
 	};
 	await scope.batch([
@@ -165,6 +171,8 @@ export interface DeletedEntry {
 	tagIds: string[];
 	/** Whether it was overtime (TS-095): it is put back as the same kind. */
 	overtime: boolean;
+	/** The day it belonged to (TS-111): it is put back on the same day. */
+	spentOn: Day;
 }
 
 /** Deletes an entry of `userId` that has ended, and answers what it was, so it can be put back. */
@@ -204,6 +212,7 @@ export async function deleteEntry(
 		endedAt: entry.endedAt.getTime(),
 		tagIds,
 		overtime: entry.overtime,
+		spentOn: entryDay(entry, zone),
 	};
 	return { ok: true as const, deleted };
 }
@@ -242,6 +251,7 @@ export async function restoreEntry(
 		description: entry.description,
 		startedAt: new Date(entry.startedAt),
 		endedAt: new Date(entry.endedAt),
+		spentOn: entry.spentOn,
 		overtime: entry.overtime,
 	};
 	const kept = entry.tagIds.length > 0 && (await tagsAllowed(scope, [], entry.tagIds));
@@ -335,6 +345,7 @@ export async function addHours(
 		description,
 		startedAt: new Date(placed.start),
 		endedAt: new Date(placed.start + minutes * 60_000),
+		spentOn: day,
 		overtime,
 	};
 	const [[entry]] = await scope.batch([
@@ -422,6 +433,7 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 	const span = {
 		startedAt: new Date(placed.start),
 		endedAt: new Date(placed.start + minutes * 60_000),
+		spentOn: day,
 	};
 	if (entry) {
 		await scope.batch([

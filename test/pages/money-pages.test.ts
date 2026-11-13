@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type OrganisationScope, organisationScope } from "~/db";
 import { defaultRatesPath, projectPath } from "~/projects/projects";
 import { destinationPath } from "~/shell/destinations";
+import { dayOf } from "~/time/calendar";
 import { captureEmail } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { value } from "../organisations/harness";
@@ -43,6 +44,7 @@ beforeEach(async () => {
 			billable: true,
 			description: null,
 			startedAt: new Date(`2026-11-02T0${at + 1}:00:00Z`),
+			spentOn: dayOf(Date.parse(`2026-11-02T0${at + 1}:00:00Z`), "UTC"),
 			endedAt: new Date(`2026-11-02T0${at + 2}:00:00Z`),
 		});
 	}
