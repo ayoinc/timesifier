@@ -3,7 +3,13 @@ import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
-import { type ActivitySummary, type ActivityValue, type OrganisationScope, users } from "~/db";
+import {
+	type ActivitySummary,
+	type ActivityValue,
+	among,
+	type OrganisationScope,
+	users,
+} from "~/db";
 import { NON_WORKING_RULE_LABELS, OVERTIME_RULE_LABELS, SHORT_NOTICE_LABELS } from "~/leave/rules";
 import { activityScopeOf, type TimeScope } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
@@ -120,7 +126,7 @@ export async function logRecords(log: LogRequest, limit: number, after?: LogCurs
 				after === undefined
 					? undefined
 					: or(lt(r.createdAt, after.at), and(eq(r.createdAt, after.at), lt(r.id, after.id))),
-				visible.everyone ? undefined : inArray(r.ownerId, visible.people),
+				visible.everyone ? undefined : among(r.ownerId, visible.people),
 				query.kind === undefined ? undefined : eq(r.subjectType, query.kind),
 				query.actor === undefined
 					? undefined
@@ -151,7 +157,7 @@ export function subjectRecords(
 			and(
 				eq(r.subjectType, subject.type),
 				eq(r.subjectId, subject.id),
-				visible.everyone ? undefined : inArray(r.ownerId, visible.people),
+				visible.everyone ? undefined : among(r.ownerId, visible.people),
 			),
 		{ orderBy: (r) => [r.createdAt, r.id] },
 	);
@@ -333,14 +339,14 @@ async function namesOf(scope: OrganisationScope, records: readonly RecordRow[]):
 				: drizzle(env.DB)
 						.select({ id: users.id, name: users.name, email: users.email })
 						.from(users)
-						.where(inArray(users.id, [...people])),
-			list.length === 0 ? [] : scope.projects.select((p) => inArray(p.id, list)),
-			list.length === 0 ? [] : scope.clients.select((c) => inArray(c.id, list)),
-			list.length === 0 ? [] : scope.teams.select((t) => inArray(t.id, list)),
-			list.length === 0 ? [] : scope.leaveKinds.select((k) => inArray(k.id, list)),
-			list.length === 0 ? [] : scope.expenseCategories.select((c) => inArray(c.id, list)),
-			list.length === 0 ? [] : scope.tags.select((t) => inArray(t.id, list)),
-			list.length === 0 ? [] : scope.workSchedules.select((s) => inArray(s.id, list)),
+						.where(among(users.id, people)),
+			list.length === 0 ? [] : scope.projects.select((p) => among(p.id, list)),
+			list.length === 0 ? [] : scope.clients.select((c) => among(c.id, list)),
+			list.length === 0 ? [] : scope.teams.select((t) => among(t.id, list)),
+			list.length === 0 ? [] : scope.leaveKinds.select((k) => among(k.id, list)),
+			list.length === 0 ? [] : scope.expenseCategories.select((c) => among(c.id, list)),
+			list.length === 0 ? [] : scope.tags.select((t) => among(t.id, list)),
+			list.length === 0 ? [] : scope.workSchedules.select((s) => among(s.id, list)),
 		]);
 	return {
 		people: new Map(accounts.map((a) => [a.id, nameOrEmail(a)])),

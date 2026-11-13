@@ -1,8 +1,7 @@
 import { env } from "cloudflare:workers";
-import { inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { type OrganisationScope, users } from "~/db";
+import { among, type OrganisationScope, users } from "~/db";
 import { type Access, timeScopeOf } from "~/organisations/access";
 import { addressLine, nameOrEmail } from "~/organisations/people";
 import { zoneOf } from "~/time/zones";
@@ -37,14 +36,14 @@ export async function peopleOf(
 	const wanted = only === undefined ? undefined : [...new Set(only)];
 	if (wanted?.length === 0) return [];
 	const memberships = await scope.memberships.select((m) =>
-		wanted ? inArray(m.userId, wanted) : undefined,
+		wanted ? among(m.userId, wanted) : undefined,
 	);
 	const ids = memberships.map((m) => m.userId);
 	if (ids.length === 0) return [];
 	const accounts = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name, email: users.email, timeZone: users.timeZone })
 		.from(users)
-		.where(inArray(users.id, ids));
+		.where(among(users.id, ids));
 	return accounts
 		.map((account) => ({
 			id: account.id,

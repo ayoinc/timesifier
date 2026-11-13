@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { record } from "~/activity/activity.server";
@@ -9,6 +9,7 @@ import { getPlatformBrand } from "~/brand/platform-brand.server";
 import {
 	type ActivitySummary,
 	activityAfter,
+	among,
 	type OrganisationScope,
 	organisationScope,
 	organisationsWithWebhooks,
@@ -491,15 +492,16 @@ async function deliverDue(scope: OrganisationScope, now: number, send: Send, onl
 		(d) =>
 			and(
 				eq(d.status, "pending"),
-				only
-					? inArray(d.id, only)
-					: or(isNull(d.nextAttemptAt), lte(d.nextAttemptAt, new Date(now))),
+				only ? among(d.id, only) : or(isNull(d.nextAttemptAt), lte(d.nextAttemptAt, new Date(now))),
 			),
 		{ orderBy: (d) => [d.nextAttemptAt, d.id], limit: DELIVERIES_PER_ORGANISATION },
 	);
 	if (due.length === 0) return;
 	const hooks = await scope.webhooks.select((w) =>
-		inArray(w.id, [...new Set(due.map((d) => d.webhookId))]),
+		among(
+			w.id,
+			due.map((d) => d.webhookId),
+		),
 	);
 	const hookById = new Map(hooks.map((hook) => [hook.id, hook]));
 	for (const delivery of due) {

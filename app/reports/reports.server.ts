@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
-import { and, asc, gt, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
+import { and, asc, gt, gte, lt, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
-import { type OrganisationScope, organisationScope, users } from "~/db";
+import { among, type OrganisationScope, organisationScope, users } from "~/db";
 import { expectedMinutes, leaveHalfDays, leaveMinutes } from "~/leave/days";
 import { calendarOf, leaveContext, shortNoticeCounts } from "~/leave/leave.server";
 import { type Access, type TimeScope, timeScopeOf } from "~/organisations/access";
@@ -34,9 +34,6 @@ import { type ReportEntry, type Row, rowOf } from "./report";
 
 /** How many entries one query reads. An export streams page after page, keyed on `id`. */
 export const ENTRY_PAGE_SIZE = 200;
-
-/** D1 takes at most 100 bound parameters a statement; a list of ids is read in chunks under that. */
-const IDS_A_QUERY = 90;
 
 /** A person a report can be narrowed to, by the name lists show them by (`shownName`). */
 export interface Person {
@@ -131,11 +128,6 @@ export async function reportRequest(
 	return { ...report, days: rangeDays(query, today, organisation.weekStartsOn) };
 }
 
-/** `column` is one of `people`, as one bound parameter however many they are. */
-function amongPeople(column: SQLiteColumn, people: readonly string[]): SQL {
-	return sql`${column} in (select value from json_each(${JSON.stringify(people)}))`;
-}
-
 /**
  * An entry has `tagId` when it has the tag itself or its project has it
  * (TS-085), each read from the organisation's own rows.
@@ -157,7 +149,7 @@ function taggedWith(
 export async function peopleToChoose(scope: OrganisationScope, access: Access): Promise<Person[]> {
 	const whose = timeScopeOf(access);
 	const members = await scope.memberships.select(
-		whose.everyone ? undefined : (m) => amongPeople(m.userId, whose.people),
+		whose.everyone ? undefined : (m) => among(m.userId, whose.people),
 	);
 	const accounts = await accountsOf(members.map((m) => m.userId));
 	return members
@@ -177,16 +169,11 @@ export async function peopleToChoose(scope: OrganisationScope, access: Access): 
 async function accountsOf(
 	ids: readonly string[],
 ): Promise<Map<string, { name: string | null; email: string }>> {
-	const accounts = new Map<string, { name: string | null; email: string }>();
-	const db = drizzle(env.DB);
-	for (let at = 0; at < ids.length; at += IDS_A_QUERY) {
-		const rows = await db
-			.select({ id: users.id, name: users.name, email: users.email })
-			.from(users)
-			.where(inArray(users.id, ids.slice(at, at + IDS_A_QUERY)));
-		for (const row of rows) accounts.set(row.id, row);
-	}
-	return accounts;
+	const rows = await drizzle(env.DB)
+		.select({ id: users.id, name: users.name, email: users.email })
+		.from(users)
+		.where(among(users.id, ids));
+	return new Map(rows.map((row) => [row.id, row]));
 }
 
 /**
@@ -228,7 +215,7 @@ export async function* entryPages(
 					after === undefined ? undefined : gt(e.id, after),
 					gte(e.startedAt, new Date(from)),
 					lt(e.startedAt, new Date(to)),
-					people.everyone ? undefined : amongPeople(e.userId, people.people),
+					people.everyone ? undefined : among(e.userId, people.people),
 					tag === undefined ? undefined : taggedWith(scope.organisationId, e.id, e.projectId, tag),
 				),
 			{ orderBy: (e) => [asc(e.id)], limit: pageSize },

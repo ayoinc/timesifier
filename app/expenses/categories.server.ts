@@ -1,9 +1,16 @@
 import { env } from "cloudflare:workers";
-import { and, asc, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { ActivitySource } from "~/activity/actions";
 import { changes, recordStatement, recordStatementWhen } from "~/activity/activity.server";
-import { type OrganisationScope, type ScopedStatement, users, uuidv7 } from "~/db";
+import {
+	among,
+	notAmong,
+	type OrganisationScope,
+	type ScopedStatement,
+	users,
+	uuidv7,
+} from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import { nameOrEmail } from "~/organisations/people";
 import type { Day } from "~/time/calendar";
@@ -55,8 +62,8 @@ export async function categoriesById(
 ): Promise<Map<string, Category>> {
 	if (ids.length === 0) return new Map();
 	const [categories, prices] = await Promise.all([
-		scope.expenseCategories.select((c) => inArray(c.id, [...ids])),
-		scope.expenseCategoryPrices.select((p) => inArray(p.categoryId, [...ids])),
+		scope.expenseCategories.select((c) => among(c.id, ids)),
+		scope.expenseCategoryPrices.select((p) => among(p.categoryId, ids)),
 	]);
 	return new Map(
 		categories.map((c) => [
@@ -152,7 +159,7 @@ export async function addUsualCategories(
 	const ids = usual.map(({ id }) => id);
 	// No category other than the starter set exists: true all through this
 	// batch, as it adds them, and false from the start if anyone added one.
-	const stillEmpty = sql`not ${scope.expenseCategories.exists((c) => notInArray(c.id, ids))}`;
+	const stillEmpty = sql`not ${scope.expenseCategories.exists((c) => notAmong(c.id, ids))}`;
 	const statements: ScopedStatement<unknown>[] = usual.flatMap(({ id, name, unit }) => {
 		const latest = unit?.prices.at(-1);
 		const added = scope.expenseCategories.exists((c) => eq(c.id, id));
@@ -199,7 +206,7 @@ export async function addUsualCategories(
 	const [made] = await scope.expenseCategories.sum(
 		() => sql<number>`1`,
 		(c) => c.organisationId,
-		(c) => inArray(c.id, ids),
+		(c) => among(c.id, ids),
 	);
 	return made?.total ?? 0;
 }
@@ -240,7 +247,7 @@ export async function categoryKeepers(scope: OrganisationScope): Promise<Categor
 					.select({ id: users.id, name: users.name, email: users.email })
 					.from(users)
 					.where(
-						inArray(
+						among(
 							users.id,
 							first.map((m) => m.userId),
 						),

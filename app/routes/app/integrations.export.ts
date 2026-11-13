@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
-import { and, asc, eq, gt, inArray, or } from "drizzle-orm";
+import { and, asc, eq, gt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { type OrganisationScope, organisationScope, users } from "~/db";
+import { among, type OrganisationScope, organisationScope, users } from "~/db";
 import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
@@ -54,7 +54,7 @@ async function namesOf(scope: OrganisationScope): Promise<Names> {
 				.select({ id: users.id, name: users.name, email: users.email, zone: users.timeZone })
 				.from(users)
 				.where(
-					inArray(
+					among(
 						users.id,
 						memberships.map((m) => m.userId),
 					),

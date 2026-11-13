@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
 import { recordStatement, recordStatementWhen } from "~/activity/activity.server";
-import { type OrganisationScope, type TenantRow, uuidv7 } from "~/db";
+import { among, type OrganisationScope, type TenantRow, uuidv7 } from "~/db";
 import { lineAmount } from "~/money/money";
 import { addDays, type Day } from "~/time/calendar";
 
@@ -67,7 +67,7 @@ export async function settledOf(
 ): Promise<Map<string, Settled>> {
 	const settled = new Map<string, Settled>();
 	if (invoiceIds.length === 0) return settled;
-	const rows = await scope.payments.select((p) => inArray(p.invoiceId, [...invoiceIds]));
+	const rows = await scope.payments.select((p) => among(p.invoiceId, invoiceIds));
 	for (const row of rows) {
 		const sum = settled.get(row.invoiceId) ?? { paidMinor: 0, writtenOffMinor: 0 };
 		if (row.kind === "write_off") sum.writtenOffMinor += row.amountMinor;
@@ -304,7 +304,7 @@ async function taxesAllowed(scope: OrganisationScope, line: LineInput): Promise<
 		return false;
 	}
 	if (ids.length === 0) return true;
-	const found = await scope.taxes.select((t) => inArray(t.id, ids));
+	const found = await scope.taxes.select((t) => among(t.id, ids));
 	return found.length === ids.length;
 }
 
@@ -459,7 +459,7 @@ export async function deleteDraft(
 			},
 		).query,
 		...(lineIds.length > 0
-			? [scope.invoiceLineSources.statements.delete((s) => inArray(s.lineId, lineIds)).query]
+			? [scope.invoiceLineSources.statements.delete((s) => among(s.lineId, lineIds)).query]
 			: []),
 		scope.estimates.statements.update({ invoiceId: null }, (e) => eq(e.invoiceId, id)).query,
 		scope.invoiceLines.statements.delete((l) => eq(l.invoiceId, id)).query,
@@ -538,7 +538,7 @@ export async function voidInvoice(
 			},
 		).query,
 		...(lineIds.length > 0
-			? [scope.invoiceLineSources.statements.delete((s) => inArray(s.lineId, lineIds)).query]
+			? [scope.invoiceLineSources.statements.delete((s) => among(s.lineId, lineIds)).query]
 			: []),
 		scope.invoices.statements.update({ status: "void", voidedAt: now }, (i) =>
 			and(eq(i.id, id), inArray(i.status, [...OWING, "paid"])),
@@ -756,5 +756,5 @@ export async function deletePayment(
 /** The lines of `invoiceIds` with the ids of what each bills for. */
 export async function sourcesOfLines(scope: OrganisationScope, lineIds: readonly string[]) {
 	if (lineIds.length === 0) return [];
-	return scope.invoiceLineSources.select((s) => inArray(s.lineId, [...lineIds]));
+	return scope.invoiceLineSources.select((s) => among(s.lineId, lineIds));
 }

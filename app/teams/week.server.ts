@@ -1,9 +1,8 @@
-import { and, asc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lt } from "drizzle-orm";
 
-import type { OrganisationScope } from "~/db";
+import { among, type OrganisationScope } from "~/db";
 import { type PeriodDays, type PeriodStatus, periodBounds } from "~/periods/periods";
 import { type Day, dayOf, daysFrom } from "~/time/calendar";
-
 import type { Person } from "./people.server";
 
 /**
@@ -44,7 +43,7 @@ async function entriesIn(scope: OrganisationScope, people: readonly Person[], pe
 	const rows = await scope.timeEntries.select(
 		(e) =>
 			and(
-				inArray(
+				among(
 					e.userId,
 					people.map((p) => p.id),
 				),
@@ -71,8 +70,8 @@ export async function teamWeek(
 	const ids = people.map((p) => p.id);
 	const [entries, running, periods] = await Promise.all([
 		entriesIn(scope, people, period),
-		scope.timeEntries.select((e) => and(inArray(e.userId, ids), isNull(e.endedAt))),
-		scope.periods.select((p) => and(inArray(p.userId, ids), eq(p.startsOn, period.startsOn))),
+		scope.timeEntries.select((e) => and(among(e.userId, ids), isNull(e.endedAt))),
+		scope.periods.select((p) => and(among(p.userId, ids), eq(p.startsOn, period.startsOn))),
 	]);
 	return people.map((person) => {
 		const own = entries.filter((e) => e.userId === person.id);
@@ -126,7 +125,7 @@ export async function timeByProject(
 	}
 	const projectIds = [...new Set(entries.map((e) => e.projectId))];
 	const projects =
-		projectIds.length === 0 ? [] : await scope.projects.select((p) => inArray(p.id, projectIds));
+		projectIds.length === 0 ? [] : await scope.projects.select((p) => among(p.id, projectIds));
 	const names = new Map(projects.map((p) => [p.id, p.name]));
 	return [...sums.values()].map((sum) => ({ ...sum, project: names.get(sum.projectId) ?? "" }));
 }
@@ -164,7 +163,7 @@ export async function personWeek(
 	]);
 	const projectIds = [...new Set(entries.map((e) => e.projectId))];
 	const projects =
-		projectIds.length === 0 ? [] : await scope.projects.select((p) => inArray(p.id, projectIds));
+		projectIds.length === 0 ? [] : await scope.projects.select((p) => among(p.id, projectIds));
 	const names = new Map(projects.map((p) => [p.id, p.name]));
 	const days = daysFrom(period.startsOn, period.endsOn).map((day) => {
 		const own = entries

@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, uuidv7 } from "~/db";
+import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { nameKey } from "~/lib/names";
 import { Role } from "~/organisations/roles";
 import type { Day } from "~/time/calendar";
@@ -102,8 +102,8 @@ export async function placesOf(
 ): Promise<Map<string, PersonPlace>> {
 	if (only?.length === 0) return new Map();
 	const [members, places, teams] = await Promise.all([
-		scope.memberships.select((m) => (only ? inArray(m.userId, [...only]) : undefined)),
-		scope.teamMembers.select((t) => (only ? inArray(t.userId, [...only]) : undefined)),
+		scope.memberships.select((m) => (only ? among(m.userId, only) : undefined)),
+		scope.teamMembers.select((t) => (only ? among(t.userId, only) : undefined)),
 		scope.teams.select(),
 	]);
 	const teamName = new Map(teams.map((t) => [t.id, t.name]));

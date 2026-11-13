@@ -1,9 +1,9 @@
 import { env, waitUntil } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, lt, lte, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, lt, lte, or, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
-import { users } from "~/db";
+import { among, users } from "~/db";
 import { dayStatus } from "~/leave/days";
 import { calendarOf, leaveContext } from "~/leave/leave.server";
 import {
@@ -220,7 +220,7 @@ async function namesOfPeople(ids: Iterable<string>): Promise<Map<string, string>
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name })
 		.from(users)
-		.where(inArray(users.id, unique));
+		.where(among(users.id, unique));
 	return new Map(rows.map((row) => [row.id, row.name]));
 }
 
@@ -233,7 +233,7 @@ async function zonesOfPeople(
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, timeZone: users.timeZone })
 		.from(users)
-		.where(inArray(users.id, unique));
+		.where(among(users.id, unique));
 	return new Map(rows.map((row) => [row.id, row.timeZone ?? fallback]));
 }
 
@@ -263,14 +263,14 @@ async function listUsers({ caller }: Call) {
 	const people = peopleOf(caller.access, undefined);
 	if (people === "none") return json({ data: [] });
 	const memberships = await caller.scope.memberships.select((m) =>
-		people === null ? undefined : inArray(m.userId, people),
+		people === null ? undefined : among(m.userId, people),
 	);
 	const rows = memberships.length
 		? await drizzle(env.DB)
 				.select({ id: users.id, name: users.name, email: users.email })
 				.from(users)
 				.where(
-					inArray(
+					among(
 						users.id,
 						memberships.map((m) => m.userId),
 					),
@@ -387,7 +387,7 @@ async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number)
 			caller.organisation.timeZone,
 		),
 		caller.scope.projects.select((p) =>
-			inArray(
+			among(
 				p.id,
 				entries.map((e) => e.projectId),
 			),
@@ -445,7 +445,7 @@ async function listEntries({ caller, url, now }: Call) {
 	const entries = await caller.scope.timeEntries.select(
 		(e) => {
 			const conditions: (SQL | undefined)[] = [];
-			if (people !== null) conditions.push(inArray(e.userId, people));
+			if (people !== null) conditions.push(among(e.userId, people));
 			if (project_id) conditions.push(eq(e.projectId, project_id));
 			if (from) conditions.push(gte(e.startedAt, new Date(bounds(from, from, zone).from)));
 			if (to) conditions.push(lt(e.startedAt, new Date(bounds(to, to, zone).to)));
@@ -769,7 +769,7 @@ async function listExpenses({ caller, url }: Call) {
 	const expenses = await caller.scope.expenses.select(
 		(x) =>
 			and(
-				people === null ? undefined : inArray(x.userId, people),
+				people === null ? undefined : among(x.userId, people),
 				project_id ? eq(x.projectId, project_id) : undefined,
 				from ? gte(x.spentOn, from) : undefined,
 				to ? lte(x.spentOn, to) : undefined,
