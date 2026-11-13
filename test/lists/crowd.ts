@@ -119,6 +119,23 @@ export async function seedWork(crowd: Crowd): Promise<void> {
 			}),
 		),
 	);
+	// The owner, the admin and the manager, an hour on the Monday each, on the last three
+	// projects: that Monday then has 150 entries over the 150 projects.
+	const signed = [crowd.owner, crowd.admin, crowd.manager].map((who) => who.user.id);
+	const monday = Date.parse(`${WEEK}T10:00:00Z`);
+	await insertAll(
+		"insert into time_entries (id, organisation_id, user_id, project_id, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+		signed.map((id, i) => [
+			uuidv7(),
+			acme.id,
+			id,
+			projects[147 + i],
+			monday,
+			monday + 3_600_000,
+			now,
+			now,
+		]),
+	);
 	const annual = await kindOf(acme.id, "annual");
 	await insertAll(
 		"insert into leave_requests (id, organisation_id, user_id, kind_id, starts_on, ends_on, starts_half, ends_half, status, created_at, updated_at) values (?, ?, ?, ?, '2026-12-14', '2026-12-14', 0, 0, 'pending', ?, ?)",
