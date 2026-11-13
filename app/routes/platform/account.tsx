@@ -2,9 +2,9 @@ import { env } from "cloudflare:workers";
 import { useState } from "react";
 import { Link } from "react-router";
 import * as z from "zod";
-
 import { sendEmail } from "~/auth/email.server";
 import { invitationEmail } from "~/auth/invitation-email";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { TextField } from "~/components/TextField";
@@ -189,12 +189,15 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			}
 			// The very message the organisation's own invitation sent, with the
 			// same link: the platform makes no invitation of its own.
-			const message = invitationEmail({
-				link: `${mailOrigin(request)}${invitationPath(invitation.id)}`,
-				organisationName: invitation.organisation,
-				inviterEmail: invitation.inviterEmail,
-				role: role.data,
-			});
+			const message = invitationEmail(
+				{
+					link: `${mailOrigin(request)}${invitationPath(invitation.id)}`,
+					organisationName: invitation.organisation,
+					inviterEmail: invitation.inviterEmail,
+					role: role.data,
+				},
+				await getPlatformBrand(env),
+			);
 			if (!(await sendEmail({ to: invitation.email, ...message }))) {
 				return declined("The invitation could not be sent. Nothing was recorded. Try again.", 500);
 			}
@@ -213,7 +216,12 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			// signing in. The platform never makes or sees the download.
 			const [first] = account.organisations;
 			const link = `${mailOrigin(request)}${first ? accountPath(first.slug) : APP_PATH}`;
-			if (!(await sendEmail({ to: account.email, ...dataExportEmail(link) }))) {
+			if (
+				!(await sendEmail({
+					to: account.email,
+					...dataExportEmail(link, await getPlatformBrand(env)),
+				}))
+			) {
 				return declined("The email could not be sent. Nothing was recorded. Try again.", 500);
 			}
 			await record("account.export_link_sent");
