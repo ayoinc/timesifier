@@ -12,15 +12,16 @@ import { mayMarkContractor } from "~/contractors/contractors";
 import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
 import { isAdministrator } from "~/organisations/access";
-import { changeRole, listMembers, removeMember } from "~/organisations/api.server";
+import { changeRole, removeMember } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
-import { declined, done, refused, unavailable } from "~/organisations/outcome.server";
+import { declined, done, refused } from "~/organisations/outcome.server";
 import { AS_ROLE, nameOrEmail, ROLE_LABELS } from "~/organisations/people";
 import { NEEDS_AN_OWNER, NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows, mayRemove, Role, rolesToGive } from "~/organisations/roles";
 import { invitationsPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { membersByJoining } from "~/teams/people.server";
 import { TeamTabs } from "~/teams/TeamTabs";
 
 import type { Route } from "./+types/members";
@@ -40,18 +41,15 @@ export function meta() {
 }
 
 /** Everyone in the organisation, each with what the person may do to them. */
-export async function loader({ request, context }: Route.LoaderArgs) {
+export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation, role, user } = context.get(membershipContext);
-	const [members, rows] = await Promise.all([
-		listMembers(request, organisation.id),
-		organisationScope(env.DB, organisation.id).memberships.select(),
-	]);
-	if (!members.ok) throw unavailable(members);
+	const scope = organisationScope(env.DB, organisation.id);
+	const [members, rows] = await Promise.all([membersByJoining(scope), scope.memberships.select()]);
 	const contractors = new Set(rows.filter((row) => row.isContractor).map(({ id }) => id));
 
 	return {
 		canInvite: allows(role, { invitation: ["create"] }),
-		members: members.data.map((member) => {
+		members: members.map((member) => {
 			const isYou = member.userId === user.id;
 			return {
 				id: member.id,
