@@ -6,7 +6,12 @@ import { CONTINUE, codeSentBy, newPerson, openAuthPage, ownAddress } from "./aut
 import { SIGNED_IN, SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems } from "./axe";
 import { expect, openGallery, openShell, test } from "./fixtures";
-import { homePath, newOrganisationName, openOutsideOrganisation } from "./organisation";
+import {
+	homeOrganisation,
+	homePath,
+	newOrganisationName,
+	openOutsideOrganisation,
+} from "./organisation";
 
 // TS-102: the WaitClock, at a wait that is not a page (docs/design-system.md,
 // "While the page waits"). The network is slowed with a route that holds the
@@ -203,7 +208,7 @@ test("an export waits with the clock in its link until the file arrives, and is 
 	await link.press("Enter");
 
 	const download = await downloading;
-	expect(download.suggestedFilename()).toMatch(/-all-time\.csv$/);
+	expect(download.suggestedFilename()).toMatch(allTimeExport());
 	await expect(link).not.toHaveAttribute("data-waiting");
 	await expect(link.locator("[data-wait-clock]")).toHaveCount(0);
 	expect(await sizeOf(link)).toEqual(atRest);
@@ -225,7 +230,7 @@ test("without script an export is an ordinary link that downloads the file", asy
 	await expect(link).toHaveAttribute("download", "");
 	const downloading = page.waitForEvent("download");
 	await link.click();
-	expect((await downloading).suggestedFilename()).toMatch(/-all-time\.csv$/);
+	expect((await downloading).suggestedFilename()).toMatch(allTimeExport());
 	await context.close();
 });
 
@@ -316,3 +321,8 @@ test.describe("accessibility", () => {
 		}
 	}
 });
+
+/** The all-time export's name since TS-100: the organisation, what it holds, and the day. */
+function allTimeExport(): RegExp {
+	return new RegExp(`^${homeOrganisation().slug}-all-time-exported-\\d{4}-\\d{2}-\\d{2}\\.csv$`);
+}
