@@ -31,14 +31,52 @@ import type { Route } from "./+types/home";
 // With script, one clock runs through it (~/landing/RunningDay); what moves as
 // it is scrolled is in ~/landing/public.css.
 
+const DESCRIPTION =
+	"A timer, timesheets and reports for people and small teams who bill or account for their time, with approvals, leave, expenses and invoices. The database is in the EU.";
+
 export function meta({ matches }: Route.MetaArgs) {
-	return pageMeta({
-		origin: rootOrigin(matches),
-		path: "/",
-		title: "Timesifier: track your hours, trust the total",
-		description:
-			"A timer, timesheets and reports for people and small teams who bill or account for their time, with approvals, leave, expenses and invoices. The database is in the EU.",
-	});
+	const origin = rootOrigin(matches);
+	return [
+		...pageMeta({
+			origin,
+			path: "/",
+			title: "Timesifier: track your hours, trust the total",
+			description: DESCRIPTION,
+		}),
+		{ "script:ld+json": structuredData(origin) },
+	];
+}
+
+/** The mark on its square, as the browser's install icon shows it: 512 by 512. */
+const LOGO_PATH = "/icon-512.png";
+
+/**
+ * What the home page tells a search engine about who and what Timesifier is.
+ * The organisation is named by its brand alone: the legal entity behind it is
+ * not on any page yet (privacy notice, "Who is responsible"). The application
+ * carries no price and no rating: it has neither to state. It is a data block,
+ * not a script: the browser runs nothing from it, so it needs no nonce.
+ */
+function structuredData(origin: string) {
+	return {
+		"@context": "https://schema.org",
+		"@graph": [
+			{
+				"@type": "Organization",
+				name: "Timesifier",
+				url: `${origin}/`,
+				logo: `${origin}${LOGO_PATH}`,
+			},
+			{
+				"@type": "SoftwareApplication",
+				name: "Timesifier",
+				url: `${origin}/`,
+				description: DESCRIPTION,
+				applicationCategory: "BusinessApplication",
+				operatingSystem: "Web",
+			},
+		],
+	};
 }
 
 /** A person who is signed in is sent to the application and never sees this page. */

@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
 import { Checkbox } from "~/components/Checkbox";
 import { TextField } from "~/components/TextField";
+import { pageMeta, rootOrigin } from "~/landing/Site";
 
 import { POLICY_ADDITION_HEADER, TURNSTILE_ADDITION } from "../../workers/security-headers";
 import type { Route } from "./+types/sign-in";
@@ -10,6 +11,7 @@ import { AuthPage, changeStep, StepHeading, StepLead } from "./auth/AuthPage";
 import { CodeStep } from "./auth/CodeStep";
 import { leaveFor } from "./auth/client";
 import { NeedsScript } from "./auth/links";
+import { SIGN_IN_PATH } from "./auth/paths";
 import { forgetCode, pendingCode, rememberCode } from "./auth/pending-code";
 import { SendCodeForm } from "./auth/SendCodeForm";
 import { loadAuthPage } from "./auth/session.server";
@@ -20,8 +22,14 @@ import { loadAuthPage } from "./auth/session.server";
 // person is, and never says: the server does not. Each view has one primary
 // action (design rule 1).
 
-export function meta() {
-	return [{ title: "Sign in · Timesifier" }];
+export function meta({ matches }: Route.MetaArgs) {
+	return pageMeta({
+		origin: rootOrigin(matches),
+		path: SIGN_IN_PATH,
+		title: "Sign in · Timesifier",
+		description:
+			"Sign in to Timesifier with a code sent to your email address. If you are new here, the same code sets you up. There is no password.",
+	});
 }
 
 /** This page shows the Turnstile widget: docs/security.md, "Turnstile". */

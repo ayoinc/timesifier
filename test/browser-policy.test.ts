@@ -70,8 +70,11 @@ async function expectBrowserPolicy(response: Response, { turnstile = false } = {
 		expect(permissions).toContain(`${feature}=()`);
 	}
 
-	// Every script in the document carries this response's nonce.
-	const scripts = (await response.text()).match(/<script\b[^>]*>/g) ?? [];
+	// Every script in the document carries this response's nonce. A data block
+	// (structured data, `application/ld+json`) is never run, so the policy does
+	// not apply to it and it carries none.
+	const tags = (await response.text()).match(/<script\b[^>]*>/g) ?? [];
+	const scripts = tags.filter((tag) => !tag.includes('type="application/ld+json"'));
 	expect(scripts.length).toBeGreaterThan(0);
 	for (const script of scripts) {
 		expect(script).toContain(`nonce="${nonce}"`);

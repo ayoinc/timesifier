@@ -152,6 +152,9 @@ export default [
 	route("sign-in", "routes/sign-in.tsx"),
 	route("privacy", "routes/privacy.tsx"),
 	route("terms", "routes/terms.tsx"),
+	// For search engines: robots.txt names the sitemap, which lists the pages above.
+	route("robots.txt", "routes/robots.ts"),
+	route("sitemap.xml", "routes/sitemap.ts"),
 	app,
 	platform,
 	// A mailing's unsubscribe link (TS-099): its signature, not a session, says whose it is.
