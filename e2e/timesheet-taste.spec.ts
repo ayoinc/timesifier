@@ -12,7 +12,7 @@ import {
 } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject, workEveryDay } from "./timesheet";
+import { afternoonZone, createProject, workEveryDay } from "./timesheet";
 
 // The Timesheet as Harvest makes it feel (TS-093, research/harvest-taste.md):
 // Start again on a finished entry, a deletion taken back with Undo in the
@@ -26,7 +26,9 @@ import { createProject, workEveryDay } from "./timesheet";
 const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
 
-test.use({ storageState: SIGNED_OUT });
+// Hours are tracked today, which has room for them only once they have passed
+// (W08): the browser, and so the person, is where it is afternoon now.
+test.use({ storageState: SIGNED_OUT, timezoneId: afternoonZone() });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
 
 test.beforeEach(async ({ context, baseURL }) => {

@@ -22,7 +22,7 @@ import {
 	INVITATION_LINK,
 	openInvitations,
 } from "./organisation";
-import { createProject, workEveryDay } from "./timesheet";
+import { createProject, pastWeekday, zoneIsTheBrowsers } from "./timesheet";
 
 // The Finance role in the browser (TS-075): a new owner makes an organisation,
 // a project, an hour and a half of time and a client through the pages, and
@@ -46,6 +46,8 @@ const finance: Person = {
 
 let slug: string;
 let organisationName: string;
+/** The day the owner's time is on. */
+let trackedOn: string;
 
 /** The Finance person's session, which every test in this file uses. */
 const OWN_SESSION = join(tmpdir(), `timesifier-finance-${randomUUID()}.json`);
@@ -56,7 +58,7 @@ test.describe.configure({ mode: "serial" });
 test.beforeAll(async ({ browser, baseURL }) => {
 	test.setTimeout(4 * TIME_WITH_TURNS);
 
-	// The owner: an organisation, a project, time on it today, and a client.
+	// The owner: an organisation, a project, time on it on a past weekday, and a client.
 	const owners = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
 	await ownAddress(owners, baseURL);
 	const page = await owners.newPage();
@@ -64,10 +66,12 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	({ slug, name: organisationName } = await createOrganisation(page));
 	await setName(page, owner.name);
 	await createProject(page, slug, "Website");
-	// Time is tracked today: every day is worked, so it is regular time whatever day the run is on (TS-095).
-	await workEveryDay(page, slug);
+	// Time is tracked on a past weekday of the browser's zone, which is the person's:
+	// regular time, which fits on it whatever day and hour the run is at (TS-095, W08).
+	await zoneIsTheBrowsers(page, slug);
+	trackedOn = await pastWeekday(page);
 
-	await openShell(page, organisationPath(slug));
+	await openShell(page, `${organisationPath(slug)}?day=${trackedOn}`);
 	await page.getByRole("button", { name: "Track time", exact: true }).click();
 	const track = page.getByRole("dialog", { name: "Track time" });
 	await track.getByRole("textbox", { name: "Description" }).fill("Design review");
@@ -187,7 +191,11 @@ test("on Reports Finance narrows to the owner, returns to Everyone, and download
 	page,
 }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
-	await openShell(page, destinationPath(slug, "reports"));
+	// The range is the day the time is on, which may be in the week before this one.
+	await openShell(
+		page,
+		`${destinationPath(slug, "reports")}?range=custom&from=${trackedOn}&to=${trackedOn}`,
+	);
 	await expect(page.getByText(`Everyone's time in ${organisationName}.`)).toBeVisible();
 
 	// The report applies as soon as the person changes (TS-091).

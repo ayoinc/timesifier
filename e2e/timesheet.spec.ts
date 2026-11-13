@@ -12,7 +12,7 @@ import {
 } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject, workEveryDay } from "./timesheet";
+import { afternoonZone, createProject, workEveryDay } from "./timesheet";
 
 // Timesheet in a browser: the timer on the Day view and in the navigation
 // (TS-012a, TS-051), the Day and Week views and their links (TS-013), an entry
@@ -25,7 +25,9 @@ import { createProject, workEveryDay } from "./timesheet";
 const COMPACT = { width: 390, height: 844 };
 const MEDIUM = { width: 1280, height: 800 };
 
-test.use({ storageState: SIGNED_OUT });
+// Hours are tracked today, which has room for them only once they have passed
+// (W08): the browser, and so the person, is where it is afternoon now.
+test.use({ storageState: SIGNED_OUT, timezoneId: afternoonZone() });
 test.describe.configure({ timeout: TIME_WITH_TURNS });
 
 test.beforeEach(async ({ context, baseURL }) => {
@@ -456,6 +458,13 @@ test.describe("the Week view", () => {
 			"aria-current",
 			"page",
 		);
+		// The week before this one, whose days have all passed: on a Monday this
+		// week's Tuesday has no room yet for hours, which never run past now (W08).
+		await page
+			.getByRole("group", { name: "Weeks" })
+			.getByRole("link", { name: "Previous week" })
+			.click();
+		await expect(page).toHaveURL(/[?&]start=\d{4}-\d{2}-\d{2}$/);
 
 		await tabTo(page, page.getByRole("button", { name: "Add row" }));
 		await page.keyboard.press("Enter");
@@ -481,12 +490,10 @@ test.describe("the Week view", () => {
 			.getByRole("group", { name: "Timesheet views" })
 			.getByRole("link", { name: "History" })
 			.click();
-		await expect(
-			page.getByRole("list", { name: "Periods" }).getByRole("listitem").first(),
-		).toContainText("Submitted");
-		await expect(
-			page.getByRole("list", { name: "Periods" }).getByRole("listitem").first(),
-		).toContainText("3:30");
+		// This week first, then the week submitted.
+		const submitted = page.getByRole("list", { name: "Periods" }).getByRole("listitem").nth(1);
+		await expect(submitted).toContainText("Submitted");
+		await expect(submitted).toContainText("3:30");
 	});
 
 	test("steps by week with links reached by keyboard", async ({ page }) => {
@@ -556,9 +563,17 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				await startTimer(page);
 				expect(await problems(page, [EMPTY_INPUT, DIGIT_CHANGING])).toEqual([]);
 
-				// The running entry gives the week a row; an hour typed into another of its days fills it.
+				// The running entry gives the week a row.
 				await openShell(page, `${organisationPath(slug)}?view=week`);
 				expect(await gridProblems(page)).toEqual([]);
+				// An hour typed into the week before fills it: every day of it has passed,
+				// where on a Monday every other day of this week is still to come (W08).
+				await page
+					.getByRole("group", { name: "Weeks" })
+					.getByRole("link", { name: "Previous week" })
+					.click();
+				await expect(page).toHaveURL(/[?&]start=\d{4}-\d{2}-\d{2}$/);
+				await page.getByRole("button", { name: "Add row" }).click();
 				const cell = page.getByRole("textbox", { name: /^Site, / }).first();
 				await cell.fill("1");
 				await cell.press("Tab");

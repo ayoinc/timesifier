@@ -6,7 +6,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject, pastWeekday } from "./timesheet";
+import { createProject, mondayOf, pastWeekday } from "./timesheet";
 
 // Expected hours as a ceiling, overtime as its own field, in a browser
 // (TS-095), on the person's own time: where an owner allows overtime, a day
@@ -34,13 +34,6 @@ async function tabTo(page: Page, target: Locator, most = 80) {
 		await page.keyboard.press("Tab");
 	}
 	throw new Error("Tab never reached the control.");
-}
-
-/** The Monday of the week `day` is in: the start of the Week view's period, whose weeks start on Monday. */
-function mondayOf(day: string): string {
-	const at = new Date(`${day}T00:00:00Z`);
-	at.setUTCDate(at.getUTCDate() - ((at.getUTCDay() + 6) % 7));
-	return at.toISOString().slice(0, 10);
 }
 
 /** Where `day` is in its week from Monday: 0 to 6. */
