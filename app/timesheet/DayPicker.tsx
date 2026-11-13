@@ -15,6 +15,7 @@ import { ChevronLeftIcon } from "~/components/icons/ChevronLeftIcon";
 import { ChevronRightIcon } from "~/components/icons/ChevronRightIcon";
 import { POPOVER_MOTION } from "~/components/motion";
 import type { loader as monthLoader } from "~/routes/app/timesheet.month";
+import { READ_AHEAD } from "~/shell/PendingBar";
 import { finishRunningTransition } from "~/shell/transitions";
 import type { Day } from "~/time/calendar";
 import { formatDay, formatMonth } from "~/time/format";
@@ -52,7 +53,9 @@ export function DayPicker({
 }) {
 	const [isOpen, setOpen] = useState(false);
 	const [month, setMonth] = useState<Day>(monthOf(day));
-	const fetcher = useFetcher<typeof monthLoader>();
+	// The totals adorn a grid that is already shown and usable: nobody waits
+	// for them, so the page shows no wait while they come (READ_AHEAD).
+	const fetcher = useFetcher<typeof monthLoader>({ key: `${READ_AHEAD}day-picker` });
 	const { load } = fetcher;
 	// The month being read, so a press that follows a hover does not read it again while it comes.
 	const reading = useRef<string | null>(null);

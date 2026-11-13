@@ -185,10 +185,14 @@ function TrackTimeSheet({
 	// Whether the page holds the day and its answer is younger than the refresh. A
 	// yes or no, not a time, so the read below runs once for each change of it.
 	const heldRecently = held !== undefined && Date.now() - heldAt <= REFRESH_EVERY_MS;
+	// The day the server last answered for: opened with no date, the sheet takes
+	// today's from that answer, which needs no second read.
+	const answered = fetcher.data?.day;
 	useEffect(() => {
 		if (!isOpen || heldRecently) return;
+		if (answered !== undefined && (asked === undefined || asked === answered)) return;
 		load(trackDayPath(slug, asked));
-	}, [isOpen, slug, asked, load, heldRecently]);
+	}, [isOpen, slug, asked, load, heldRecently, answered]);
 
 	const fetched =
 		fetcher.data && (asked === undefined || fetcher.data.day === asked) ? fetcher.data : undefined;

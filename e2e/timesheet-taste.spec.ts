@@ -180,8 +180,15 @@ test.describe("at 1280px", () => {
 
 		await page.keyboard.press("n");
 		await expect(trackSheet(page)).toBeVisible();
-		// Typing in the sheet is typing, not a key.
+		// Typing in the sheet is typing, not a key: the sheet opens ready, so the
+		// letter goes to the project field and opens its suggestions. The first
+		// Escape closes them, the second the sheet.
 		await page.keyboard.type("n");
+		await expect(trackSheet(page).getByRole("combobox", { name: "Project" })).toHaveValue(/n$/);
+		await expect(page.getByRole("listbox")).toBeVisible();
+		await page.keyboard.press("Escape");
+		await expect(page.getByRole("listbox")).toHaveCount(0);
+		await expect(trackSheet(page)).toBeVisible();
 		await page.keyboard.press("Escape");
 		await expect(trackSheet(page)).toBeHidden();
 

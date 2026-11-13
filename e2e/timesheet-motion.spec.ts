@@ -69,11 +69,14 @@ async function startFromTrackTime(page: Page) {
 	await expect(sheet).toBeHidden();
 }
 
-test("Track time holds the shape of its fields while it reads the day's rules", async ({
+test("Track time holds the shape of its fields while it reads the day's rules, and on the Timesheet opens at once", async ({
 	page,
 }) => {
 	const slug = await organisationWithProject(page);
-	await openShell(page, organisationPath(slug));
+	const reads: string[] = [];
+	page.on("request", (request) => {
+		if (new URL(request.url()).pathname.includes("/timesheet/day")) reads.push(request.url());
+	});
 	await page.route(
 		(url) => url.pathname.includes("/timesheet/day"),
 		async (route) => {
@@ -81,12 +84,28 @@ test("Track time holds the shape of its fields while it reads the day's rules", 
 			await route.continue();
 		},
 	);
+
+	// On the Timesheet the page already holds the day: nothing is read, nothing waits.
+	await openShell(page, organisationPath(slug));
 	await main(page).getByRole("button", { name: "Track time", exact: true }).click();
 	const sheet = trackSheet(page);
+	await expect(sheet.getByRole("combobox", { name: "Project" })).toBeVisible({ timeout: 1000 });
+	await expect(sheet.getByRole("status", { name: "Loading your projects" })).toHaveCount(0);
+	expect(reads).toEqual([]);
+	await page.keyboard.press("Escape");
+	await expect(sheet).toBeHidden();
+
+	// From another page the day is read, and the sheet keeps its fields' shape meanwhile.
+	await openShell(page, destinationPath(slug, "projects"));
+	await page
+		.getByRole("navigation", { name: "Main" })
+		.getByRole("button", { name: "Track time" })
+		.click();
 	await expect(sheet.getByRole("status", { name: "Loading your projects" })).toBeVisible();
 	await expect(sheet).not.toContainText("Reading your projects");
 	await expect(sheet.getByRole("combobox", { name: "Project" })).toBeVisible();
 	await expect(sheet.getByRole("status", { name: "Loading your projects" })).toHaveCount(0);
+	expect(reads).toHaveLength(1);
 });
 
 test("a timer started from Track time runs at once, and stops at once", async ({ page }) => {

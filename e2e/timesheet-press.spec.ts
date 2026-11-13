@@ -163,6 +163,15 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
 			await expect(picker).not.toContainText("Reading the month");
 			const shown = picker.locator("a[aria-current=date]");
 			await expect(shown).not.toHaveAttribute("aria-label", /tracked/);
+			// Measured once the popover has finished opening: its scale is the
+			// opening, not the totals.
+			await expect
+				.poll(() =>
+					picker.evaluate(
+						(dialog) => dialog.parentElement?.getAnimations({ subtree: true }).length,
+					),
+				)
+				.toBe(0);
 			const box = await picker.boundingBox();
 			await release();
 			await expect(shown).toHaveAttribute("aria-label", /1:00 tracked/);
