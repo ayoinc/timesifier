@@ -1,5 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -14,8 +12,16 @@ import { describe, expect, it } from "vitest";
 // constant's values (`["pending", "approved"]`, `[...OWING, "paid"]`) or a
 // constant itself (`LOCKING`), which does not grow with the data.
 
-const ROOT = join(import.meta.dirname, "../..");
-const HELPER = "app/db/among.ts";
+/** Every file of `app/`, by its path from the repository, but the helper's own. */
+const APP = Object.fromEntries(
+	Object.entries(
+		import.meta.glob<string>(["../../app/**/*.{ts,tsx}", "!../../app/db/among.ts"], {
+			eager: true,
+			query: "?raw",
+			import: "default",
+		}),
+	).map(([path, source]) => [path.replace("../../", ""), source]),
+);
 
 /** A constant's name: upper case, as the code names its fixed lists. */
 const CONSTANT = /^[A-Z][A-Z0-9_]*$/;
@@ -70,7 +76,7 @@ function openEndedLists(file: string, source: string): { line: number; what: str
 			if (tagged || LOOKS_LIKE_SQL.test(text)) {
 				const pieces = [node.head, ...node.templateSpans.slice(0, -1).map((span) => span.literal)];
 				for (const piece of pieces) {
-					if (IN_BEFORE_VALUE.test(piece.text)) at(piece, "`in (${…})` written into SQL");
+					if (IN_BEFORE_VALUE.test(piece.text)) at(piece, "an interpolated `in (` in SQL");
 					if (JSON_EACH_BEFORE_VALUE.test(piece.text)) at(piece, "a private copy of `among`");
 				}
 			}
@@ -81,41 +87,28 @@ function openEndedLists(file: string, source: string): { line: number; what: str
 	return found;
 }
 
-/** Every TypeScript file under `directory`. */
-function sources(directory: string): string[] {
-	return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-		const path = join(directory, entry.name);
-		if (entry.isDirectory()) return sources(path);
-		return /\.tsx?$/.test(entry.name) ? [path] : [];
-	});
-}
-
 describe("lists that go to D1 (decision 40)", () => {
 	it("app/ has no open-ended inArray( or interpolated IN ( outside app/db/among.ts", () => {
-		const offences = sources(join(ROOT, "app"))
-			.map((path) => relative(ROOT, path))
-			.filter((file) => file !== HELPER)
-			.flatMap((file) =>
-				openEndedLists(file, readFileSync(join(ROOT, file), "utf8")).map(
-					({ line, what }) => `${file}:${line} ${what}: use among(column, list) from ~/db`,
-				),
-			);
+		expect(Object.keys(APP).length).toBeGreaterThan(100);
+		const offences = Object.entries(APP).flatMap(([file, source]) =>
+			openEndedLists(file, source).map(
+				({ line, what }) => `${file}:${line} ${what}: use among(column, list) from ~/db`,
+			),
+		);
 		expect(offences).toEqual([]);
 	});
 
 	it("finds each kind of open-ended list, and lets a fixed one be", () => {
-		const source = [
-			"inArray(p.userId, people);",
-			"notInArray(p.id, ids.slice(0, 90));",
-			"sql`${p.id} in (${sql.join(ids, sql`, `)})`;",
-			"sql`${p.id} in (select value from json_each(${JSON.stringify(ids)}))`;",
-			'db.prepare(`select * from users where id in (${ids.map(() => "?").join()})`);',
-			'inArray(p.status, ["pending", "approved"]);',
-			'inArray(i.status, [...OWING, "paid"]);',
-			"inArray(p.status, LOCKING);",
-			"among(p.userId, people);",
-			"`Signed in (${count})`;",
-		].join("\n");
+		const source = `inArray(p.userId, people);
+notInArray(p.id, ids.slice(0, 90));
+sql\`\${p.id} in (\${sql.join(ids, sql\`, \`)})\`;
+sql\`\${p.id} in (select value from json_each(\${JSON.stringify(ids)}))\`;
+db.prepare(\`select * from users where id in (\${ids.map(() => "?").join()})\`);
+inArray(p.status, ["pending", "approved"]);
+inArray(i.status, [...OWING, "paid"]);
+inArray(p.status, LOCKING);
+among(p.userId, people);
+\`Signed in (\${count})\`;`;
 		expect(openEndedLists("fixture.ts", source).map(({ line }) => line)).toEqual([1, 2, 3, 4, 5]);
 	});
 });
