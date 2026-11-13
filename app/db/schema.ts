@@ -315,6 +315,13 @@ export const timeEntries = sqliteTable(
 		startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
 		endedAt: integer("ended_at", { mode: "timestamp_ms" }),
 		/**
+		 * The local date, `YYYY-MM-DD`, the entry belongs to: the day it starts on
+		 * in its person's zone when it is tracked (TS-111, amending decision 26).
+		 * Every writer sets it, so it has no default here; migration 0020 added it
+		 * with an empty default, which an entry tracked before TS-111b still has.
+		 */
+		spentOn: text("spent_on").notNull(),
+		/**
 		 * The task, one of the project's (B4). Null for an entry made before tasks.
 		 * `taskId`, `billable` and `importId` (TS-064) are added in place, with no
 		 * reference of their own: a reference would make SQLite rebuild the table,

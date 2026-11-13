@@ -33,6 +33,7 @@ const Payload = z.object({
 		endedAt: z.number(),
 		tagIds: z.array(z.string()),
 		overtime: z.boolean(),
+		spentOn: z.iso.date(),
 	}),
 });
 

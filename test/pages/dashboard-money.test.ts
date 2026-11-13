@@ -4,6 +4,7 @@ import { type OrganisationScope, organisationScope } from "~/db";
 import { createDraft, issueInvoice } from "~/invoices/invoices.server";
 import { formatMoney } from "~/money/money";
 import { projectPath } from "~/projects/projects";
+import { dayOf } from "~/time/calendar";
 import { captureEmail } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, seedTeam } from "../organisations/harness";
@@ -53,6 +54,7 @@ async function track(who: Person, projectId: string, from: string, to: string, b
 		projectId,
 		description: "Work",
 		startedAt: new Date(from),
+		spentOn: dayOf(Date.parse(from), "UTC"),
 		endedAt: new Date(to),
 		billable,
 	});

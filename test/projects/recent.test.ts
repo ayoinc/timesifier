@@ -5,6 +5,7 @@ import { type OrganisationScope, organisationScope, organisations, users } from 
 import { membershipOf } from "~/organisations/membership.server";
 import { recentProjectIds } from "~/projects/recent.server";
 import { trackChoices } from "~/tasks/track.server";
+import { dayOf } from "~/time/calendar";
 import { freshDatabase } from "../db/database";
 import { seedMembership } from "../organisations/harness";
 
@@ -51,6 +52,7 @@ async function entry(userId: string, projectId: string, hoursAfterT0: number) {
 		userId,
 		projectId,
 		startedAt: new Date(T0 + hoursAfterT0 * HOUR),
+		spentOn: dayOf(T0 + hoursAfterT0 * HOUR, "UTC"),
 		endedAt: new Date(T0 + (hoursAfterT0 + 1) * HOUR),
 	});
 }

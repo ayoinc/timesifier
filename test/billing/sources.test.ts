@@ -11,6 +11,7 @@ import {
 	uninvoicedTime,
 } from "~/invoices/sources.server";
 import { uninvoicedOf } from "~/invoices/uninvoiced.server";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMember, value } from "../organisations/harness";
@@ -109,6 +110,7 @@ async function entry({
 		description: "Work",
 		billable: true,
 		startedAt,
+		spentOn: dayOf(startedAt.getTime(), "UTC"),
 		endedAt: new Date(startedAt.getTime() + seconds * 1000),
 	});
 	if (!row) throw new Error("seed failed");

@@ -40,6 +40,23 @@ Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the busin
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-111a · The rules hold together, part 1: room for an entry's day
+
+Builder: an AI session on branch `ts-111-entry-day-trigger`. Ships alone, before TS-111b: its migration drops and recreates a trigger (`.github/workflows/ci.yml`, "migration check"). Migration `0020_entry_day_column`, to be renumbered at merge. The first of three: room for the day (this card), every writer storing it (TS-111b), then the backfill and every reader on it (TS-111c; decision 39).
+
+- [x] `time_entries.spent_on` added, text, NOT NULL, empty by default, so the Worker running before TS-111b still writes (`app/db/schema.ts`, `migrations/0020_entry_day_column.sql`).
+- [x] The backstop of 0016 still refuses every change of an invoiced entry, its billed columns and `updated_at` included, except its empty day written once with a real date; once the day is set it never changes (`test/billing/invoices.test.ts`, "is locked while on an invoice", which ships with TS-111b).
+
+### TS-111b · The rules hold together, part 1: every writer stores an entry's day
+
+Builder: an AI session on branch `ts-111-rules-day`, on TS-111a (PR #66). No migration: `app/db/schema.ts` names `spent_on`, required of every insert, with migration 0020's snapshot. The second of three: every writer stores the day; readers still work it out from the start, as before, until TS-111c switches them (decision 39).
+
+- [x] The timer stores the day it starts on in the person's zone; a timer stopped after midnight, or by starting another, keeps it; one started before TS-111b takes the day it started when it stops (`startTimer`, `stopTimer`, `entryDay`; `test/pages/entry-day.test.ts`, per role).
+- [x] The timer's split at the limit: the overtime keeps the day the timer started on, even when the cut is past midnight (TR-06's storage; `splitStopped`; `test/pages/entry-day.test.ts`).
+- [x] Hours tracked, a slot of the calendar and a cell store the day chosen; a cell changed keeps it (`addHours`, `setCellHours`; `test/pages/entry-day.test.ts`).
+- [x] An edit keeps the entry's day unless its start moves, then takes the start's day in the person's zone; Undo puts an entry back on its day, carried in the signed token, though the zone has changed since; Copy day and Copy week store the day copied onto (`editEntry`, `restoreEntry`, `copy.server.ts`; `test/pages/entry-day.test.ts`).
+- [x] The API's create stores `spent_date`, or the start's day in the maker's zone, and its change keeps the day unless the start moves; the CSV import stores each row's date (`test/integrations/api.test.ts`, `test/integrations/import.test.ts`, "stores each … day (TS-111)").
+
 ### TS-096 · Loading and motion like Royal London
 
 Builder: AI sessions on branch `ts-096-motion` (PR #57). In review: the placement's effect is proven on the preview and again in production after the merge. No migration. `docs/design-system.md` ("While the page waits", "How a page loads"), decision 34.

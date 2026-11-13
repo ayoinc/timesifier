@@ -14,6 +14,7 @@ import {
 	timeEntries,
 	users,
 } from "~/db/schema";
+import { dayOf } from "~/time/calendar";
 import { freshDatabase } from "./database";
 
 // The tables of the features under the navigation's headings (TS-053): each
@@ -86,6 +87,7 @@ async function seed() {
 			projectId: project.id,
 			description: null,
 			startedAt: new Date(T0),
+			spentOn: dayOf(T0, "UTC"),
 			endedAt: new Date(T0 + HOUR),
 		});
 		return { client, project, team, period };
@@ -162,6 +164,7 @@ describe("a reference from one row to another", () => {
 					projectId: globex.project.id,
 					description: null,
 					startedAt: new Date(T0 + 2 * HOUR),
+					spentOn: dayOf(T0 + 2 * HOUR, "UTC"),
 					endedAt: null,
 				}),
 			),
@@ -215,6 +218,7 @@ describe("the rules the database holds", () => {
 				projectId,
 				description: null,
 				startedAt: new Date(T0),
+				spentOn: dayOf(T0, "UTC"),
 				endedAt: null,
 			});
 
@@ -234,6 +238,7 @@ describe("the rules the database holds", () => {
 					projectId: acme.project.id,
 					description: null,
 					startedAt: new Date(T0),
+					spentOn: dayOf(T0, "UTC"),
 					endedAt: new Date(T0 - 1),
 				}),
 			),

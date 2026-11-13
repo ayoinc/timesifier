@@ -9,7 +9,7 @@ import { findActiveProject } from "~/projects/projects.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 
-import { dayOf } from "./calendar";
+import { type Day, dayOf } from "./calendar";
 
 /**
  * Time entries: the rules every writer of them shares (docs/decisions.md
@@ -20,10 +20,16 @@ import { dayOf } from "./calendar";
  * the server's clock; a time the browser claims is never used. Each start and
  * stop is recorded in the activity log, by the person whose entry it is.
  *
+ * An entry's day, `spentOn`, is written when it is tracked: the day it
+ * starts on in the person's zone at that moment (TS-111). An entry started
+ * before days were stored has none, and takes the day it started when it is
+ * stopped (`entryDay`).
+ *
  * A timer of regular time that runs past its day's expected hours is cut
  * where they were used, once it stops (TS-095): the rest becomes an entry of
  * overtime, in a second batch with its row in the log, where the day takes
  * overtime; where it takes none, the entry is kept whole and the day is over.
+ * The overtime keeps the day the timer started on, even past midnight.
  */
 
 /** The entry of `userId` that is running in the organisation, or null. */
@@ -37,6 +43,14 @@ export async function runningEntry(scope: OrganisationScope, userId: string) {
 
 /** An entry as the timer reads and writes it. */
 type Entry = NonNullable<Awaited<ReturnType<typeof runningEntry>>>;
+
+/**
+ * The day an entry belongs to: the one stored with it, or, for an entry
+ * tracked before days were stored (TS-111), the day it starts on in `zone`.
+ */
+export function entryDay(entry: { spentOn: string; startedAt: Date }, zone: string): Day {
+	return entry.spentOn || dayOf(entry.startedAt.getTime(), zone);
+}
 
 export interface StartTimer {
 	userId: string;
@@ -88,8 +102,9 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const id = uuidv7();
 	const entry = { type: "time_entry", ownerId: userId } as const;
 	const [stopped, [started]] = await scope.batch([
-		scope.timeEntries.statements.update({ endedAt: at }, (e) =>
-			and(eq(e.userId, userId), isNull(e.endedAt)),
+		scope.timeEntries.statements.update(
+			{ endedAt: at, ...(running ? { spentOn: entryDay(running, zone) } : {}) },
+			(e) => and(eq(e.userId, userId), isNull(e.endedAt)),
 		),
 		scope.timeEntries.statements.insert({
 			id,
@@ -99,6 +114,7 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 			billable: task.billable,
 			description,
 			startedAt: at,
+			spentOn: dayOf(now, zone),
 			endedAt: null,
 			overtime: verdict.overtime,
 		}),
@@ -152,8 +168,11 @@ export async function stopTimer(
 	now: number,
 	source: ActivitySource = "web",
 ) {
-	const [stopped] = await scope.timeEntries.update({ endedAt: new Date(now) }, (e) =>
-		and(eq(e.userId, userId), isNull(e.endedAt)),
+	const running = await runningEntry(scope, userId);
+	if (!running) return null;
+	const [stopped] = await scope.timeEntries.update(
+		{ endedAt: new Date(now), spentOn: entryDay(running, zone) },
+		(e) => and(eq(e.id, running.id), eq(e.userId, userId), isNull(e.endedAt)),
 	);
 	if (!stopped) return null;
 	await record(
@@ -216,6 +235,7 @@ async function splitStopped(
 		billable: stopped.billable,
 		description: stopped.description,
 		startedAt: from,
+		spentOn: stopped.spentOn,
 		endedAt,
 		overtime: true,
 	};
