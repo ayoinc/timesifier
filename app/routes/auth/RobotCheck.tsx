@@ -25,6 +25,9 @@ declare global {
 
 let loading: Promise<TurnstileApi> | undefined;
 
+/** Set on the widget's container while the widget asks the person something. */
+const ASKING = "data-asking";
+
 /** Adds Turnstile's script to the page once, carrying the page's nonce. */
 function loadTurnstile(): Promise<TurnstileApi> {
 	// The executor form: this project's `lib` has no `Promise.withResolvers`.
@@ -132,6 +135,9 @@ export function RobotCheck({ siteKey, ref }: RobotCheckProps) {
 							appearance: "interaction-only",
 							// The token goes to the server in a header, not in a form field.
 							"response-field": false,
+							// The widget takes room only while it asks the person something.
+							"before-interactive-callback": () => container.current?.setAttribute(ASKING, ""),
+							"after-interactive-callback": () => container.current?.removeAttribute(ASKING),
 							callback: (token: string) => produced(token),
 							"expired-callback": () => produced(undefined),
 							// Returning true tells Turnstile the page has dealt with the error.
@@ -155,5 +161,14 @@ export function RobotCheck({ siteKey, ref }: RobotCheckProps) {
 		};
 	}, [siteKey]);
 
-	return <div ref={container} className="empty:hidden" />;
+	// Out of the flow, and so out of the form's spacing, until the widget asks the
+	// person something: the frame Turnstile puts in it on every page is empty, and
+	// its arrival would push what is below it down (a layout shift). It is clipped,
+	// not hidden, so the check still runs in it.
+	return (
+		<div
+			ref={container}
+			className="absolute h-0 w-full overflow-hidden data-asking:static data-asking:h-auto data-asking:overflow-visible"
+		/>
+	);
 }

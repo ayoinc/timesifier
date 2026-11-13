@@ -40,6 +40,23 @@ Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the busin
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-103 · The public pages at their best
+
+Builder: AI sessions on branch `ts-103-marketing`. The owner: "marketing on the side we'll beautify it". In review: the pull request against `main`; verifying the site in Google Search Console and Bing Webmaster Tools needs the owner (steps in the pull request). No migration. `docs/design-system.md` ("Pages outside the shell"), decision 43.
+
+- [x] A section that runs the width of the page opens with its heading at the left and its lead at the right from 840px; the privacy section's photograph stays beside its facts while they are read (`SectionHead`, `app/routes/home.tsx`; screenshots in `cmux-assets/browser/timesifier/TS-103/`).
+- [x] A section's opening words rise into place with the scrolling, by transform and opacity only, and stand still with reduced motion (`rise` in `app/landing/public.css`; `e2e/landing.spec.ts`, "with reduced motion asked for", and "nothing on the page moves when its images arrive").
+- [x] "Start tracking" and "Sign in" have hover, focus and press states on the sheet, and give under the press where motion is allowed (`transition-control` carries `scale`).
+- [x] Text selected on the sheet shows, in both schemes (`.bg-sheet ::selection`).
+- [x] The notices list their parts under the title, and each part's heading stays in the margin while it is read (`app/landing/Document.tsx`; `e2e/documents.spec.ts`).
+- [x] The foot on a surface of its own: the lockup, the notices side by side on a phone, the credits in words (`SiteFooter`; `test/claims.test.ts`, "each photographer is named once").
+- [x] Sign-in no longer shifts as Turnstile arrives: its empty frame is out of the flow until it asks the person something (`app/routes/auth/RobotCheck.tsx`; Lighthouse CLS 0.013 → 0).
+- [x] `/sitemap.xml` lists exactly the public pages, which link only to one another; `robots.txt` is the application's and names it (`test/claims.test.ts`, "the sitemap lists exactly the public pages").
+- [x] Every public page has a canonical link, its own `og:url` and a description, `/sign-in` included (`test/claims.test.ts`, "each public page names itself as its canonical address").
+- [x] JSON-LD `Organization` (name, address, logo) and `SoftwareApplication`, no price and no rating (`test/claims.test.ts`, "the structured data parses"; `test/browser-policy.test.ts`).
+- [x] Lighthouse 13.6.0 on the local production build, mobile: 100 in performance, accessibility, best practices and SEO on all four pages (table in the pull request).
+- [ ] The owner verifies the site in Google Search Console and Bing Webmaster Tools and submits the sitemap.
+
 ### TS-096 · Loading and motion like Royal London
 
 Builder: AI sessions on branch `ts-096-motion` (PR #57). In review: the placement's effect is proven on the preview and again in production after the merge. No migration. `docs/design-system.md` ("While the page waits", "How a page loads"), decision 34.
