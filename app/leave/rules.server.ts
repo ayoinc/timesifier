@@ -164,19 +164,20 @@ export async function rulesCalendarOf(
 	return { ...calendarOf(context, userId), rules, work };
 }
 
-/** An entry as the checks read it. */
+/** An entry as the checks read it, with the day it belongs to (TS-111). */
 export interface Timed {
 	id: string;
 	startedAt: number | Date;
 	endedAt: number | Date | null;
 	overtime: boolean;
+	day: Day;
 }
 
-/** The milliseconds of each kind of `entries` that start on `day` in `zone`, a running one counted to `now`. */
-export function trackedOn(entries: readonly Timed[], day: Day, zone: string, now: number): KindsMs {
+/** The milliseconds of each kind of `entries` on `day`, a running one counted to `now`. */
+export function trackedOn(entries: readonly Timed[], day: Day, now: number): KindsMs {
 	const sum = { regularMs: 0, overtimeMs: 0 };
 	for (const entry of entries) {
-		if (dayOf(entry.startedAt, zone) !== day) continue;
+		if (entry.day !== day) continue;
 		const ms = Math.max(0, Number(entry.endedAt ?? now) - Number(entry.startedAt));
 		if (entry.overtime) sum.overtimeMs += ms;
 		else sum.regularMs += ms;
@@ -184,23 +185,22 @@ export function trackedOn(entries: readonly Timed[], day: Day, zone: string, now
 	return sum;
 }
 
-/** The entries of `userId` that start from `first` to `last` in `zone`. */
+/** The entries of `userId` whose day is from `first` to `last`. */
 async function entriesOfDays(
 	scope: OrganisationScope,
 	userId: string,
 	first: Day,
 	last: Day,
-	zone: string,
 ): Promise<Timed[]> {
-	const { from, to } = bounds(first, last, zone);
 	const rows = await scope.timeEntries.select((e) =>
-		and(eq(e.userId, userId), gte(e.startedAt, new Date(from)), lt(e.startedAt, new Date(to))),
+		and(eq(e.userId, userId), gte(e.spentOn, first), lte(e.spentOn, last)),
 	);
 	return rows.map((row) => ({
 		id: row.id,
 		startedAt: row.startedAt.getTime(),
 		endedAt: row.endedAt?.getTime() ?? null,
 		overtime: row.overtime,
+		day: row.spentOn,
 	}));
 }
 
@@ -218,7 +218,6 @@ export async function dayRulesOf(
 	userId: string,
 	days: readonly Day[],
 	entries: readonly Timed[],
-	zone: string,
 	now: number,
 ): Promise<DayRule[]> {
 	const first = days[0];
@@ -228,8 +227,8 @@ export async function dayRulesOf(
 	const counted =
 		calendar.rules.overtimeWeekCap === null
 			? entries
-			: await entriesOfDays(scope, userId, weekOf(calendar.rules, first), last, zone);
-	return dayRules(calendar, days, (day) => trackedOn(counted, day, zone, now));
+			: await entriesOfDays(scope, userId, weekOf(calendar.rules, first), last);
+	return dayRules(calendar, days, (day) => trackedOn(counted, day, now));
 }
 
 /** A change to one day, as a writer of entries describes it. */
@@ -249,13 +248,12 @@ function overtimeBetween(
 	entries: readonly Timed[],
 	first: Day,
 	last: Day,
-	zone: string,
 	now: number,
 ) {
 	if (first > last) return 0;
 	let sum = 0;
 	for (const day of daysFrom(first, last)) {
-		sum += wholeMinutes(trackedOn(entries, day, zone, now).overtimeMs);
+		sum += wholeMinutes(trackedOn(entries, day, now).overtimeMs);
 	}
 	return sum;
 }
@@ -269,7 +267,6 @@ function overtimeBetween(
 export async function refusalOf(
 	scope: OrganisationScope,
 	userId: string,
-	zone: string,
 	now: number,
 	change: DayChange,
 ): Promise<string | null> {
@@ -278,27 +275,21 @@ export async function refusalOf(
 	const limit = dayLimit(calendar, change.day);
 	const weekCapped = change.overtime && rules.overtimeWeekCap !== null;
 	const entries = weekCapped
-		? await entriesOfDays(
-				scope,
-				userId,
-				weekOf(rules, change.day),
-				weekEndOf(rules, change.day),
-				zone,
-			)
-		: await entriesOfDays(scope, userId, change.day, change.day, zone);
+		? await entriesOfDays(scope, userId, weekOf(rules, change.day), weekEndOf(rules, change.day))
+		: await entriesOfDays(scope, userId, change.day, change.day);
 	const replaced = entries.find((entry) => entry.id === change.replaces);
 	const others = entries.filter((entry) => entry.id !== change.replaces);
 	const ofKind = (ms: KindsMs) => (change.overtime ? ms.overtimeMs : ms.regularMs);
 	const verdict = mayWrite(limit, rules, {
 		overtime: change.overtime,
-		othersMs: ofKind(trackedOn(others, change.day, zone, now)),
-		beforeMs: replaced ? ofKind(trackedOn([replaced], change.day, zone, now)) : 0,
+		othersMs: ofKind(trackedOn(others, change.day, now)),
+		beforeMs: replaced ? ofKind(trackedOn([replaced], change.day, now)) : 0,
 		afterMs: change.afterMs,
 		weekOvertimeBefore: weekCapped
-			? overtimeBetween(others, weekOf(rules, change.day), addDays(change.day, -1), zone, now)
+			? overtimeBetween(others, weekOf(rules, change.day), addDays(change.day, -1), now)
 			: 0,
 		weekOvertimeAfter: weekCapped
-			? overtimeBetween(others, addDays(change.day, 1), weekEndOf(rules, change.day), zone, now)
+			? overtimeBetween(others, addDays(change.day, 1), weekEndOf(rules, change.day), now)
 			: 0,
 	});
 	return verdict.ok ? null : verdict.message;
@@ -321,14 +312,14 @@ export async function timerStartOf(
 	const limit = dayLimit(calendar, day);
 	const first = weekOf(rules, day);
 	const last = addDays(first, 6);
-	const entries = await entriesOfDays(scope, userId, first, last, zone);
+	const entries = await entriesOfDays(scope, userId, first, last);
 	// The running entry is stopped as the new one starts: what it has run counts.
-	const tracked = trackedOn(entries, day, zone, now);
+	const tracked = trackedOn(entries, day, now);
 	const ofDay = wholeMinutes(tracked.overtimeMs);
 	const allowance = overtimeAllowance(
 		limit,
 		rules,
-		overtimeBetween(entries, first, last, zone, now) - ofDay,
+		overtimeBetween(entries, first, last, now) - ofDay,
 	);
 	const verdict = mayStart(
 		limit,
@@ -344,23 +335,23 @@ export async function timerStartOf(
  * `splitAtLimit`): what its day had left of regular time is regular, the
  * rest overtime while the day takes overtime at all. Overtime past a cap is
  * kept and the day flagged over; so is all of it where the day takes none.
+ * The day is the entry's own, the one it started on, even when the cut falls
+ * after midnight (TR-06).
  */
 export async function stopSplitOf(
 	scope: OrganisationScope,
 	userId: string,
-	stopped: { id: string; startedAt: number; endedAt: number },
-	zone: string,
+	stopped: { id: string; startedAt: number; endedAt: number; day: Day },
 ): Promise<{ overtime: boolean; overtimeFrom: number | null }> {
-	const day = dayOf(stopped.startedAt, zone);
+	const { day } = stopped;
 	const [calendar, entries] = await Promise.all([
 		rulesCalendarOf(scope, userId, day, day),
-		entriesOfDays(scope, userId, day, day, zone),
+		entriesOfDays(scope, userId, day, day),
 	]);
 	const limit = dayLimit(calendar, day);
 	const others = trackedOn(
 		entries.filter((entry) => entry.id !== stopped.id),
 		day,
-		zone,
 		stopped.endedAt,
 	);
 	return splitAtLimit(
@@ -376,7 +367,6 @@ export async function daysOver(
 	userId: string,
 	first: Day,
 	last: Day,
-	zone: string,
 	now: number,
 ): Promise<DayRule[]> {
 	const calendar = await rulesCalendarOf(scope, userId, first, last);
@@ -385,9 +375,6 @@ export async function daysOver(
 		userId,
 		calendar.rules.overtimeWeekCap === null ? first : weekOf(calendar.rules, first),
 		last,
-		zone,
 	);
-	return dayRules(calendar, daysFrom(first, last), (day) =>
-		trackedOn(entries, day, zone, now),
-	).filter((day) => day.overMinutes > 0);
+	return dayRules(calendar, daysFrom(first, last), (day) => trackedOn(entries, day, now)).filter((day) => day.overMinutes > 0);
 }

@@ -224,19 +224,6 @@ async function namesOfPeople(ids: Iterable<string>): Promise<Map<string, string>
 	return new Map(rows.map((row) => [row.id, row.name]));
 }
 
-async function zonesOfPeople(
-	ids: Iterable<string>,
-	fallback: string,
-): Promise<Map<string, string>> {
-	const unique = [...new Set(ids)];
-	if (unique.length === 0) return new Map();
-	const rows = await drizzle(env.DB)
-		.select({ id: users.id, timeZone: users.timeZone })
-		.from(users)
-		.where(inArray(users.id, unique));
-	return new Map(rows.map((row) => [row.id, row.timeZone ?? fallback]));
-}
-
 const ref = (id: string | null, names: Map<string, string>) =>
 	id === null ? null : { id, name: names.get(id) ?? null };
 
@@ -376,16 +363,13 @@ interface EntryRow {
 	importId: string | null;
 	createdAt: Date;
 	updatedAt: Date;
+	spentOn: string;
 }
 
-/** Entries as the API shows them: names beside ids, the local day, and descriptions only with the scope. */
+/** Entries as the API shows them: names beside ids, their stored day, and descriptions only with the scope. */
 async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number): Promise<Json[]> {
-	const [people, zones, projects, clients, tasks] = await Promise.all([
+	const [people, projects, clients, tasks] = await Promise.all([
 		namesOfPeople(entries.map((e) => e.userId)),
-		zonesOfPeople(
-			entries.map((e) => e.userId),
-			caller.organisation.timeZone,
-		),
 		caller.scope.projects.select((p) =>
 			inArray(
 				p.id,
@@ -413,7 +397,7 @@ async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number)
 					? ref(project.clientId, clientNames)
 					: null,
 			task: ref(entry.taskId, taskNames),
-			spent_date: dayOf(entry.startedAt, zones.get(entry.userId) ?? caller.organisation.timeZone),
+			spent_date: entry.spentOn,
 			started_at: iso(entry.startedAt),
 			ended_at: iso(entry.endedAt),
 			running: entry.endedAt === null,
@@ -439,7 +423,6 @@ async function listEntries({ caller, url, now }: Call) {
 	}
 	const people = peopleOf(caller.access, user_id);
 	if (people === "none") return json({ data: [], next_cursor: null });
-	const zone = caller.organisation.timeZone;
 	const cursor = readCursor(paging.data.cursor);
 	const perPage = paging.data.per_page;
 	const entries = await caller.scope.timeEntries.select(
@@ -447,8 +430,9 @@ async function listEntries({ caller, url, now }: Call) {
 			const conditions: (SQL | undefined)[] = [];
 			if (people !== null) conditions.push(inArray(e.userId, people));
 			if (project_id) conditions.push(eq(e.projectId, project_id));
-			if (from) conditions.push(gte(e.startedAt, new Date(bounds(from, from, zone).from)));
-			if (to) conditions.push(lt(e.startedAt, new Date(bounds(to, to, zone).to)));
+			// Each entry's own day, stored in its person's zone (TS-111).
+			if (from) conditions.push(gte(e.spentOn, from));
+			if (to) conditions.push(lte(e.spentOn, to));
 			if (cursor) {
 				conditions.push(
 					or(
@@ -657,7 +641,7 @@ async function removeEntry({ caller, id, now }: Call) {
 	if (entry.userId !== caller.user.id) {
 		return forbidden("A token deletes its maker's own entries, and nobody else's.");
 	}
-	const written = await deleteEntry(caller.scope, caller.user.id, zoneOfCaller(caller), id, "api");
+	const written = await deleteEntry(caller.scope, caller.user.id, id, "api");
 	if (!written.ok) return refused(written);
 	await tellWebhooks(caller, now);
 	return json(null, 204);

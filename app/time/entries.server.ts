@@ -9,7 +9,7 @@ import { findActiveProject } from "~/projects/projects.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 
-import { type Day, dayOf } from "./calendar";
+import { dayOf } from "./calendar";
 
 /**
  * Time entries: the rules every writer of them shares (docs/decisions.md
@@ -21,9 +21,8 @@ import { type Day, dayOf } from "./calendar";
  * stop is recorded in the activity log, by the person whose entry it is.
  *
  * An entry's day, `spentOn`, is written when it is tracked: the day it
- * starts on in the person's zone at that moment (TS-111). An entry started
- * before days were stored has none, and takes the day it started when it is
- * stopped (`entryDay`).
+ * starts on in the person's zone at that moment (TS-111, decision 39), and is
+ * not worked out again when it stops.
  *
  * A timer of regular time that runs past its day's expected hours is cut
  * where they were used, once it stops (TS-095): the rest becomes an entry of
@@ -43,14 +42,6 @@ export async function runningEntry(scope: OrganisationScope, userId: string) {
 
 /** An entry as the timer reads and writes it. */
 type Entry = NonNullable<Awaited<ReturnType<typeof runningEntry>>>;
-
-/**
- * The day an entry belongs to: the one stored with it, or, for an entry
- * tracked before days were stored (TS-111), the day it starts on in `zone`.
- */
-export function entryDay(entry: { spentOn: string; startedAt: Date }, zone: string): Day {
-	return entry.spentOn || dayOf(entry.startedAt.getTime(), zone);
-}
 
 export interface StartTimer {
 	userId: string;
@@ -85,7 +76,7 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 		return { ok: false as const, reason: "no-project" as const };
 	}
 	const running = await runningEntry(scope, userId);
-	const days = [dayOf(now, zone), ...(running ? [dayOf(running.startedAt, zone)] : [])];
+	const days = [dayOf(now, zone), ...(running ? [running.spentOn] : [])];
 	if ((await lockedDays(scope, userId, days)).size > 0) {
 		return { ok: false as const, reason: "locked" as const };
 	}
@@ -102,9 +93,8 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const id = uuidv7();
 	const entry = { type: "time_entry", ownerId: userId } as const;
 	const [stopped, [started]] = await scope.batch([
-		scope.timeEntries.statements.update(
-			{ endedAt: at, ...(running ? { spentOn: entryDay(running, zone) } : {}) },
-			(e) => and(eq(e.userId, userId), isNull(e.endedAt)),
+		scope.timeEntries.statements.update({ endedAt: at }, (e) =>
+			and(eq(e.userId, userId), isNull(e.endedAt)),
 		),
 		scope.timeEntries.statements.insert({
 			id,
@@ -153,7 +143,7 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	]);
 	if (!started) throw new Error("The new entry was not returned.");
 	const [ended] = stopped;
-	if (ended) await splitStopped(scope, ended, zone, source);
+	if (ended) await splitStopped(scope, ended, source);
 	return { ok: true as const, started, stopped: ended ?? null };
 }
 
@@ -164,15 +154,11 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 export async function stopTimer(
 	scope: OrganisationScope,
 	userId: string,
-	zone: string,
 	now: number,
 	source: ActivitySource = "web",
 ) {
-	const running = await runningEntry(scope, userId);
-	if (!running) return null;
-	const [stopped] = await scope.timeEntries.update(
-		{ endedAt: new Date(now), spentOn: entryDay(running, zone) },
-		(e) => and(eq(e.id, running.id), eq(e.userId, userId), isNull(e.endedAt)),
+	const [stopped] = await scope.timeEntries.update({ endedAt: new Date(now) }, (e) =>
+		and(eq(e.userId, userId), isNull(e.endedAt)),
 	);
 	if (!stopped) return null;
 	await record(
@@ -183,7 +169,7 @@ export async function stopTimer(
 		changes({ endedAt: null }, { endedAt: stopped.endedAt }, ["endedAt"]),
 		source,
 	);
-	return (await splitStopped(scope, stopped, zone, source)) ?? stopped;
+	return (await splitStopped(scope, stopped, source)) ?? stopped;
 }
 
 /**
@@ -196,17 +182,16 @@ export async function stopTimer(
 async function splitStopped(
 	scope: OrganisationScope,
 	stopped: Entry,
-	zone: string,
 	source: ActivitySource,
 ): Promise<Entry | null> {
 	if (stopped.overtime || stopped.endedAt === null) return null;
 	const { userId, endedAt } = stopped;
-	const cut = await stopSplitOf(
-		scope,
-		userId,
-		{ id: stopped.id, startedAt: stopped.startedAt.getTime(), endedAt: endedAt.getTime() },
-		zone,
-	);
+	const cut = await stopSplitOf(scope, userId, {
+		id: stopped.id,
+		startedAt: stopped.startedAt.getTime(),
+		endedAt: endedAt.getTime(),
+		day: stopped.spentOn,
+	});
 	if (cut.overtimeFrom === null && !cut.overtime) return null;
 	const subject = { type: "time_entry", id: stopped.id, ownerId: userId } as const;
 	if (cut.overtimeFrom === null) {

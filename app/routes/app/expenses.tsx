@@ -246,19 +246,17 @@ async function submissionOf(
 	const [row, running, over] = await Promise.all([
 		periodOf(scope, userId, period.startsOn),
 		scope.timeEntries.select((e) => and(eq(e.userId, userId), isNull(e.endedAt)), { limit: 1 }),
-		daysOver(scope, userId, period.startsOn, period.endsOn, zone, Date.now()),
+		daysOver(scope, userId, period.startsOn, period.endsOn, Date.now()),
 	]);
 	const status = row?.status ?? null;
-	const { from, to } = periodBounds(period, zone);
 	return {
 		period,
 		state: periodState(status),
 		status,
 		comment: row?.status === "returned" ? row.comment : null,
-		runsInWeek: running.some(({ startedAt }) => {
-			const at = startedAt.getTime();
-			return from <= at && at < to;
-		}),
+		runsInWeek: running.some(
+			({ spentOn }) => period.startsOn <= spentOn && spentOn <= period.endsOn,
+		),
 		started: period.startsOn <= today,
 		over,
 	};

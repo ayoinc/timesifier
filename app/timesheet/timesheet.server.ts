@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte } from "drizzle-orm";
 
 import { type Filter, type OrganisationScope, organisationScope, type ScopedAccessor } from "~/db";
 import { type DayKind, dayLabel } from "~/leave/days";
@@ -51,30 +51,23 @@ import type { ChosenView } from "./views.server";
 type TimeEntries = OrganisationScope["timeEntries"] extends ScopedAccessor<infer T> ? T : never;
 
 /**
- * The entries of `userId` that start in `span`. The organisation, the person
- * and the start are the columns of the index
- * `time_entries_organisation_id_user_id_started_at_idx`, in its order, so the
+ * The entries of `userId` whose day is from `first` to `last` (TS-111). The
+ * organisation, the person and the day are the columns of the index
+ * `time_entries_organisation_id_user_id_spent_on_idx`, in its order, so the
  * query is answered from it (TS-013).
  */
-export function startingIn(
-	userId: string,
-	span: { from: number; to: number },
-): Filter<TimeEntries> {
-	return (e) =>
-		and(
-			eq(e.userId, userId),
-			gte(e.startedAt, new Date(span.from)),
-			lt(e.startedAt, new Date(span.to)),
-		);
+export function onDays(userId: string, first: Day, last: Day): Filter<TimeEntries> {
+	return (e) => and(eq(e.userId, userId), gte(e.spentOn, first), lte(e.spentOn, last));
 }
 
-/** The entries of `userId` that start in `span`, earliest first, as the sheets read them. */
-export async function entriesStartingIn(
+/** The entries of `userId` whose day is from `first` to `last`, earliest first, as the sheets read them. */
+export async function entriesOn(
 	scope: OrganisationScope,
 	userId: string,
-	span: { from: number; to: number },
+	first: Day,
+	last: Day,
 ): Promise<SheetEntry[]> {
-	const rows = await scope.timeEntries.select(startingIn(userId, span), {
+	const rows = await scope.timeEntries.select(onDays(userId, first, last), {
 		orderBy: (e) => [asc(e.startedAt)],
 	});
 	return rows.map(toSheetEntry);
@@ -88,6 +81,7 @@ export function toSheetEntry(row: TimeEntries["$inferSelect"]): SheetEntry {
 		startedAt: row.startedAt.getTime(),
 		endedAt: row.endedAt?.getTime() ?? null,
 		overtime: row.overtime,
+		day: row.spentOn,
 	};
 }
 
@@ -315,13 +309,13 @@ export async function timesheetData(
 			const first = days[0] as Day;
 			const last = days.at(-1) as Day;
 			const [entries, locked, away] = await Promise.all([
-				entriesStartingIn(scope, user.id, bounds(addDays(first, -1), last, zone)),
+				entriesOn(scope, user.id, addDays(first, -1), last),
 				lockedDays(scope, user.id, days),
 				weekAway(scope, user.id, { startsOn: first, endsOn: last }),
 			]);
 			const period = month === null ? { startsOn: first, endsOn: last } : null;
 			const [rules, row] = await Promise.all([
-				dayRulesOf(scope, user.id, days, entries, zone, now),
+				dayRulesOf(scope, user.id, days, entries, now),
 				period ? periodOf(scope, user.id, period.startsOn) : null,
 			]);
 			return {
@@ -365,10 +359,10 @@ async function periodWithEntries(
 ): Promise<{ entries: SheetEntry[]; rules: DayRule[]; submission: PeriodSubmission }> {
 	const days = daysFrom(period.startsOn, period.endsOn);
 	const [entries, row] = await Promise.all([
-		entriesStartingIn(scope, userId, periodBounds(period, zone)),
+		entriesOn(scope, userId, period.startsOn, period.endsOn),
 		periodOf(scope, userId, period.startsOn),
 	]);
-	const rules = await dayRulesOf(scope, userId, days, entries, zone, now);
+	const rules = await dayRulesOf(scope, userId, days, entries, now);
 	return { entries, rules, submission: submissionOf(period, row, entries, rules, zone, now) };
 }
 
@@ -388,9 +382,7 @@ function submissionOf(
 		state: periodState(status),
 		status,
 		comment: row?.status === "returned" ? row.comment : null,
-		runsInWeek: entries.some(
-			(entry) => entry.endedAt === null && inPeriod(dayOf(entry.startedAt, zone)),
-		),
+		runsInWeek: entries.some((entry) => entry.endedAt === null && inPeriod(entry.day)),
 		started: period.startsOn <= dayOf(now, zone),
 		over: rules.filter((rule) => rule.overMinutes > 0 && inPeriod(rule.day)),
 	};
@@ -410,8 +402,8 @@ async function dayData(
 		lockNoticeOf(scope.organisationId),
 		weekAway(scope, userId, period),
 	]);
-	const entries = ofPeriod.filter((entry) => dayOf(entry.startedAt, zone) === day);
-	const { days, total } = weekSheet(ofPeriod, daysFrom(period.startsOn, period.endsOn), zone, now);
+	const entries = ofPeriod.filter((entry) => entry.day === day);
+	const { days, total } = weekSheet(ofPeriod, daysFrom(period.startsOn, period.endsOn), now);
 	const rule = rules.find((r) => r.day === day);
 	const open =
 		entries.length === 0 &&
@@ -419,7 +411,7 @@ async function dayData(
 		rule?.closedReason == null &&
 		rule?.leftMinutes !== 0 &&
 		day <= dayOf(now, zone);
-	const source = open ? await copySourceDay(scope, userId, day, zone) : null;
+	const source = open ? await copySourceDay(scope, userId, day) : null;
 	return {
 		copyFrom: source?.day ?? null,
 		view: "day" as const,
@@ -448,20 +440,20 @@ async function weekData(
 	const before = periodAfter(period, -1);
 	const [{ entries, rules, submission }, previous, locked, lockDate, away] = await Promise.all([
 		periodWithEntries(scope, userId, period, zone, now),
-		entriesStartingIn(scope, userId, periodBounds(before, zone)),
+		entriesOn(scope, userId, before.startsOn, before.endsOn),
 		lockedDays(scope, userId, days),
 		lockNoticeOf(scope.organisationId),
 		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
 	const open = days.some((day) => !locked.has(day) && day <= dayOf(now, zone));
-	const source = open ? await copySourceWeek(scope, userId, period, zone) : null;
+	const source = open ? await copySourceWeek(scope, userId, period) : null;
 	return {
 		view: "week" as const,
 		canCopyWeek: source !== null,
 		...submission,
 		days,
-		sheet: weekSheet(entries, days, zone, now, { projectOrder: projects.map((p) => p.id) }),
+		sheet: weekSheet(entries, days, now, { projectOrder: projects.map((p) => p.id) }),
 		lastWeekProjects: [...new Set(previous.map((e) => e.projectId))].filter((id) => active.has(id)),
 		lockedDays: days.filter((day) => locked.has(day)),
 		lockDate,
@@ -478,9 +470,8 @@ async function historyData(
 	now: number,
 ): Promise<Omit<HistoryData, keyof TimesheetBase>> {
 	const oldest = periodAfter(current, -(HISTORY_LENGTH - 1));
-	const span = bounds(oldest.startsOn, current.endsOn, zone);
 	const [entries, periods] = await Promise.all([
-		entriesStartingIn(scope, userId, span),
+		entriesOn(scope, userId, oldest.startsOn, current.endsOn),
 		scope.periods.select((p) => and(eq(p.userId, userId), gte(p.startsOn, oldest.startsOn)), {
 			orderBy: (p) => [desc(p.startsOn)],
 		}),
@@ -491,7 +482,6 @@ async function historyData(
 			current,
 			periods.map((p) => ({ ...p, status: PeriodStatus.parse(p.status) })),
 			entries,
-			zone,
 			now,
 		),
 	};
@@ -525,10 +515,10 @@ export async function trackDayData(
 	const shown = day ?? today;
 	const [projects, entries, reasons] = await Promise.all([
 		projectsOf(scope),
-		entriesStartingIn(scope, user.id, bounds(addDays(shown, -1), shown, zone)),
+		entriesOn(scope, user.id, shown, shown),
 		lockReasonsOn(scope, user.id, [shown]),
 	]);
-	const [rule] = await dayRulesOf(scope, user.id, [shown], entries, zone, now);
+	const [rule] = await dayRulesOf(scope, user.id, [shown], entries, now);
 	return {
 		today,
 		day: shown,
@@ -559,12 +549,11 @@ export async function pickerMonthData(
 	const { days, month } = calendarDays("month", date ?? today, organisation.weekStartsOn);
 	const first = days[0] as Day;
 	const last = days.at(-1) as Day;
-	const entries = await entriesStartingIn(scope, user.id, bounds(first, last, zone));
+	const entries = await entriesOn(scope, user.id, first, last);
 	const shownMonth = month as Day;
 	const totals = new Map<Day, number>();
 	for (const entry of entries) {
-		const at = dayOf(entry.startedAt, zone);
-		totals.set(at, (totals.get(at) ?? 0) + durationOf(entry, now));
+		totals.set(entry.day, (totals.get(entry.day) ?? 0) + durationOf(entry, now));
 	}
 	return {
 		today,

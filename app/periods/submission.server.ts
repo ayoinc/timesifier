@@ -50,8 +50,9 @@ async function current(scope: OrganisationScope, userId: string, startsOn: strin
 export async function submitPeriod(scope: OrganisationScope, step: Step) {
 	const { userId, startsOn, zone, weekStartsOn, now } = step;
 	const period: PeriodDays = periodContaining(startsOn, weekStartsOn);
-	const { from, to } = periodBounds(period, zone);
-	if (from > now) return { ok: false as const, reason: "not-yet" as NotMoved };
+	if (periodBounds(period, zone).from > now) {
+		return { ok: false as const, reason: "not-yet" as NotMoved };
+	}
 
 	const running = await scope.timeEntries.select(
 		(e) => and(eq(e.userId, userId), isNull(e.endedAt)),
@@ -59,8 +60,8 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 			limit: 1,
 		},
 	);
-	const startedAt = running[0]?.startedAt.getTime();
-	if (startedAt !== undefined && from <= startedAt && startedAt < to) {
+	const runningOn = running[0]?.spentOn;
+	if (runningOn !== undefined && period.startsOn <= runningOn && runningOn <= period.endsOn) {
 		return { ok: false as const, reason: "running" as NotMoved };
 	}
 
@@ -70,7 +71,7 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 		return { ok: false as const, reason: "not-from-here" as NotMoved };
 	}
 
-	const over: DayRule[] = await daysOver(scope, userId, period.startsOn, period.endsOn, zone, now);
+	const over: DayRule[] = await daysOver(scope, userId, period.startsOn, period.endsOn, now);
 	if (over.length > 0) return { ok: false as const, reason: "over" as NotMoved, over };
 
 	const at = new Date(now);

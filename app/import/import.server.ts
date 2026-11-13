@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import {
@@ -412,7 +412,7 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 	const trackedOf = (userId: string) => (day: Day) =>
 		tracked.get(`${userId}|${day}`) ?? { regularMs: 0, overtimeMs: 0 };
 	const now = Date.now();
-	for (const [userId, member] of memberOf) {
+	for (const userId of memberOf.keys()) {
 		const days = candidates
 			.filter((c) => c.userId === userId)
 			.map((c) => c.day)
@@ -421,19 +421,16 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 		const last = days.at(-1) as Day;
 		const calendar = await rulesCalendarOf(scope, userId, first, last);
 		calendars.set(userId, calendar);
-		const { from, to } = bounds(
-			weekOf(calendar.rules, first),
-			addDays(weekOf(calendar.rules, last), 6),
-			member.zone,
-		);
+		const from = weekOf(calendar.rules, first);
+		const to = addDays(weekOf(calendar.rules, last), 6);
 		const [entries, periods] = await Promise.all([
 			scope.timeEntries.select((e) =>
-				and(eq(e.userId, userId), gte(e.startedAt, new Date(from)), lt(e.startedAt, new Date(to))),
+				and(eq(e.userId, userId), gte(e.spentOn, from), lte(e.spentOn, to)),
 			),
 			scope.periods.select((p) => eq(p.userId, userId)),
 		]);
 		for (const entry of entries) {
-			const day = dayOf(entry.startedAt, member.zone);
+			const day = entry.spentOn;
 			const slot = `${userId}|${day}`;
 			const sum = tracked.get(slot) ?? { regularMs: 0, overtimeMs: 0 };
 			const ms = (entry.endedAt?.getTime() ?? now) - entry.startedAt.getTime();
@@ -754,13 +751,8 @@ async function entriesToCreate(
 		const slot = `${row.userId}|${row.day}`;
 		let startedAt = nextStart.get(slot);
 		if (startedAt === undefined) {
-			const { from, to } = bounds(row.day, row.day, zone);
 			const sameDay = await scope.timeEntries.select((e) =>
-				and(
-					eq(e.userId, row.userId),
-					gte(e.startedAt, new Date(from)),
-					lt(e.startedAt, new Date(to)),
-				),
+				and(eq(e.userId, row.userId), eq(e.spentOn, row.day)),
 			);
 			const lastEnd = Math.max(0, ...sameDay.map((e) => (e.endedAt ?? e.startedAt).getTime()));
 			startedAt = Math.max(instantAt(row.day, DAY_STARTS_AT_MINUTES, zone), lastEnd);
@@ -836,8 +828,7 @@ export async function revertImport(
 	const projects = new Map((await scope.projects.select()).map((p) => [p.id, p.name]));
 	const lockedEntries: string[] = [];
 	for (const entry of entries) {
-		const member = members.get(entry.userId);
-		const day = dayOf(entry.startedAt, member?.zone ?? organisationZone);
+		const day = entry.spentOn;
 		const period = periods.find(
 			(p) => p.userId === entry.userId && p.startsOn <= day && day <= p.endsOn,
 		);
@@ -852,7 +843,7 @@ export async function revertImport(
 			const minutes =
 				((entry.endedAt ?? entry.startedAt).getTime() - entry.startedAt.getTime()) / 60_000;
 			lockedEntries.push(
-				`${member?.name ?? "Someone"}, ${formatDayWithYear(day)}, ${projects.get(entry.projectId) ?? "a project"}, ${formatDuration(minutes * 60)}: ${LOCK_WORDS[reason]}`,
+				`${members.get(entry.userId)?.name ?? "Someone"}, ${formatDayWithYear(day)}, ${projects.get(entry.projectId) ?? "a project"}, ${formatDuration(minutes * 60)}: ${LOCK_WORDS[reason]}`,
 			);
 		}
 	}

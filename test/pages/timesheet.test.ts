@@ -792,7 +792,7 @@ describe("Track time (TS-056)", () => {
 			const second = gridEntryStart(
 				day,
 				LONDON,
-				[{ startedAt: first, endedAt: first + 90 * MINUTE }],
+				[{ startedAt: first, endedAt: first + 90 * MINUTE, spentOn: day }],
 				T0,
 			);
 			expect(second).toBe(first + 90 * MINUTE);
