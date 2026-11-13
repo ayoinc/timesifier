@@ -18,3 +18,7 @@ BETTER_AUTH_SECRET=
 # https://developers.cloudflare.com/turnstile/troubleshooting/testing/
 #   1x0000000000000000000000000000000AA
 TURNSTILE_SECRET_KEY=
+
+# The platform console's owners (TS-099): addresses separated by commas. Each
+# opens /platform after a code emailed to it. Empty closes the console.
+PLATFORM_OWNERS=

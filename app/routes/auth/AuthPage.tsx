@@ -194,6 +194,8 @@ const PROBLEM_WORDS: Record<Exclude<Problem, "robot-check">, string> = {
 	"expired-code": "That code has expired. Send a new one.",
 	"spent-code": "That code no longer works: it was entered wrongly too many times. Send a new one.",
 	failed: "Something went wrong. Check your connection and try again.",
+	// Shown only after the right code, so only to whoever reads the inbox (TS-099).
+	closed: "This account is closed. Write to privacy@timesifier.com to have it opened again.",
 };
 
 /**

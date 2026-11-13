@@ -105,8 +105,22 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 	const stored: Record<StoredTerm, ReactNode> = {
 		"Your account": (
 			<>
-				Your name, your email address, whether a sign-in code has proved the address is yours, and
-				your time zone once it is set.
+				Your name, your email address, whether a sign-in code has proved the address is yours, your
+				time zone once it is set, whether you take Timesifier's product announcements and its
+				newsletter, and when your account was closed, if it was.
+			</>
+		),
+		"Your sign-ins": (
+			<>
+				When you signed in, and the kind of browser in a few words, such as "Chrome on macOS": never
+				the internet address it came from.
+			</>
+		),
+		"Mail from Timesifier": (
+			<>
+				Each product announcement and newsletter Timesifier sends: its subject and words, who sent
+				it and to how many people. For each person it is addressed to, when it was sent, or that it
+				was skipped because they had turned that mail off.
 			</>
 		),
 		"Your sessions": (
@@ -130,11 +144,11 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 		),
 		"The organisation and its people": (
 			<>
-				The organisation's name, the name in its address on {host}, its settings, and the logo and
-				colour its invoices and estimates carry, the logo kept in Cloudflare R2. Who belongs to it,
-				each person's role, and whether they work as a contractor. Its teams, who is in each and who
-				manages it. Each invitation: the email address invited, the role offered, who sent it, when
-				it expires and what became of it.
+				The organisation's name, the name in its address on {host}, its settings, its plan with its
+				seats and when a trial of it ends, and the logo and colour its invoices and estimates carry,
+				the logo kept in Cloudflare R2. Who belongs to it, each person's role, and whether they work
+				as a contractor. Its teams, who is in each and who manages it. Each invitation: the email
+				address invited, the role offered, who sent it, when it expires and what became of it.
 			</>
 		),
 		"Time and approvals": (
@@ -240,6 +254,19 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 				emails and exports carry, and which person at Timesifier last changed them.
 			</>
 		),
+		"The platform console": (
+			<>
+				Each step a platform owner takes in the console, with the reason they gave, and each use of
+				support access. For each session that opens the console, a keyed hash of the code emailed to
+				open it, never the code itself, and when it was proved.
+			</>
+		),
+		"Support access": (
+			<>
+				Each time an owner of the organisation grants Timesifier support access: who granted it,
+				until when, and who ended it early, if anyone did.
+			</>
+		),
 	};
 
 	return (
@@ -256,7 +283,8 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 			<DocumentSection id="stored" title="What is stored">
 				<p>
 					What you and the people in your organisation put into Timesifier, and what it needs to
-					sign you in. Everything except your account belongs to one organisation.
+					sign you in. Everything except your account, your sign-ins, the mail Timesifier sends and
+					Timesifier's own records belongs to one organisation.
 				</p>
 				{STORED.map(({ heading, rows }) => (
 					<div key={heading} className="flex flex-col gap-4">
@@ -274,8 +302,9 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 
 			<DocumentSection id="who-sees" title="Who sees what">
 				<p>
-					Nobody outside an organisation can read anything in it, or learn that it exists. Inside
-					it, what a person sees depends on their role, and on whether they manage a team.
+					Nobody outside an organisation can read anything in it, or learn that it exists, except
+					Timesifier's platform owners, as their row below says. Inside it, what a person sees
+					depends on their role, and on whether they manage a team.
 				</p>
 				<Rows>
 					<Row term="Owners and admins">
@@ -306,6 +335,16 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 						A member an owner or admin marks as a contractor sees what their role lets them, the
 						same as anyone else with it. Owners, admins and Finance see contractors' hours in the
 						Contractors report.
+					</Row>
+					<Row term="Timesifier's platform owners">
+						The people who run Timesifier, each of whom must prove their session with a code emailed
+						to them, see every account's name, email address, organisations and sign-ins, and each
+						organisation's name, plan and seats, how many members, invitations, time entries,
+						projects and invoices it has, and when it was last used: never what is in them. Only
+						while an owner of the organisation grants support access, for 24 or 72 hours, can they
+						read its people, projects, latest time entries and invoices, and change nothing; each
+						reading is recorded in the organisation's activity log. They never see the
+						organisation's wellbeing figures, which only its owners see.
 					</Row>
 				</Rows>
 				<p>
@@ -370,7 +409,22 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 								a budget alert, to the organisation's owners and admins and, for a budget in hours,
 								to the managers of the teams of the people who tracked time to the project;
 							</li>
-							<li>a notice that a webhook was switched off, to the person who added it.</li>
+							<li>a notice that a webhook was switched off, to the person who added it;</li>
+							<li>
+								a product announcement, to every account that has not turned them off, and the
+								newsletter, to those who asked for it, each with a link that stops it;
+							</li>
+							<li>
+								a code that opens the platform console, to the platform owner who asked for it;
+							</li>
+							<li>
+								a link to download your data, when you ask Timesifier for it, to your account's
+								address;
+							</li>
+							<li>
+								an invitation sent again by a platform owner, at your request, to the address it was
+								for.
+							</li>
 						</ul>
 						<p className="mt-2">
 							An organisation sends at most {facts.documentEmails} invoice and estimate emails in 24
@@ -490,6 +544,9 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 						carried it stays in your mailbox, and Cloudflare keeps its record of sending it for up
 						to 30 days. The counts of codes sent to an address stop counting after one hour.
 					</Row>
+					<Row term="Your sign-ins">
+						Each is deleted 90 days after it was made, by a job that runs every day.
+					</Row>
 					<Row term="An invitation">
 						It can be accepted for {INVITATION_DAYS} days. Its record stays with the organisation.
 					</Row>
@@ -560,6 +617,8 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 						read. Owners and admins can download every time entry of the organisation as CSV and
 						every invoice as a PDF in one ZIP, from Integrations. Owners, admins and Finance can
 						download the reports of invoices, the Contractors report and a file for Xero, as CSV.
+						Anyone can download everything Timesifier holds about them, as one ZIP of JSON and CSV
+						files, from My account.
 					</Row>
 					<Row term="Corrections">
 						You can change your name and your time zone in My account, and your own time entries and
@@ -568,7 +627,13 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 					<Row term="Deletion">
 						You can leave an organisation from My account, and an owner can delete one in Workspace
 						settings: "How long it is kept" says what goes with each. There is no control in
-						Timesifier to delete your account.
+						Timesifier to delete your account: write to the address below, and Timesifier deletes
+						it. Your name, address, sessions, sign-ins and mail choices go, with your memberships
+						and the invitations you sent, and an organisation you are alone in goes with you. The
+						organisations' time entries and expenses stay, under "Deleted person", so their totals
+						still add up; the receipts of your expenses are deleted unless an issued invoice holds
+						them. An only owner of an organisation with other members makes another member an owner
+						first.
 					</Row>
 				</Rows>
 				<p>

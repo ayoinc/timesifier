@@ -22,6 +22,7 @@ import {
 	foreignKey,
 	index,
 	integer,
+	primaryKey,
 	type SQLiteTableExtraConfigValue,
 	sqliteTable,
 	text,
@@ -53,6 +54,21 @@ export const users = sqliteTable("users", {
 	 * set; while it is null their organisation's zone is used (decision 26).
 	 */
 	timeZone: text("time_zone"),
+	/**
+	 * Whether the person gets the newsletter (TS-099): off until they ask for it,
+	 * on My account or on the sign-in page, as their account is made. Every newsletter carries a link that turns it off.
+	 */
+	newsletter: integer("newsletter", { mode: "boolean" }).notNull().default(false),
+	/**
+	 * Whether the person gets product announcements (TS-099): on for every
+	 * account holder until they turn them off, from the link in any announcement or on My account.
+	 */
+	announcements: integer("announcements", { mode: "boolean" }).notNull().default(true),
+	/**
+	 * When a platform owner closed the account (TS-099), null while it is open.
+	 * A closed account cannot sign in; restoring it sets this back to null.
+	 */
+	closedAt: integer("closed_at", { mode: "timestamp_ms" }),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
 });
@@ -136,6 +152,15 @@ export const organisations = sqliteTable("organisations", {
 	brandLogoVersion: integer("brand_logo_version"),
 	/** The organisation's colour, `#rrggbb`, dark enough for white type on it (TS-100); null for none. */
 	brandColour: text("brand_colour"),
+	/**
+	 * The organisation's plan (TS-099): `free`, `team` or `business`
+	 * (`app/plans/plans.ts`). Set by a platform owner; nothing is paid yet.
+	 */
+	plan: text("plan").notNull().default("free"),
+	/** How many people the plan holds; null for the plan's own number. */
+	seats: integer("seats"),
+	/** When a trial of `plan` ends; after it the organisation is on Free. Null when the plan is not a trial. */
+	trialEndsAt: integer("trial_ends_at", { mode: "timestamp_ms" }),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
 });
@@ -2499,6 +2524,159 @@ export const workRequests = sqliteTable(
 		),
 		check("work_requests_ends_on_or_after_start", sql`${table.endsOn} >= ${table.startsOn}`),
 		check("work_requests_minutes_in_range", sql`${table.minutesPerDay} BETWEEN 1 AND 1440`),
+	],
+);
+
+// The platform console (TS-099): the layer above every organisation, open to
+// the addresses in `PLATFORM_OWNERS` after a fresh emailed code. Its own
+// tables hold no organisation's data; `support_grants` is the organisation's,
+// and reached through `organisationScope`.
+
+/**
+ * A platform owner's step-up for one session: the code emailed to them, kept as
+ * a keyed hash, and when it was proved. It goes with the session, so each new
+ * session asks for a new code.
+ */
+export const platformStepUps = sqliteTable("platform_step_ups", {
+	sessionId: text("session_id")
+		.primaryKey()
+		.references(() => sessions.id, { onDelete: "cascade" }),
+	userId: text("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	/** The waiting code, as a keyed hash; null once it is used or before one is sent. */
+	codeHash: text("code_hash"),
+	codeExpiresAt: integer("code_expires_at", { mode: "timestamp_ms" }),
+	/** Wrong codes tried against the waiting code. */
+	attempts: integer("attempts").notNull().default(0),
+	/** Codes sent for this session. */
+	sent: integer("sent").notNull().default(0),
+	verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
+	createdAt: createdAt(),
+	updatedAt: updatedAt(),
+});
+
+/**
+ * The platform's own log: every step a platform owner takes in the console,
+ * with the reason they gave, and every use of support access. Never changed or
+ * deleted by the application.
+ */
+export const platformEvents = sqliteTable(
+	"platform_events",
+	{
+		id: id(),
+		/** Who: a platform owner, or null for the system. */
+		actorId: text("actor_id").references(() => users.id),
+		action: text("action").notNull(),
+		/** `account`, `organisation`, `mailing` or `console`. */
+		subjectType: text("subject_type").notNull(),
+		subjectId: text("subject_id"),
+		reason: text("reason"),
+		/** What the step was about, in a few named values: never an organisation's data. */
+		detail: text("detail", { mode: "json" })
+			.$type<Record<string, string | number | boolean | null>>()
+			.notNull()
+			.default(sql`'{}'`),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("platform_events_created_at_idx").on(table.createdAt),
+		index("platform_events_subject_idx").on(table.subjectType, table.subjectId),
+	],
+);
+
+/**
+ * Support access an organisation's owner granted the platform (TS-099): until
+ * `expires_at`, or until revoked, a platform owner may read the organisation's
+ * own data, and change nothing.
+ */
+export const supportGrants = sqliteTable(
+	"support_grants",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		grantedBy: text("granted_by")
+			.notNull()
+			.references(() => users.id),
+		expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+		revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+		revokedBy: text("revoked_by").references(() => users.id),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("support_grants_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("support_grants_organisation_id_expires_at_idx").on(
+			table.organisationId,
+			table.expiresAt,
+		),
+	],
+);
+
+/** One sign-in: when, and the browser's kind in two words. Kept for 90 days. */
+export const signIns = sqliteTable(
+	"sign_ins",
+	{
+		id: id(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** Such as "Chrome on macOS"; never the address it came from. */
+		device: text("device").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		index("sign_ins_user_id_created_at_idx").on(table.userId, table.createdAt),
+		index("sign_ins_created_at_idx").on(table.createdAt),
+	],
+);
+
+/**
+ * A message to account holders (TS-099): a product announcement, to everyone
+ * who has not turned them off, or the newsletter, to those who asked for it.
+ */
+export const mailings = sqliteTable(
+	"mailings",
+	{
+		id: id(),
+		/** `announcement` or `newsletter`. */
+		kind: text("kind").notNull(),
+		subject: text("subject").notNull(),
+		body: text("body").notNull(),
+		sentBy: text("sent_by").references(() => users.id),
+		/** How many people it was addressed to when it was sent. */
+		recipients: integer("recipients").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		check("mailings_kind_known", sql`${table.kind} IN ('announcement', 'newsletter')`),
+		index("mailings_created_at_idx").on(table.createdAt),
+	],
+);
+
+/**
+ * One person's copy of a mailing, waiting until `sent_at`. The scheduled work
+ * sends them a few at a time, within the day's cap.
+ */
+export const mailingDeliveries = sqliteTable(
+	"mailing_deliveries",
+	{
+		mailingId: text("mailing_id")
+			.notNull()
+			.references(() => mailings.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** When it was sent, or skipped because the person had turned the mail off; null while waiting. */
+		sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+		/** `sent` or `skipped`; null while waiting. */
+		outcome: text("outcome"),
+	},
+	(table) => [
+		primaryKey({ columns: [table.mailingId, table.userId] }),
+		index("mailing_deliveries_sent_at_idx").on(table.sentAt),
 	],
 );
 

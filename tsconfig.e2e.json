@@ -11,7 +11,8 @@
 		"app/invoices/paths.ts",
 		"app/auth/code.ts",
 		"app/auth/person-name.ts",
-		"app/shell/color-scheme.server.ts"
+		"app/shell/color-scheme.server.ts",
+		"app/platform/paths.ts"
 	],
 	"compilerOptions": {
 		"composite": true,

@@ -151,6 +151,7 @@ describe("scripts/deploy-config.ts --write", () => {
 		expect(status).toBe(0);
 		expect(written).toEqual({
 			...committed,
+			secrets: { required: ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY", "PLATFORM_OWNERS"] },
 			routes: [
 				{ pattern: "time.example.org", custom_domain: true },
 				{ pattern: "www.time.example.org", custom_domain: true },
@@ -189,8 +190,10 @@ describe("scripts/deploy-config.ts --write", () => {
 				r2_buckets: committed.previews.r2_buckets,
 			},
 		});
-		// Still what stops a deploy whose Worker has no secrets.
-		expect(written.secrets).toEqual({ required: ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY"] });
+		// Still what stops a deploy whose Worker has no secrets; production also needs its platform owners (TS-099).
+		expect(written.secrets).toEqual({
+			required: ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY", "PLATFORM_OWNERS"],
+		});
 		expect(written.workers_dev).toBe(false);
 	});
 
@@ -234,6 +237,7 @@ describe("the committed wrangler.jsonc belongs to no deployment", () => {
 			PREVIEW_HOST_SUFFIX: "",
 			TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
 			EMAIL_FROM: "no-reply@localhost",
+			PLATFORM_OWNERS: "",
 		});
 		expect(config.previews.vars.PREVIEW_HOST_SUFFIX).toBeUndefined();
 		expect(config.send_email).toEqual([{ name: "EMAIL" }]);

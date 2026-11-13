@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 import { SIGNED_IN } from "./e2e/auth-state";
+import { PLATFORM_OWNERS } from "./e2e/platform-owners";
 
 // Browser tests run against a production build served by `vite preview`, so they
 // see real server rendering, hydration and the Content Security Policy that ships.
@@ -30,15 +31,17 @@ const SETUP = /auth\.setup\.ts/;
 // other Chromium test, one at a time.
 const SEEDS_THE_DATABASE = /[\\/](?:people|projects-search|reports|zz-fixes-shots)\.spec\.ts$/;
 // What the server under test is given. None of it is a secret: the first signs
-// cookies for this run only, and the second is Cloudflare's published Turnstile
-// test secret, which passes every check.
+// cookies for this run only, the second is Cloudflare's published Turnstile
+// test secret, which passes every check, and the third makes the addresses of
+// e2e/platform-owners.ts the platform console's owners (TS-099).
 // https://developers.cloudflare.com/turnstile/troubleshooting/testing/
-// Where the checkout has a `.dev.vars`, Wrangler reads the two secrets from it
+// Where the checkout has a `.dev.vars`, Wrangler reads the secrets from it
 // instead; it must hold the same Turnstile secret, as `.dev.vars.example` says.
 const SERVER_ENV = {
 	DESIGN_ROUTE: "1",
 	BETTER_AUTH_SECRET: "browser-tests-only-m4Qx8Zr2Lk7Vt1Nc5Hd9Wb3Yp6Sg0Jf",
 	TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+	PLATFORM_OWNERS: PLATFORM_OWNERS.join(","),
 };
 
 // The steps that bring the server up, in order:
@@ -46,11 +49,15 @@ const SERVER_ENV = {
 //    `vars` of wrangler.jsonc into the build's own configuration. Those are a
 //    developer's machine's: an ENVIRONMENT of `development`, so authentication
 //    trusts localhost and nothing else, and Turnstile's published test site key;
-// 2. create the local D1 database from the migrations, where it does not exist;
-// 3. serve. Wrangler's local EMAIL binding sends nothing: it writes each message
+// 2. name the console's owner in that .dev.vars. The build copies only the
+//    declared secrets there, and PLATFORM_OWNERS is a variable locally
+//    (wrangler.jsonc), which a line of .dev.vars replaces;
+// 3. create the local D1 database from the migrations, where it does not exist;
+// 4. serve. Wrangler's local EMAIL binding sends nothing: it writes each message
 //    under .wrangler/tmp/email/, where e2e/auth.ts reads the sign-in codes.
 const START_SERVER = [
 	"pnpm exec react-router build",
+	`printf 'PLATFORM_OWNERS=%s\\n' "${SERVER_ENV.PLATFORM_OWNERS}" >> build/server/.dev.vars`,
 	"pnpm db:migrate:local",
 	`pnpm exec vite preview --port ${PORT} --strictPort`,
 ].join(" && ");

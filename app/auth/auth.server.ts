@@ -18,16 +18,28 @@
 
 import { env, waitUntil } from "cloudflare:workers";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError } from "better-auth/api";
 import { betterAuth } from "better-auth/minimal";
 import { emailOTP } from "better-auth/plugins/email-otp";
 import type { Session, User } from "better-auth/types";
 import { drizzle } from "drizzle-orm/d1";
 import { getPlatformBrand } from "~/brand/platform-brand.server";
-import { accounts, organisations, rateLimits, sessions, users, uuidv7, verifications } from "~/db";
+import {
+	accounts,
+	organisations,
+	platformData,
+	rateLimits,
+	sessions,
+	users,
+	uuidv7,
+	verifications,
+} from "~/db";
 // The two tenant tables are absent from `~/db` on purpose. Better Auth is the
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
 import { required, setting } from "~/lib/deployment";
+import { deviceOf } from "~/platform/device";
+import { NEWSLETTER_HEADER } from "~/platform/paths";
 import { SIGN_IN_CODE_LENGTH } from "./code";
 import { sendEmail, sender } from "./email.server";
 import { endpointPath, isOffered } from "./endpoints";
@@ -119,6 +131,36 @@ function createAuth(bindings: Bindings) {
 		// Read from the database on every request, never from a copy in a cookie:
 		// an ended session stops working on the very next request.
 		session: { cookieCache: { enabled: false } },
+
+		// The platform console's three needs of a sign-in (TS-099): a closed
+		// account starts no session; every sign-in is kept for the account's
+		// history, as the browser's kind and nothing finer; and a new account that
+		// asked for the newsletter on the sign-in page gets it.
+		databaseHooks: {
+			user: {
+				create: {
+					async after(user, context) {
+						if (context?.request?.headers.get(NEWSLETTER_HEADER) !== "yes") return;
+						await platformData.setMailChoice(DB, user.id, "newsletter", true);
+					},
+				},
+			},
+			session: {
+				create: {
+					async before(session) {
+						if (await platformData.isAccountClosed(DB, session.userId)) {
+							throw new APIError("FORBIDDEN", {
+								code: "ACCOUNT_CLOSED",
+								message: "This account is closed.",
+							});
+						}
+					},
+					async after(session) {
+						await platformData.recordSignIn(DB, session.userId, deviceOf(session.userAgent));
+					},
+				},
+			},
+		},
 
 		rateLimit: {
 			// On everywhere. Left alone, Better Auth limits only in production mode.

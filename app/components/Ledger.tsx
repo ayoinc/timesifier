@@ -31,8 +31,8 @@ export function Ledger({ heading, note, on = "surface", children }: LedgerProps)
 			)}
 		>
 			<p className="flex items-baseline justify-between gap-4 px-4 pt-4 pb-3 text-label-large @sm:px-5">
-				<span>{heading}</span>
-				{note && <span className="text-on-surface-variant">{note}</span>}
+				<span className="min-w-0">{heading}</span>
+				{note && <span className="shrink-0 text-on-surface-variant whitespace-nowrap">{note}</span>}
 			</p>
 			{children}
 		</div>

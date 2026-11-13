@@ -15,6 +15,8 @@ export type Email = {
 	 * TS-077), and the images its HTML shows, attached inline (TS-100).
 	 */
 	attachments?: EmailAttachment[];
+	/** Headers of the message's own: a mailing's `List-Unsubscribe` and `List-Unsubscribe-Post` (TS-099). */
+	headers?: Record<string, string>;
 };
 
 /**
@@ -45,14 +47,22 @@ export function sender(): { email: string } | null {
  * message, which may carry a sign-in code.
  *
  * It never throws, so a caller may hand the promise to `waitUntil` and answer
- * the request without waiting for the mail.
+ * the request without waiting for the mail. It answers whether the message was
+ * handed to Email Service, which the mailings' queue reads (TS-099).
  */
-export async function sendEmail({ to, subject, text, html, attachments }: Email): Promise<void> {
+export async function sendEmail({
+	to,
+	subject,
+	text,
+	html,
+	attachments,
+	headers,
+}: Email): Promise<boolean> {
 	try {
 		const from = sender();
 		if (!from) {
 			console.log("email: not sent, this environment has no EMAIL binding");
-			return;
+			return false;
 		}
 		const { senderName, replyTo } = await getPlatformBrand(env);
 		await env.EMAIL.send({
@@ -63,11 +73,14 @@ export async function sendEmail({ to, subject, text, html, attachments }: Email)
 			text,
 			html,
 			...(attachments ? { attachments } : {}),
+			...(headers ? { headers } : {}),
 		});
+		return true;
 	} catch (error) {
 		// Email Service puts a code such as E_SENDER_NOT_VERIFIED on the error.
 		// Its message is left out because it may quote the address.
 		const code = error instanceof Error && "code" in error ? String(error.code) : "unknown";
 		console.error(`email: send failed with ${code}`);
+		return false;
 	}
 }

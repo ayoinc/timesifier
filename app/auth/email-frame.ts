@@ -126,6 +126,11 @@ export type Message = {
 	parts: readonly (string | Figure | Action)[];
 	/** Why the person got the message and what to do if they did not expect it. */
 	reason: string;
+	/**
+	 * The way to stop mail of this kind, under the reason: every mailing to
+	 * account holders carries one (TS-099). Not an action: it is drawn as a plain link.
+	 */
+	unsubscribe?: Action;
 };
 
 /** The colours of the one action: the organisation's colour with white words, or the product's. */
@@ -202,7 +207,7 @@ function imageHtml(
  * name, and its footer line.
  */
 export function compose(
-	{ subject, heading, parts, reason }: Message,
+	{ subject, heading, parts, reason, unsubscribe }: Message,
 	platform: PlatformLook,
 	organisation?: OrganisationLook,
 ): Omit<Email, "to"> {
@@ -212,6 +217,9 @@ export function compose(
 		: { ground: COLOUR.action, words: COLOUR.onAction };
 	const name = organisation ? organisation.name : PRODUCT;
 	const attachments: EmailAttachment[] = [];
+	const stop = unsubscribe
+		? ` <a href="${escapeHtmlText(unsubscribe.link)}" style="${REASON}text-decoration:underline;">${escapeHtmlText(unsubscribe.action)}</a>`
+		: "";
 
 	let logo = "";
 	if (organisation?.logo) {
@@ -257,12 +265,13 @@ export function compose(
 		`<table ${COLUMN_TABLE}><tr><td align="left" style="padding:32px 0 48px;">` +
 		`<h1 style="margin:0;${HEADING}">${escapeHtmlText(heading)}</h1>` +
 		parts.map((part) => partAsHtml(part, action)).join("") +
-		`<p style="margin:40px 0 0;padding:16px 0 0;border-top:1px solid ${COLOUR.rule};${REASON}">${escapeHtmlText(reason)}</p>` +
+		`<p style="margin:40px 0 0;padding:16px 0 0;border-top:1px solid ${COLOUR.rule};${REASON}">${escapeHtmlText(reason)}${stop}</p>` +
 		`<p style="margin:12px 0 0;${REASON}">${foot}</p>` +
 		"</td></tr></table>" +
 		"</td></tr></table></body></html>";
 
-	const text = `${[name, heading, ...parts.map(partAsText), reason, footText].join("\n\n")}\n`;
+	const footer = unsubscribe ? [reason, partAsText(unsubscribe)] : [reason];
+	const text = `${[name, heading, ...parts.map(partAsText), ...footer, footText].join("\n\n")}\n`;
 
 	return { subject, text, html, attachments };
 }

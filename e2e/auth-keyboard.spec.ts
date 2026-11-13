@@ -52,14 +52,18 @@ test("a new address and its code, with the keyboard alone", async ({ page }) => 
 	const person = newPerson();
 	await openAuthPage(page);
 
-	// The tab order follows the page: the band, then the one field and its action.
+	// The tab order follows the page: the band, then the one field, the
+	// newsletter's box (TS-099) and the action.
 	await tabThroughTheBand(page);
 	await page.keyboard.press("Tab");
 	await expect(page.getByLabel("Email")).toBeFocused();
 	await page.keyboard.type(person.email);
+	await page.keyboard.press("Tab");
+	await expect(page.getByRole("checkbox", { name: /newsletter/ })).toBeFocused();
 	await tabTo(page, page.getByRole("button", CONTINUE));
 	// After the action there is only the foot of the page.
 	await tabTo(page, page.getByRole("link", { name: "Privacy notice" }));
+	await page.keyboard.press("Shift+Tab");
 	await page.keyboard.press("Shift+Tab");
 	await page.keyboard.press("Shift+Tab");
 	await expect(page.getByLabel("Email")).toBeFocused();

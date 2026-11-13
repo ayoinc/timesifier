@@ -1,3 +1,5 @@
+import { SEATS_FULL } from "~/plans/plans";
+
 // The words a person reads when the server refuses something they asked for
 // about an organisation. The server answers with a status and, usually, a code;
 // the pages never show its own wording.
@@ -64,6 +66,8 @@ const BY_CODE = new Map([
 		"INVITATION_LIMIT_REACHED",
 		"This organisation has as many invitations waiting as it can hold. Cancel one to send another.",
 	],
+	// The plan's seats (TS-099): members and waiting invitations each take one.
+	["SEATS_FULL", SEATS_FULL],
 
 	[
 		"YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER",

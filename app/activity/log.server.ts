@@ -204,6 +204,8 @@ const STEPS: Record<string, string> = {
 	imported: "Imported",
 	reverted: "Reverted",
 	assigned: "Assigned",
+	granted: "Granted",
+	used: "Used",
 };
 
 /** What each kind of thing an action names is called in a sentence. */
@@ -234,10 +236,12 @@ const NOUNS: Record<string, string> = {
 	timesheet_rules: "the timesheet rules",
 	work_schedule: "work schedule",
 	brand: "the brand",
+	support_access: "support access for Timesifier",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */
 const FIELD_LABELS: Record<string, string> = {
+	hours: "Hours",
 	projectId: "Project",
 	clientId: "Client",
 	taskId: "Task",
