@@ -69,6 +69,15 @@ const HELVETICA_WIDTHS = [
 	222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
 ];
 
+/** Widths of the Helvetica-Bold glyphs from space to tilde, in thousandths of the size (its AFM). */
+const HELVETICA_BOLD_WIDTHS = [
+	278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+	556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667,
+	611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+	667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556,
+	278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+];
+
 /** The WinAnsi codes of the characters outside ASCII that money and names use. */
 const WIN_ANSI: Record<string, number> = {
 	"€": 0x80,
@@ -94,10 +103,11 @@ export function winAnsi(text: string): number[] {
 	});
 }
 
-/** How wide `text` is at `size` points. */
-function widthOf(text: string, size: number): number {
+/** How wide `text` is at `size` points, in Helvetica or, `bold`, Helvetica-Bold. */
+function widthOf(text: string, size: number, bold = false): number {
+	const widths = bold ? HELVETICA_BOLD_WIDTHS : HELVETICA_WIDTHS;
 	const units = winAnsi(text).reduce(
-		(sum, code) => sum + (code >= 32 && code <= 126 ? (HELVETICA_WIDTHS[code - 32] ?? 556) : 556),
+		(sum, code) => sum + (code >= 32 && code <= 126 ? (widths[code - 32] ?? 556) : 556),
 		0,
 	);
 	return (units * size) / 1000;
@@ -115,22 +125,22 @@ function literal(text: string): string {
 }
 
 /** `text` broken into lines no wider than `width` at `size`, at spaces where it can be. */
-function wrap(text: string, width: number, size: number): string[] {
+function wrap(text: string, width: number, size: number, bold = false): string[] {
 	const lines: string[] = [];
 	for (const paragraph of text.split(/\r?\n/)) {
 		let line = "";
 		for (const word of paragraph.split(" ")) {
 			const tried = line ? `${line} ${word}` : word;
-			if (widthOf(tried, size) <= width) {
+			if (widthOf(tried, size, bold) <= width) {
 				line = tried;
 				continue;
 			}
 			if (line) lines.push(line);
 			// A word wider than the column is cut where it reaches the edge.
 			let rest = word;
-			while (widthOf(rest, size) > width && rest.length > 1) {
+			while (widthOf(rest, size, bold) > width && rest.length > 1) {
 				let cut = rest.length - 1;
-				while (cut > 1 && widthOf(rest.slice(0, cut), size) > width) cut--;
+				while (cut > 1 && widthOf(rest.slice(0, cut), size, bold) > width) cut--;
 				lines.push(rest.slice(0, cut));
 				rest = rest.slice(cut);
 			}
@@ -156,7 +166,7 @@ class Page {
 	y = PAGE_HEIGHT - MARGIN;
 
 	text(x: number, text: string, size = 10, { bold = false, right = false } = {}) {
-		const left = right ? x - widthOf(text, size) : x;
+		const left = right ? x - widthOf(text, size, bold) : x;
 		this.ops.push(
 			`BT /${bold ? "F2" : "F1"} ${size} Tf ${left.toFixed(2)} ${this.y.toFixed(2)} Td ${literal(text)} Tj ET`,
 		);
@@ -256,7 +266,7 @@ function layout(document: PrintedDocument, art: PdfArt): Page[] {
 	}
 	if (document.subject) {
 		page.down(6);
-		for (const line of wrap(document.subject, RIGHT - MARGIN, 11)) {
+		for (const line of wrap(document.subject, RIGHT - MARGIN, 11, true)) {
 			page.text(MARGIN, line, 11, { bold: true });
 			page.down(15);
 		}

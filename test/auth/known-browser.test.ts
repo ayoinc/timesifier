@@ -215,11 +215,11 @@ describe("the code a known browser is waiting for", () => {
 	it("is not replaced by a stranger's request, which sends nothing", async () => {
 		const known = await signedInBefore();
 		const asked = await ask(EMAIL, known);
-		const code = await mailbox.codeFor(EMAIL);
 
 		await strangersAsk(2);
 
 		expect(await codesSentTo(EMAIL), "the first sign-in's and the one that waits").toBe(2);
+		const code = await mailbox.codeFor(EMAIL);
 		expect((await signInWith(EMAIL, code, known, codeCookie(asked))).status).toBe(200);
 	});
 
@@ -248,6 +248,8 @@ describe("the code a known browser is waiting for", () => {
 	it("holds strangers back no longer once it has signed the person in", async () => {
 		const known = await signedInBefore();
 		const asked = await ask(EMAIL, known);
+		// Its code is sent after the answer: waited for, so the latest is this one.
+		expect(await codesSentTo(EMAIL)).toBe(2);
 		const signedIn = await signInWith(
 			EMAIL,
 			await mailbox.codeFor(EMAIL),

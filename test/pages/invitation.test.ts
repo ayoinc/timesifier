@@ -58,8 +58,13 @@ describe("the link in the email", () => {
 	it("is the address of the invitation's page", async () => {
 		const { page } = await invited();
 
-		const message = mailbox.sent().find(({ to }) => to === "bob@example.com");
-		expect(message?.text).toContain(`https://timesifier.example${page}`);
+		// Sent after the answer, once the platform's brand is read.
+		const message = await vi.waitFor(() => {
+			const sent = mailbox.sent().find(({ to }) => to === "bob@example.com");
+			if (!sent) throw new Error("no invitation has been sent to bob@example.com");
+			return sent;
+		});
+		expect(message.text).toContain(`https://timesifier.example${page}`);
 	});
 });
 

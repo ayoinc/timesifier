@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { record } from "~/activity/activity.server";
+import { saveLogo } from "~/brand/organisation-brand.server";
 import { organisationScope } from "~/db";
 import { createEstimate } from "~/estimates/estimates.server";
 import { recordExpense } from "~/expenses/expenses.server";
@@ -31,6 +32,7 @@ import {
 import type { Role } from "~/organisations/roles";
 import { saveReport } from "~/reports/saved.server";
 import { captureEmail, type Mailbox } from "../auth/harness";
+import { png } from "../brand/files";
 import { freshDatabase } from "../db/database";
 import {
 	createOrganisation,
@@ -153,6 +155,11 @@ async function world(column: Column): Promise<World> {
 		removeReceipt: false,
 	});
 	if (!expense.ok) throw new Error("seed failed");
+	// Acme's logo (TS-100), uploaded by Ada.
+	const logo = new File([await png(48, 16)], "logo.png", { type: "image/png" });
+	if (!(await saveLogo(acme.id, ada.user.id, logo, null, Date.now())).ok) {
+		throw new Error("seed failed");
+	}
 	const started = await startImport(
 		organisationScope(env.DB, acme.id),
 		ada.user.id,
@@ -365,6 +372,8 @@ const ROLE_TABLE: Record<string, Row> = {
 		address: (w) => `/app/acme/expenses/${w.expense}/receipt`,
 		page: by(200, 200, 200, 200, 404),
 	},
+	// The organisation's logo, in the band of every page: every member's (TS-100).
+	"routes/app/logo": { page: every(200) },
 	"routes/app/team": {
 		page: by(200, 200, 404, 200, 404),
 		form: {

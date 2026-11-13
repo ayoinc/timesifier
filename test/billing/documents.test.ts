@@ -330,6 +330,14 @@ describe("the PDF", () => {
 			pdfText(pdfOf(document, PLAIN_ART)),
 		);
 	});
+
+	it("ends a bold heading on its column's right edge, measured in the bold face", async () => {
+		const id = await draft([manual(12_345, "Design")]);
+		const file = new TextDecoder("latin1").decode(pdfOf(await printed(id), PLAIN_ART));
+		// Helvetica-Bold's "Amount" is 3777 thousandths wide; at 9 points that is 33.993,
+		// so it starts 33.99 points before the right margin, 595 - 56 = 539.
+		expect(file).toMatch(/BT \/F2 9 Tf 505\.01 [\d.]+ Td \(Amount\) Tj ET/);
+	});
 });
 
 describe("sending", () => {
