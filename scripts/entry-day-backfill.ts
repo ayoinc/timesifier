@@ -1,4 +1,4 @@
-// Writes the backfill of migrations/0021_entry_day_backfill.sql (TS-111,
+// Writes the backfill of migrations/0023_entry_day_backfill.sql (TS-111,
 // docs/decisions.md entry 39): every entry without its day is given the day
 // its start falls on in its person's zone, as the person's zone is when the
 // migration runs (their own, else their organisation's), which is the zone

@@ -3,14 +3,14 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { dayOf } from "~/time/calendar";
 
-// Migration 0021_entry_day_backfill (TS-111, decision 39): every entry tracked
+// Migration 0023_entry_day_backfill (TS-111, decision 39): every entry tracked
 // before days were stored is given the day it shows today, the one its start
 // falls on in its person's zone now, else its organisation's. The schema is
-// built up to 0020, entries are written with no day, then 0021 runs alone and
+// built up to 0022, entries are written with no day, then 0023 runs alone and
 // each day it wrote is compared with `dayOf`, which every reader used before.
 
 const MIGRATIONS = (env as Cloudflare.Env & { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
-const BACKFILL = "0021_entry_day_backfill.sql";
+const BACKFILL = "0023_entry_day_backfill.sql";
 
 /** Every zone the application accepts (`isTimeZone`): a person's may be any of them. */
 const ZONES = ["UTC", ...Intl.supportedValuesOf("timeZone").filter((zone) => zone !== "UTC")];
