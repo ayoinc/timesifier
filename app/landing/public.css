@@ -270,6 +270,18 @@ html {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+	/* A button-shaped link on the public pages gives a little under the press
+	   (`motion-safe:active:scale-97`) and comes back quickly: `transition-control`
+	   with the scale added, where motion is allowed and nowhere else. */
+	.press {
+		transition:
+			color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+			background-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+			border-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+			box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+			scale var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+	}
+
 	@supports (animation-timeline: view()) {
 		/*
 		 * A section's opening words rise into place as they come up the window:
