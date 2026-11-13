@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { sendEmail } from "~/auth/email.server";
 import { isOurHost } from "~/auth/hosts";
 import { isKeyedHash, keyedHash } from "~/auth/keyed-hash.server";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { platformData } from "~/db";
 import { required, setting } from "~/lib/deployment";
 
@@ -71,6 +72,7 @@ export async function sendWaitingMail(now: Date): Promise<number> {
 	if (left === 0) return 0;
 	const waiting = await platformData.waitingDeliveries(env.DB, left);
 	const origin = mailOrigin();
+	const platform = await getPlatformBrand(env);
 	let sent = 0;
 	for (const delivery of waiting) {
 		const kind: MailKind = delivery.kind === "newsletter" ? "newsletter" : "announcement";
@@ -80,12 +82,15 @@ export async function sendWaitingMail(now: Date): Promise<number> {
 			await platformData.markDelivery(env.DB, delivery, "skipped", now);
 			continue;
 		}
-		const message = mailingEmail({
-			kind,
-			subject: delivery.subject,
-			body: delivery.body,
-			unsubscribe: `${origin}${await unsubscribePath(kind, delivery.userId)}`,
-		});
+		const message = mailingEmail(
+			{
+				kind,
+				subject: delivery.subject,
+				body: delivery.body,
+				unsubscribe: `${origin}${await unsubscribePath(kind, delivery.userId)}`,
+			},
+			platform,
+		);
 		if (!(await sendEmail({ to: delivery.email, ...message }))) break;
 		await platformData.markDelivery(env.DB, delivery, "sent", now);
 		sent += 1;

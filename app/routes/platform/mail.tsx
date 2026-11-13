@@ -9,6 +9,7 @@ import {
 } from "react-aria-components";
 import { useFetcher } from "react-router";
 import * as z from "zod";
+import { getPlatformBrand } from "~/brand/platform-brand.server";
 
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
@@ -102,12 +103,15 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 	if (input.intent === "preview") {
 		// The platform owner's own unsubscribe link stands in for each person's.
-		const message = mailingEmail({
-			kind,
-			subject,
-			body,
-			unsubscribe: `${mailOrigin(request)}${await unsubscribePath(kind, owner.user.id)}`,
-		});
+		const message = mailingEmail(
+			{
+				kind,
+				subject,
+				body,
+				unsubscribe: `${mailOrigin(request)}${await unsubscribePath(kind, owner.user.id)}`,
+			},
+			await getPlatformBrand(env),
+		);
 		return {
 			ok: true,
 			said: "This is how it reads. Nothing was sent or queued.",

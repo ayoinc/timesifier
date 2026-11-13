@@ -15,6 +15,8 @@ export const STORED = [
 		rows: [
 			{ term: "Your account", tables: ["users", "accounts"] },
 			{ term: "Your sessions", tables: ["sessions"] },
+			{ term: "Your sign-ins", tables: ["sign_ins"] },
+			{ term: "Mail from Timesifier", tables: ["mailings", "mailing_deliveries"] },
 			{ term: "Sign-in codes", tables: ["verifications"] },
 			{ term: "Limits on requests", tables: ["rate_limits"] },
 		],
@@ -79,6 +81,7 @@ export const STORED = [
 				tables: ["expenses", "expense_tags", "expense_categories", "expense_category_prices"],
 			},
 			{ term: "Saved reports", tables: ["saved_reports", "saved_report_shares"] },
+			{ term: "Support access", tables: ["support_grants"] },
 		],
 	},
 	{
@@ -96,7 +99,10 @@ export const STORED = [
 	},
 	{
 		heading: "Timesifier itself",
-		rows: [{ term: "Timesifier's brand", tables: ["platform_brand"] }],
+		rows: [
+			{ term: "Timesifier's brand", tables: ["platform_brand"] },
+			{ term: "The platform console", tables: ["platform_events", "platform_step_ups"] },
+		],
 	},
 ] as const;
 

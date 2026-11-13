@@ -289,6 +289,16 @@ it("the notice names every email the application sends, and whom it goes to", as
 			"an invoice or an estimate, as a PDF, to the billing contacts of a client",
 			"a reminder of an overdue invoice, with its PDF, to the client's billing contacts",
 		],
+		"../app/platform/mail.server.ts": [
+			"a product announcement, to every account that has not turned them off, and the newsletter, to those who asked for it",
+		],
+		"../app/platform/step-up.server.ts": [
+			"a code that opens the platform console, to the platform owner who asked for it",
+		],
+		"../app/routes/platform/account.tsx": [
+			"a link to download your data, when you ask Timesifier for it",
+			"an invitation sent again by a platform owner, at your request",
+		],
 	};
 	expect(senders).toEqual(Object.keys(said).sort());
 
