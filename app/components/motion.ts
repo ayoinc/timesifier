@@ -66,6 +66,13 @@ export function settleOnEscape() {
 	const down = (event: KeyboardEvent) => {
 		if (event.key !== "Escape") return;
 		cancelAnimationFrame(frame);
+		// A popover already on its way out, such as a menu whose item opened a
+		// sheet that this Escape closes, is finished first. The mark would cut
+		// its exit short, and React Aria, waiting for that exit to finish, would
+		// keep the popover open with the focus given back into it.
+		for (const leaving of document.querySelectorAll(".popover-motion[data-exiting]")) {
+			for (const animation of leaving.getAnimations()) animation.finish();
+		}
 		root.dataset.escaping = "";
 	};
 	// React Aria gives the focus back in the frame after the overlay leaves; the mark stays one frame more.
