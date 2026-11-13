@@ -40,6 +40,19 @@ Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the busin
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-112 · Lists of any length
+
+Builder: an AI session on branch `ts-112-lists`, stacked on 8b6880d (#61, #64, #60). From the scale test (`research/corporate/scale-test.md`, D1 to D3): D1 takes at most 100 bound parameters a statement, and every list of people, projects or records was bound a parameter a value. Decision 40. No migration.
+
+- [x] **1. One helper.** `among(column, ids)` and `notAmong` in `app/db/among.ts` bind a list as one JSON value, `column in (select value from json_each(?))`, each value once; every list that grows with data goes through it (people, teams, projects, tasks, tags, entries, expenses, invoices, lines, payments, retainers, reports, tokens, webhooks, imports, the console). The five private copies (`contractors`, `db/platform`, `expenses`, `projects/search`, `reports`) and a sixth (`projects/project`), the chunked loops of 90 and the silent cuts at 90 ids (`budget.server.ts`, `projects/settings.server.ts`, `tasks/tasks.server.ts`) are gone. `inArray` stays only over fixed lists of constants.
+- [x] **2. The Approvals link in one statement.** `waitingFor` (`app/db/waiting.ts`) counts submitted periods and pending leave, overtime and weekend requests in one `count(*)`, reading whom the person decides for in SQL (`mayDecidePeriodOf`, `mayDecideLeaveOf`): an owner's and admin's 294 and a manager's 240 in an organisation of 150 (`test/lists/pages.test.ts`).
+- [x] **3. Every page of an owner and an admin, and a manager of 120.** Timesheet (day and week), Team (week, teams, Members), Approvals (pending and not submitted), Time off (and its requests), Settings (and Work schedules) answer 200 with all 150 people in an organisation of 150; a manager of 120 sees their 120 and no other (`test/lists/pages.test.ts`). Members reads its list through the scope, not Better Auth's `list-members`, which reads at most 100 (`membersByJoining` in `app/teams/people.server.ts`).
+- [x] **4. Activity and its export.** Each table is asked only for the ids that can be its own, by the record's kind and the summary's field; tasks, invoices and estimates are named too. A page naming 150 things of every kind, a manager's page naming 121 projects, and an export of all 270 records (`test/lists/activity.test.ts`).
+- [x] **5. The API.** `/time_entries` names each project once, through `among`: a first page of 100 entries over 100 projects, and 150 entries over 150 projects page after page; `/users` pages by `id` with `per_page` and `cursor`, 150 people in three pages of 60; `/leave` pages by `starts_on` and `id` in place of its silent cut at 1,000, naming 147 people (`test/lists/api.test.ts`, `docs/api.md`).
+- [x] **6. A check in CI.** `test/node/lists.test.ts` fails `pnpm test` on any `inArray(` over a list that is not fixed, `in (${…})` written into SQL, or a private `json_each(${…})` in `app/` outside `app/db/among.ts`, naming file:line; on 8b6880d it names 127.
+- [x] **7. Before and after.** The 12 tests of `test/lists/` and `test/node/lists.test.ts` fail on 8b6880d (500s, the export cut after its header, 127 lists named) and pass on this branch.
+- [x] **8. Docs.** Decision 40 with Cloudflare's limits page; `docs/architecture.md` (D1's limits), `docs/security.md` (reports), `AGENTS.md`, `docs/api.md`.
+
 ### TS-096 · Loading and motion like Royal London
 
 Builder: AI sessions on branch `ts-096-motion` (PR #57). In review: the placement's effect is proven on the preview and again in production after the merge. No migration. `docs/design-system.md` ("While the page waits", "How a page loads"), decision 34.
