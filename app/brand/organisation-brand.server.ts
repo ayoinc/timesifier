@@ -261,6 +261,21 @@ export async function removeLogo(
 }
 
 /**
+ * Deletes every object the organisation has in the `BRAND` bucket, as the
+ * organisation itself is deleted. Throws when a delete fails, so the
+ * organisation is kept and asking again deletes what is left.
+ */
+export async function deleteOrganisationLogos(organisationId: string): Promise<void> {
+	const prefix = `org/${organisationId}/brand/`;
+	let cursor: string | undefined;
+	do {
+		const page = await env.BRAND.list({ prefix, cursor });
+		if (page.objects.length > 0) await env.BRAND.delete(page.objects.map(({ key }) => key));
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
+}
+
+/**
  * Sets the organisation's colour, or takes it away when `typed` is empty, and
  * records the change. A colour too light for white words on it is refused.
  */

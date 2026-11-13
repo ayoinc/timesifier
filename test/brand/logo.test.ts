@@ -467,3 +467,49 @@ describe("the brand of one organisation", () => {
 		expect((await open(`/app/${slug}/logo`, ada)).status).toBe(404);
 	});
 });
+
+describe("deleting the organisation", () => {
+	const remove = () => submitFiles(SETTINGS, { intent: "delete", confirmation: "Acme" }, ada);
+	const organisationsLeft = () =>
+		value<number>("select count(*) from organisations where id = ?", acme.id);
+
+	it("deletes its logo and the PNG drawn from it, and leaves another organisation's", async () => {
+		const other = await createOrganisation(ada.cookie, "Other");
+		const otherSlug = await value<string>("select slug from organisations where id = ?", other.id);
+		await submitFiles(
+			`/app/${otherSlug}/settings`,
+			{ intent: "brand-logo", logo: file(await png(64, 32), "logo.png", "image/png") },
+			ada,
+		);
+		await upload(
+			ada,
+			file(svg(), "logo.svg", "image/svg+xml"),
+			file(await png(120, 40), "logo.png", "image/png"),
+		);
+		expect(await storedKeys()).toHaveLength(2);
+
+		expect((await remove()).status).toBeLessThan(400);
+		expect(await organisationsLeft()).toBe(0);
+		expect(await storedKeys()).toEqual([]);
+		expect(await storedKeys(other.id)).toEqual([`org/${other.id}/brand/logo`]);
+	});
+
+	it("is refused, keeping the organisation, when a logo cannot be deleted; asking again finishes it", async () => {
+		await upload(ada, file(await png(64, 32), "logo.png", "image/png"));
+		const failing = vi.spyOn(env.BRAND, "delete").mockRejectedValueOnce(new Error("R2 down"));
+		vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const refused = await outcome(await remove());
+		expect(refused.status).toBe(503);
+		expect(refused.said).toContain(
+			"The organisation was not deleted, because its logo could not be deleted. Try again to finish deleting it.",
+		);
+		expect(failing).toHaveBeenCalledTimes(1);
+		expect(await organisationsLeft()).toBe(1);
+		expect(await storedKeys()).toEqual([LOGO_KEY()]);
+
+		expect((await remove()).status).toBeLessThan(400);
+		expect(await organisationsLeft()).toBe(0);
+		expect(await storedKeys()).toEqual([]);
+	});
+});
