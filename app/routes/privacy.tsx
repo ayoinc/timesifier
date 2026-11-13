@@ -151,7 +151,16 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 				Each request for leave: whose it is, the kind of leave (sick leave is one), its days and
 				half days, the note given with it, how much notice it gave and the reason given when that
 				was short, and who decided or cancelled it, when and what they said. The organisation's
-				kinds of leave with their allowances, its public holidays and its working week.
+				kinds of leave with their allowances, its public holidays, and the working week it kept
+				before its work schedules.
+			</>
+		),
+		"Work schedules": (
+			<>
+				The organisation's work schedules: each one's name and, from each day it changed, the
+				weekdays it works with their start, finish and unpaid break, and its rules for overtime and
+				for days not worked. Who each schedule is given to (a person, a team, a role or the whole
+				organisation) and from which day.
 			</>
 		),
 		"Projects, tasks and budgets": (

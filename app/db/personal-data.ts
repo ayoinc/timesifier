@@ -35,6 +35,15 @@ export const STORED = [
 				tables: ["leave_requests", "leave_kinds", "public_holidays", "working_days"],
 			},
 			{
+				term: "Work schedules",
+				tables: [
+					"work_schedules",
+					"work_schedule_versions",
+					"work_schedule_days",
+					"schedule_assignments",
+				],
+			},
+			{
 				term: "Projects, tasks and budgets",
 				tables: [
 					"projects",
