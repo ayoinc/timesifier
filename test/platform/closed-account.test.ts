@@ -45,8 +45,12 @@ afterEach(() => {
 /** A sign-in with a code, through the Worker, as the sign-in page makes it. */
 async function signingIn(email: string) {
 	const client = "198.51.100.77";
+	// The code is sent after the answer (TS-100): wait for this request's own.
+	const sentTo = () => mailbox.sent().filter(({ to }) => to === email).length;
+	const before = sentTo();
 	const asked = await requestCode(email, { client });
 	expect(asked.status).toBe(200);
+	await vi.waitFor(() => expect(sentTo()).toBeGreaterThan(before));
 	return post(
 		"/sign-in/email-otp",
 		{ email, otp: await mailbox.codeFor(email) },
