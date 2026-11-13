@@ -822,12 +822,12 @@ html {
 }
 
 /*
- * Escape dismisses at once (app/components/motion.ts, `settleOnEscape`): while
- * the document carries the mark, nothing transitions, so what closes is gone in
- * the next frame and the control the focus returns to takes its state at once.
+ * Escape dismisses a menu or a popover at once (app/components/motion.ts,
+ * `settleOnEscape`): while the document carries the mark, neither it nor the
+ * button it opened from transitions, so it is gone in the next frame and the
+ * button takes its state at once. Sheets and tooltips keep their exits.
  */
-:root[data-escaping] *,
-:root[data-escaping] *::before,
-:root[data-escaping] *::after {
+:root[data-escaping] .popover-motion,
+:root[data-escaping] [aria-haspopup] {
 	transition: none;
 }

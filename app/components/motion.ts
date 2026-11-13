@@ -13,7 +13,7 @@
  * S2-15). Dismissed with Escape it is gone at once (`settleOnEscape`).
  */
 export const POPOVER_MOTION =
-	"transition duration-spring ease-spring motion-reduce:transition-opacity motion-reduce:duration-short4 motion-reduce:ease-standard " +
+	"popover-motion transition duration-spring ease-spring motion-reduce:transition-opacity motion-reduce:duration-short4 motion-reduce:ease-standard " +
 	"data-entering:opacity-0 data-exiting:opacity-0 motion-safe:data-entering:scale-90 " +
 	"data-exiting:transition-opacity data-exiting:duration-short2 data-exiting:ease-emphasized-accelerate " +
 	"data-[placement=bottom]:origin-top data-[placement=top]:origin-bottom";
@@ -54,9 +54,10 @@ export const SHEET_MOTION =
  * Dismissing with Escape is not animated (TS-114, harvest sweep S2-15). While
  * the key is down, and for the frames in which what it closed leaves and the
  * focus goes back to what opened it, the document carries `data-escaping`,
- * under which nothing transitions (app/app.css). A menu, a list, a picker or a
- * sheet is gone in the frame after the key, and the button it opened from
- * takes its state at once, its focus ring with it. Installed once, in the
+ * under which a popover (`popover-motion`) and the button it opened from
+ * (`aria-haspopup`) do not transition (app/app.css). A menu, a list or a
+ * picker is gone in the frame after the key, and its button takes its state
+ * at once, its focus ring with it. Installed once, in the
  * browser, by the root of the application.
  */
 export function settleOnEscape() {
