@@ -30,30 +30,60 @@ function joined(parts: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
 }
 
 /**
- * A PNG `width` by `height` of one colour, eight bits a sample, as RGBA, with
- * `extra` bytes of a private chunk after its header to make it as large as a
- * test needs.
+ * A PNG `width` by `height` of colour type `kind` and bit `depth`, whose
+ * filtered rows, each led by its filter byte, are `raw`, with `chunks` between
+ * its header and its pixels (a palette, a transparency, or bulk).
  */
-export async function png(
-	width: number,
-	height: number,
-	{ rgba = [29, 78, 216, 255], extra = 0 }: { rgba?: number[]; extra?: number } = {},
-): Promise<Uint8Array<ArrayBuffer>> {
+export async function pngOf({
+	width,
+	height,
+	kind,
+	raw,
+	depth = 8,
+	interlace = 0,
+	chunks = [],
+}: {
+	width: number;
+	height: number;
+	kind: number;
+	raw: Uint8Array;
+	depth?: number;
+	interlace?: number;
+	chunks?: readonly [string, Uint8Array][];
+}): Promise<Uint8Array<ArrayBuffer>> {
 	const header = new Uint8Array(13);
 	const view = new DataView(header.buffer);
 	view.setUint32(0, width);
 	view.setUint32(4, height);
-	header.set([8, 6, 0, 0, 0], 8);
-	const row = new Uint8Array(1 + width * 4);
-	for (let x = 0; x < width; x++) row.set(rgba, 1 + x * 4);
-	const raw = joined(Array.from({ length: height }, () => row));
+	header.set([depth, kind, 0, 0, interlace], 8);
 	return joined([
 		new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
 		chunk("IHDR", header),
-		...(extra > 0 ? [chunk("teSt", new Uint8Array(extra))] : []),
+		...chunks.map(([name, body]) => chunk(name, body)),
 		chunk("IDAT", await deflate(raw)),
 		chunk("IEND", new Uint8Array()),
 	]);
+}
+
+/**
+ * A PNG `width` by `height` of one colour, eight bits a sample, as RGBA, with
+ * `extra` bytes of a private chunk after its header to make it as large as a
+ * test needs.
+ */
+export function png(
+	width: number,
+	height: number,
+	{ rgba = [29, 78, 216, 255], extra = 0 }: { rgba?: number[]; extra?: number } = {},
+): Promise<Uint8Array<ArrayBuffer>> {
+	const row = new Uint8Array(1 + width * 4);
+	for (let x = 0; x < width; x++) row.set(rgba, 1 + x * 4);
+	return pngOf({
+		width,
+		height,
+		kind: 6,
+		raw: joined(Array.from({ length: height }, () => row)),
+		chunks: extra > 0 ? [["teSt", new Uint8Array(extra)]] : [],
+	});
 }
 
 /** The first bytes of a baseline JPEG `width` by `height` with three components: enough to be judged one. */
@@ -103,7 +133,7 @@ export function webp(width: number, height: number): Uint8Array<ArrayBuffer> {
 	const bits = ((width - 1) & 0x3fff) | (((height - 1) & 0x3fff) << 14);
 	const body = new Uint8Array([
 		...TEXT.encode("VP8L"),
-		5,
+		10,
 		0,
 		0,
 		0,
@@ -112,6 +142,8 @@ export function webp(width: number, height: number): Uint8Array<ArrayBuffer> {
 		(bits >> 8) & 0xff,
 		(bits >> 16) & 0xff,
 		(bits >> 24) & 0xff,
+		0,
+		0,
 		0,
 		0,
 		0,
