@@ -586,6 +586,22 @@ Decided for TS-119 (research/harvest-sweep-2.md, S2-05 and S2-11), on 2026-11-13
 | Mileage left unpriced, with a hint naming HMRC                     | What S2-05 proposed. A price that is HMRC's on each day is truer than a blank, and a UK business pays it; the hint alone leaves Mileage unusable until an owner sets one. |
 | A trigger on `organisations`, as work schedules have               | Atomic with the row, whichever way it is made; but the Activity log's records are written by `app/activity/`, and a trigger would have to build them in SQL.              |
 
+### 45. The console's Brand page: four images, a colour ink or white reads on, a test to oneself
+
+Decided on 2026-11-13 (TS-120), within decisions 36 and 38.
+
+- **Where.** `/platform/brand`, the console's last tab, behind the same `PLATFORM_OWNERS` allowlist and step-up as every console page. A save goes through `setPlatformBrand` with the platform owner as the actor and writes `brand.changed` to the platform log with the fields that changed; a save that changes nothing writes nothing.
+- **Images.** The logo and the mark, each for a light ground and a dark one: four PNGs of at most 64 KB and 16 to 1,024 pixels a side. `platform_brand` gains `logo_dark` (migration `0022_platform_brand_dark_logo`); the logo's built-in tile stands for both logos. Messages are drawn on paper, so they carry the light logo and, on what an organisation sends, the light mark; the dark logo and the dark mark are kept for a dark ground and the page says nothing carries them yet. An SVG or a WebP is drawn as a PNG in the browser, as the organisation's Brand section does (`app/brand/rendition.ts`), and only the PNG reaches the server.
+- **Colour.** The platform's colour is the band and carries no type in a message, but it is the product's `sheet` role, the amber that ink stands on. It must carry ink or white at 4.5 to 1 (`platformColourProblem` in `app/brand/colour.ts`), which refuses only a muddy middle; the amber carries ink at 7.7 to 1.
+- **Test email.** "Send me a test email" sends the saved brand, not the form, to the signed-in platform owner's own address and nobody else, five an hour (`takeOne` under `platform-brand-test:<user id>`), each logged as `brand.test_sent`.
+
+| Option                                  | Evidence                                                                                                                      |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Ink or white at 4.5 to 1 (chosen)       | Keeps the amber and any dark colour; refuses a grey neither reads on. One rule for the band and for anything later set on it. |
+| White at 4.5 to 1, as an organisation's | Refuses the amber the product starts with, which carries ink, not white.                                                      |
+| The band against the paper at 3 to 1    | The amber against the paper is 1.8 to 1, so it would refuse the product's own colour.                                         |
+| A test to any address typed             | Lets a stolen console session mail anyone in the platform's name; the owner's own inbox proves the message without that risk. |
+
 ### 46. Who runs Timesifier: one company, named by the deployment
 
 Decided by the owner on 2026-11-14 (TS-121).
