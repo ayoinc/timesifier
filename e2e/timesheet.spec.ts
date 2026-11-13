@@ -67,6 +67,10 @@ async function startTimer(page: Page) {
 	await expect(dayTimer(page)).toBeVisible();
 	// The sheet's scrim fades out after the sheet has gone; until it has, it lies over the page.
 	await expect(page.locator("[data-exiting]")).toHaveCount(0);
+	// The timer shows before the server has answered; its answer brings the
+	// snackbar, which rises over the foot of the page. Until it has come, a scan
+	// can meet it part-way in.
+	await expect(page.locator("[data-snackbar]")).toContainText("Timer started.");
 }
 
 /** Presses Tab until `target` has the focus: the way a person without a pointer gets there. */
