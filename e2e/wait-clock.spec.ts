@@ -116,6 +116,10 @@ test.describe("signing in", () => {
 			expect(timing.after).toBeGreaterThanOrEqual(APPEARS_AFTER_MS - FRAME_MS);
 			expect(timing.after).toBeLessThan(APPEARS_AFTER_MS + 300);
 			await expect(proceed.locator('[data-doing="Sending…"]')).toBeVisible();
+			// The button is the one place the wait is seen; the status says it to a screen reader alone.
+			await expect(page.getByRole("status").filter({ hasText: "Sending the code…" })).toHaveClass(
+				/\bsr-only\b/,
+			);
 			expect(await sizeOf(proceed)).toEqual(atRest);
 			// A second press, and Enter in the field, send nothing more.
 			await proceed.click({ force: true });

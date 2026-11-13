@@ -2,7 +2,7 @@ import { type FormEvent, type ReactNode, useRef, useState } from "react";
 
 import { Button } from "~/components/Button";
 
-import { type Notice, NoticeLine, problem, progress, useOneAtATime } from "./AuthPage";
+import { type Notice, NoticeLine, problem, useOneAtATime, waiting } from "./AuthPage";
 import { sendCode } from "./client";
 import { RobotCheck, type RobotCheckHandle } from "./RobotCheck";
 
@@ -31,7 +31,7 @@ export function SendCodeForm({ email, siteKey, children, onSent }: SendCodeFormP
 	function submit(event: FormEvent) {
 		event.preventDefault();
 		once(async () => {
-			setNotice(progress("Sending the code…"));
+			setNotice(waiting("Sending the code…"));
 			const token = await check.current?.token();
 			if (!token) return setNotice(problem("robot-check"));
 			const outcome = await sendCode(email, token);

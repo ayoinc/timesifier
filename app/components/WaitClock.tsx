@@ -70,8 +70,9 @@ export function WaitClock({
 				strokeLinecap="round"
 			>
 				<circle cx="12" cy="12" r={11.75 - ring / 2} strokeWidth={ring} />
+				{/* At 40px, a dot at twelve, three, six and nine, beyond the amber hand's reach: a dial, not crosshairs. */}
 				{size === "medium" ? (
-					<path d="M12 2.75v1.5M21.25 12h-1.5M12 21.25v-1.5M2.75 12h1.5" strokeWidth="1.25" />
+					<path d="M12 3.25h0M20.75 12h0M12 20.75h0M3.25 12h0" strokeWidth="1.5" />
 				) : null}
 				<path d={size === "medium" ? "M12 12h5" : "M12 12h3.75"} strokeWidth={hour} />
 			</svg>
