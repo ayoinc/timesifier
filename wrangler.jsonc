@@ -40,12 +40,18 @@
 	//   Cloudflare's published test key, which passes every check:
 	//   https://developers.cloudflare.com/turnstile/troubleshooting/testing/
 	// EMAIL_FROM: the address every message comes from. Locally nothing is sent.
+	// PLATFORM_OWNERS: empty, so the console (TS-099) is closed on a developer's
+	//   machine until `.dev.vars` names an owner. It is a variable here, not only
+	//   a secret, because Wrangler loads from `.dev.vars` only the declared
+	//   secrets and the names of variables. Production replaces this list and
+	//   requires the secret (scripts/deploy-config.ts).
 	"vars": {
 		"ENVIRONMENT": "development",
 		"APP_HOST": "",
 		"PREVIEW_HOST_SUFFIX": "",
 		"TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
-		"EMAIL_FROM": "no-reply@localhost"
+		"EMAIL_FROM": "no-reply@localhost",
+		"PLATFORM_OWNERS": ""
 	},
 	// Each pull request gets a preview on workers.dev. Without this line a preview
 	// has no URL, because turning workers_dev off turns preview URLs off too. It

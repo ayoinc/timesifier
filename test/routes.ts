@@ -146,13 +146,17 @@ export async function addressFor(route: RouteUnderTest, organisationId: string):
  * and who: the default rates (`projects/rates`, TS-067) are below Projects,
  * which everyone is shown, and the Contractors report and its export
  * (TS-079) and the Profitability view (TS-071) below Reports; each holds money and is open to those who see rates
- * alone. Anyone else gets the 404 a destination they are not shown answers.
+ * alone. Support access and Wellbeing (TS-099), below Workspace settings,
+ * which admins are shown too, are the owners' alone. Anyone else gets the 404
+ * a destination they are not shown answers.
  */
 const NARROWER: Record<string, (role: Role) => boolean> = {
 	"routes/app/rates": maySeeRates,
 	"routes/app/contractors": maySeeRates,
 	"routes/app/contractors.export": maySeeRates,
 	"routes/app/reports.profitability": maySeeRates,
+	"routes/app/support-access": (role) => role === "owner",
+	"routes/app/wellbeing": (role) => role === "owner",
 };
 
 /** Whether a person of `role`, who is shown the route's destination, may open the route. */

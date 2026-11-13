@@ -91,7 +91,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, My account, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access and Wellbeing, My account and its data, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -148,6 +148,10 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/reports/saved",
 				"/app/acme/settings",
 				"/app/acme/settings/schedules",
+				// Support access and Wellbeing, and a person's own data (TS-099).
+				"/app/acme/settings/support",
+				"/app/acme/settings/wellbeing",
+				"/app/acme/account/data",
 				"/app/acme/account",
 				"/app/acme/account/calendar",
 				"/app/acme/settings/members",
@@ -186,6 +190,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/reports.utilisation",
 			"routes/app/schedules",
 			"routes/app/settings",
+			"routes/app/support-access",
 			"routes/app/tasks",
 			"routes/app/team",
 			"routes/app/time-off",
@@ -315,6 +320,8 @@ describe("a member of one organisation asking for another organisation's address
 			projectId: "all",
 			currency: "GBP",
 		},
+		// Support access a stranger would grant themselves; no grant is made.
+		"routes/app/support-access": { intent: "grant", hours: "72" },
 	};
 
 	it.each(withAction)(
@@ -346,6 +353,7 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from api_tokens")).toBe(0);
 			expect(await value("select count(*) from calendar_feeds")).toBe(0);
 			expect(await value("select count(*) from expense_categories")).toBe(0);
+			expect(await value("select count(*) from support_grants")).toBe(0);
 		},
 	);
 

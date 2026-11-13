@@ -614,6 +614,32 @@ export function platformEventList(
 		.limit(limit);
 }
 
+/**
+ * The names the platform log shows for its subjects: organisations by name,
+ * accounts by name and address. Names only, as the rest of the console reads.
+ */
+export async function platformSubjectNames(
+	database: D1Database,
+	{ organisationIds, userIds }: { organisationIds: string[]; userIds: string[] },
+) {
+	const db = drizzle(database);
+	const [named, people] = await Promise.all([
+		organisationIds.length === 0
+			? []
+			: db
+					.select({ id: organisations.id, name: organisations.name })
+					.from(organisations)
+					.where(inArray(organisations.id, organisationIds)),
+		userIds.length === 0
+			? []
+			: db
+					.select({ id: users.id, name: users.name, email: users.email })
+					.from(users)
+					.where(inArray(users.id, userIds)),
+	]);
+	return { organisations: named, people };
+}
+
 // ---------------------------------------------------------------------------
 // Step-up
 
@@ -729,6 +755,7 @@ export async function mailingList(database: D1Database, limit = 50) {
 			recipients: mailings.recipients,
 			createdAt: mailings.createdAt,
 			sender: users.name,
+			senderEmail: users.email,
 		})
 		.from(mailings)
 		.leftJoin(users, eq(users.id, mailings.sentBy))
