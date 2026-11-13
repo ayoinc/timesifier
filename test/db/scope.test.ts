@@ -7,6 +7,7 @@ import { everyRow, organisationScope } from "~/db";
 import * as schema from "~/db/schema";
 import { memberships, organisations, users } from "~/db/schema";
 import { tenantTables } from "~/db/scope";
+import { dayOf } from "~/time/calendar";
 import { freshDatabase } from "./database";
 
 let database: D1Database;
@@ -195,14 +196,33 @@ describe("organisation scope", () => {
 		if (!build || !design || !theirs) throw new Error("seed failed");
 		const at = (minutes: number) => new Date(Date.UTC(2026, 10, 2) + minutes * 60_000);
 		await scope.timeEntries.insert([
-			{ userId: ada.id, projectId: build.id, startedAt: at(0), endedAt: at(30) },
-			{ userId: dana.id, projectId: build.id, startedAt: at(0), endedAt: at(45) },
-			{ userId: ada.id, projectId: design.id, startedAt: at(60), endedAt: at(70) },
+			{
+				userId: ada.id,
+				projectId: build.id,
+				startedAt: at(0),
+				endedAt: at(30),
+				spentOn: "2026-11-02",
+			},
+			{
+				userId: dana.id,
+				projectId: build.id,
+				startedAt: at(0),
+				endedAt: at(45),
+				spentOn: "2026-11-02",
+			},
+			{
+				userId: ada.id,
+				projectId: design.id,
+				startedAt: at(60),
+				endedAt: at(70),
+				spentOn: "2026-11-02",
+			},
 		]);
 		await other.timeEntries.insert({
 			userId: bola.id,
 			projectId: theirs.id,
 			startedAt: at(0),
+			spentOn: dayOf(at(0).getTime(), "UTC"),
 			endedAt: at(600),
 		});
 		const minutes = (e: typeof schema.timeEntries) =>

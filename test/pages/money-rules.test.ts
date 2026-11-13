@@ -98,6 +98,7 @@ async function seedEntry(
 		billable: more.billable ?? true,
 		description: "Work",
 		startedAt: new Date(from),
+		spentOn: dayOf(Date.parse(from), "UTC"),
 		endedAt: new Date(to),
 	});
 	if (!entry) throw new Error("No entry was made.");

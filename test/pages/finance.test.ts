@@ -31,6 +31,7 @@ import {
 } from "~/organisations/access";
 import type { Role } from "~/organisations/roles";
 import { saveReport } from "~/reports/saved.server";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { png } from "../brand/files";
 import { freshDatabase } from "../db/database";
@@ -208,6 +209,7 @@ async function world(column: Column): Promise<World> {
 		description: "Build",
 		billable: true,
 		startedAt: new Date("2026-10-14T09:00:00Z"),
+		spentOn: dayOf(Date.parse("2026-10-14T09:00:00Z"), "UTC"),
 		endedAt: new Date("2026-10-14T10:00:00Z"),
 	});
 	const invoice = await createDraft(scope, ada.user.id, {

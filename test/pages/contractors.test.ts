@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decimalAmount, decimalHours } from "~/contractors/contractors";
 import { type OrganisationScope, organisationScope } from "~/db";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, row, seedMembership, seedTeam, value } from "../organisations/harness";
@@ -278,6 +279,7 @@ async function aWeekOfWork() {
 			userId: who.user.id,
 			projectId,
 			startedAt: new Date(from),
+			spentOn: dayOf(Date.parse(from), "UTC"),
 			endedAt: new Date(to),
 		});
 	// Linus: 1:30 at £30, then twice 20 minutes 30 seconds at £45, each worth
@@ -371,12 +373,14 @@ describe("the Contractors report", () => {
 				userId: linus.user.id,
 				projectId: site.id,
 				startedAt: new Date("2026-10-04T12:00:00Z"),
+				spentOn: "2026-10-05",
 				endedAt: new Date("2026-10-04T13:00:00Z"),
 			},
 			{
 				userId: linus.user.id,
 				projectId: site.id,
 				startedAt: new Date("2026-10-11T12:00:00Z"),
+				spentOn: "2026-10-12",
 				endedAt: new Date("2026-10-11T14:00:00Z"),
 			},
 		]);
