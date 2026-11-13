@@ -238,10 +238,7 @@ export function SiteFooter({ current, photos = [] }: SiteFooterProps) {
 					<ul className="flex flex-col gap-1 text-on-surface-variant">
 						{photos.map((photo) => (
 							<li key={photo.name} className="py-1">
-								{photo.place}: photograph by{" "}
-								<a href={photo.profile} className={LINK}>
-									{photo.author}
-								</a>
+								{photo.place}: photograph by {photo.author}
 							</li>
 						))}
 					</ul>

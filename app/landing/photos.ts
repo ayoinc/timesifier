@@ -12,10 +12,12 @@ export interface PhotoSource {
 	height: number;
 	/** Where it was taken, as its caption says it. */
 	place: string;
-	/** Who took it, credited at the foot of the page and never under the photograph. */
+	/**
+	 * Who took it, credited at the foot of the page and never under the
+	 * photograph. In words, not a link: the public pages link only to their own
+	 * (e2e/public-links.spec.ts); public/images/CREDITS.md has each source.
+	 */
 	author: string;
-	/** The photographer's page on Unsplash. */
-	profile: string;
 }
 
 // Every width of a photograph has exactly the same shape (3:2 or 4:5 in whole
@@ -28,7 +30,6 @@ export const PHOTOS = {
 		height: 1200,
 		place: "U-Bahn, Berlin-Tempelhof",
 		author: "Karri Heiskanen",
-		profile: "https://unsplash.com/@karriheiskanen",
 	},
 	workshop: {
 		name: "workshop",
@@ -37,7 +38,6 @@ export const PHOTOS = {
 		height: 1500,
 		place: "A workshop in Utrecht",
 		author: "Bob van Aubel",
-		profile: "https://unsplash.com/@bobvanaubel",
 	},
 	platform: {
 		name: "platform",
@@ -46,7 +46,6 @@ export const PHOTOS = {
 		height: 800,
 		place: "Amsterdam Sloterdijk",
 		author: "Nikolai Kolosov",
-		profile: "https://unsplash.com/@nikolaikolosov",
 	},
 } as const satisfies Record<string, PhotoSource>;
 

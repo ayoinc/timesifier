@@ -96,7 +96,6 @@ it("each photographer is named once, in the credits at the foot of the page, not
 		expect(words(footer), path).toContain("Credits");
 		for (const photo of photos) {
 			expect(html.split(photo.author).length - 1, `${path}: ${photo.author}`).toBe(1);
-			expect(footer, `${path}: ${photo.author}`).toContain(`href="${photo.profile}"`);
 			expect(footer).toContain(photo.author);
 		}
 		expect(words(html.slice(0, html.lastIndexOf("<footer"))), path).not.toMatch(/Photograph/);
