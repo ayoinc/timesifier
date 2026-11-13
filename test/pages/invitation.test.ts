@@ -128,8 +128,9 @@ describe("opened by the person it was sent to", () => {
 		expect(text).toContain("Join Acme?");
 		// Ada has not given a name, so she is shown by her address.
 		expect(text).toContain("ada@example.com invited you to join Acme as an admin.");
-		expect(html).toMatch(/<button[^>]*value="join"[^>]*>Join<\/button>/);
-		expect(html).toMatch(/<button[^>]*value="decline"[^>]*>Decline<\/button>/);
+		// Buttons that can wait (docs/design-system.md, "While the page waits") hold their words in a span.
+		expect(html).toMatch(/<button[^>]*value="join"[^>]*>(?:<span[^>]*>){2}Join<\/span>/);
+		expect(html).toMatch(/<button[^>]*value="decline"[^>]*>(?:<span[^>]*>){2}Decline<\/span>/);
 		expect(text).not.toContain(GONE);
 	});
 

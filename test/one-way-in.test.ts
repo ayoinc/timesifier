@@ -156,7 +156,8 @@ describe("the words", () => {
 		expect(text).toContain(
 			"We will email you a code. If you are new here, the same code sets you up.",
 		);
-		expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Continue<\/button>/);
+		// A button that can wait (docs/design-system.md, "While the page waits") holds its words in a span.
+		expect(html).toMatch(/<button[^>]*type="submit"[^>]*>(?:<span[^>]*>){2}Continue<\/span>/);
 		// One field: no name is asked on the way in.
 		expect(html.match(/<input\b/g)).toHaveLength(1);
 		expect(html).toMatch(/<input[^>]*type="email"/);
