@@ -4,6 +4,7 @@ import { useFetcher, useFetchers, useLocation, useNavigation } from "react-route
 import { periodContaining } from "~/periods/periods";
 import type { loader, TimesheetAnswer } from "~/routes/app/timesheet";
 import { organisationPath } from "~/shell/destinations";
+import { READ_AHEAD } from "~/shell/PendingBar";
 import { addDays, type Day } from "~/time/calendar";
 
 import { monthAfter, monthOf } from "./calendar-sheets";
@@ -207,15 +208,16 @@ export function useWarmNeighbours(answer: TimesheetAnswer, neighbours: readonly 
 		kept.set(keyOf(here), { answer, at: Date.now() });
 	}, [here, answer]);
 
-	useWarm(neighbours[0] ?? null, settled);
-	useWarm(neighbours[1] ?? null, settled);
+	useWarm(`${READ_AHEAD}timesheet-previous`, neighbours[0] ?? null, settled);
+	useWarm(`${READ_AHEAD}timesheet-next`, neighbours[1] ?? null, settled);
 }
 
 /** How long the page is left still before a neighbour is read. */
 const SETTLE_MS = 150;
 
-function useWarm(path: string | null, settled: boolean) {
-	const { load, reset, state, data } = useFetcher<typeof loader>();
+/** Reads `path` ahead into what is kept, by the fetcher `key`, which the page shows no wait for. */
+function useWarm(key: string, path: string | null, settled: boolean) {
+	const { load, reset, state, data } = useFetcher<typeof loader>({ key });
 	const asked = useRef<string | null>(null);
 	useEffect(() => {
 		if (!settled || path === null || freshAt(path) !== undefined) return;
