@@ -137,7 +137,8 @@ test("the owner invoices a client, issues it, and records its payment with the k
 	// Invoices has nothing yet; New invoice offers the client, which has no priced time to invoice.
 	await openShell(page, invoicesPath(slug));
 	await expect(page.getByRole("heading", { name: "No invoices yet" })).toBeVisible();
-	await expect(page.getByText("Nothing is owed to you now.")).toBeVisible();
+	// With no invoice there is no overview (TS-119): nothing to sum.
+	await expect(page.getByRole("table", { name: /^Issued and paid each month/ })).toHaveCount(0);
 	await page.getByRole("button", { name: "New invoice" }).click();
 	await expect(page).toHaveURL(newInvoicePath(slug));
 	const what = page.getByRole("form", { name: "What to invoice" });
