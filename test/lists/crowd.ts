@@ -29,6 +29,8 @@ export interface Crowd {
 	others: string[];
 	/** Who the manager manages: the first `MANAGED` of `others`. */
 	managed: string[];
+	/** The team "Many" the manager manages. */
+	team: string;
 	/** One project for each of the 150 people, Project 001 to Project 150. */
 	projects: string[];
 }
@@ -86,7 +88,7 @@ export async function seedCrowd(mailbox: Mailbox): Promise<Crowd> {
 			now,
 		]),
 	);
-	return { acme, owner, admin, manager, others, managed, projects };
+	return { acme, owner, admin, manager, others, managed, team, projects };
 }
 
 /** Everybody in Acme, the three who sign in first. */
