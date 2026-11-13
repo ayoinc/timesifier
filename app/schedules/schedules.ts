@@ -69,7 +69,7 @@ export function isWorkedDay(day: WorkedDay): boolean {
  * The day that expects `minutes`, as a working week became a schedule: from
  * 09:00, with an hour's break on a day of more than six hours, finishing when
  * the minutes are done; earlier, on a day too long to finish by midnight.
- * Null for no minutes. Migration `0018_work_schedules` does the same in SQL.
+ * Null for no minutes. Migration `0019_work_schedules` does the same in SQL.
  */
 export function dayOfMinutes(minutes: number): WorkedDay | null {
 	if (minutes <= 0) return null;
@@ -114,7 +114,7 @@ export interface Schedule {
 	versions: readonly ScheduleVersion[];
 }
 
-/** The schedules every organisation starts with (migration `0018_work_schedules`). */
+/** The schedules every organisation starts with (migration `0019_work_schedules`). */
 export const STANDARD_DAY: WorkedDay = { start: 9 * 60, finish: 17 * 60 + 30, breakMinutes: 60 };
 export const LONG_DAY: WorkedDay = { start: 9 * 60, finish: 18 * 60, breakMinutes: 60 };
 const weekdays = (day: WorkedDay): ScheduleWeek => [day, day, day, day, day, null, null];

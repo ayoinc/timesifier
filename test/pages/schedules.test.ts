@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
 import { makeToken } from "~/integrations/api-tokens.server";
 import { LONG_WEEK, STANDARD_WEEK, weekOfMinutes } from "~/schedules/schedules";
-import migration from "../../migrations/0018_work_schedules.sql?raw";
+import migration from "../../migrations/0019_work_schedules.sql?raw";
 import { captureEmail, type Mailbox, ORIGIN } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { row, value } from "../organisations/harness";
