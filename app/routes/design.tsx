@@ -23,6 +23,7 @@ import { Tab, TabList, TabPanel, Tabs } from "~/components/Tabs";
 import { TextField } from "~/components/TextField";
 import { TimerMark } from "~/components/TimerMark";
 import { Tooltip } from "~/components/Tooltip";
+import { WaitClock } from "~/components/WaitClock";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import {
 	formatDay,
@@ -40,7 +41,8 @@ import {
 // with DESIGN_ROUTE=1 (see app/routes.ts); production answers 404.
 //
 // An overlay opens from its button. `?open=<name>&scheme=<light|dark>` opens one
-// as the page loads, where <name> is select, menu, dialog, sheet, tooltip or snackbar.
+// as the page loads, where <name> is select, menu, dialog, sheet, tooltip or snackbar;
+// `wait` holds the WaitClock row waiting.
 // `?tab=`, `?period=`, `?q=` and `?status=` drive LinkTabs, PeriodStepper and FilterBar.
 
 // No generated route types here: they exist only when the route is registered.
@@ -175,12 +177,21 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 	const [snackbars] = useState(createSnackbarQueue);
 	const [choice, setChoice] = useState("Nothing chosen yet");
 	const [presses, setPresses] = useState(0);
+	const [sending, setSending] = useState(false);
+	// Held waiting from `?open=wait`, for a picture of it; otherwise from the switch.
+	const [waiting, setWaiting] = useState(open === "wait");
 	const [seconds, setSeconds] = useState(3598);
 	const title = scheme === "light" ? "Light scheme" : "Dark scheme";
 	const [parameters] = useSearchParams();
 	const tab = parameters.get("tab") ?? "week";
 	const asked = Number(parameters.get("period") ?? THIS_PERIOD);
 	const period = asked >= 0 && asked < PERIODS.length ? Math.trunc(asked) : THIS_PERIOD;
+
+	useEffect(() => {
+		if (!sending) return;
+		const done = setTimeout(() => setSending(false), 3000);
+		return () => clearTimeout(done);
+	}, [sending]);
 
 	useEffect(() => {
 		if (open !== "snackbar") return;
@@ -257,6 +268,39 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 						<IconButton label="Add one" variant="filled" onPress={() => setPresses(presses + 1)}>
 							<AddIcon />
 						</IconButton>
+					</Row>
+				</Component>
+
+				<Component name="WaitClock">
+					<Row label="a button that waits is as wide at rest as while waiting; the clock comes after 400ms">
+						<Switch isSelected={waiting} onChange={setWaiting}>
+							Waiting
+						</Switch>
+					</Row>
+					<Row label="small, inside a button: filled, tonal, outlined, text">
+						<Button isPending={waiting}>Send</Button>
+						<Button variant="tonal" isPending={waiting}>
+							Save
+						</Button>
+						<Button variant="outlined" isPending={waiting} pendingLabel="Exporting…">
+							Export CSV
+						</Button>
+						<Button variant="text" isPending={waiting}>
+							Send a new code
+						</Button>
+					</Row>
+					<Row label="a press waits three seconds, then the button is at rest again">
+						<Button isPending={sending} onPress={() => setSending(true)}>
+							Send invoice
+						</Button>
+					</Row>
+					<Row label="medium, in a panel, with its words; on amber, in one colour">
+						<div className="flex min-h-18 min-w-56 items-center rounded-large border border-outline-variant p-4">
+							<WaitClock size="medium" label="Reading the file…" waiting={waiting} />
+						</div>
+						<div className="flex size-18 items-center justify-center rounded-large bg-primary-container text-on-primary-container">
+							{waiting ? <WaitClock size="medium" tone="one" /> : null}
+						</div>
 					</Row>
 				</Component>
 
