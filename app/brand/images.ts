@@ -272,7 +272,7 @@ export async function pngPixels(bytes: Uint8Array): Promise<Pixels | null> {
 		else if (name === "IEND") break;
 		at += 12 + length;
 	}
-	if (!header || header.depth !== 8 || header.interlace !== 0) return null;
+	if (header?.depth !== 8 || header.interlace !== 0) return null;
 	const channels = ({ 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 } as Record<number, number>)[header.kind];
 	if (!channels || (header.kind === 3 && !palette)) return null;
 	const { width, height } = header;
