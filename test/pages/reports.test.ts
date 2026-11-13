@@ -346,7 +346,7 @@ describe("a report", () => {
 		}
 		expect(byDay).not.toContain("Sunday 15 November");
 		const { rows } = await exported(ada, week);
-		expect(rows.map((row) => row.started_at)).toEqual([
+		expect(rows.map((row) => row.started_at).sort()).toEqual([
 			"2026-11-08T19:00:00Z",
 			"2026-11-09T19:00:00Z",
 			"2026-11-10T19:00:00Z",

@@ -12,25 +12,8 @@ import { dayOf } from "~/time/calendar";
 const MIGRATIONS = (env as Cloudflare.Env & { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
 const BACKFILL = "0021_entry_day_backfill.sql";
 
-/** Zones with summer time north and south, half and quarter hours, and none. */
-const ZONES = [
-	"Europe/London",
-	"Europe/Paris",
-	"America/Los_Angeles",
-	"America/New_York",
-	"America/St_Johns",
-	"America/Sao_Paulo",
-	"Pacific/Auckland",
-	"Pacific/Chatham",
-	"Australia/Lord_Howe",
-	"Australia/Adelaide",
-	"Asia/Kolkata",
-	"Asia/Kathmandu",
-	"Asia/Tokyo",
-	"Pacific/Kiritimati",
-	"Pacific/Pago_Pago",
-	"UTC",
-];
+/** Every zone the application accepts (`isTimeZone`): a person's may be any of them. */
+const ZONES = ["UTC", ...Intl.supportedValuesOf("timeZone").filter((zone) => zone !== "UTC")];
 const YEAR = 365.25 * 24 * 3_600_000;
 const FROM = Date.parse("2000-01-01T00:00:00Z");
 
@@ -97,10 +80,7 @@ describe("the backfill of entries' days", () => {
 			{ id: "plain-acme", zone: null, organisation: "acme" },
 			{ id: "plain-kiwi", zone: null, organisation: "kiwi" },
 		];
-		await env.DB.batch([
-			...people.map((p) => user(p.id, p.zone)),
-			...unzoned.map((p) => user(p.id, p.zone)),
-		]);
+		await env.DB.batch([...people, ...unzoned].map((p) => user(p.id, p.zone)));
 
 		const next = generator(39);
 		const expected = new Map<string, string>();
@@ -111,12 +91,12 @@ describe("the backfill of entries' days", () => {
 			expected.set(id, dayOf(startedAt, zone));
 		};
 		for (const p of people) {
-			for (let i = 0; i < 25; i++) {
+			for (let i = 0; i < 3; i++) {
 				// Anywhere from 2000 to 2040, to the minute.
 				add(p.id, "acme", p.zone, FROM + next(Math.floor((40 * YEAR) / 60_000)) * 60_000);
 			}
 			// Each side of every midnight and clock change of a year: on the half hours of 2026.
-			for (let i = 0; i < 25; i++) {
+			for (let i = 0; i < 3; i++) {
 				const at = Date.parse("2026-01-01T00:00:00Z") + next(365 * 48) * 1_800_000;
 				add(p.id, "kiwi", p.zone, at);
 			}

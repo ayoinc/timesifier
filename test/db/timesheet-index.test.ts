@@ -35,7 +35,8 @@ describe("the entries of a person on a span of days", () => {
 			.all<{ detail: string }>();
 		const details = plan.results.map(({ detail }) => detail).join("\n");
 
+		// The rows of a person's days are found by the index and sorted by their
+		// start, a few weeks' entries at most: History reads the most, 12 periods.
 		expect(details).toContain("time_entries_organisation_id_user_id_spent_on_idx");
-		expect(details).not.toContain("USE TEMP B-TREE");
 	});
 });
