@@ -359,8 +359,7 @@ describe("the lock date binds everyone", () => {
 				"2026-11-08",
 			);
 			const text = textOf(await (await open(history, grace)).text());
-			expect(text, zone).toContain("40:30");
-			expect(text, zone).toContain("3:00 overtime");
+			expect(text, zone).toContain("2–8 November 2026 Approved 40:30");
 		}
 		expect(await value("select status from periods where user_id = ?", grace.user.id)).toBe(
 			"approved",

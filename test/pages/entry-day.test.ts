@@ -273,7 +273,7 @@ describe("the day stored, across both clock changes and a change of zone", () =>
 	it("is the day chosen for random times on them, and no later change of zone moves one", async () => {
 		const me = await acmeWith("member");
 		await setZone(me, LONDON);
-		// Weekend time is overtime here, so the Sundays of the changes take time too.
+		// Weekend time may be overtime here, so the Sundays of the changes take time too.
 		await env.DB.prepare(
 			"update organisations set overtime_policy = 'allowed', non_working_days = 'overtime' where id = ?",
 		)
@@ -290,8 +290,17 @@ describe("the day stored, across both clock changes and a change of zone", () =>
 			if (from === null || tracked.some((t) => t.day === day)) continue;
 			const clock = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 			const hours = ["0.25", "0.5", "1"][next(3)] as string;
-			const answer = await ask(me, { intent: "track", projectId: site, day, hours, start: clock });
-			expect(answer.status, `${day} ${clock} seed ${seed}`).toBe(200);
+			// A weekend's time is tracked as overtime.
+			const weekend = [0, 6].includes(new Date(`${day}T12:00:00Z`).getUTCDay());
+			const answer = await ask(me, {
+				intent: "track",
+				projectId: site,
+				day,
+				hours,
+				start: clock,
+				...(weekend ? { overtime: "on" } : {}),
+			});
+			expect(answer.status, `${day} ${clock} seed ${seed}: ${answer.said.slice(0, 300)}`).toBe(200);
 			tracked.push({ day, from });
 		}
 		const stored = await entriesOf(me);
