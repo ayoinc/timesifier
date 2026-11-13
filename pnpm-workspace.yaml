@@ -10,3 +10,5 @@ allowBuilds:
 # server). This gives that one path the esbuild drizzle-kit itself already uses.
 overrides:
   "@esbuild-kit/core-utils>esbuild": "0.25.12"
+patchedDependencies:
+  react-router@8.5.1: patches/react-router@8.5.1.patch
