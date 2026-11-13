@@ -18,7 +18,7 @@ const BASE =
 	"relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 " +
 	"outline-none state-layer transition-control " +
 	"data-hovered:state-hover data-focus-visible:state-focus data-focus-visible:focus-indicator " +
-	"data-pressed:state-pressed data-pending:cursor-progress " +
+	"data-pressed:state-pressed data-waiting:cursor-progress " +
 	"data-disabled:cursor-not-allowed data-disabled:text-disabled data-disabled:shadow-none";
 
 const SIZES = {
@@ -119,10 +119,18 @@ export function Button({
 	pendingLabel,
 	...props
 }: ButtonProps) {
+	// Pending is drawn here, not with React Aria's `isPending`: that announces the
+	// button by reference from its live region, and the reference outlives a
+	// button the answer removes, which leaves the region naming nothing.
+	const pending = isPending === true;
 	return (
 		<AriaButton
 			{...props}
-			isPending={isPending}
+			// A pending submit button submits nothing, by the press or by Enter in a field.
+			type={pending && props.type === "submit" ? "button" : props.type}
+			onPress={pending ? undefined : props.onPress}
+			aria-disabled={pending || undefined}
+			data-waiting={pending || undefined}
 			className={cx(
 				BASE,
 				SIZES[size],

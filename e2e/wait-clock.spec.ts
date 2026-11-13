@@ -109,7 +109,7 @@ test.describe("signing in", () => {
 		const code = await codeSentBy(async () => {
 			await proceed.click();
 			// Pending at once, the clock not yet seen.
-			await expect(proceed).toHaveAttribute("data-pending", "true");
+			await expect(proceed).toHaveAttribute("data-waiting", "true");
 			await expect(proceed).toHaveAttribute("aria-disabled", "true");
 			const timing = await clockTiming(page);
 			expect(timing.sawEarly, "the clock was seen before 400ms").toBe(false);
@@ -137,7 +137,7 @@ test.describe("signing in", () => {
 		const verify = page.getByRole("button", CONTINUE);
 		const verifyAtRest = await sizeOf(verify);
 		await verify.click();
-		await expect(verify).toHaveAttribute("data-pending", "true");
+		await expect(verify).toHaveAttribute("data-waiting", "true");
 		await expect(verify.locator('[data-doing="Checking…"]')).toBeVisible();
 		await expect(verify.locator("[data-wait-clock]")).toBeVisible();
 		expect(await sizeOf(verify)).toEqual(verifyAtRest);
@@ -160,7 +160,7 @@ test("Create organisation waits with the clock, at its size, and is sent once", 
 	const atRest = await sizeOf(create);
 	await watchClock(create);
 	await create.click();
-	await expect(create).toHaveAttribute("data-pending", "true");
+	await expect(create).toHaveAttribute("data-waiting", "true");
 	const timing = await clockTiming(page);
 	expect(timing.sawEarly, "the clock was seen before 400ms").toBe(false);
 	expect(timing.after).toBeGreaterThanOrEqual(APPEARS_AFTER_MS - FRAME_MS);
@@ -188,7 +188,7 @@ test("an export waits with the clock in its link until the file arrives, and is 
 
 	const downloading = page.waitForEvent("download");
 	await link.click();
-	await expect(link).toHaveAttribute("data-pending", "true");
+	await expect(link).toHaveAttribute("data-waiting", "true");
 	const timing = await clockTiming(page);
 	expect(timing.sawEarly, "the clock was seen before 400ms").toBe(false);
 	expect(timing.after).toBeGreaterThanOrEqual(APPEARS_AFTER_MS - FRAME_MS);
@@ -200,7 +200,7 @@ test("an export waits with the clock in its link until the file arrives, and is 
 
 	const download = await downloading;
 	expect(download.suggestedFilename()).toMatch(/-all-time\.csv$/);
-	await expect(link).not.toHaveAttribute("data-pending");
+	await expect(link).not.toHaveAttribute("data-waiting");
 	await expect(link.locator("[data-wait-clock]")).toHaveCount(0);
 	expect(await sizeOf(link)).toEqual(atRest);
 	expect(sent).toHaveLength(1);

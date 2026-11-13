@@ -85,7 +85,7 @@ export function DownloadLink({
 			download
 			className={className}
 			aria-disabled={waiting || undefined}
-			data-pending={waiting || undefined}
+			data-waiting={waiting || undefined}
 			onClick={fetchFile}
 		>
 			<WaitingLabel waiting={waiting} doing={pendingLabel} align="start">
