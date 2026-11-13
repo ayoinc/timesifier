@@ -50,7 +50,7 @@ Builder: an AI session on branch `ts-112-lists`, stacked on 8b6880d (#61, #64, #
 - [x] **4. Activity and its export.** Each table is asked only for the ids that can be its own, by the record's kind and the summary's field; tasks, invoices and estimates are named too. A page naming 150 things of every kind, a manager's page naming 121 projects, and an export of all 270 records (`test/lists/activity.test.ts`).
 - [x] **5. The API.** `/time_entries` names each project once, through `among`: a first page of 100 entries over 100 projects, and 150 entries over 150 projects page after page; `/users` pages by `id` with `per_page` and `cursor`, 150 people in three pages of 60; `/leave` pages by `starts_on` and `id` in place of its silent cut at 1,000, naming 147 people (`test/lists/api.test.ts`, `docs/api.md`).
 - [x] **6. A check in CI.** `test/node/lists.test.ts` fails `pnpm test` on any `inArray(` over a list that is not fixed, `in (${…})` written into SQL, or a private `json_each(${…})` in `app/` outside `app/db/among.ts`, naming file:line; on 8b6880d it names 127.
-- [x] **7. Before and after.** The 12 tests of `test/lists/` and `test/node/lists.test.ts` fail on 8b6880d (500s, the export cut after its header, 127 lists named) and pass on this branch.
+- [x] **7. Before and after.** Of the 13 tests in `test/lists/` and `test/node/lists.test.ts`, 12 fail on 8b6880d (500s, the export cut short, 127 lists named) and all pass on this branch; the 13th tests the check itself on a fixture.
 - [x] **8. Docs.** Decision 40 with Cloudflare's limits page; `docs/architecture.md` (D1's limits), `docs/security.md` (reports), `AGENTS.md`, `docs/api.md`.
 
 ### TS-096 · Loading and motion like Royal London
