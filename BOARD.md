@@ -40,6 +40,23 @@ Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the busin
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-120 · The console's Brand page
+
+Builder: an AI session on branch `ts-120-brand-page`. Decision 45, within 36 and 38. Migration `0022_platform_brand_dark_logo` (renumber at merge if main has taken 0022). In review: the pull request against `main`.
+
+- [x] **1. Where.** `/platform/brand`, the console's last tab, behind the allowlist and the step-up: a stepped-up platform owner opens it; one who has not is sent to the code and back, and their posts do nothing; an organisation's owner, a member and a signed-in stranger get the console's 404 (`test/platform/console-brand.test.ts` "who opens the Brand page"; every console route in `test/platform/console-roles.test.ts`).
+- [x] **2. Sender name and reply-to.** Saved through `setPlatformBrand`; each refusal says why (`test/platform/console-brand.test.ts` "a save that is not valid").
+- [x] **3. Tagline and email footer line.** One line each, at most 120 and 200 characters; each refusal said (same).
+- [x] **4. Brand colour, contrast-checked.** Ink or white must read on it at 4.5 to 1 (`platformColourProblem`), checked as it is typed, the save disabled until it does, and refused by the server too (same; `e2e/platform-brand.spec.ts`).
+- [x] **5. Logo and mark, each light and dark.** Four PNGs within 64 KB and 16 to 1,024 px; `platform_brand.logo_dark` added; an SVG or WebP drawn as a PNG in the browser (`app/brand/rendition.ts`, shared with Workspace settings › Brand) and the PNG taken in its place; a box puts each built-in one back; the page says which ones messages carry (same, "a save"; `e2e/platform-brand.spec.ts`).
+- [x] **6. Live preview** of a message's top and foot and of the band, drawn from the form as it is typed, in the light scheme a message is drawn in, with each image on its ground (`e2e/platform-brand.spec.ts`).
+- [x] **7. Save and log.** `setPlatformBrand` with the platform owner as the actor; `brand.changed` in the platform log with the fields that changed; nothing written when nothing changed (`test/platform/console-brand.test.ts` "a save").
+- [x] **8. The next sign-in code email** carries the saved sender name, reply-to, footer line, tagline, colour and logo, attached inline (same, "frames the next sign-in code email in what was saved").
+- [x] **9. Send me a test email.** The saved brand, to the signed-in platform owner only, five an hour, each logged as `brand.test_sent` (`test/platform/console-brand.test.ts` "the test email"; `e2e/platform-brand.spec.ts`).
+- [x] **10. Browser spec.** Keyboard and axe at 390 and 1280 px in both schemes; screenshots in `cmux-assets/browser/timesifier/TS-120/` (`e2e/platform-brand.spec.ts`).
+- [x] **11. Docs.** Decision 45; `docs/security.md` (the console's threats); `docs/architecture.md`; `docs/design-direction.md`.
+- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+
 ### TS-096 · Loading and motion like Royal London
 
 Builder: AI sessions on branch `ts-096-motion` (PR #57). In review: the placement's effect is proven on the preview and again in production after the merge. No migration. `docs/design-system.md` ("While the page waits", "How a page loads"), decision 34.

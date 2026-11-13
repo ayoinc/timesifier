@@ -561,7 +561,7 @@ function EmailPreview({
 	);
 }
 
-/** A square of `colour` with ink and white letters on it. */
+/** A square of `colour` with a stroke of ink and a stroke of white on it, as lines of type would stand. */
 function Swatch({ colour }: { colour: string }) {
 	return (
 		<svg
@@ -571,19 +571,8 @@ function Swatch({ colour }: { colour: string }) {
 			className="h-6 w-14 shrink-0 rounded-extra-small"
 		>
 			<rect width="56" height="24" rx="4" fill={colour} />
-			<text
-				x="16"
-				y="16.5"
-				textAnchor="middle"
-				fontSize="12"
-				fontWeight="600"
-				fill={EMAIL_COLOURS.ink}
-			>
-				Aa
-			</text>
-			<text x="40" y="16.5" textAnchor="middle" fontSize="12" fontWeight="600" fill="white">
-				Aa
-			</text>
+			<rect x="8" y="7" width="40" height="3" rx="1.5" fill={EMAIL_COLOURS.ink} />
+			<rect x="8" y="14" width="28" height="3" rx="1.5" fill={EMAIL_COLOURS.onBrand} />
 		</svg>
 	);
 }
