@@ -62,7 +62,7 @@ async function ada() {
 	const scope = organisationScope(env.DB, acme.id);
 	const [client] = await scope.clients.insert({ name: "Initech", nameKey: "initech" });
 	const [project] = await scope.projects.insert({ name: "Site", nameKey: "site" });
-	const [category] = await scope.expenseCategories.insert({ name: "Travel", nameKey: "travel" });
+	const [category] = await scope.expenseCategories.insert({ name: "Taxis", nameKey: "taxis" });
 	if (!client || !project || !category) throw new Error("seed failed");
 	const [entry] = await scope.timeEntries.insert({
 		userId,

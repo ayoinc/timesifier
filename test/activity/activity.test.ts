@@ -269,6 +269,9 @@ describe("the pages record", () => {
 		mailbox = captureEmail();
 		ada = await person(mailbox, "ada@example.com");
 		acme = await createOrganisation(ada.cookie, "Acme");
+		// What these tests count starts after the organisation was made, with the
+		// system's records of its usual expense categories (TS-119).
+		await env.DB.prepare("delete from activity_records").run();
 		site = uuidv7();
 		await env.DB.prepare(
 			"insert into projects (id, organisation_id, name, name_key, created_at, updated_at) values (?, ?, 'Site', 'site', 0, 0)",

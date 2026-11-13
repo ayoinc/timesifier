@@ -8,7 +8,7 @@ import { formatMoney } from "~/money/money";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TEXT_LINK } from "~/shell/links";
 import { Section } from "~/shell/PageHeading";
-import { dayLabel } from "~/teams/words";
+import { formatDayWithYear } from "~/time/format";
 
 import { amountText, type DatedPrice, UNIT_NAME_MAX_LENGTH } from "./expenses";
 import {
@@ -84,12 +84,15 @@ export function ExpenseCategories({
 										detail={[
 											c.archived ? "Archived" : null,
 											c.unitName && price
-												? `${money(price.unitPriceMinor)} per ${c.unitName} from ${dayLabel(price.effectiveFrom)}`
+												? `${money(price.unitPriceMinor)} per ${c.unitName} from ${formatDayWithYear(price.effectiveFrom)}`
 												: "An amount each time",
 											...c.prices
 												.slice(0, -1)
 												.reverse()
-												.map((p) => `${money(p.unitPriceMinor)} from ${dayLabel(p.effectiveFrom)}`),
+												.map(
+													(p) =>
+														`${money(p.unitPriceMinor)} from ${formatDayWithYear(p.effectiveFrom)}`,
+												),
 										]
 											.filter(Boolean)
 											.join(" · ")}
@@ -266,7 +269,7 @@ export function UsualCategoriesSheet({
 					<a href={HMRC_MILEAGE_RATES} className={TEXT_LINK}>
 						HMRC&rsquo;s approved rate for cars and vans
 					</a>
-					: {pounds(now.unitPriceMinor)} from {dayLabel(now.effectiveFrom)}, and{" "}
+					: {pounds(now.unitPriceMinor)} from {formatDayWithYear(now.effectiveFrom)}, and{" "}
 					{pounds(before.unitPriceMinor)} before. That is the rate for the first 10,000 business
 					miles of a tax year; change the price if you pay another.
 				</p>
