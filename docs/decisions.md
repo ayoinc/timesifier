@@ -460,6 +460,8 @@ Decided on 2026-11-12, on card TS-096, after the owner saw the Timesheet blink o
 
 **Measured on 2026-11-12, from this machine (EWR), on the pull request's preview against production.** The header: every preview request `cf-placement: remote-FRA`; production none. On one kept-alive connection, 24 requests each, the median time from sending a request to its first byte: a static file (no Worker) 107ms on the preview and 110ms on production, so the network is the same; `/robots.txt` (the Worker, no query) 219ms against 104ms, the journey to Frankfurt; `/api/v1/me` with an unknown token (the Worker and one D1 query) 261ms against 234ms. One query therefore cost 42ms from Frankfurt and 130ms from Newark: a page that asks ten questions in turn saves about three quarters of a second.
 
+**Measured in production on 2026-11-13, after #57's deploy (13:42 UTC), from this machine (EWR).** Every request `cf-placement: remote-FRA` (`scripts/placement-ttfb.sh https://timesifier.com 15`). On one kept-alive connection, 24 requests each, the median time from sending a request to its first byte: a static file 110ms, `/robots.txt` 241ms, `/api/v1/me` 254ms; the same morning, before the deploy, 107ms, 117ms and 235ms. The network is unchanged; the journey to Frankfurt adds about 125ms (the preview's 115ms); one D1 query costs 254 − 241 = 13ms from Frankfurt against 235 − 117 = 118ms from Newark before. A page that asks several questions in turn gains about 105ms for each after the first, as the preview found.
+
 ### 35. Work schedules: named, dated, assigned by the most specific
 
 Decided by the owner on 2026-11-12 (TS-097), replacing the one working week of TS-061. Entry 34 is TS-096's.
