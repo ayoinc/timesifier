@@ -84,7 +84,9 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 	return {
 		account: {
 			id: account.id,
-			title: account.name.trim() || "No name yet",
+			// Without a name, the address is what the page and its sheets call them.
+			title: account.name.trim() || account.email,
+			named: account.name.trim() !== "",
 			email: account.email,
 			joined: consoleDay(account.createdAt),
 			closed: account.closedAt ? consoleDay(account.closedAt) : null,
@@ -268,9 +270,12 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 
 	return (
 		<>
-			<PageHeading>{account.title}</PageHeading>
+			<PageHeading>
+				<span className="wrap-anywhere">{account.title}</span>
+			</PageHeading>
 			<PageLead>
-				<span className="wrap-anywhere">{account.email}</span>. Joined {account.joined}. {state}
+				{account.named ? <span className="wrap-anywhere">{account.email}</span> : "No name yet"}.
+				Joined {account.joined}. {state}
 			</PageLead>
 			{/* What the last tool did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">

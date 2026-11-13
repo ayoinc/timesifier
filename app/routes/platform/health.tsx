@@ -26,7 +26,7 @@ export async function loader() {
 	]);
 	return {
 		...health,
-		weekly: health.weekly.map(({ from, count }) => ({ from: consoleDay(from), count })),
+		weekly: health.weekly.map(({ to, count }) => ({ to: consoleDay(to), count })),
 		mailSentToday: DAILY_MAIL_CAP - left,
 		mailCap: DAILY_MAIL_CAP,
 	};
@@ -75,14 +75,14 @@ export default function Health({ loaderData }: Route.ComponentProps) {
 			<Section
 				id="new-accounts"
 				heading="New accounts by week"
-				lead="New accounts in each of the last eight weeks, oldest first."
+				lead="New accounts in each of the last eight weeks, counted back 7 days at a time from now, oldest first."
 			>
 				<Ledger heading="Weeks">
 					<LedgerRows>
-						{health.weekly.map(({ from, count }) => (
+						{health.weekly.map(({ to, count }) => (
 							<LedgerRow
-								key={from}
-								title={`Week from ${from}`}
+								key={to}
+								title={`The 7 days to ${to}`}
 								detail={
 									// The bar repeats the figure at the row's end, so it is hidden from
 									// assistive technology. Its colour is the theme's, light or dark.
@@ -113,8 +113,9 @@ export default function Health({ loaderData }: Route.ComponentProps) {
 
 			<Section id="mail" heading="Mail today">
 				<p className="max-w-160 text-body-large">
-					{counted(health.mailSentToday, "message", "messages")} of mailings sent today, of the{" "}
-					{NUMBER.format(health.mailCap)} a day may take. What is left waits for tomorrow.
+					Mailings have sent {NUMBER.format(health.mailSentToday)} of the{" "}
+					{counted(health.mailCap, "message", "messages")} a day they may send. Any more wait for
+					tomorrow.
 				</p>
 			</Section>
 		</>

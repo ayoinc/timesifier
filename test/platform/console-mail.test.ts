@@ -60,7 +60,7 @@ describe("the page", () => {
 
 		expect(text).toContain("Product announcement, to 2 people");
 		expect(text).toContain("Newsletter, to 1 person");
-		expect(text).toContain("40 a minute and 1000 a day at most");
+		expect(text).toContain("40 a minute and 1,000 a day at most");
 		expect(text).toContain("Nothing has been sent yet.");
 	});
 

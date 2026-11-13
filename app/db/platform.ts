@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, isNull, lt, max, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lt, max, or, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
@@ -44,7 +44,8 @@ export interface PlatformHealth {
 	newAccounts7: number;
 	newAccounts30: number;
 	/** New accounts in each of the last eight weeks, oldest first, by the week's first day. */
-	weekly: { from: Date; count: number }[];
+	/** New accounts in each of the last eight spans of 7 days, the oldest first; each ends at `to`. */
+	weekly: { to: Date; count: number }[];
 	/** People with a session used in the last 7 and 30 days. */
 	active7: number;
 	active30: number;
@@ -107,7 +108,7 @@ export async function platformHealth(database: D1Database, now: Date): Promise<P
 		newAccounts30: month?.n ?? 0,
 		weekly: Array.from({ length: 8 }, (_, index) => {
 			const ago = 7 - index;
-			return { from: at(ago * 7 + 7), count: byWeek.get(ago) ?? 0 };
+			return { to: at(ago * 7), count: byWeek.get(ago) ?? 0 };
 		}),
 		active7: active7?.n ?? 0,
 		active30: active30?.n ?? 0,
@@ -145,8 +146,16 @@ function countsBy(
 	return drizzle(database)
 		.select({ organisationId: table.organisationId, n: count() })
 		.from(table)
-		.where(inArray(table.organisationId, ids))
+		.where(among(table.organisationId, ids))
 		.groupBy(table.organisationId);
+}
+
+/**
+ * `column` is one of `ids`, as one bound parameter however many they are: D1
+ * takes at most 100 a statement, and the console lists up to 100 organisations.
+ */
+function among(column: SQLiteColumn, ids: readonly string[]): SQL {
+	return sql`${column} in (select value from json_each(${JSON.stringify(ids)}))`;
 }
 
 /**
@@ -183,7 +192,7 @@ export async function platformOrganisations(
 				wanted
 					? or(contains(organisations.name, wanted), contains(organisations.slug, wanted))
 					: undefined,
-				ids ? inArray(organisations.id, ids) : undefined,
+				ids ? among(organisations.id, ids) : undefined,
 			),
 		)
 		.orderBy(desc(organisations.createdAt))
@@ -194,23 +203,20 @@ export async function platformOrganisations(
 		db
 			.select({ organisationId: memberships.organisationId, n: count() })
 			.from(memberships)
-			.where(inArray(memberships.organisationId, organisationIds))
+			.where(among(memberships.organisationId, organisationIds))
 			.groupBy(memberships.organisationId),
 		db
 			.select({ organisationId: invitations.organisationId, n: count() })
 			.from(invitations)
 			.where(
-				and(
-					inArray(invitations.organisationId, organisationIds),
-					eq(invitations.status, "pending"),
-				),
+				and(among(invitations.organisationId, organisationIds), eq(invitations.status, "pending")),
 			)
 			.groupBy(invitations.organisationId),
 		db
 			.select({ organisationId: memberships.organisationId, at: max(sessions.updatedAt) })
 			.from(memberships)
 			.innerJoin(sessions, eq(sessions.userId, memberships.userId))
-			.where(inArray(memberships.organisationId, organisationIds))
+			.where(among(memberships.organisationId, organisationIds))
 			.groupBy(memberships.organisationId),
 		countsBy(database, timeEntries, organisationIds),
 		countsBy(database, projects, organisationIds),
@@ -483,12 +489,12 @@ export async function organisationsLeftWithoutOwner(database: D1Database, userId
 		db
 			.select({ organisationId: memberships.organisationId, n: count() })
 			.from(memberships)
-			.where(and(inArray(memberships.organisationId, ids), eq(memberships.role, "owner")))
+			.where(and(among(memberships.organisationId, ids), eq(memberships.role, "owner")))
 			.groupBy(memberships.organisationId),
 		db
 			.select({ organisationId: memberships.organisationId, n: count() })
 			.from(memberships)
-			.where(inArray(memberships.organisationId, ids))
+			.where(among(memberships.organisationId, ids))
 			.groupBy(memberships.organisationId),
 	]);
 	const ownersOf = new Map(owners.map(({ organisationId, n }) => [organisationId, n]));
@@ -624,13 +630,13 @@ export async function platformSubjectNames(
 			: db
 					.select({ id: organisations.id, name: organisations.name })
 					.from(organisations)
-					.where(inArray(organisations.id, organisationIds)),
+					.where(among(organisations.id, organisationIds)),
 		userIds.length === 0
 			? []
 			: db
 					.select({ id: users.id, name: users.name, email: users.email })
 					.from(users)
-					.where(inArray(users.id, userIds)),
+					.where(among(users.id, userIds)),
 	]);
 	return { organisations: named, people };
 }
@@ -765,7 +771,7 @@ export async function mailingList(database: D1Database, limit = 50) {
 		})
 		.from(mailingDeliveries)
 		.where(
-			inArray(
+			among(
 				mailingDeliveries.mailingId,
 				rows.map(({ id }) => id),
 			),

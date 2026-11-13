@@ -716,6 +716,23 @@ const ROLE_TABLE: Record<string, Row> = {
 	},
 	// Any other address under an organisation (TS-091): its 404 page, to everyone.
 	"routes/app/not-found": { address: () => "/app/acme/x", page: every(404) },
+	// Each person's own data, across every organisation they belong to (TS-099).
+	"routes/app/account.data": { page: every(200) },
+	// Support access and the wellbeing signals sit below Workspace settings, but
+	// only owners open them; admins too are answered 404 (TS-099).
+	"routes/app/support-access": {
+		page: by(200, 404, 404, 404, 404),
+		form: {
+			fields: () => ({ intent: "grant", hours: "24" }),
+			made: async (w) =>
+				(await count(
+					"select count(*) from support_grants where organisation_id = ?",
+					w.acme.id,
+				)) === 1,
+			post: by<Post>("done", 404, 404, 404, 404),
+		},
+	},
+	"routes/app/wellbeing": { page: by(200, 404, 404, 404, 404) },
 };
 
 /** Every route of one organisation: the layout that checks membership, and all it holds. */

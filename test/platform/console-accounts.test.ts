@@ -90,7 +90,8 @@ describe("one account", () => {
 		const html = await pageBody(await open(pageOf(ada.user.id), root));
 		const text = textOf(html);
 
-		expect(html).toContain(">No name yet</h1>");
+		expect(html).toContain(">ada@example.com</span></h1>");
+		expect(text).toContain("No name yet");
 		expect(text).toContain("ada@example.com");
 		expect(text).toContain("Acme");
 		expect(text).toContain("Owner");

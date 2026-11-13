@@ -98,11 +98,14 @@ export default function Support({ loaderData }: Route.ComponentProps) {
 								title={<span className="wrap-anywhere">{member.name}</span>}
 								detail={
 									// The address too, as support may need to reach them; not twice for a person with no name.
-									member.email !== member.name && (
-										<span className="wrap-anywhere">{member.email}</span>
+									member.email === member.name ? (
+										member.role
+									) : (
+										<>
+											<span className="wrap-anywhere">{member.email}</span>. {member.role}
+										</>
 									)
 								}
-								value={member.role}
 							/>
 						))}
 					</LedgerRows>
