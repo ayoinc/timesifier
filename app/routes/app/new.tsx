@@ -10,6 +10,7 @@ import { refused, unavailable } from "~/organisations/outcome.server";
 import { APP_PATH, organisationPath, WELCOME_PARAM } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { useSubmitting } from "~/shell/submitting";
 
 import type { Route } from "./+types/new";
 
@@ -61,6 +62,7 @@ export async function action({ request }: Route.ActionArgs) {
 export default function NewOrganisation({ loaderData, actionData }: Route.ComponentProps) {
 	const { first, back } = loaderData;
 	const busy = useNavigation().state !== "idle";
+	const submitting = useSubmitting();
 
 	return (
 		<>
@@ -90,7 +92,9 @@ export default function NewOrganisation({ loaderData, actionData }: Route.Compon
 					{actionData && !actionData.ok && !busy ? actionData.problem : null}
 				</p>
 				<div className="flex flex-wrap items-center gap-4">
-					<Button type="submit">Create organisation</Button>
+					<Button type="submit" {...submitting()}>
+						Create organisation
+					</Button>
 					{!first && (
 						<Link to={back.to} className={`${TEXT_LINK} wrap-anywhere`}>
 							{back.label}

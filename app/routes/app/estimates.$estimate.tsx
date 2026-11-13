@@ -3,6 +3,7 @@ import { Link, redirect } from "react-router";
 import * as z from "zod";
 
 import { Checkbox } from "~/components/Checkbox";
+import { DownloadLink } from "~/components/DownloadLink";
 import { TextField } from "~/components/TextField";
 import {
 	addEstimateLine,
@@ -265,9 +266,9 @@ export default function EstimatePage({ loaderData }: Route.ComponentProps) {
 				{estimate.decidedAt ? ` ${estimate.decidedAt}` : ""}.
 			</PageLead>
 			<p className="mt-4">
-				<a href={loaderData.pdf} className={ACTION_LINK} download>
+				<DownloadLink href={loaderData.pdf} className={ACTION_LINK} pendingLabel="Downloading…">
 					Download PDF
-				</a>
+				</DownloadLink>
 			</p>
 
 			<Section id="document" heading={estimate.label}>

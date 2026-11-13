@@ -26,7 +26,7 @@ export interface SendCodeFormProps {
 export function SendCodeForm({ email, siteKey, children, onSent }: SendCodeFormProps) {
 	const [notice, setNotice] = useState<Notice | null>(null);
 	const check = useRef<RobotCheckHandle>(null);
-	const once = useOneAtATime();
+	const { once, running } = useOneAtATime();
 
 	function submit(event: FormEvent) {
 		event.preventDefault();
@@ -49,7 +49,7 @@ export function SendCodeForm({ email, siteKey, children, onSent }: SendCodeFormP
 			<RobotCheck ref={check} siteKey={siteKey} />
 			<NoticeLine notice={notice} />
 			<div>
-				<Button type="submit" size="large">
+				<Button type="submit" size="large" isPending={running !== null} pendingLabel="Sending…">
 					Continue
 				</Button>
 			</div>

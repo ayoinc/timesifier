@@ -1,5 +1,5 @@
 import { data } from "react-router";
-
+import { DownloadLink } from "~/components/DownloadLink";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { halfDaysLabel } from "~/leave/kinds";
 import { membershipContext } from "~/organisations/membership.server";
@@ -265,9 +265,9 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 
 						<BillableSplit split={report.split} range={loaderData.range} />
 						<p className="mt-2">
-							<a href={report.exportPath} download className={ACTION_LINK}>
+							<DownloadLink href={report.exportPath} className={ACTION_LINK}>
 								Export as CSV
-							</a>
+							</DownloadLink>
 						</p>
 					</div>
 

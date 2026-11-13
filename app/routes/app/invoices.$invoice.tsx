@@ -7,6 +7,7 @@ import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
+import { DownloadLink } from "~/components/DownloadLink";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
@@ -385,9 +386,13 @@ export default function Invoice({ loaderData }: Route.ComponentProps) {
 
 			<div className="mt-8 flex max-w-200 flex-wrap items-center gap-4">
 				{primary}
-				<a href={invoicePdfPath(slug, invoice.id)} download className={ACTION_LINK}>
+				<DownloadLink
+					href={invoicePdfPath(slug, invoice.id)}
+					className={ACTION_LINK}
+					pendingLabel="Downloading…"
+				>
 					Download PDF
-				</a>
+				</DownloadLink>
 				<MenuTrigger>
 					<Button variant="outlined" aria-label={`More actions for invoice ${invoice.number}`}>
 						More

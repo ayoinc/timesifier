@@ -219,18 +219,27 @@ export function progress(text: string): Notice {
 
 /**
  * Runs one piece of work at a time: a second press while the first request is
- * on its way does nothing. The buttons stay enabled, so the keyboard focus is
+ * on its way does nothing. `running` names the work on its way, for the button
+ * that started it to be pending (docs/design-system.md, "While the page
+ * waits"). A pending button stays in the focus order, so the keyboard focus is
  * never thrown off a button that has just been pressed.
  */
-export function useOneAtATime(): (work: () => Promise<void>) => Promise<void> {
+export function useOneAtATime<What extends string = "work">(): {
+	once: (work: () => Promise<void>, what?: What) => Promise<void>;
+	running: What | null;
+} {
 	const busy = useRef(false);
-	return async (work) => {
+	const [running, setRunning] = useState<What | null>(null);
+	const once = async (work: () => Promise<void>, what?: What) => {
 		if (busy.current) return;
 		busy.current = true;
+		setRunning(what ?? ("work" as What));
 		try {
 			await work();
 		} finally {
 			busy.current = false;
+			setRunning(null);
 		}
 	};
+	return { once, running };
 }

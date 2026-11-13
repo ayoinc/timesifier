@@ -40,6 +40,7 @@ export function PeriodHeader({
 	const fetcher = useFetcher<Outcome>();
 	const [confirming, setConfirming] = useState(false);
 	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
+	const sending = fetcher.state === "idle" ? null : fetcher.formData?.get("intent");
 	const handled = useRef<Outcome | undefined>(undefined);
 	const noteId = useId();
 	useEffect(() => {
@@ -91,6 +92,7 @@ export function PeriodHeader({
 							<Button
 								variant="tonal"
 								isDisabled={over.length > 0}
+								isPending={sending === "submit"}
 								aria-describedby={notes.length > 0 ? noteId : undefined}
 								onPress={() => setConfirming(true)}
 							>
@@ -98,7 +100,11 @@ export function PeriodHeader({
 							</Button>
 						)}
 						{status === "submitted" && (
-							<Button variant="outlined" onPress={() => send("withdraw")}>
+							<Button
+								variant="outlined"
+								isPending={sending === "withdraw"}
+								onPress={() => send("withdraw")}
+							>
 								Withdraw submission
 							</Button>
 						)}
