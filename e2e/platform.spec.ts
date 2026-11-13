@@ -132,9 +132,9 @@ test("the console asks a signed-in platform owner for a code of its own, and ope
 	page,
 }) => {
 	await openConsole(page);
-	// The tabs, in order, with Health current; the Brand page comes with TS-100.
+	// The tabs, in order, with Health current; Brand (TS-120) is the last.
 	const tabs = page.getByRole("group", { name: "Platform console sections" }).getByRole("link");
-	await expect(tabs).toHaveText(["Health", "Organisations", "Accounts", "Mail", "Log"]);
+	await expect(tabs).toHaveText(["Health", "Organisations", "Accounts", "Mail", "Log", "Brand"]);
 	await expect(tabs.first()).toHaveAttribute("aria-current", "page");
 	await expect(page.getByRole("heading", { level: 1, name: "Health" })).toBeVisible();
 });
