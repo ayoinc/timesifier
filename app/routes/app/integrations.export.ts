@@ -3,6 +3,7 @@ import { and, asc, eq, gt, inArray, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { type OrganisationScope, organisationScope, users } from "~/db";
+import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
 import { dayOf } from "~/time/calendar";
@@ -130,7 +131,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 	return new Response(body, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",
-			"Content-Disposition": `attachment; filename="${organisation.slug}-all-time.csv"`,
+			"Content-Disposition": `attachment; filename="${exportFilename(organisation.name, "all-time", dayOf(Date.now(), organisation.timeZone), "csv")}"`,
 			"Cache-Control": "no-store",
 		},
 	});

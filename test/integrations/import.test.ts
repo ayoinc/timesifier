@@ -466,7 +466,9 @@ describe("exporting all time", () => {
 		);
 		const response = await open("/app/acme/integrations/export", ada);
 		expect(response.status).toBe(200);
-		expect(response.headers.get("Content-Disposition")).toContain("acme-all-time.csv");
+		expect(response.headers.get("Content-Disposition")).toMatch(
+			/^attachment; filename="acme-all-time-exported-\d{4}-\d{2}-\d{2}\.csv"$/,
+		);
 		const csv = await response.text();
 		const rows = parseCsv(csv) ?? [];
 		expect(rows[0]?.cells).toEqual([

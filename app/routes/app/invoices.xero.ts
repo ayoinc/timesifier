@@ -5,7 +5,8 @@ import * as z from "zod";
 import { billingReportRequest } from "~/invoices/billing-reports.server";
 import { billingOf } from "~/invoices/context.server";
 import { taxesOf } from "~/invoices/documents.server";
-import { DEFAULT_XERO_OPTIONS, type XeroInvoice, xeroCsv, xeroFilename } from "~/invoices/xero";
+import { DEFAULT_XERO_OPTIONS, type XeroInvoice, xeroCsv } from "~/invoices/xero";
+import { exportFilename } from "~/organisations/export-filename";
 
 import type { Route } from "./+types/invoices.xero";
 
@@ -82,7 +83,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	return new Response(file, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",
-			"Content-Disposition": `attachment; filename="${xeroFilename(organisation.slug, first, last)}"`,
+			"Content-Disposition": `attachment; filename="${exportFilename(organisation.name, `xero-${first}-to-${last}`, today, "csv")}"`,
 			"Cache-Control": "no-store",
 		},
 	});

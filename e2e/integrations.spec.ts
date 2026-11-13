@@ -211,7 +211,9 @@ for (const viewport of [
 				const downloading = page.waitForEvent("download");
 				await pressWithKeyboard(page, "link", "Export all invoices as PDFs");
 				const download = await downloading;
-				expect(download.suggestedFilename()).toBe(`${slug}-all-invoices.zip`);
+				expect(download.suggestedFilename()).toMatch(
+					new RegExp(`^${slug}-all-invoices-exported-\\d{4}-\\d{2}-\\d{2}\\.zip$`),
+				);
 				const bytes = readFileSync(await download.path());
 				expect(bytes.subarray(0, 2).toString("latin1")).toBe("PK");
 				const name = `invoice-${number.replace(/[^A-Za-z0-9-]/g, "-")}.pdf`;

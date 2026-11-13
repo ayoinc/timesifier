@@ -391,8 +391,8 @@ describe("the Contractors report", () => {
 		const { response, header, rows } = await exported(ada, WEEK);
 
 		expect(response.headers.get("Content-Type")).toBe("text/csv; charset=utf-8; header=present");
-		expect(response.headers.get("Content-Disposition")).toBe(
-			'attachment; filename="timesifier-acme-contractors-2026-10-05-to-2026-10-11.csv"',
+		expect(response.headers.get("Content-Disposition")).toMatch(
+			/^attachment; filename="acme-contractors-2026-10-05-to-2026-10-11-exported-\d{4}-\d{2}-\d{2}\.csv"$/,
 		);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 		expect(header).toEqual([

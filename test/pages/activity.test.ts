@@ -152,7 +152,7 @@ describe("the filters and the export", () => {
 		const response = await open(`${log}/export?kind=time_entry`, ada);
 		expect(response.status).toBe(200);
 		expect(response.headers.get("Content-Disposition")).toMatch(
-			/^attachment; filename="timesifier-.*-activity-.*\.csv"$/,
+			/^attachment; filename="acme-activity-\d{4}-\d{2}-\d{2}-to-\d{4}-\d{2}-\d{2}-exported-\d{4}-\d{2}-\d{2}\.csv"$/,
 		);
 		expect(response.headers.get("Cache-Control")).toBe("no-store");
 		const csv = await response.text();

@@ -173,8 +173,3 @@ export function xeroCsv(
 	}
 	return file;
 }
-
-/** The file's name: "timesifier-acme-xero-2026-11-01-to-2026-11-30.csv". */
-export function xeroFilename(slug: string, first: Day, last: Day): string {
-	return `timesifier-${slug}-xero-${first}-to-${last}.csv`;
-}

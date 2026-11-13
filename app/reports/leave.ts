@@ -35,8 +35,3 @@ export const LEAVE_CSV_COLUMNS = [
 export function daysCell(halfDays: number | null): string {
 	return halfDays === null ? "" : String(halfDays / 2);
 }
-
-/** The file's name: "timesifier-acme-leave-2026.csv". */
-export function leaveCsvFilename(slug: string, year: number): string {
-	return `timesifier-${slug}-leave-${year}.csv`;
-}

@@ -1,12 +1,10 @@
 import { data } from "react-router";
-import {
-	CONTRACTOR_CSV_COLUMNS,
-	contractorCsvRows,
-	contractorsCsvFilename,
-} from "~/contractors/contractors";
+import { CONTRACTOR_CSV_COLUMNS, contractorCsvRows } from "~/contractors/contractors";
 import { contractorReport, requireSeesCost } from "~/contractors/contractors.server";
+import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
+import { dayOf } from "~/time/calendar";
 
 import type { Route } from "./+types/contractors.export";
 
@@ -31,7 +29,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		BYTE_ORDER_MARK +
 		csvLine(CONTRACTOR_CSV_COLUMNS) +
 		lines.flatMap((line) => contractorCsvRows(line).map(csvLine)).join("");
-	const filename = contractorsCsvFilename(membership.organisation.slug, days.first, days.last);
+	const { organisation } = membership;
+	const filename = exportFilename(
+		organisation.name,
+		`contractors-${days.first}-to-${days.last}`,
+		dayOf(Date.now(), organisation.timeZone),
+		"csv",
+	);
 	return new Response(body, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",

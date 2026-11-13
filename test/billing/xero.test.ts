@@ -11,13 +11,7 @@ import {
 import type { DraftLine } from "~/invoices/lines";
 import { addContact } from "~/invoices/mail.server";
 import { addTax } from "~/invoices/settings.server";
-import {
-	DEFAULT_XERO_OPTIONS,
-	XERO_COLUMNS,
-	xeroCsv,
-	xeroDate,
-	xeroFilename,
-} from "~/invoices/xero";
+import { DEFAULT_XERO_OPTIONS, XERO_COLUMNS, xeroCsv, xeroDate } from "~/invoices/xero";
 
 import { captureEmail } from "../auth/harness";
 import { freshDatabase } from "../db/database";
@@ -159,11 +153,8 @@ describe("Xero sales-invoice CSV", () => {
 		const response = await open(`${XERO}?from=2026-11-01&to=2026-11-30`, owner);
 		expect(response.status).toBe(200);
 		expect(response.headers.get("Content-Type")).toBe("text/csv; charset=utf-8; header=present");
-		expect(response.headers.get("Content-Disposition")).toBe(
-			`attachment; filename="${xeroFilename("acme", "2026-11-01", "2026-11-30")}"`,
-		);
-		expect(response.headers.get("Content-Disposition")).toBe(
-			'attachment; filename="timesifier-acme-xero-2026-11-01-to-2026-11-30.csv"',
+		expect(response.headers.get("Content-Disposition")).toMatch(
+			/^attachment; filename="acme-xero-2026-11-01-to-2026-11-30-exported-\d{4}-\d{2}-\d{2}\.csv"$/,
 		);
 		expect(await response.text()).toBe(expected());
 	});
