@@ -387,7 +387,7 @@ export const timeEntries = sqliteTable(
 		/**
 		 * The local date, `YYYY-MM-DD`, the entry belongs to: the day it starts on
 		 * in its person's zone when it is tracked (TS-111, amending decision 26).
-		 * Every writer sets it, so it has no default here; migration 0020 added it
+		 * Every writer sets it, so it has no default here; migration 0022 added it
 		 * with an empty default, which an entry tracked before TS-111b still has.
 		 */
 		spentOn: text("spent_on").notNull(),

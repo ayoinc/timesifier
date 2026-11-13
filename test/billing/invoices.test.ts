@@ -184,7 +184,7 @@ describe("billed time", () => {
 			env.DB.prepare("update time_entries set description = 'changed' where id = ?").bind(a).run();
 		await expect(change()).rejects.toThrow(/invoiced entry does not change/);
 		// Its empty day may be written once, with a real date and nothing else
-		// (migration 0020, TS-111), and then not again.
+		// (migration 0022, TS-111), and then not again.
 		const day = (spentOn: string, extra = "") =>
 			env.DB.prepare(`update time_entries set spent_on = ?${extra} where id = ?`)
 				.bind(spentOn, a)
