@@ -31,7 +31,7 @@ afterEach(() => {
 const ACTOR = "platform-operator";
 
 describe("the platform's brand, unchanged", () => {
-	it("is what migration 0018 starts the row at, and the same as the brand with no row at all", async () => {
+	it("is what migration 0020 starts the row at, and the same as the brand with no row at all", async () => {
 		const migrated = await getPlatformBrand(env);
 		expect(migrated).toEqual(builtInPlatformBrand());
 		expect(migrated).toMatchObject({

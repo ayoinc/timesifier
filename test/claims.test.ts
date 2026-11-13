@@ -222,7 +222,7 @@ it("deleting an organisation deletes everything in it, as the notice says: every
 		).toContain("cascade");
 	}
 	expect(words(await page(PRIVACY_PATH))).toContain(
-		"Everything in it goes at once: its memberships, invitations and all its work, and first its receipts.",
+		"Everything in it goes at once: its memberships, invitations and all its work, and first its receipts and its logo.",
 	);
 });
 
@@ -308,13 +308,15 @@ it("the notice says what a webhook is sent and when it stops, and how far a cale
 	expect(text).toContain(`of the last ${ENTRY_DAYS_BACK} days`);
 });
 
-it("the pages say receipts are kept in the EU because their bucket has the EU jurisdiction", async () => {
-	const buckets = [...(wrangler ?? "").matchAll(/\{ "binding": "RECEIPTS",[^}]*\}/g)].map(
+it("the pages say receipts and logos are kept in the EU because their buckets have the EU jurisdiction", async () => {
+	const buckets = [...(wrangler ?? "").matchAll(/\{ "binding": "(?:RECEIPTS|BRAND)",[^}]*\}/g)].map(
 		([b]) => b,
 	);
-	expect(buckets.length).toBeGreaterThan(0);
+	expect(buckets.length).toBe(4);
 	for (const bucket of buckets) expect(bucket).toContain('"jurisdiction": "eu"');
-	expect(words(await page(PRIVACY_PATH))).toContain("in a bucket restricted to the EU");
+	expect(words(await page(PRIVACY_PATH))).toContain(
+		"Receipts and organisations' logos are kept in Cloudflare R2, in buckets restricted to the EU",
+	);
 	expect(words(await page("/"))).toContain("Receipts are kept in storage restricted to the EU.");
 });
 

@@ -130,10 +130,11 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 		),
 		"The organisation and its people": (
 			<>
-				The organisation's name, the name in its address on {host}, and its settings. Who belongs to
-				it, each person's role, and whether they work as a contractor. Its teams, who is in each and
-				who manages it. Each invitation: the email address invited, the role offered, who sent it,
-				when it expires and what became of it.
+				The organisation's name, the name in its address on {host}, its settings, and the logo and
+				colour its invoices and estimates carry, the logo kept in Cloudflare R2. Who belongs to it,
+				each person's role, and whether they work as a contractor. Its teams, who is in each and who
+				manages it. Each invitation: the email address invited, the role offered, who sent it, when
+				it expires and what became of it.
 			</>
 		),
 		"Time and approvals": (
@@ -233,6 +234,12 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 				are never copied into it: the log says only that they changed.
 			</>
 		),
+		"Timesifier's brand": (
+			<>
+				The name, reply address, tagline, footer line, colour, logo and marks that Timesifier's own
+				emails and exports carry, and which person at Timesifier last changed them.
+			</>
+		),
 	};
 
 	return (
@@ -312,8 +319,8 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 			<DocumentSection id="where" title="Where it is kept">
 				<p>
 					In one database, Cloudflare D1, restricted to the European Union: it runs and stores its
-					data only inside the EU. Receipts are kept in Cloudflare R2, in a bucket restricted to the
-					EU, whose files are stored only inside the EU.
+					data only inside the EU. Receipts and organisations' logos are kept in Cloudflare R2, in
+					buckets restricted to the EU, whose files are stored only inside the EU.
 				</p>
 				<p>
 					The application runs on Cloudflare Workers in Frankfurt, near the database. Your request
@@ -334,9 +341,9 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 				</p>
 				<p>Mail you send to {PRIVACY_EMAIL} is received by Microsoft, which hosts that mailbox.</p>
 				<Rows>
-					<Row term="Hosting, the database and receipts">
+					<Row term="Hosting, the database and files">
 						Cloudflare Workers answers every request, Cloudflare D1 holds the database and
-						Cloudflare R2 holds the receipts.
+						Cloudflare R2 holds the receipts and the organisations' logos.
 					</Row>
 					<Row term="Email">
 						<p>
@@ -520,14 +527,14 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 					</Row>
 					<Row term="Deleting an organisation">
 						An owner can delete an organisation. Everything in it goes at once: its memberships,
-						invitations and all its work, and first its receipts. If a receipt cannot be deleted,
-						the organisation is not deleted, and the owner is asked to try again. The accounts of
-						the people in it are not deleted.
+						invitations and all its work, and first its receipts and its logo. If a receipt or the
+						logo cannot be deleted, the organisation is not deleted, and the owner is asked to try
+						again. The accounts of the people in it are not deleted.
 					</Row>
 					<Row term="Copies">
 						Cloudflare keeps the means to restore the database to any minute of the last 30 days, so
 						what is deleted from the database is gone for good 30 days later. Timesifier keeps no
-						other copy, of the database or of a receipt.
+						other copy, of the database, a receipt or a logo.
 					</Row>
 				</Rows>
 			</DocumentSection>

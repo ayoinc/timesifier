@@ -94,6 +94,10 @@ export const STORED = [
 		heading: "The activity log",
 		rows: [{ term: "The activity log", tables: ["activity_records"] }],
 	},
+	{
+		heading: "Timesifier itself",
+		rows: [{ term: "Timesifier's brand", tables: ["platform_brand"] }],
+	},
 ] as const;
 
 /** The name of a row of "What is stored". */
