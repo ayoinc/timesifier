@@ -24,8 +24,7 @@ export interface WaitingLabelProps {
  * stand in the same place, so the control is as wide as the wider of the two
  * from the start and never changes size. The change shows only once the wait
  * has lasted 400ms (app/app.css, `.wait-appear`). The control's name stays its
- * words at rest: a name that changed under the focus would not be read again,
- * and React Aria says "pending" of a pending button itself. The words while
+ * words at rest: a name that changed under the focus would not be read again. The words while
  * waiting are drawn from `data-doing` by CSS (app/app.css, `.waiting-words`),
  * so they are in no copy of the page's text: not in the HTML read without
  * styles, nor in what is selected and copied.
