@@ -20,6 +20,7 @@ import {
 	ORGANISATIONS_PATH,
 	PERSONAL_DATA_SEGMENT,
 	PLATFORM_ACTIVITY_PATH,
+	PLATFORM_BRAND_PATH,
 	PLATFORM_PATH,
 	SUPPORT_ACCESS_SEGMENT,
 	SUPPORT_VIEW_SEGMENT,
@@ -139,6 +140,7 @@ const platform = route(PLATFORM_PATH, "routes/platform/layout.tsx", [
 		route(`${belowPlatform(ACCOUNTS_PATH)}/:${ACCOUNT_ID_PARAM}`, "routes/platform/account.tsx"),
 		route(belowPlatform(MAIL_PATH), "routes/platform/mail.tsx"),
 		route(belowPlatform(PLATFORM_ACTIVITY_PATH), "routes/platform/log.tsx"),
+		route(belowPlatform(PLATFORM_BRAND_PATH), "routes/platform/brand.tsx"),
 		route("*", "routes/platform/not-found.tsx"),
 	]),
 ]);

@@ -183,8 +183,10 @@ export const platformBrand = sqliteTable("platform_brand", {
 	emailFooter: text("email_footer").notNull(),
 	/** The platform's colour, `#rrggbb`: the band at the top of its messages. */
 	colour: text("colour").notNull(),
-	/** The logo a message carries attached, a PNG; null for the built-in one. */
+	/** The logo a message carries attached, a PNG for a light ground; null for the built-in one. */
 	logo: text("logo"),
+	/** The logo for a dark ground, a PNG; null for the built-in one (TS-120). */
+	logoDark: text("logo_dark"),
 	/** The mark for light grounds, a PNG; null for the built-in one. */
 	markLight: text("mark_light"),
 	/** The mark for dark grounds, a PNG; null for the built-in one. */

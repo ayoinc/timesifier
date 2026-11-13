@@ -7,6 +7,7 @@ export const ORGANISATIONS_PATH = `${PLATFORM_PATH}/organisations`;
 export const ACCOUNTS_PATH = `${PLATFORM_PATH}/accounts`;
 export const MAIL_PATH = `${PLATFORM_PATH}/mail`;
 export const PLATFORM_ACTIVITY_PATH = `${PLATFORM_PATH}/activity`;
+export const PLATFORM_BRAND_PATH = `${PLATFORM_PATH}/brand`;
 
 /** What follows `/platform/organisations/<id>` in the address of the support view. */
 export const SUPPORT_VIEW_SEGMENT = "support";
@@ -47,16 +48,14 @@ export function accountConsolePath(id: string): string {
 	return `${ACCOUNTS_PATH}/${encodeURIComponent(id)}`;
 }
 
-/**
- * The console's sections, in the order its tabs show them. TS-100 adds the
- * console's Brand page as the last tab, after Log; there is no page for it yet.
- */
+/** The console's sections, in the order its tabs show them. Brand (TS-120) is the last. */
 export const CONSOLE_TABS = [
 	{ href: PLATFORM_PATH, label: "Health" },
 	{ href: ORGANISATIONS_PATH, label: "Organisations" },
 	{ href: ACCOUNTS_PATH, label: "Accounts" },
 	{ href: MAIL_PATH, label: "Mail" },
 	{ href: PLATFORM_ACTIVITY_PATH, label: "Log" },
+	{ href: PLATFORM_BRAND_PATH, label: "Brand" },
 ] as const;
 
 /** A path inside the console to go back to after the step-up, or the console's first page. */
