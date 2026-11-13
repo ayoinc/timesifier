@@ -654,7 +654,7 @@ export const publicHolidays = sqliteTable(
  * The organisation's working week: for each day of the week as ISO counts it
  * (1 is Monday), the minutes a person is expected to work; 0 is not a working
  * day. Seven rows an organisation. Replaced by work schedules (TS-097) and no
- * longer read: migration `0018_work_schedules` made each organisation's week
+ * longer read: migration `0019_work_schedules` made each organisation's week
  * its default schedule. A later migration, which ships alone, takes it away.
  */
 export const workingDays = sqliteTable(
@@ -686,7 +686,7 @@ export const workingDays = sqliteTable(
 // schedule, from its day, to a person, a team, a role or the organisation;
 // the most specific wins (`app/schedules/schedules.ts`). Every organisation is
 // given "Standard" and "Long", Standard its default, by the trigger
-// `organisations_schedule_defaults` in `migrations/0018_work_schedules.sql`.
+// `organisations_schedule_defaults` in `migrations/0019_work_schedules.sql`.
 
 /** A named work schedule. Archived, it is no longer offered; it is never deleted, as past days keep it. */
 export const workSchedules = sqliteTable(
