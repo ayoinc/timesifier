@@ -45,7 +45,7 @@ Nothing below is bound to the Worker today. Each joins when the feature named ne
 | --------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | AI              | Workers AI behind AI Gateway | A suggested project for an entry                                                                                                                                                        | Planned (TS-015)                                                                                                                                                                                                                                                         |
 | Background work | Cron Trigger                 | The weekly summary; deleting expired rows, and activity records after 730 days; reminders; budget alerts; issuing recurring invoices; late-invoice reminders; auto-lock at the deadline | Built: auto-lock, recurring invoices and late-invoice reminders, hourly (TS-065, TS-074, TS-078), and activity records after 730 days, daily at 03:17 UTC (TS-072), in `workers/scheduled.ts`, the Worker's `scheduled` handler. Planned: TS-018, TS-033, TS-049, TS-069 |
-| Files           | R2                           | A nightly copy of the database; expense receipts, under `org/<organisation id>/receipts/<expense id>`; organisation logos, under `org/<organisation id>/brand/`                     | Planned (TS-022b; receipts TS-070, B9; logos TS-100)                                                                                                                                                                                                                     |
+| Files           | R2                           | A nightly copy of the database; expense receipts, under `org/<organisation id>/receipts/<expense id>`; organisation logos, under `org/<organisation id>/brand/`                         | Planned (TS-022b; receipts TS-070, B9; logos TS-100)                                                                                                                                                                                                                     |
 | Real-time       | Durable Objects              | A change that must be pushed to a person's other devices within a second                                                                                                                | Not planned                                                                                                                                                                                                                                                              |
 
 ## Routes
@@ -253,11 +253,11 @@ No alert is set yet. The owner turns on a billing notification in the Cloudflare
 
 ## Where data lives
 
-| Product       | Personal data that rests there                                                      | Where                                                   |
-| ------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| D1            | Names, email addresses, sessions, memberships, invitations; later, time entries     | The `eu` jurisdiction (see "Data rules")                |
-| Workers Logs  | Request URLs and the lines the application logs, which hold no address and no token | Cloudflare's log storage; this project sets no region   |
-| Email Service | Each message in transit: the recipient's address, a code or an invitation           | Cloudflare's mail systems, then the recipient's mailbox |
+| Product       | Personal data that rests there                                                                         | Where                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| D1            | Names, email addresses, sessions, memberships, invitations; later, time entries                        | The `eu` jurisdiction (see "Data rules")                |
+| Workers Logs  | Request URLs and the lines the application logs, which hold no address and no token                    | Cloudflare's log storage; this project sets no region   |
+| Email Service | Each message in transit: the recipient's address, a code or an invitation                              | Cloudflare's mail systems, then the recipient's mailbox |
 | R2            | Expense receipts (TS-070); organisation logos (TS-100); later a nightly copy of the database (TS-022b) | The `eu` jurisdiction                                   |
 
 ## Versions

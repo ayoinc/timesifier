@@ -235,7 +235,7 @@ test("an estimate is sent to the client's contact, accepted on its link signed o
 	// The client opens the link without an account, and accepts it.
 	const outside = await signedOut(context, baseURL);
 	const client = await outside.newPage();
-	await openShell(client, new URL(link).pathname, "header");
+	await openShell(client, new URL(link).pathname, "main");
 	await expect(client.getByRole("heading", { level: 1, name: `Estimate ${number}` })).toBeVisible();
 	await expect(client.getByText(`From ${organisation}. Sent.`)).toBeVisible();
 	await expect(client.getByRole("main")).toContainText("Design and build");
@@ -312,7 +312,7 @@ for (const viewport of [
 				const link = await sendEstimate(page, `accounts-${Date.now()}@example.com`);
 				await expectNoProblems(page, /^Estimate /, [EMPTY_INPUT]);
 
-				await openShell(page, new URL(link).pathname, "header");
+				await openShell(page, new URL(link).pathname, "main");
 				await expectNoProblems(page, /^Estimate /);
 				await page.getByRole("button", { name: "Accept estimate" }).click();
 				await expect(page.getByRole("status")).toHaveText("Thank you. The estimate is accepted.");

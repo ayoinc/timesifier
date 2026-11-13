@@ -121,12 +121,12 @@ export async function openGallery(page: Page, path = "/design") {
  * Waits until React has taken over the page that is open. Before that a press
  * on a link is an ordinary one, and a button does nothing. The sign is the
  * record React keeps on each element it has hydrated, read from the first link
- * in `within`; nothing a person can see changes at that moment.
+ * or button in `within`; nothing a person can see changes at that moment.
  */
 export async function takenOver(page: Page, within = "nav") {
 	await page.waitForFunction((container) => {
-		const link = document.querySelector(`${container} a`);
-		return link !== null && Object.keys(link).some((key) => key.startsWith("__reactFiber"));
+		const control = document.querySelector(`${container} :is(a, button)`);
+		return control !== null && Object.keys(control).some((key) => key.startsWith("__reactFiber"));
 	}, within);
 }
 

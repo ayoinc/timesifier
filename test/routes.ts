@@ -1,9 +1,11 @@
 import { env } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
+import { saveLogo } from "~/brand/organisation-brand.server";
 import { organisationScope } from "~/db";
 import { maySeeRates } from "~/organisations/access";
 import type { Role } from "~/organisations/roles";
 import { ORGANISATION_PARAM } from "~/shell/destinations";
+import { png } from "./brand/files";
 
 // The application's routes as it was built, for the tests that request every
 // route of some part of it. Read from the route configuration, so a route that
@@ -106,10 +108,31 @@ export function namesARecord(route: Pick<RouteUnderTest, "id" | "address">): boo
 }
 
 /**
+ * The routes that answer 404 until the organisation has what they serve, and
+ * how to give it that: the organisation's logo (`logo`, TS-100), uploaded by
+ * its owner. `addressFor` gives it before the route is asked for.
+ */
+const NEEDS: Record<string, (organisationId: string) => Promise<void>> = {
+	"routes/app/logo": async (organisationId) => {
+		const owner = await env.DB.prepare(
+			"select user_id from memberships where organisation_id = ? and role = 'owner'",
+		)
+			.bind(organisationId)
+			.first<string>("user_id");
+		if (!owner) throw new Error("The organisation has no owner.");
+		const file = new File([await png(48, 16)], "logo.png", { type: "image/png" });
+		const saved = await saveLogo(organisationId, owner, file, null, Date.now());
+		if (!saved.ok) throw new Error(saved.problem);
+	},
+};
+
+/**
  * The address to ask for the route at in the organisation `organisationId`:
  * its own address, or for a page of one record, that of a record made for it.
+ * What the route serves, where it needs something (`NEEDS`), is given first.
  */
 export async function addressFor(route: RouteUnderTest, organisationId: string): Promise<string> {
+	await NEEDS[route.id]?.(organisationId);
 	const make = RECORD_PAGES[route.id];
 	if (!make) return route.address;
 	if (!route.address.endsWith(`/${STAND_IN_RECORD}`)) {
