@@ -118,7 +118,7 @@ describe("the timer", () => {
 		await start(acme, T0);
 		await start(acme, T0 + MINUTE, projectId, bola);
 
-		expect((await stopTimer(acme, bola, ZONE, T0 + 2 * MINUTE))?.userId).toBe(bola);
+		expect((await stopTimer(acme, bola, T0 + 2 * MINUTE))?.userId).toBe(bola);
 		expect(await runningEntry(acme, ada)).not.toBeNull();
 	});
 
@@ -148,10 +148,10 @@ describe("the timer", () => {
 	});
 
 	it("stops the running entry at the server's clock, and does nothing when none runs", async () => {
-		expect(await stopTimer(acme, ada, ZONE, T0)).toBeNull();
+		expect(await stopTimer(acme, ada, T0)).toBeNull();
 		await start(acme, T0);
 
-		const stopped = await stopTimer(acme, ada, ZONE, T0 + 5 * MINUTE);
+		const stopped = await stopTimer(acme, ada, T0 + 5 * MINUTE);
 
 		expect(stopped?.endedAt?.getTime()).toBe(T0 + 5 * MINUTE);
 		expect(await runningEntry(acme, ada)).toBeNull();

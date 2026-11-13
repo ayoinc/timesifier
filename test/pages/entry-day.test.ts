@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { exactInstantAt } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, type Role, seedMembership, value } from "../organisations/harness";
@@ -152,23 +153,6 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 		});
 	});
 
-	it("a timer started before days were stored takes the day it started when it stops, or when another starts", async () => {
-		// Started at 00:30 on Tuesday in Auckland by the Worker before TS-111: no day.
-		await seedEntry(acme.id, me.user.id, site, at("2026-11-09T11:30:00Z"), null);
-		expect(await daysOf(me)).toEqual([""]);
-		clockAt(at("2026-11-09T12:00:00Z"));
-		expect((await ask(me, { intent: "stop" })).status).toBe(200);
-		expect(await daysOf(me)).toEqual(["2026-11-10"]);
-
-		await env.DB.prepare("delete from time_entries").run();
-		await seedEntry(acme.id, me.user.id, site, at("2026-11-09T11:30:00Z"), null);
-		clockAt(at("2026-11-09T12:00:00Z"));
-		expect((await ask(me, { intent: "track", projectId: site, day: "2026-11-10" })).status).toBe(
-			200,
-		);
-		expect(await daysOf(me)).toEqual(["2026-11-10", "2026-11-10"]);
-	});
-
 	it("hours tracked, on a slot of the calendar, and typed into a cell are on the day chosen", async () => {
 		await ask(me, { intent: "track", projectId: site, day: "2026-11-09", hours: "1" });
 		// 00:30 on Tuesday in Auckland is Monday in UTC.
@@ -270,4 +254,58 @@ it("leaves no entry without its day after a week of every write path", async () 
 	expect(
 		await value("select count(*) from time_entries where date(spent_on) is not spent_on"),
 	).toBe(0);
+});
+
+describe("the day stored, across both clock changes and a change of zone", () => {
+	const LONDON = "Europe/London";
+	/** The days either side of London's two clock changes of 2026, Sundays both. */
+	const DAYS = ["2026-03-28", "2026-03-29", "2026-03-30", "2026-10-24", "2026-10-25", "2026-10-26"];
+
+	/** A small seeded generator, so a failing case can be run again. */
+	function generator(seed: number) {
+		let state = seed >>> 0;
+		return (below: number) => {
+			state = (state * 1664525 + 1013904223) >>> 0;
+			return state % below;
+		};
+	}
+
+	it("is the day chosen for random times on them, and no later change of zone moves one", async () => {
+		const me = await acmeWith("member");
+		await setZone(me, LONDON);
+		// Weekend time is overtime here, so the Sundays of the changes take time too.
+		await env.DB.prepare(
+			"update organisations set overtime_policy = 'allowed', non_working_days = 'overtime' where id = ?",
+		)
+			.bind(acme.id)
+			.run();
+		const tracked: { day: string; from: number }[] = [];
+		for (let seed = 1; tracked.length < DAYS.length; seed++) {
+			const next = generator(seed);
+			const day = DAYS[next(DAYS.length)] as string;
+			// Up to 23:00, so an entry of up to an hour may run past midnight, a quarter at a time.
+			const minute = next(23 * 4) * 15;
+			const from = exactInstantAt(day, minute, LONDON);
+			// The hour the spring change skips is no time at all.
+			if (from === null || tracked.some((t) => t.day === day)) continue;
+			const clock = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+			const hours = ["0.25", "0.5", "1"][next(3)] as string;
+			const answer = await ask(me, { intent: "track", projectId: site, day, hours, start: clock });
+			expect(answer.status, `${day} ${clock} seed ${seed}`).toBe(200);
+			tracked.push({ day, from });
+		}
+		const stored = await entriesOf(me);
+		expect(stored.map((e) => [e.from, e.day])).toEqual(
+			[...tracked].sort((x, y) => x.from - y.from).map((t) => [t.from, t.day]),
+		);
+
+		// A change of zone moves nothing tracked; new time lands in the new zone's day.
+		for (const zone of [AUCKLAND, "America/Los_Angeles"]) {
+			await setZone(me, zone);
+			expect(await daysOf(me), zone).toEqual(stored.map((e) => e.day));
+		}
+		clockAt(at("2026-11-12T07:00:00Z"));
+		await ask(me, { intent: "track", projectId: site, day: "2026-11-11" });
+		expect((await entriesOf(me)).at(-1)?.day).toBe("2026-11-11");
+	});
 });

@@ -10,6 +10,10 @@ import { EMPTY_INPUT, problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 
+// The day an entry is stored with: the one it starts on in the browser's zone,
+// which the person's becomes (TS-111).
+const dayIn = (instant: number) => new Date(instant).toLocaleDateString("en-CA");
+
 // Projects searched by a project's or its client's name, grouped under the
 // clients, with each project's hours to date; Clients filtered by name
 // (TS-057). Each test signs in a new person who makes an organisation of
@@ -64,7 +68,7 @@ function seedOrganisation(slug: string, email: string) {
 			project(website, "Website", globex),
 			project(randomUUID(), "Payroll", initech),
 			project(randomUUID(), "Office move", null),
-			`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values ('${randomUUID()}', ${organisation}, (select id from users where email = '${email}'), '${website}', 'Copy', ${now - 5_400_000 - 60_000}, ${now - 60_000}, ${now}, ${now})`,
+			`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values ('${randomUUID()}', ${organisation}, (select id from users where email = '${email}'), '${website}', 'Copy', ${now - 5_400_000 - 60_000}, '${dayIn(now - 5_400_000 - 60_000)}', ${now - 60_000}, ${now}, ${now})`,
 		].join("; "),
 	);
 }
