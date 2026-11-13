@@ -35,14 +35,12 @@ beforeEach(async () => {
 });
 
 describe("the endpoints under /api/auth", () => {
-	it("are these 20 and no other", () => {
+	it("are these 18 and no other", () => {
 		expect([...offered].sort()).toEqual([
 			"GET /get-session",
-			"GET /organization/get-full-organization",
 			"GET /organization/get-invitation",
 			"GET /organization/list",
 			"GET /organization/list-invitations",
-			"GET /organization/list-members",
 			"POST /email-otp/send-verification-otp",
 			"POST /organization/accept-invitation",
 			"POST /organization/cancel-invitation",
