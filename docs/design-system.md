@@ -252,6 +252,15 @@ Four constraints apply to every page, and bite hardest on a public page with pic
 - No `style` attribute in the HTML the server sends: the browser ignores it. Style with classes.
 - `pnpm check:tokens` refuses a hex colour and a bracketed Tailwind value under `app/`.
 
+What the public pages share (TS-103), in `app/landing/`:
+
+- **A section's opening.** A section that runs the width of the page opens with its heading at the left and its lead at the right, on the heading's first line, from 840px (`SectionHead` in `app/routes/home.tsx`). A section with a photograph keeps the words beside it; a photograph beside a long list stays in the window while the list is read (`sticky`).
+- **Rise.** A section's opening words rise into place as they come up the window, tied to the scrolling (`rise` in `app/landing/public.css`): 24px and clear to settled, done by about a quarter of the way up. Only `transform` and `opacity` move, so nothing beside them does. With reduced motion, or in a browser without scroll-driven animations, they simply stand. The notices (privacy, terms) do not move at all.
+- **Press.** A button-shaped link has a state layer for hover, focus and press, and gives to 97% under the press where motion is allowed (`motion-safe:active:scale-97`; `transition-control` carries `scale`).
+- **The notices.** Under the title, a ruled list of the page's parts to jump to; each part's heading stays in the margin while the part is read, from 840px (`app/landing/Document.tsx`).
+- **The foot.** On a surface of its own, the width of the window: the lockup and what Timesifier is, the notices, and the credits in words (`SiteFooter`). On a phone the two notices stand side by side.
+- **For search engines.** Every public page has a description, a canonical link and its `og:url` from `pageMeta`; `PUBLIC_PAGES` is the list `/sitemap.xml` gives, and `robots.txt` names it; the home page alone carries structured data (decision 43).
+
 ### The 600px rule
 
 One `nav` element with one list of links is drawn two ways, by CSS alone (rule 17). Tailwind's `medium:` variant is Material's medium window size, 600px (`--breakpoint-medium` in `app/app.css`); `max-medium:` is everything narrower.

@@ -510,3 +510,23 @@ Every message carries its images attached to it, inline, and refers to each by i
 An organisation's logo may be an SVG, which is refused, not cleaned, when it could do more than draw; mail programs and PDFs get the PNG the browser drew from it, never the SVG. Its colour must carry white words at 4.5 to 1, because its action does.
 
 **What it costs.** Each message is larger by its images, and an organisation's logo is read from R2 for every document it sends. A logo uploaded as an SVG or a WebP without the PNG drawn from it (a browser without script) appears on the pages but not in messages and PDFs. Deleting an organisation must delete its logos in R2 first, and is refused, to be asked again, when one cannot be.
+
+### 43. Search: the application serves robots.txt and the sitemap; structured data names the brand only
+
+Decided on 2026-11-13, on card TS-103.
+
+**robots.txt.** Before, `/robots.txt` was not ours: the Worker answered 404, and Cloudflare served its Content Signals Policy in its place (the comment block of definitions, with no rule and no sitemap), which it does for a zone on the Free plan that has no `robots.txt` of its own ([Cloudflare, robots.txt setting](https://developers.cloudflare.com/bots/additional-configurations/managed-robots-txt/)). Measured on production on 2026-11-13: status 200, `cf-placement: remote-FRA` and our security headers, so the Worker ran and Cloudflare replaced its 404. Now `app/routes/robots.ts` answers: every page may be crawled, and the `Sitemap:` line names `/sitemap.xml` on the origin asked for. If the zone's Bot Preference Sync is turned on later, Cloudflare puts its managed lines before ours. Whether to ask AI crawlers not to train on the pages is the owner's choice, made in the dashboard, not here.
+
+**Sitemap.** `app/routes/sitemap.ts` lists `PUBLIC_PAGES` (`app/landing/Site.tsx`) and nothing else, without dates: no date of change is recorded anywhere, and a wrong one is worse than none. `test/claims.test.ts` holds the list to the pages a visitor can reach from the home page, and to the route modules that describe themselves with `pageMeta`.
+
+**Structured data.** The home page alone carries JSON-LD: an `Organization` with the brand name, address and logo, and a `SoftwareApplication` with the page's own description. No legal name, no address, no price, no rating: the legal entity is not known yet, Timesifier has no price list and nobody has rated it. It is a data block (`type="application/ld+json"`), which the browser does not run, so the Content Security Policy does not apply to it and it carries no nonce (`docs/security.md`).
+
+| Option                                       | Evidence                                                                                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| robots.txt and sitemap from routes (chosen)  | The origin is the request's, so a preview's sitemap names the preview and production's names production; no host is written in the code.                       |
+| Static files in `public/`                    | Served before the Worker runs, but the `Sitemap:` line and every `<loc>` must be absolute, so they would name one host for every deployment.                   |
+| Cloudflare's managed robots.txt alone        | No `Sitemap:` line, and its content changes with dashboard settings nobody reviews in a pull request.                                                          |
+| `Organization` with a legal name and address | What Google suggests for a business, but the privacy notice says the legal entity is not on any page yet; structured data must not say more than the pages do. |
+| `SoftwareApplication` with an `offers` price | Would make the page eligible for a rich result, but "free today" is not a price list; the terms say a price will be given with a new date first.               |
+
+**What it costs.** Without `offers` or `aggregateRating`, Google shows no software rich result for the home page; the structured data still names the organisation and its logo. The site has to be verified in Google Search Console and Bing Webmaster Tools by the owner before either reads the sitemap (the pull request gives the steps).
