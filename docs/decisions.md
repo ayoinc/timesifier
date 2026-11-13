@@ -510,3 +510,20 @@ Every message carries its images attached to it, inline, and refers to each by i
 An organisation's logo may be an SVG, which is refused, not cleaned, when it could do more than draw; mail programs and PDFs get the PNG the browser drew from it, never the SVG. Its colour must carry white words at 4.5 to 1, because its action does.
 
 **What it costs.** Each message is larger by its images, and an organisation's logo is read from R2 for every document it sends. A logo uploaded as an SVG or a WebP without the PNG drawn from it (a browser without script) appears on the pages but not in messages and PDFs. Deleting an organisation must delete its logos in R2 first, and is refused, to be asked again, when one cannot be.
+
+### 40. A list goes to D1 as one JSON value
+
+Decided on 2026-11-13 (TS-112), on the measurement in `research/corporate/scale-test.md`.
+
+D1 takes at most 100 bound parameters a statement ([Cloudflare D1 limits](https://developers.cloudflare.com/d1/platform/limits/): "Maximum bound parameters per query: 100", applying to each statement of a batch too). Drizzle's `inArray(column, ids)` binds one parameter a value, so every list that grows with an organisation's people, projects or records failed once it held about a hundred: every page an owner or admin opened answered 500 in an organisation of about 99 members, through the Approvals link the shared layout counts; Activity and `/time_entries` failed in any busy organisation.
+
+A list now goes to D1 as one parameter: `among(column, ids)` in `app/db/among.ts` writes `column in (select value from json_each(?))` and binds the list as one JSON array, each value once; `notAmong` is its opposite. SQLite still uses the column's index (`LIST SUBQUERY … SCAN json_each`). `inArray` stays only over a fixed list of constants (`["pending", "approved"]`, `[...OWING, "paid"]`), and `test/node/lists.test.ts` fails `pnpm test` on any other `inArray(` or `in (${…})` written into SQL in `app/`, naming its file and line. A count that needs no list does not read one: the Approvals link is one `count(*)` (`app/db/waiting.ts`).
+
+| Option                                     | Evidence                                                                                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| One JSON parameter, `json_each` (chosen)   | One parameter however long the list; one statement, so one round trip; the index is used. The list is a bound value, so it counts against D1's 2 MB a string (about 50,000 ids), not its 100 KB a statement. Five modules had already written a copy.    |
+| Chunks of 90 ids, a statement each         | Works, at a round trip a chunk, and every caller must remember to chunk and merge; three places instead cut the list at 90 and silently left out the rest.                                                   |
+| A join or subquery in place of each list   | Best where the list is itself a query (the Approvals count), but most lists are ids a page has already read from another table, or from D1 and then filtered by a rule written in TypeScript.               |
+| A temporary table filled before the query  | Several statements a read, and D1 offers no session-scoped temporary tables across a batch.                                                                                                                   |
+
+**What it costs.** A list is serialised to JSON on every call, which is cheap beside the round trip it saves. A list longer than D1's 2 MB a string, about 50,000 ids, would fail; none is that long, since the longest lists are an organisation's people and a page holds at most 500 records. Read the same day from <https://developers.cloudflare.com/d1/platform/limits/>, last updated 2026-10-30.
