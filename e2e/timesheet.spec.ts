@@ -107,14 +107,18 @@ test.describe("the timer", () => {
 		await page.keyboard.press("Enter");
 		await expect(sheet).toBeHidden();
 		await expect(navTimer(page)).toBeVisible();
+		// The installed clock still runs in real time between steps, so the two
+		// timers are read together, again until they agree, never one against a
+		// reading of the other that time has already overtaken.
+		const bothRead = async () => {
+			const nav = await elapsed(navTimer(page)).textContent();
+			const day = await elapsed(dayTimer(page)).textContent();
+			return nav === day ? nav : `navigation ${nav}, Day view ${day}`;
+		};
 		await page.clock.runFor(3_000);
-		await expect(elapsed(dayTimer(page))).toHaveText(
-			(await elapsed(navTimer(page)).textContent()) ?? "",
-		);
+		await expect.poll(bothRead).toMatch(/^0:00:(0[1-9]|[1-5]\d)$/);
 		await page.clock.runFor(61_000);
-		await expect(elapsed(dayTimer(page))).toHaveText(
-			(await elapsed(navTimer(page)).textContent()) ?? "",
-		);
+		await expect.poll(bothRead).toMatch(/^0:01:\d\d$/);
 		// A timer is never announced: no live region holds it.
 		for (const timer of [navTimer(page), dayTimer(page)]) {
 			await expect(
