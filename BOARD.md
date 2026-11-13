@@ -40,6 +40,19 @@ Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the busin
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-114 · The Timesheet answers the press
+
+Builder: an AI session on branch `ts-114-press`, stacked on #65. From `timesifier/research/corporate/live-feel.md` (F1 to F6) and the harvest sweep 2 (S2-01 to S2-04, S2-15). No migration. `docs/design-system.md` ("A press answered before the server"), decision 41. In review: the draft pull request, with the feel measured before and after against the local server.
+
+- [x] **1. Steps and tabs answer in the press's frame.** Previous and Next day, week and month, and the Day, Week, Calendar and History tabs draw the date label, the selected day and the tab from the address pressed, before the server answers; what they replace dims (`.awaiting`). The periods either side are read 150ms after the page settles, kept for 30 seconds and cleared by anything sent, so a warm step draws the next day whole from memory; a read ahead shows no pending bar (`app/timesheet/aim.ts`, `READ_AHEAD`; `e2e/timesheet-press.spec.ts`, "a step and a tab answer the press before the server does, and a warm step lands from memory").
+- [x] **2. The Timesheet's two parts load in parallel.** `timesheetData` and `trackChoices` start together; only the two reads of the shown entries' tasks and tags wait for the entries' ids (`app/routes/app/timesheet.tsx`, `app/tasks/track.server.ts`).
+- [x] **3. Track time opens from what the page holds.** On the Timesheet, any day the view shows is opened from its projects, choices, rules and lock reasons (`lockReasons` in the Day, Week and Calendar data), with no request; it reads again behind the sheet only when the page's answer is older than 30 seconds (`app/timesheet/TrackTime.tsx`; spec, "Track time opens from what the page holds…", no request to `timesheet/day`).
+- [x] **4. The day picker draws its grid at once.** The month is drawn from the date and the organisation's first weekday; the totals are read on open and on hover or focus of the title, and each day's dot fades in where its place was kept (`app/timesheet/DayPicker.tsx`; spec: the grid stands while the totals are held, and does not move when they come).
+- [x] **5. Projects filters on the page.** Each key filters the list the page holds by the server's rule (`projectMatches`) and replaces `?q=`; the page and the layouts read nothing again for a move of the query alone (`app/shell/revalidation.ts`, decision 41); words that do not narrow those the page was sent for are asked of the server; without script the GET form searches on the server (spec: no `.data` request while typing; `?q=pay` loaded whole finds the same).
+- [x] **6. Menus close within 100ms.** A menu or popover leaves in 100ms by opacity alone; Escape dismisses with no transition and the button takes its state at once (`POPOVER_MOTION`, `settleOnEscape`; spec: the account menu is gone ≤ 100ms after Escape with no transition running, with and without reduced motion).
+- [x] **7. No uncaught AbortError when a navigation aborts a fetcher's load.** Fixed in React Router's turbo-stream decoder (`patches/react-router@8.5.1.patch`, decision 41; `test/node/turbo-stream-abort.test.ts`).
+- [x] **Browser spec** with reduced motion and without, and axe on the day, the picker before and after its totals, and Projects filtered, at 390px and 1280px in both schemes (`e2e/timesheet-press.spec.ts`).
+
 ### TS-096 · Loading and motion like Royal London
 
 Builder: AI sessions on branch `ts-096-motion` (PR #57). In review: the placement's effect is proven on the preview and again in production after the merge. No migration. `docs/design-system.md` ("While the page waits", "How a page loads"), decision 34.
