@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, gt, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
+import { and, asc, gt, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
@@ -11,7 +11,7 @@ import { type Access, type TimeScope, timeScopeOf } from "~/organisations/access
 import { accessOf } from "~/organisations/access.server";
 import { type Membership, notFound } from "~/organisations/membership.server";
 import { addressLine, nameOrEmail, shownName } from "~/organisations/people";
-import { bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { type Day, dayOf, daysFrom } from "~/time/calendar";
 import { zoneOfMember } from "~/time/zones.server";
 
 import type { Grouping } from "./choices";
@@ -200,16 +200,15 @@ async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
 }
 
 /**
- * The entries of `request` that start in its days, page by page in the order
- * of their ids (docs/decisions.md entry 26). Each page is one query of at most
+ * The entries of `request` whose stored day is in its days, page by page in
+ * the order of their ids (docs/decisions.md entries 26 and 39). Each page is one query of at most
  * `pageSize` entries after the last id of the one before.
  */
 export async function* entryPages(
-	request: Pick<ReportRequest, "scope" | "days" | "zone" | "people" | "tag">,
+	request: Pick<ReportRequest, "scope" | "days" | "people" | "tag">,
 	pageSize = ENTRY_PAGE_SIZE,
 ): AsyncGenerator<ReportEntry[]> {
 	const { scope, people, tag } = request;
-	const { from, to } = bounds(request.days.first, request.days.last, request.zone);
 	const [projects, clients, tasks] = await Promise.all([
 		scope.projects.select(),
 		scope.clients.select(),
@@ -226,8 +225,8 @@ export async function* entryPages(
 			(e) =>
 				and(
 					after === undefined ? undefined : gt(e.id, after),
-					gte(e.startedAt, new Date(from)),
-					lt(e.startedAt, new Date(to)),
+					gte(e.spentOn, request.days.first),
+					lte(e.spentOn, request.days.last),
 					people.everyone ? undefined : amongPeople(e.userId, people.people),
 					tag === undefined ? undefined : taggedWith(scope.organisationId, e.id, e.projectId, tag),
 				),
@@ -248,6 +247,7 @@ export async function* entryPages(
 				clientId,
 				client: clientId === null ? null : (clientNames.get(clientId) ?? null),
 				description: row.description,
+				day: row.spentOn,
 				startedAt: row.startedAt.getTime(),
 				endedAt: row.endedAt?.getTime() ?? null,
 				taskId: row.taskId,
@@ -267,7 +267,7 @@ export async function rowsOfReport(request: ReportRequest): Promise<Row[]> {
 	const rows: Row[] = [];
 	for await (const page of entryPages(request)) {
 		for (const entry of page) {
-			const row = rowOf(entry, request.days, request.zone, request.now);
+			const row = rowOf(entry, request.days, request.now);
 			if (row) rows.push(row);
 		}
 	}

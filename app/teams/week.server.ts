@@ -1,17 +1,17 @@
-import { and, asc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 
 import type { OrganisationScope } from "~/db";
-import { type PeriodDays, type PeriodStatus, periodBounds } from "~/periods/periods";
-import { type Day, dayOf, daysFrom } from "~/time/calendar";
+import type { PeriodDays, PeriodStatus } from "~/periods/periods";
+import { type Day, daysFrom } from "~/time/calendar";
 
 import type { Person } from "./people.server";
 
 /**
  * Team > This week (TS-045): for one period, each person the viewer may see,
  * with the time they have logged in it, whether their timer runs now, and
- * where their period stands. A person's period is their own local days, so
- * each person's entries are counted between the bounds of the period in their
- * zone. A running entry counts up to `now`.
+ * where their period stands. A person's period is their own local days: each
+ * entry counts on the day stored with it when it was tracked (decision 39). A
+ * running entry counts up to `now`.
  */
 
 export interface PersonInWeek {
@@ -34,30 +34,21 @@ function secondsOf(entry: { startedAt: Date; endedAt: Date | null }, now: number
 	return Math.max(0, Math.floor((end - entry.startedAt.getTime()) / 1000));
 }
 
-/** The entries of `people` that start within their own bounds of `period`. */
+/** The entries of `people` whose day is in `period`. */
 async function entriesIn(scope: OrganisationScope, people: readonly Person[], period: PeriodDays) {
 	if (people.length === 0) return [];
-	const spans = new Map(people.map((p) => [p.id, periodBounds(period, p.timeZone)]));
-	const all = [...spans.values()];
-	const from = Math.min(...all.map((s) => s.from));
-	const to = Math.max(...all.map((s) => s.to));
-	const rows = await scope.timeEntries.select(
+	return scope.timeEntries.select(
 		(e) =>
 			and(
 				inArray(
 					e.userId,
 					people.map((p) => p.id),
 				),
-				gte(e.startedAt, new Date(from)),
-				lt(e.startedAt, new Date(to)),
+				gte(e.spentOn, period.startsOn),
+				lte(e.spentOn, period.endsOn),
 			),
 		{ orderBy: (e) => [asc(e.startedAt)] },
 	);
-	return rows.filter((entry) => {
-		const span = spans.get(entry.userId);
-		const at = entry.startedAt.getTime();
-		return span !== undefined && span.from <= at && at < span.to;
-	});
 }
 
 /** Each of `people` in `period`, in the order given. */
@@ -168,7 +159,7 @@ export async function personWeek(
 	const names = new Map(projects.map((p) => [p.id, p.name]));
 	const days = daysFrom(period.startsOn, period.endsOn).map((day) => {
 		const own = entries
-			.filter((e) => dayOf(e.startedAt, person.timeZone) === day)
+			.filter((e) => e.spentOn === day)
 			.map((e) => ({
 				id: e.id,
 				project: names.get(e.projectId) ?? "",

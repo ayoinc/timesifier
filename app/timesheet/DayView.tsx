@@ -23,7 +23,7 @@ import { TEXT_LINK } from "~/shell/links";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { EntryChoices } from "~/tasks/EntryChoices";
 import { TrackChoicesContext } from "~/tasks/track";
-import { addDays, type Day, dayOf } from "~/time/calendar";
+import { addDays, type Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 
 import { DayPicker } from "./DayPicker";
@@ -172,7 +172,6 @@ export function DayView({ data, slug }: { data: DayData; slug: string }) {
 						day={day}
 						today={today}
 						running={data.running}
-						zone={zone}
 						slug={slug}
 					/>
 
@@ -408,13 +407,7 @@ export function EntryFields({
 	return (
 		<>
 			<EntryChoices projects={offered} defaultProjectId={entry.projectId} entryId={entry.id} />
-			<TextField
-				label="Date"
-				name="date"
-				type="date"
-				defaultValue={dayOf(entry.startedAt, data.zone)}
-				isRequired
-			/>
+			<TextField label="Date" name="date" type="date" defaultValue={entry.day} isRequired />
 			<div className="grid grid-cols-2 gap-4">
 				<TextField
 					label="Start"

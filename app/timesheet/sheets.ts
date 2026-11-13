@@ -216,9 +216,7 @@ export function historyRows(
 		period = periodAfter(period, -1)
 	) {
 		const row = periods.find((each) => each.startsOn === period.startsOn) ?? null;
-		const inPeriod = entries.filter(
-			({ day }) => period.startsOn <= day && day <= period.endsOn,
-		);
+		const inPeriod = entries.filter(({ day }) => period.startsOn <= day && day <= period.endsOn);
 		rows.push({
 			...period,
 			state: periodState(row?.status ?? null),

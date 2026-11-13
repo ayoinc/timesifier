@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, inArray, lt, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { ActivitySource } from "~/activity/actions";
 import { record } from "~/activity/activity.server";
 import { type OrganisationScope, organisationScope, organisations } from "~/db";
-import { addDays, bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { LeaveStatus } from "./kinds";
 import { calendarOf, leaveContext } from "./leave.server";
 import {
@@ -244,12 +244,7 @@ export interface DayChange {
 }
 
 /** The whole minutes of overtime of `entries` on the days from `first` to `last`, both included. */
-function overtimeBetween(
-	entries: readonly Timed[],
-	first: Day,
-	last: Day,
-	now: number,
-) {
+function overtimeBetween(entries: readonly Timed[], first: Day, last: Day, now: number) {
 	if (first > last) return 0;
 	let sum = 0;
 	for (const day of daysFrom(first, last)) {
@@ -376,5 +371,7 @@ export async function daysOver(
 		calendar.rules.overtimeWeekCap === null ? first : weekOf(calendar.rules, first),
 		last,
 	);
-	return dayRules(calendar, daysFrom(first, last), (day) => trackedOn(entries, day, now)).filter((day) => day.overMinutes > 0);
+	return dayRules(calendar, daysFrom(first, last), (day) => trackedOn(entries, day, now)).filter(
+		(day) => day.overMinutes > 0,
+	);
 }

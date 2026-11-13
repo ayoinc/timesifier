@@ -5,8 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { type OrganisationScope, users } from "~/db";
 import { pricingOf } from "~/projects/money.server";
 import { rateFor, wholeMinutes } from "~/rates/price";
-import { addDays, bounds, type Day, dayOf } from "~/time/calendar";
-import { zoneOf } from "~/time/zones";
+import { addDays, type Day, dayOf } from "~/time/calendar";
 
 import {
 	type DraftLine,
@@ -123,8 +122,8 @@ export async function billableProjectsOf(
 
 /**
  * The billable, uninvoiced, finished time of `projectIds` in `days`, priced:
- * each entry on the local day it starts in its person's zone, at the rate in
- * force that day (`rateFor`).
+ * each entry on its stored day (decision 39), at the rate in force that day
+ * (`rateFor`).
  */
 export async function uninvoicedTime(
 	scope: OrganisationScope,
@@ -134,15 +133,14 @@ export async function uninvoicedTime(
 	now: number,
 ): Promise<PreviewEntry[]> {
 	if (projectIds.length === 0) return [];
-	const range = days ? bounds(days.first, days.last, organisation.timeZone) : null;
 	const [entries, pricing, tasks, projects] = await Promise.all([
 		scope.timeEntries.select((t) =>
 			and(
 				inArray(t.projectId, [...projectIds]),
 				eq(t.billable, true),
 				isNotNull(t.endedAt),
-				range ? gte(t.startedAt, new Date(range.from)) : undefined,
-				lt(t.startedAt, new Date(range ? range.to : now)),
+				days ? gte(t.spentOn, days.first) : undefined,
+				days ? lte(t.spentOn, days.last) : lt(t.startedAt, new Date(now)),
 				sql`not ${scope.invoiceLineSources.exists((s) => eq(s.timeEntryId, t.id))}`,
 			),
 		),
@@ -153,7 +151,7 @@ export async function uninvoicedTime(
 	if (entries.length === 0) return [];
 
 	const people = await drizzle(env.DB)
-		.select({ id: users.id, name: users.name, timeZone: users.timeZone })
+		.select({ id: users.id, name: users.name })
 		.from(users)
 		.where(inArray(users.id, [...new Set(entries.map((e) => e.userId))]));
 	const personById = new Map(people.map((p) => [p.id, p]));
@@ -162,8 +160,7 @@ export async function uninvoicedTime(
 
 	const items = entries.map((entry) => {
 		const person = personById.get(entry.userId);
-		const zone = zoneOf({ timeZone: person?.timeZone ?? null }, organisation);
-		const day = dayOf(entry.startedAt, zone);
+		const day = entry.spentOn;
 		const minutes = wholeMinutes(
 			((entry.endedAt?.getTime() ?? entry.startedAt.getTime()) - entry.startedAt.getTime()) / 1000,
 		);

@@ -7,7 +7,7 @@ import { PeriodStepper } from "~/components/PeriodStepper";
 import { Tooltip } from "~/components/Tooltip";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TRANSITION, useTravel } from "~/shell/transitions";
-import { addDays, type Day, dayOf } from "~/time/calendar";
+import { addDays, type Day } from "~/time/calendar";
 import { formatMonth } from "~/time/format";
 
 import { CalendarMonth } from "./CalendarMonth";

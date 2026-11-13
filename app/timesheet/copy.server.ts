@@ -5,10 +5,10 @@ import { type OrganisationScope, uuidv7 } from "~/db";
 import { daysOf } from "~/leave/leave.server";
 import { refusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
-import { type PeriodDays, periodAfter, periodBounds } from "~/periods/periods";
+import { type PeriodDays, periodAfter } from "~/periods/periods";
 import { entryTagStatements, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
-import { addDays, bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { gridEntryStart, placeOnDay } from "~/time/grid";
 import { ENTRY_FIELDS, entriesOfDay, subject } from "~/time/manual.server";
 
@@ -106,12 +106,7 @@ export async function copySourceWeek(
 	period: PeriodDays,
 ): Promise<{ period: PeriodDays; entries: CopySource[] } | null> {
 	const oldest = periodAfter(period, -3);
-	const sources = await sourcesIn(
-		scope,
-		userId,
-		oldest.startsOn,
-		addDays(period.startsOn, -1),
-	);
+	const sources = await sourcesIn(scope, userId, oldest.startsOn, addDays(period.startsOn, -1));
 	for (const back of [1, 2, 3]) {
 		const week = periodAfter(period, -back);
 		const entries = sources.filter((s) => week.startsOn <= s.day && s.day <= week.endsOn);

@@ -16,7 +16,7 @@ import {
 	type ReportQuery,
 	rangeDays,
 } from "~/reports/query";
-import { addDays, bounds, dayOf } from "~/time/calendar";
+import { dayOf } from "~/time/calendar";
 
 import {
 	type Contractor,
@@ -104,9 +104,7 @@ export async function contractorReport(
 	const [theirs, othersEntries, rates] = await Promise.all([
 		contractorsNow.length === 0
 			? Promise.resolve([])
-			: scope.timeEntries.select((e) =>
-					and(inDays(e), among(e.userId, contractorsNow)),
-				),
+			: scope.timeEntries.select((e) => and(inDays(e), among(e.userId, contractorsNow))),
 		// The entries of people who are no longer members.
 		scope.timeEntries.select((e) =>
 			and(
@@ -175,10 +173,7 @@ async function leftAsContractors(
 }
 
 /** Each of `ids` by name (their address when they have given none). */
-async function peopleOf(
-	ids: readonly string[],
-	left: ReadonlySet<string>,
-): Promise<Contractor[]> {
+async function peopleOf(ids: readonly string[], left: ReadonlySet<string>): Promise<Contractor[]> {
 	const people: Contractor[] = [];
 	const db = drizzle(env.DB);
 	for (let at = 0; at < ids.length; at += IDS_A_QUERY) {

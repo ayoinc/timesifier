@@ -15,7 +15,7 @@ import { rulesCalendarOf } from "~/leave/rules.server";
 import { nameKey, recordName } from "~/lib/names";
 import { lockOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
-import { addDays, bounds, type Day, dayOf, instantAt } from "~/time/calendar";
+import { addDays, type Day, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
 import { ENTRY_FIELDS } from "~/time/manual.server";
 

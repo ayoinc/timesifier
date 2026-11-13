@@ -5,7 +5,6 @@ import { drizzle } from "drizzle-orm/d1";
 import { type OrganisationScope, organisationScope, users } from "~/db";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
-import { dayOf } from "~/time/calendar";
 
 import type { Route } from "./+types/integrations.export";
 
@@ -15,6 +14,7 @@ import type { Route } from "./+types/integrations.export";
 // here or in Harvest. It is streamed a page at a time and nothing is stored.
 // Overtime (TS-095) is a last column of its own, Yes or No; an import here
 // reads each row's kind from the day's limits again, and Harvest ignores it.
+// Each row's date is the entry's stored day (decision 39).
 
 /** The columns, in their order: Harvest's eight, the person's email, then whether it is overtime. */
 export const EXPORT_COLUMNS = [
@@ -37,7 +37,7 @@ interface Names {
 	project: Map<string, { name: string; clientId: string | null }>;
 	client: Map<string, string>;
 	task: Map<string, string>;
-	person: Map<string, { name: string; email: string; zone: string | null }>;
+	person: Map<string, { name: string; email: string }>;
 }
 
 /** Names by id, read before the file starts, so a file that is never read reads nothing more. */
@@ -50,7 +50,7 @@ async function namesOf(scope: OrganisationScope): Promise<Names> {
 	]);
 	const people = memberships.length
 		? await drizzle(env.DB)
-				.select({ id: users.id, name: users.name, email: users.email, zone: users.timeZone })
+				.select({ id: users.id, name: users.name, email: users.email })
 				.from(users)
 				.where(
 					inArray(
@@ -70,7 +70,6 @@ async function namesOf(scope: OrganisationScope): Promise<Names> {
 async function* chunks(
 	scope: OrganisationScope,
 	{ project, client, task, person }: Names,
-	organisationZone: string,
 	now: number,
 ) {
 	yield BYTE_ORDER_MARK + csvLine(EXPORT_COLUMNS);
@@ -93,7 +92,7 @@ async function* chunks(
 			const of = project.get(entry.projectId);
 			const minutes = ((entry.endedAt?.getTime() ?? now) - entry.startedAt.getTime()) / 60_000;
 			chunk += csvLine([
-				dayOf(entry.startedAt, who?.zone ?? organisationZone),
+				entry.spentOn,
 				of?.clientId ? (client.get(of.clientId) ?? "") : "",
 				of?.name ?? "",
 				entry.taskId ? (task.get(entry.taskId) ?? "") : "",
@@ -115,7 +114,7 @@ async function* chunks(
 export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation } = context.get(membershipContext);
 	const scope = organisationScope(env.DB, organisation.id);
-	const source = chunks(scope, await namesOf(scope), organisation.timeZone, Date.now());
+	const source = chunks(scope, await namesOf(scope), Date.now());
 	const encoder = new TextEncoder();
 	const body = new ReadableStream<Uint8Array>({
 		async pull(controller) {

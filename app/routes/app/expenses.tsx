@@ -40,7 +40,7 @@ import { isAdministrator, maySeeExpensesOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
-import { type PeriodDays, periodBounds } from "~/periods/periods";
+import type { PeriodDays } from "~/periods/periods";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
 import { activeProjects } from "~/projects/projects.server";
 import { recentProjectIds } from "~/projects/recent.server";
@@ -241,7 +241,7 @@ async function submissionOf(
 	scope: OrganisationScope,
 	userId: string,
 	period: PeriodDays,
-	{ today, zone }: { today: Day; zone: string },
+	{ today }: { today: Day },
 ): Promise<PeriodSubmission> {
 	const [row, running, over] = await Promise.all([
 		periodOf(scope, userId, period.startsOn),

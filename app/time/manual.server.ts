@@ -1,4 +1,4 @@
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type { ActivitySource } from "~/activity/actions";
 import { changes, recordStatement } from "~/activity/activity.server";
@@ -10,7 +10,7 @@ import { findActiveProject } from "~/projects/projects.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 
-import { bounds, type Day, dayOf } from "./calendar";
+import { type Day, dayOf } from "./calendar";
 import { formatDuration } from "./format";
 import { gridEntryStart, placeOnDay } from "./grid";
 

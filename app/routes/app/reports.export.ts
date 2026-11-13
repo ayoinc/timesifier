@@ -21,7 +21,7 @@ async function* csvChunks(report: ReportRequest): AsyncGenerator<string> {
 	for await (const page of entryPages(report)) {
 		let chunk = "";
 		for (const entry of page) {
-			const row = rowOf(entry, report.days, report.zone, report.now);
+			const row = rowOf(entry, report.days, report.now);
 			if (row) chunk += csvLine(rowCells(row, report.showClients));
 		}
 		if (chunk) yield chunk;

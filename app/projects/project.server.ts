@@ -153,7 +153,7 @@ export async function projectPage(
 		byTask.set(taskKey, (byTask.get(taskKey) ?? 0) + length);
 		byPerson.set(entry.userId, (byPerson.get(entry.userId) ?? 0) + length);
 		if (!seesRates) continue;
-		const day = dayOf(entry.startedAt, zone);
+		const day = entry.spentOn;
 		const amount = priceTime(priced, pricing.rates, {
 			userId: entry.userId,
 			taskId: entry.taskId,

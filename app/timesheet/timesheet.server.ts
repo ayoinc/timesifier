@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, gte, lt, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 
 import { type Filter, type OrganisationScope, organisationScope, type ScopedAccessor } from "~/db";
 import { type DayKind, dayLabel } from "~/leave/days";
@@ -10,15 +10,9 @@ import type { LockNotice, LockReason } from "~/locks/locks";
 import { lockNoticeOf, lockReasonsOn } from "~/locks/locks.server";
 import type { Membership } from "~/organisations/membership.server";
 import { lockedDays } from "~/periods/locks.server";
-import {
-	type PeriodDays,
-	PeriodStatus,
-	periodAfter,
-	periodBounds,
-	periodContaining,
-} from "~/periods/periods";
+import { type PeriodDays, PeriodStatus, periodAfter, periodContaining } from "~/periods/periods";
 import { hoursLabel } from "~/schedules/schedules";
-import { addDays, bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { runningEntry } from "~/time/entries.server";
 import { zoneOfMember } from "~/time/zones.server";
 
@@ -340,7 +334,7 @@ export async function timesheetData(
 		}
 		case "history": {
 			const current = periodContaining(today, organisation.weekStartsOn);
-			return { ...base, ...(await historyData(scope, user.id, current, zone, now)) };
+			return { ...base, ...(await historyData(scope, user.id, current, now)) };
 		}
 	}
 }
@@ -466,7 +460,6 @@ async function historyData(
 	scope: OrganisationScope,
 	userId: string,
 	current: PeriodDays,
-	zone: string,
 	now: number,
 ): Promise<Omit<HistoryData, keyof TimesheetBase>> {
 	const oldest = periodAfter(current, -(HISTORY_LENGTH - 1));
