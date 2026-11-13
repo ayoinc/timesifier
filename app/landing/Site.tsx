@@ -178,7 +178,7 @@ export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 								<li>
 									<a
 										href={SIGN_IN_PATH}
-										className="inline-block rounded-small border border-on-sheet px-4 py-2 outline-none hover:underline hover:underline-offset-4 focus-visible:focus-indicator"
+										className="inline-block rounded-small border border-on-sheet px-4 py-2 outline-none state-layer over-sheet transition-control hover:state-hover focus-visible:state-focus focus-visible:focus-indicator active:state-pressed motion-safe:active:scale-97"
 									>
 										Sign in
 									</a>
@@ -210,50 +210,61 @@ export interface SiteFooterProps {
 }
 
 /**
- * The foot of every public page: what Timesifier is, the way to its notices,
- * and the credits for the page's photographs, in that order.
+ * The foot of every public page, on a surface of its own the width of the
+ * window: what Timesifier is, the way to its notices, and the credits for the
+ * page's photographs, in that order. From 600px they stand in three columns; on
+ * a phone, one under another, the two notices side by side.
  */
 export function SiteFooter({ current, photos = [] }: SiteFooterProps) {
 	return (
-		<footer className={`${PAGE} site-footer grid gap-8 py-12 text-body-medium medium:grid-cols-12`}>
-			<div className="medium:col-span-5">
-				<p>
-					<Wordmark />
-				</p>
-				<p className="mt-2 max-w-80 text-on-surface-variant">
-					A time tracker for people and small teams who bill or account for their hours.
-				</p>
-			</div>
-			<nav aria-label="Notices" className="medium:col-span-3">
-				<ul className="flex flex-col gap-1">
-					{NOTICES.map(({ href, label }) => (
-						<li key={href}>
-							<a
-								href={href}
-								aria-current={href === current ? "page" : undefined}
-								className={cx(LINK, "inline-block py-1", href === current && "decoration-2")}
-							>
-								{label}
-							</a>
-						</li>
-					))}
-				</ul>
-			</nav>
-			{photos.length > 0 && (
-				<section aria-labelledby="site-credits" className="medium:col-span-4">
-					<h2 id="site-credits" className="py-1 text-label-large">
-						Credits
+		<footer className="site-footer bg-surface-container-low text-body-medium">
+			<div
+				className={`${PAGE} grid gap-x-8 gap-y-10 pt-12 pb-16 medium:grid-cols-12 expanded:pt-16 expanded:pb-20`}
+			>
+				<div className="medium:col-span-5">
+					<p>
+						<Wordmark />
+					</p>
+					<p className="mt-3 max-w-80 text-on-surface-variant">
+						A time tracker for people and small teams who bill or account for their hours.
+					</p>
+				</div>
+				<nav aria-labelledby="site-notices" className="medium:col-span-3">
+					<h2 id="site-notices" className="text-label-large">
+						Notices
 					</h2>
-					<ul className="flex flex-col gap-1 text-on-surface-variant">
-						{photos.map((photo) => (
-							<li key={photo.name} className="py-1">
-								{photo.place}: photograph by {photo.author}
+					<ul className="mt-2 flex gap-x-6 medium:flex-col">
+						{NOTICES.map(({ href, label }) => (
+							<li key={href}>
+								<a
+									href={href}
+									aria-current={href === current ? "page" : undefined}
+									className={cx(LINK, "inline-block py-1.5", href === current && "decoration-2")}
+								>
+									{label}
+								</a>
 							</li>
 						))}
 					</ul>
-					<p className="mt-2 text-on-surface-variant">From Unsplash, under the Unsplash License.</p>
-				</section>
-			)}
+				</nav>
+				{photos.length > 0 && (
+					<section aria-labelledby="site-credits" className="medium:col-span-4">
+						<h2 id="site-credits" className="text-label-large">
+							Credits
+						</h2>
+						<ul className="mt-2 flex flex-col text-on-surface-variant">
+							{photos.map((photo) => (
+								<li key={photo.name} className="py-1.5">
+									{photo.place}: photograph by {photo.author}
+								</li>
+							))}
+						</ul>
+						<p className="mt-2 text-on-surface-variant">
+							From Unsplash, under the Unsplash License.
+						</p>
+					</section>
+				)}
+			</div>
 		</footer>
 	);
 }
