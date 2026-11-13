@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cx } from "./cx";
 import { WaitClock } from "./WaitClock";
 
-const FACE = "col-start-1 row-start-1 inline-flex items-center justify-center gap-2";
+const FACE = "col-start-1 row-start-1 inline-flex items-center gap-2";
 
 export interface WaitingLabelProps {
 	/** Whether the control's request is on its way. */
@@ -14,6 +14,8 @@ export interface WaitingLabelProps {
 	doing: string;
 	/** The clock's tone: `one` on a filled control, where amber would not show. */
 	tone?: "two" | "one";
+	/** `center` in a button, the default; `start` in a link, which begins where its sentence does. */
+	align?: "center" | "start";
 }
 
 /**
@@ -25,11 +27,18 @@ export interface WaitingLabelProps {
  * words at rest: a name that changed under the focus would not be read again,
  * and React Aria says "pending" of a pending button itself.
  */
-export function WaitingLabel({ waiting, children, doing, tone = "two" }: WaitingLabelProps) {
+export function WaitingLabel({
+	waiting,
+	children,
+	doing,
+	tone = "two",
+	align = "center",
+}: WaitingLabelProps) {
+	const face = cx(FACE, align === "center" ? "justify-center" : "justify-start");
 	return (
 		<span className="inline-grid">
-			<span className={cx(FACE, waiting && "wait-leave")}>{children}</span>
-			<span aria-hidden="true" className={cx(FACE, !waiting && "invisible")}>
+			<span className={cx(face, waiting && "wait-leave")}>{children}</span>
+			<span aria-hidden="true" className={cx(face, !waiting && "invisible")}>
 				{waiting ? <WaitClock tone={tone} /> : <span className="size-5 shrink-0" />}
 				<span className={waiting ? "wait-appear" : undefined}>{doing}</span>
 			</span>
