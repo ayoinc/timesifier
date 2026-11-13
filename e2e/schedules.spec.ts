@@ -51,9 +51,10 @@ async function addEarly(page: Page, slug: string) {
 	const sheet = page.getByRole("dialog", { name: "New schedule" });
 	await sheet.getByLabel("Name").fill("Early");
 	for (const day of ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]) {
-		await sheet.getByLabel(`${day} start`).fill("07:00");
-		await sheet.getByLabel(`${day} finish`).fill("15:00");
-		await sheet.getByLabel(`${day} break (minutes)`).fill("30");
+		const fields = sheet.getByRole("group", { name: day, exact: true });
+		await fields.getByLabel("Start").fill("07:00");
+		await fields.getByLabel("Finish").fill("15:00");
+		await fields.getByLabel("Break (minutes)").fill("30");
 	}
 	await sheet.getByRole("button", { name: "Save" }).click();
 	await expect(sheet).toBeHidden();
@@ -107,7 +108,8 @@ test("an owner adds a schedule, gives it to themselves with the keyboard, and it
 	await openShell(page, `${organisationPath(slug)}?day=${today}`);
 	if (weekday) {
 		await expect(main(page)).toContainText("07:00–15:00, 7:30 expected.");
-		await openShell(page, `${organisationPath(slug)}?view=week&start=${today}`);
+		// This week: a week's address starts on the organisation's first day of the week.
+		await openShell(page, `${organisationPath(slug)}?view=week`);
 		await expect(
 			page.getByRole("columnheader").filter({ hasText: "07:00–15:00" }).first(),
 		).toBeVisible();
@@ -127,21 +129,33 @@ test("an owner adds a schedule, gives it to themselves with the keyboard, and it
 	await expect(main(page).getByRole("button", { name: /schedule/i })).toHaveCount(0);
 });
 
-test("a day that finishes before it starts is refused in the sheet, which stays open", async ({
-	page,
-}) => {
-	const { slug } = await owner(page);
-	await openShell(page, schedulesPath(slug));
-	await page.getByRole("button", { name: "New schedule" }).click();
-	const sheet = page.getByRole("dialog", { name: "New schedule" });
-	await sheet.getByLabel("Name").fill("Backwards");
-	await sheet.getByLabel("Monday start").fill("17:00");
-	await sheet.getByLabel("Monday finish").fill("09:00");
-	await sheet.getByRole("button", { name: "Save" }).click();
-	await expect(sheet.getByRole("alert")).toHaveText(
-		"Monday finishes before it starts. A day ends by midnight.",
-	);
-	await expect(sheet).toBeVisible();
+test.describe("a schedule refused", () => {
+	// The backwards day is answered 400 on purpose, which Chromium logs; the
+	// address is known once the organisation is made.
+	const refused: Record<string, number[]> = {};
+	// biome-ignore lint/correctness/noEmptyPattern: Playwright reads a fixture's needs from its first argument.
+	test.use({ refusals: async ({}, use) => use(refused) });
+
+	test("a day that finishes before it starts is refused in the sheet, which stays open", async ({
+		page,
+	}) => {
+		const { slug } = await owner(page);
+		const path = schedulesPath(slug);
+		refused[path] = [400];
+		refused[`${path}.data`] = [400];
+		await openShell(page, path);
+		await page.getByRole("button", { name: "New schedule" }).click();
+		const sheet = page.getByRole("dialog", { name: "New schedule" });
+		await sheet.getByLabel("Name").fill("Backwards");
+		const monday = sheet.getByRole("group", { name: "Monday", exact: true });
+		await monday.getByLabel("Start").fill("17:00");
+		await monday.getByLabel("Finish").fill("09:00");
+		await sheet.getByRole("button", { name: "Save" }).click();
+		await expect(sheet.getByRole("alert")).toHaveText(
+			"Monday finishes before it starts. A day ends by midnight.",
+		);
+		await expect(sheet).toBeVisible();
+	});
 });
 
 for (const viewport of [
@@ -161,7 +175,9 @@ for (const viewport of [
 
 				await page.getByRole("button", { name: "Change Early" }).click();
 				const sheet = page.getByRole("dialog", { name: "Change Early" });
-				await expect(sheet.getByLabel("Monday start")).toHaveValue("07:00");
+				await expect(
+					sheet.getByRole("group", { name: "Monday", exact: true }).getByLabel("Start"),
+				).toHaveValue("07:00");
 				expect(
 					await problems(page, [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS, EMPTY_INPUT]),
 					"the schedule's sheet",

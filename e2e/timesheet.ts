@@ -31,10 +31,15 @@ export async function workEveryDay(page: Page, slug: string) {
 	await page.getByRole("button", { name: "Change Standard" }).click();
 	const sheet = page.getByRole("dialog", { name: "Change Standard" });
 	for (const day of ["Saturday", "Sunday"]) {
-		await sheet.getByRole("checkbox", { name: `${day} worked` }).check();
-		await sheet.getByLabel(`${day} start`).fill("09:00");
-		await sheet.getByLabel(`${day} finish`).fill("17:30");
-		await sheet.getByLabel(`${day} break (minutes)`).fill("60");
+		// The box is drawn by its label; the input under it is hidden from the pointer.
+		const worked = sheet.getByRole("checkbox", { name: `${day} worked` });
+		await worked.focus();
+		await page.keyboard.press("Space");
+		await expect(worked).toBeChecked();
+		const fields = sheet.getByRole("group", { name: day, exact: true });
+		await fields.getByLabel("Start").fill("09:00");
+		await fields.getByLabel("Finish").fill("17:30");
+		await fields.getByLabel("Break (minutes)").fill("60");
 	}
 	await sheet.getByRole("button", { name: "Save" }).click();
 	await expect(sheet).toBeHidden();
