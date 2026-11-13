@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import { type OrganisationScope, organisationScope } from "~/db";
 import { addEstimateLine, createEstimate, estimateToken } from "~/estimates/estimates.server";
+import { USUAL_CATEGORIES } from "~/expenses/starter";
 import { sendInvoice } from "~/invoices/deliver.server";
 import {
 	createDraft,
@@ -23,7 +23,7 @@ import { openRetainer } from "~/invoices/retainers.server";
 import { projectPath } from "~/projects/projects";
 import { captureEmail } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { value } from "../organisations/harness";
+import { seedNoCategories, value } from "../organisations/harness";
 import { type Person, submit } from "../pages/harness";
 import { KINDS, type Kind, seedRoles } from "../pages/roles-seed";
 
@@ -236,6 +236,8 @@ describe.each(KINDS)("the %s's money changes", (kind) => {
 	});
 
 	it("an expense category created, priced again, archived and restored is recorded each time", async () => {
+		// Without the usual set a new organisation is given, whose records are the system's.
+		await seedNoCategories(acme.id);
 		const added = await send(
 			SETTINGS,
 			{
@@ -252,13 +254,15 @@ describe.each(KINDS)("the %s's money changes", (kind) => {
 			expect(await value("select count(*) from expense_categories")).toBe(0);
 			expect(
 				await value(
-					"select count(*) from activity_records where subject_type = 'expense_category'",
+					"select count(*) from activity_records where subject_type = 'expense_category' and source <> 'system'",
 				),
 			).toBe(0);
 			return;
 		}
 		const id = (await value<string>("select id from expense_categories")) as string;
-		const created = await records("expense_category.created");
+		const created = (await records("expense_category.created")).filter(
+			(r) => r.source !== "system",
+		);
 		expect(created).toEqual([
 			{
 				actor: who().user.id,
@@ -306,6 +310,33 @@ describe.each(KINDS)("the %s's money changes", (kind) => {
 		expect(await records("expense_category.restored")).toMatchObject([
 			{ actor: who().user.id, subjectType: "expense_category", subjectId: id, owner: null },
 		]);
+	});
+
+	it("the usual categories added to an organisation with none are recorded as theirs, one record each", async () => {
+		await seedNoCategories(acme.id);
+		const added = await send(SETTINGS, { intent: "add-usual-categories" }, who());
+		expect(added).toBe(KEEPS_CATEGORIES[kind] ? 200 : 404);
+		const theirs = (await records("expense_category.created")).filter((r) => r.source !== "system");
+		if (!KEEPS_CATEGORIES[kind]) {
+			expect(theirs).toEqual([]);
+			expect(await value("select count(*) from expense_categories")).toBe(0);
+			return;
+		}
+		expect(theirs).toHaveLength(USUAL_CATEGORIES.length);
+		for (const record of theirs) {
+			expect(record).toMatchObject({
+				actor: who().user.id,
+				source: "web",
+				subjectType: "expense_category",
+				owner: null,
+			});
+		}
+		expect(theirs.map((r) => r.summary.after?.name)).toEqual([...USUAL_CATEGORIES]);
+		// Pressed again, it adds and records nothing.
+		expect(await send(SETTINGS, { intent: "add-usual-categories" }, who())).toBe(409);
+		expect(
+			(await records("expense_category.created")).filter((r) => r.source !== "system"),
+		).toHaveLength(USUAL_CATEGORIES.length);
 	});
 
 	it("a payment recorded on an invoice's page is recorded as theirs, never with its note", async () => {

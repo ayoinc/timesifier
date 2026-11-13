@@ -91,7 +91,7 @@ interface World {
 	leave: string;
 	/** A client, Initech. */
 	client: string;
-	/** An expense category, Travel. */
+	/** An expense category, Taxis. */
 	category: string;
 	/** Grace's expense, with a receipt. */
 	expense: string;
@@ -138,8 +138,8 @@ async function world(column: Column): Promise<World> {
 	});
 	if (!client) throw new Error("seed failed");
 	const [category] = await organisationScope(env.DB, acme.id).expenseCategories.insert({
-		name: "Travel",
-		nameKey: "travel",
+		name: "Taxis",
+		nameKey: "taxis",
 	});
 	if (!category) throw new Error("seed failed");
 	const expense = await recordExpense(organisationScope(env.DB, acme.id), grace.userId, {

@@ -8,8 +8,8 @@ import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 import { createProject } from "./timesheet";
 
-// Expenses in a browser (TS-070): an owner adds expense categories in
-// Workspace settings, records an expense with its receipt from the keyboard
+// Expenses in a browser (TS-070): an owner finds the usual expense categories
+// in Workspace settings (TS-119), records an expense with its receipt from the keyboard
 // alone, opens the receipt, submits the week, which locks the expense, and
 // finds it in the Expenses view of Reports. With TS-092, an expense carries a
 // tag chosen from the keyboard, the Expenses view is a tab of Reports chosen
@@ -34,31 +34,15 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0
 
 const recordSheet = (page: Page) => page.getByRole("dialog", { name: "Record an expense" });
 
-/** Adds a category in Workspace settings, with a unit and its price when given. */
-async function addCategory(page: Page, slug: string, name: string, unit?: [string, string]) {
-	await openShell(page, destinationPath(slug, "settings"));
-	await page.getByRole("button", { name: "Add category" }).click();
-	const sheet = page.getByRole("dialog", { name: "Add an expense category" });
-	await sheet.getByLabel("Name").fill(name);
-	if (unit) {
-		await sheet.getByLabel("Unit", { exact: true }).fill(unit[0]);
-		await sheet.getByLabel(/^Price per unit/).fill(unit[1]);
-	}
-	await sheet.getByRole("button", { name: "Add" }).click();
-	await expect(sheet).toBeHidden();
-	await expect(page.getByRole("status")).toHaveText(`${name} added.`);
-}
-
-/** An owner with an organisation, a project and two categories, on Expenses. */
+/** An owner with an organisation, a project and the usual categories (TS-119). */
 async function ownerWithCategories(page: Page) {
 	await signIn(page, newPerson().email);
 	const { slug } = await createOrganisation(page);
 	await createProject(page, slug, "Site");
-	await addCategory(page, slug, "Travel");
-	await addCategory(page, slug, "Mileage", ["mile", "0.45"]);
-	await expect(page.getByRole("list", { name: "Expense categories" })).toContainText(
-		"£0.45 per mile",
-	);
+	await openShell(page, destinationPath(slug, "settings"));
+	const categories = page.getByRole("list", { name: "Expense categories" });
+	await expect(categories).toContainText("Travel");
+	await expect(categories).toContainText("£0.55 per mile from Monday 6 April 2026");
 	return slug;
 }
 
@@ -79,7 +63,7 @@ async function choose(page: Page, button: Locator, list: string, option: string)
 	await page.keyboard.press("Enter");
 	const listbox = page.getByRole("listbox", { name: list });
 	await expect(listbox).toBeVisible();
-	await page.keyboard.type(option.slice(0, 3));
+	await page.keyboard.type(option.slice(0, 4));
 	await expect(listbox.getByRole("option", { name: option })).toBeFocused();
 	await page.keyboard.press("Enter");
 	await expect(listbox).toBeHidden();
@@ -109,7 +93,7 @@ test("an expense is recorded with its receipt, submitted with the week, and repo
 	await page.keyboard.press("Enter");
 	const categories = page.getByRole("listbox", { name: "Category" });
 	await expect(categories).toBeVisible();
-	await page.keyboard.type("Tr");
+	await page.keyboard.type("Trav");
 	await expect(categories.getByRole("option", { name: "Travel" })).toBeFocused();
 	await page.keyboard.press("Enter");
 	await expect(category).toContainText("Travel");
@@ -147,12 +131,12 @@ test("an expense is recorded with its receipt, submitted with the week, and repo
 		.getByRole("listbox", { name: "Category" })
 		.getByRole("option", { name: "Mileage" })
 		.click();
-	await expect(sheet.getByText("£0.45 per mile on that day.")).toBeVisible();
+	await expect(sheet.getByText("£0.55 per mile on that day.")).toBeVisible();
 	await sheet.getByLabel(/^Quantity \(mile\)/).fill("10");
 	await sheet.getByRole("button", { name: "Record" }).click();
 	await expect(sheet).toBeHidden();
-	await expect(week).toContainText("10 × £0.45 per mile");
-	await expect(page.getByRole("main")).toContainText("£17.00");
+	await expect(week).toContainText("10 × £0.55 per mile");
+	await expect(page.getByRole("main")).toContainText("£18.00");
 
 	// Submitting the week locks its expenses with its time.
 	await page.getByRole("button", { name: "Submit week" }).click();
@@ -291,16 +275,19 @@ for (const viewport of [
 			}) => {
 				await signIn(page, newPerson().email);
 				const { slug } = await createOrganisation(page);
-				// With no category yet, the empty state says where to add one.
+				// The usual categories are there from the start (TS-119); a project is not.
 				await openShell(page, destinationPath(slug, "expenses"));
 				await expect(
-					page.getByRole("link", { name: "Add them in Workspace settings" }),
+					page.getByText("There are no active projects to record an expense on yet."),
 				).toBeVisible();
 				await expectNoProblems(page, "Expenses");
 
 				await createProject(page, slug, "Site");
 				await createTag(page, slug, "Retainer");
-				await addCategory(page, slug, "Mileage", ["mile", "0.45"]);
+				await openShell(page, destinationPath(slug, "settings"));
+				await expect(page.getByRole("list", { name: "Expense categories" })).toContainText(
+					"Mileage",
+				);
 				await expectNoProblems(page, "Workspace settings", [EMPTY_INPUT]);
 
 				await openShell(page, destinationPath(slug, "expenses"));
@@ -309,6 +296,7 @@ for (const viewport of [
 				await expectNoProblemsInSheet(page, sheet, sheet.getByText("Reimburse me"));
 
 				await page.getByRole("button", { name: "Record expense" }).click();
+				await choose(page, sheet.getByRole("button", { name: /Category/ }), "Category", "Mileage");
 				await sheet.getByLabel(/^Quantity \(mile\)/).fill("4");
 				const tag = sheet.getByRole("checkbox", { name: "Retainer" });
 				await tag.focus();
