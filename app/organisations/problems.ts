@@ -25,6 +25,9 @@ export const SOMETHING_WENT_WRONG = "Something went wrong. Nothing was changed. 
 export const NEEDS_AN_OWNER =
 	"An organisation needs at least one owner. Make another member an owner first.";
 
+/** The code of an organisation that was not deleted because its receipts were not all deleted. */
+export const RECEIPTS_NOT_DELETED = "RECEIPTS_NOT_DELETED";
+
 /** The sentence for each code a person can reach from the pages. */
 const BY_CODE = new Map([
 	// The two caps of card TS-027. The first arrives with status 429, so the code
@@ -67,6 +70,11 @@ const BY_CODE = new Map([
 
 	["MEMBER_NOT_FOUND", "That person is no longer a member of this organisation."],
 	["INVITATION_NOT_FOUND", "That invitation is no longer waiting."],
+
+	[
+		RECEIPTS_NOT_DELETED,
+		"The organisation was not deleted, because not all of its receipts could be deleted. Try again to finish deleting it.",
+	],
 ]);
 
 /**

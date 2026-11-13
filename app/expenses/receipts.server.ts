@@ -15,9 +15,14 @@ import {
  * cannot be named from another's.
  */
 
+/** Where every receipt of `organisationId` is kept: the prefix of each of its keys. */
+export function receiptPrefix(organisationId: string): string {
+	return `org/${organisationId}/receipts/`;
+}
+
 /** Where the receipt of `expenseId` in `organisationId` is kept. */
 export function receiptKey(organisationId: string, expenseId: string): string {
-	return `org/${organisationId}/receipts/${expenseId}`;
+	return `${receiptPrefix(organisationId)}${expenseId}`;
 }
 
 /** A receipt that has been checked and read, ready to be stored. */
@@ -82,4 +87,20 @@ export function getReceipt(organisationId: string, expenseId: string) {
 /** Removes the receipt of `expenseId`, if there is one. */
 export async function deleteReceipt(organisationId: string, expenseId: string): Promise<void> {
 	await env.RECEIPTS.delete(receiptKey(organisationId, expenseId));
+}
+
+/**
+ * Removes every receipt of `organisationId`, a page of keys at a time (R2
+ * lists at most 1,000 keys a call and deletes at most 1,000 a call). Run
+ * before the organisation's row goes, so a failure, which throws, leaves the
+ * organisation in place for a retry to finish (docs/security.md, "Receipts").
+ */
+export async function deleteOrganisationReceipts(organisationId: string): Promise<void> {
+	const prefix = receiptPrefix(organisationId);
+	let cursor: string | undefined;
+	do {
+		const page = await env.RECEIPTS.list({ prefix, cursor });
+		if (page.objects.length > 0) await env.RECEIPTS.delete(page.objects.map(({ key }) => key));
+		cursor = page.truncated ? page.cursor : undefined;
+	} while (cursor);
 }

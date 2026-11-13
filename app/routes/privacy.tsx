@@ -1,6 +1,14 @@
 import { env } from "cloudflare:workers";
+import type { ReactNode } from "react";
 
+import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
+import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
+import { STORED, type StoredTerm } from "~/db/personal-data";
+import { ENTRY_DAYS_BACK, LEAVE_DAYS_BACK } from "~/integrations/feeds.server";
+import { EVENT_LABELS } from "~/integrations/scopes";
+import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
+import { DOCUMENT_EMAILS } from "~/invoices/mail.server";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import {
 	LINK,
@@ -15,11 +23,13 @@ import { setting } from "~/lib/deployment";
 
 import type { Route } from "./+types/privacy";
 
-// The privacy notice. Every statement on it is something the application does:
-// what the tables hold and the cookies are is in docs/security.md, where the
-// database is in docs/architecture.md. A change to either changes this page in
-// the same pull request. test/documents.test.ts holds the cookies' names to
-// the ones the application sets.
+// The privacy notice. Every statement on it is something the application does.
+// What is stored is drawn from `app/db/personal-data.ts`, which names every
+// table of the schema under one of the rows below; who sees what is
+// `app/organisations/access.ts`; how long things are kept is the schema's
+// foreign keys and the daily job in `workers/scheduled.ts`. The numbers come
+// from the code through the loader. A change to any of these changes this page
+// in the same pull request, and `test/claims.test.ts` fails until it does.
 
 export function meta({ matches }: Route.MetaArgs) {
 	return pageMeta({
@@ -27,19 +37,27 @@ export function meta({ matches }: Route.MetaArgs) {
 		path: PRIVACY_PATH,
 		title: "Privacy notice · Timesifier",
 		description:
-			"What Timesifier stores about you, where it is kept, who handles it, the cookies it sets, and how to have your data exported or deleted.",
+			"What Timesifier stores about you and your organisation's work, who can see it, how long it is kept, who else handles it, and how to have it exported or deleted.",
 	});
 }
 
 /**
  * What the notice says of this deployment comes from the deployment: the host
  * the page was asked for on, and the address its mail is sent from, which is
- * `null` where none is set.
+ * `null` where none is set. The numbers it states come from the modules that
+ * act on them, which are the server's.
  */
 export function loader({ request }: Route.LoaderArgs) {
 	return {
 		host: new URL(request.url).host,
 		sender: setting(env, "EMAIL_FROM") ?? null,
+		facts: {
+			activityDays: ACTIVITY_RETENTION_DAYS,
+			webhookSwitchOff: SWITCH_OFF_AFTER,
+			documentEmails: DOCUMENT_EMAILS.max,
+			feedLeaveDays: LEAVE_DAYS_BACK,
+			feedEntryDays: ENTRY_DAYS_BACK,
+		},
 	};
 }
 
@@ -50,6 +68,11 @@ export function loader({ request }: Route.LoaderArgs) {
  * it is incomplete, and it is. Nothing may be put here that is not true.
  */
 const CONTROLLER: { name: string; address: string } | null = null;
+
+/** This version of the notice. */
+const VERSION = { date: "2026-11-12", inWords: "12 November 2026" };
+
+const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
 
 function Controller() {
 	if (CONTROLLER) {
@@ -68,12 +91,156 @@ function Controller() {
 	);
 }
 
-export default function Privacy({ loaderData: { host, sender } }: Route.ComponentProps) {
+/** The kinds of event a webhook can be sent, as Integrations names them, in a sentence. */
+const EVENTS = Object.values(EVENT_LABELS)
+	.map((label, index, all) =>
+		index === 0
+			? label.toLowerCase()
+			: `${index === all.length - 1 ? " and " : ", "}${label.toLowerCase()}`,
+	)
+	.join("");
+
+export default function Privacy({ loaderData: { host, sender, facts } }: Route.ComponentProps) {
+	/** What each row of "What is stored" says. Every row of `STORED` has its words here. */
+	const stored: Record<StoredTerm, ReactNode> = {
+		"Your account": (
+			<>
+				Your name, your email address, whether a sign-in code has proved the address is yours, and
+				your time zone once it is set.
+			</>
+		),
+		"Your sessions": (
+			<>
+				For each browser you are signed in on: a session token, when it expires, and the internet
+				address and the browser description the session was started from.
+			</>
+		),
+		"Sign-in codes": (
+			<>
+				A keyed hash of each code sent to you, never the code itself, with a count of the attempts
+				made on it. A count of the codes sent to your address in the last hour, kept under a keyed
+				hash of the address.
+			</>
+		),
+		"Limits on requests": (
+			<>
+				A count of the requests each internet address makes to sign in and to manage an
+				organisation, minute by minute. Each count is deleted about a minute after it is made.
+			</>
+		),
+		"The organisation and its people": (
+			<>
+				The organisation's name, the name in its address on {host}, and its settings. Who belongs to
+				it, each person's role, and whether they work as a contractor. Its teams, who is in each and
+				who manages it. Each invitation: the email address invited, the role offered, who sent it,
+				when it expires and what became of it.
+			</>
+		),
+		"Time and approvals": (
+			<>
+				Each time entry: whose it is, its project and task, its start and its end, its description
+				and tags, whether it is billable or overtime, and the import that brought it, if one did.
+				Each timesheet period once it is submitted, with every step it took (submitted, withdrawn,
+				approved, returned or reopened), who took it, when, and the comment given. Each request to
+				work overtime or on a day off: its days, the hours asked for, the reason, and who decided
+				it, when and what they said.
+			</>
+		),
+		Leave: (
+			<>
+				Each request for leave: whose it is, the kind of leave (sick leave is one), its days and
+				half days, the note given with it, how much notice it gave and the reason given when that
+				was short, and who decided or cancelled it, when and what they said. The organisation's
+				kinds of leave with their allowances, its public holidays, and the working week it kept
+				before its work schedules.
+			</>
+		),
+		"Work schedules": (
+			<>
+				The organisation's work schedules: each one's name and, from each day it changed, the
+				weekdays it works with their start, finish and unpaid break, and its rules for overtime and
+				for days not worked. Who each schedule is given to (a person, a team, a role or the whole
+				organisation) and from which day.
+			</>
+		),
+		"Projects, tasks and budgets": (
+			<>
+				The organisation's projects, tasks and tags, how each project bills, and its budgets,
+				including a budget for one person on a project. A record of each budget alert sent.
+			</>
+		),
+		"Clients and their contacts": (
+			<>
+				The organisation's clients, and each client's billing contacts: an email address and, when
+				one is given, a name. These are people outside the organisation, whose addresses an owner,
+				admin or Finance enters so that invoices and estimates can be sent to them.
+			</>
+		),
+		"Rates, invoices and estimates": (
+			<>
+				Billable and cost rates, including a rate for one person. The organisation's invoicing
+				details: its legal name, its address and its tax number. Invoices, estimates, recurring
+				invoices and retainers, with their lines, notes and totals; payments and write-offs, with
+				who recorded them. An invoice's line names a person, or carries an entry's description, when
+				the person invoicing groups its time that way.
+			</>
+		),
+		"Expenses and receipts": (
+			<>
+				Each expense: whose it is, its day, project, category, amount, notes and tags, whether it is
+				billable and whether it is to be paid back. A receipt, a PDF or an image, is kept as a file
+				in Cloudflare R2, with its file name and type in the database. The organisation's expense
+				categories and their prices.
+			</>
+		),
+		"Saved reports": (
+			<>A report a member saves: its name, what it shows, and who it is shared with.</>
+		),
+		"API tokens": (
+			<>
+				Each token's name, what it may do, who made it, when it was last used, when it expires and
+				whether it was revoked. Of the token itself only a keyed hash and its first eight characters
+				are kept.
+			</>
+		),
+		Webhooks: (
+			<>
+				The address an owner or admin gives each webhook, the kinds of event it is sent, whether it
+				includes descriptions, who added it, and how its last deliveries went. Each delivery is kept
+				exactly as it was sent: what it holds is under "Who else handles it". Of its signing secret
+				only a hash is kept.
+			</>
+		),
+		Imports: (
+			<>
+				Each CSV import: its file's name, what it imported, who made it, and how many rows it took
+				or skipped, with why. The file's text is kept while the import waits to be confirmed, and
+				emptied once it is imported.
+			</>
+		),
+		"Calendar feeds": (
+			<>
+				Each calendar address a person makes: whose it is, whether it is their own or a team's,
+				whether it lists their time entries, and whether it was revoked. Of the address's secret
+				only a keyed hash is kept.
+			</>
+		),
+		"The activity log": (
+			<>
+				A record of each change made in the organisation, by a person, through the API, by an import
+				or by Timesifier itself: who made it, how, what was changed, whose record it was, and the
+				values before and after. Words a person typed, such as a description, a note or a comment,
+				are never copied into it: the log says only that they changed.
+			</>
+		),
+	};
+
 	return (
 		<Document
 			path={PRIVACY_PATH}
 			title="Privacy notice"
-			lead="What Timesifier stores about you today, where it is kept, who else handles it, and how to have it exported or deleted. It is a first version and is not complete yet: it does not name who runs Timesifier. It will change as the product does, and its date with it."
+			version={VERSION}
+			lead="What Timesifier stores about you and your organisation's work, who can see it, where and how long it is kept, who else handles it, and how to have it exported or deleted. It does not yet name who runs Timesifier, so it is not complete. It changes as the product does, and its date with it."
 		>
 			<DocumentSection id="who-we-are" title="Who is responsible">
 				<Controller />
@@ -81,46 +248,72 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 
 			<DocumentSection id="stored" title="What is stored">
 				<p>
-					Timesifier stores what it needs to sign you in and to know which organisation you belong
-					to.
+					What you and the people in your organisation put into Timesifier, and what it needs to
+					sign you in. Everything except your account belongs to one organisation.
+				</p>
+				{STORED.map(({ heading, rows }) => (
+					<div key={heading} className="flex flex-col gap-4">
+						<h3 className="mt-4 text-title-large">{heading}</h3>
+						<Rows>
+							{rows.map(({ term }) => (
+								<Row key={term} term={term}>
+									{stored[term]}
+								</Row>
+							))}
+						</Rows>
+					</div>
+				))}
+			</DocumentSection>
+
+			<DocumentSection id="who-sees" title="Who sees what">
+				<p>
+					Nobody outside an organisation can read anything in it, or learn that it exists. Inside
+					it, what a person sees depends on their role, and on whether they manage a team.
 				</p>
 				<Rows>
-					<Row term="Your account">
-						Your name, your email address, and whether a sign-in code has proved the address is
-						yours.
+					<Row term="Owners and admins">
+						Everyone's time, timesheets, expenses with their receipts, and leave, with its kind;
+						every rate and amount, the invoices and estimates, and the clients' contacts; the whole
+						activity log; the integrations. They invite and remove people. Only an owner deletes the
+						organisation.
 					</Row>
-					<Row term="Your sessions">
-						For each browser you are signed in on: a session token, when it expires, and the
-						internet address and the browser description the session was started from.
+					<Row term="Finance">
+						Everyone's time, timesheets, expenses with their receipts, every rate and amount, the
+						invoices and estimates, the clients' contacts and the whole activity log. That a
+						colleague is on leave, but not which kind, unless Finance manages their team. Finance
+						approves no timesheet or leave except as a manager.
 					</Row>
-					<Row term="Sign-in codes">
-						A keyed hash of each code sent to you, never the code itself, with a count of the
-						attempts made on it. A count of the codes sent to your address in the last hour, kept
-						under a keyed hash of the address.
+					<Row term="Managers">
+						Any member of the organisation can be made the manager of a team. A manager sees the
+						time, timesheets, expenses with their receipts, leave with its kind, and records in the
+						activity log of the people in the teams they manage, and approves or returns their
+						timesheets and leave, never their own. A manager sees no rate, invoice or estimate.
 					</Row>
-					<Row term="Your organisations">
-						The name and the address of each organisation, who belongs to it, and each person's
-						role.
+					<Row term="Members">
+						Their own time, timesheets, expenses and leave, and the history of their own entries;
+						the organisation's projects; who belongs to the organisation, with their names and email
+						addresses; and that a colleague is on leave, but not which kind. A member can share a
+						report they saved with other members, who see in it only what their own role lets them.
 					</Row>
-					<Row term="Invitations">
-						The email address invited, the role offered, who sent the invitation, when it expires
-						and what became of it.
-					</Row>
-					<Row term="Limits on requests">
-						A count of the requests each internet address makes to sign in and to manage an
-						organisation, minute by minute. Each count is deleted about a minute after it is made.
+					<Row term="Contractors">
+						A member an owner or admin marks as a contractor sees what their role lets them, the
+						same as anyone else with it. Owners, admins and Finance see contractors' hours in the
+						Contractors report.
 					</Row>
 				</Rows>
 				<p>
-					Time entries, projects and reports are not stored yet. This notice will say what they hold
-					before they are.
+					Nobody changes another person's time entries or expenses, except that an owner or admin
+					can import time entries for people in the organisation and undo that import. What leaves
+					the organisation leaves because someone in it sends it: an invoice or an estimate to a
+					client, a webhook, an API token or a calendar feed. Each is under "Who else handles it".
 				</p>
 			</DocumentSection>
 
 			<DocumentSection id="where" title="Where it is kept">
 				<p>
 					In one database, Cloudflare D1, restricted to the European Union: it runs and stores its
-					data only inside the EU.
+					data only inside the EU. Receipts are kept in Cloudflare R2, in a bucket restricted to the
+					EU, whose files are stored only inside the EU.
 				</p>
 				<p>
 					The application runs on Cloudflare Workers in Frankfurt, near the database. Your request
@@ -141,13 +334,66 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 				</p>
 				<p>Mail you send to {PRIVACY_EMAIL} is received by Microsoft, which hosts that mailbox.</p>
 				<Rows>
-					<Row term="Hosting and the database">
-						Cloudflare Workers answers every request and Cloudflare D1 holds the database.
+					<Row term="Hosting, the database and receipts">
+						Cloudflare Workers answers every request, Cloudflare D1 holds the database and
+						Cloudflare R2 holds the receipts.
 					</Row>
 					<Row term="Email">
-						Sign-in codes and invitations are sent through Cloudflare's email service
-						{sender ? `, from ${sender}` : ""}. The email with a code holds no link, no image and no
-						tracking.
+						<p>
+							Every email is sent through Cloudflare's email service
+							{sender ? `, from ${sender}` : ""}. Timesifier sends these and no others:
+						</p>
+						<ul className="mt-2 list-disc ps-6">
+							<li>a sign-in code, to the address entered on the sign-in page;</li>
+							<li>
+								an invitation, to the address an owner or admin invites, with the address of the
+								person who invited them, the organisation's name and the role offered;
+							</li>
+							<li>
+								an invoice or an estimate, as a PDF, to the billing contacts of a client, when an
+								owner, admin or Finance sends it, or when a recurring invoice is set to send itself;
+								an estimate's email holds a link with which anyone who has it can read the estimate
+								and accept or decline it, without an account;
+							</li>
+							<li>
+								a reminder of an overdue invoice, with its PDF, to the client's billing contacts,
+								when the organisation has reminders on;
+							</li>
+							<li>
+								a budget alert, to the organisation's owners and admins and, for a budget in hours,
+								to the managers of the teams of the people who tracked time to the project;
+							</li>
+							<li>a notice that a webhook was switched off, to the person who added it.</li>
+						</ul>
+						<p className="mt-2">
+							An organisation sends at most {facts.documentEmails} invoice and estimate emails in 24
+							hours. No email holds an image or anything that tells Timesifier it was opened, and
+							the email with a code holds no link.
+						</p>
+					</Row>
+					<Row term="Webhooks">
+						An owner or admin can give Timesifier an address to tell about {EVENTS}. For each such
+						event that the person who added the webhook may see, Timesifier posts to that address,
+						signed: the event, when and how it happened, who made it (their identifier and name),
+						the fields that changed, and the record as the API shows it. For a time entry that is
+						whose it is, its project, client, task, day, start, end and hours, and whether it is
+						billable or overtime; its description only if the webhook includes descriptions. Whoever
+						runs the address receives all of it. A delivery that fails is tried again; after{" "}
+						{facts.webhookSwitchOff} failures in a row the webhook is switched off.
+					</Row>
+					<Row term="API tokens">
+						An owner or admin can make a token for Timesifier's API. It works as the person who made
+						it, with their role at the time of each request, limited to what the token may do:
+						reading time entries, their descriptions, projects, people and their leave, expenses or
+						invoices, and adding, changing and deleting the maker's own time entries. Whoever holds
+						the token can do with it what it allows.
+					</Row>
+					<Row term="Calendar feeds">
+						A person can make a calendar address of their own approved leave, from the last{" "}
+						{facts.feedLeaveDays} days on and, if they choose, of their time entries of the last{" "}
+						{facts.feedEntryDays} days, by project and task; a manager, one of a team's approved
+						leave. Anyone with the address, such as the calendar it is added to, can read it without
+						an account, until it is revoked.
 					</Row>
 					<Row term="The check that you are a person">
 						Before a sign-in code is sent, the page that asks for it runs Cloudflare Turnstile,
@@ -161,9 +407,12 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 					</Row>
 					<Row term="Logs">
 						Cloudflare keeps a log of each request the application answers. A line holds the address
-						of the page asked for and details of the request, and Cloudflare keeps it for at most
-						seven days. The lines Timesifier itself writes never hold an email address, a sign-in
-						code, a cookie or a session token.
+						of the page asked for, which for a calendar feed or an estimate's link includes its
+						secret, and details of the request, and Cloudflare keeps it for at most seven days. For
+						one request in ten Cloudflare also keeps a trace for seven days: how long each step
+						took, the addresses the request was for and posted to, and the text of each database
+						statement, whose values are sent apart from it. The lines Timesifier itself writes never
+						hold an email address, a sign-in code, a cookie or a session token.
 					</Row>
 					<Row term="Reports of failed connections">
 						Cloudflare asks your browser to tell it when the browser cannot reach {host}. Such a
@@ -217,11 +466,9 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 
 			<DocumentSection id="how-long" title="How long it is kept">
 				<Rows>
-					<Row term="Your account, your organisations and your memberships">
-						Until you ask for them to be deleted, or, for an organisation, until an owner deletes
-						it. Deleting an organisation deletes its memberships and its invitations with it.
-						Cloudflare keeps the means to restore the database to any minute of the last 30 days, so
-						what is deleted is gone for good 30 days later.
+					<Row term="Your account">
+						Until it is deleted at your request: see "Export and deletion". Leaving an organisation,
+						or its deletion, does not delete your account.
 					</Row>
 					<Row term="A session">
 						It works for seven days from when it was last renewed, and ends at once when you sign
@@ -235,7 +482,50 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 						to 30 days. The counts of codes sent to an address stop counting after one hour.
 					</Row>
 					<Row term="An invitation">
-						It can be accepted for seven days. Its record stays with the organisation.
+						It can be accepted for {INVITATION_DAYS} days. Its record stays with the organisation.
+					</Row>
+					<Row term="Your organisation's work">
+						<p>
+							Until it is deleted in Timesifier, or the organisation is. Nothing in it is deleted
+							for its age, except the activity log.
+						</p>
+						<ul className="mt-2 list-disc ps-6">
+							<li>
+								When a person leaves an organisation or is removed from it, their time entries and
+								expenses stay with it, so that its totals still add up. Their requests for leave and
+								for overtime, their places in teams, their saved reports and their calendar feeds
+								are deleted with their membership.
+							</li>
+							<li>
+								A person can delete their own time entry or expense while it is not locked by an
+								approved or submitted timesheet, the organisation's lock date, or an invoice.
+								Deleting an expense, or its receipt, deletes the receipt's file.
+							</li>
+							<li>
+								Clients, projects, tasks, tags, expense categories and taxes are archived, never
+								deleted. An invoice that has been sent is never deleted, only voided, and keeps its
+								payments.
+							</li>
+							<li>
+								A webhook's deliveries are kept until the webhook is deleted. A revoked API token or
+								calendar feed keeps its record.
+							</li>
+						</ul>
+					</Row>
+					<Row term="The activity log">
+						Each record is deleted {facts.activityDays} days after it was made, by a job that runs
+						every day.
+					</Row>
+					<Row term="Deleting an organisation">
+						An owner can delete an organisation. Everything in it goes at once: its memberships,
+						invitations and all its work, and first its receipts. If a receipt cannot be deleted,
+						the organisation is not deleted, and the owner is asked to try again. The accounts of
+						the people in it are not deleted.
+					</Row>
+					<Row term="Copies">
+						Cloudflare keeps the means to restore the database to any minute of the last 30 days, so
+						what is deleted from the database is gone for good 30 days later. Timesifier keeps no
+						other copy, of the database or of a receipt.
 					</Row>
 				</Rows>
 			</DocumentSection>
@@ -254,14 +544,31 @@ export default function Privacy({ loaderData: { host, sender } }: Route.Componen
 			</DocumentSection>
 
 			<DocumentSection id="your-data" title="Export and deletion">
+				<Rows>
+					<Row term="A copy">
+						Anyone in an organisation can download from Reports, as CSV, the time, expenses and
+						leave they may see, their own at least, and from the Activity log the records they may
+						read. Owners and admins can download every time entry of the organisation as CSV and
+						every invoice as a PDF in one ZIP, from Integrations. Owners, admins and Finance can
+						download the reports of invoices, the Contractors report and a file for Xero, as CSV.
+					</Row>
+					<Row term="Corrections">
+						You can change your name and your time zone in My account, and your own time entries and
+						expenses while they are not locked. Your email address cannot be changed in Timesifier.
+					</Row>
+					<Row term="Deletion">
+						You can leave an organisation from My account, and an owner can delete one in Workspace
+						settings: "How long it is kept" says what goes with each. There is no control in
+						Timesifier to delete your account.
+					</Row>
+				</Rows>
 				<p>
-					The controls to export your data and to delete your account are not in the product yet.
-					Until they are, write to{" "}
+					For anything else, a copy of what is stored about you, a correction, or your account
+					deleted, write to{" "}
 					<a href={`mailto:${PRIVACY_EMAIL}`} className={LINK}>
 						{PRIVACY_EMAIL}
 					</a>{" "}
-					from the address of your account, and say what you want: a copy of your data, a
-					correction, or your account deleted.
+					from the address of your account, and say what you want.
 				</p>
 				<p>
 					The{" "}

@@ -31,6 +31,8 @@ import { and, eq, like } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 import { organisationScope, organisations } from "~/db";
+import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
+import { RECEIPTS_NOT_DELETED } from "~/organisations/problems";
 import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
 import { sendEmail } from "./email.server";
@@ -333,10 +335,25 @@ export function organisationPlugins() {
 				// The plugin deletes an organisation's memberships first and its row
 				// last, and the database refuses to take the last owner from an
 				// organisation that is still there (migrations/0004). So the row goes
-				// first, here, in one statement, and the memberships and invitations
-				// go with it through their foreign keys. The plugin's own three
+				// first, here, in one statement, and every table of the organisation
+				// goes with it through its foreign keys. The plugin's own three
 				// deletes then find nothing left.
+				//
+				// Its receipts in R2 go before the row: no foreign key reaches them.
+				// Should one delete fail, the organisation is not deleted and says
+				// so, and asking again deletes what is left (docs/security.md, "Receipts").
 				async beforeDeleteOrganization({ organization }) {
+					try {
+						await deleteOrganisationReceipts(organization.id);
+					} catch (error) {
+						console.error(
+							`organisation: receipts not deleted, ${error instanceof Error ? error.name : "unknown"}`,
+						);
+						throw new APIError("SERVICE_UNAVAILABLE", {
+							code: RECEIPTS_NOT_DELETED,
+							message: "The organisation's receipts could not all be deleted. Try again.",
+						});
+					}
 					await drizzle(env.DB).delete(organisations).where(eq(organisations.id, organization.id));
 				},
 			},

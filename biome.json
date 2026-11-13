@@ -38,7 +38,14 @@
 	},
 	"overrides": [
 		{
-			"includes": ["app/db/**", "app/auth/**", "test/db/**", "test/node/**", "drizzle.config.ts"],
+			"includes": [
+				"app/db/**",
+				"app/auth/**",
+				"test/db/**",
+				"test/node/**",
+				"test/claims.test.ts",
+				"drizzle.config.ts"
+			],
 			"linter": { "rules": { "style": { "noRestrictedImports": "off" } } }
 		}
 	],

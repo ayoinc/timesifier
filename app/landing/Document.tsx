@@ -9,17 +9,25 @@ import { MAIN_ID, PAGE, SiteFooter, SiteHeader, SkipLink } from "./Site";
 /** The date the notices were first written. Each says so under its title. */
 const FIRST_VERSION = { date: "2026-11-11", inWords: "11 November 2026" };
 
+/** A date, as the page shows it and as `<time>` gives it to machines. */
+export interface DocumentDate {
+	date: string;
+	inWords: string;
+}
+
 export interface DocumentProps {
 	/** The page's own address: `/privacy`. */
 	path: string;
 	title: string;
+	/** When the words of this version were written, when it is not the first. */
+	version?: DocumentDate;
 	/** What the page is and what it covers, in a sentence or two. */
 	lead: ReactNode;
 	/** The parts of the page: `DocumentSection`s. */
 	children: ReactNode;
 }
 
-export function Document({ path, title, lead, children }: DocumentProps) {
+export function Document({ path, title, version, lead, children }: DocumentProps) {
 	return (
 		<>
 			<SkipLink />
@@ -30,7 +38,16 @@ export function Document({ path, title, lead, children }: DocumentProps) {
 					<div className={`${PAGE} pt-8 pb-12 expanded:pt-16 expanded:pb-16`}>
 						<h1 className="text-display-small text-balance medium:text-display-medium">{title}</h1>
 						<p className="mt-6 text-title-medium">
-							First version, <time dateTime={FIRST_VERSION.date}>{FIRST_VERSION.inWords}</time>
+							{version ? (
+								<>
+									This version <time dateTime={version.date}>{version.inWords}</time>; first version{" "}
+									<time dateTime={FIRST_VERSION.date}>{FIRST_VERSION.inWords}</time>
+								</>
+							) : (
+								<>
+									First version, <time dateTime={FIRST_VERSION.date}>{FIRST_VERSION.inWords}</time>
+								</>
+							)}
 						</p>
 						<p className="mt-2 max-w-136 text-body-large text-on-sheet-variant">{lead}</p>
 					</div>

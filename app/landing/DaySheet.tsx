@@ -67,7 +67,7 @@ export function DaySheet() {
 				/>
 			</Ledger>
 			<figcaption className="text-body-small text-on-sheet-variant">
-				A day as Timesifier will keep it: one timer, the entries it made, and their total.
+				A day as Timesifier keeps it: one timer, the entries it made, and their total.
 			</figcaption>
 		</figure>
 	);

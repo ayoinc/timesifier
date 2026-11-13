@@ -81,7 +81,7 @@ export function CodeStep({ email, siteKey, onSent, onSignedIn, onChangeEmail }: 
 				<strong className="wrap-anywhere text-on-surface">{email}</strong>. It can take a minute to
 				arrive and may be in your spam folder. Type it here: a code works only in the browser that
 				asked for it, and for {CODE_LIFETIME_SECONDS / 60} minutes. If nothing comes, send a new
-				code. We send at most five codes an hour to one address.
+				code. From this browser you can be sent at most five codes an hour.
 			</StepLead>
 
 			<form onSubmit={submit} className="mt-8 flex flex-col gap-6">
