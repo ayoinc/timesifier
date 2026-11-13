@@ -367,8 +367,10 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 						</ul>
 						<p className="mt-2">
 							An organisation sends at most {facts.documentEmails} invoice and estimate emails in 24
-							hours. No email holds an image or anything that tells Timesifier it was opened, and
-							the email with a code holds no link.
+							hours. Every image in an email is attached to the message: the Timesifier logo or, on
+							an organisation's invoice, reminder or estimate, its logo if it has one and the
+							Timesifier mark. Nothing is fetched when an email is opened, and nothing tells
+							Timesifier it was. The email with a code holds no link.
 						</p>
 					</Row>
 					<Row term="Webhooks">
