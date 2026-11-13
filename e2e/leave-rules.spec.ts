@@ -6,12 +6,12 @@ import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject, workEveryDay } from "./timesheet";
+import { createProject, mondayOf, pastWeekday, workEveryDay } from "./timesheet";
 
 // Leave and time together in a browser (TS-090), on the person's own time:
 // an owner nobody else decides for sets the timesheet rules with the keyboard,
 // asks for overtime, asks for annual leave at short notice with a reason, and
-// records half a day of sick leave today, which leaves the day 3:45: more is
+// records half a day of sick leave on a past weekday, which leaves the day 3:45: more is
 // refused with the time left, 3:45 fits, and the day then takes no more. A
 // whole day of leave closes the day in every view. Then the pages and sheets
 // at both window sizes and in both schemes, with no WCAG 2.2 A or AA
@@ -148,23 +148,10 @@ test("annual leave at short notice says so, asks why, and is sent with the reaso
 	await expect(status(page)).toHaveText("Approved automatically: nobody else can decide it.");
 });
 
-/** Records half a day of sick leave today, the sheet's own first and last day, which are the person's today. */
-async function halfDaySickToday(page: Page, slug: string) {
-	await openShell(page, destinationPath(slug, "time-off"));
-	await page.getByRole("button", { name: "Request time off" }).click();
-	const sheet = page.getByRole("dialog", { name: "Request time off" });
-	await sheet.getByRole("button", { name: /Kind of leave/ }).click();
-	await page
-		.getByRole("listbox", { name: "Kind of leave" })
-		.getByRole("option", { name: "Sick leave" })
-		.click();
-	await expect(sheet).toContainText("Sick leave needs no notice.");
-	await sheet.getByText("Half a day", { exact: true }).click();
-	await sheet.getByRole("button", { name: "Request" }).click();
-	await expect(sheet).toBeHidden();
-	await expect(status(page)).toHaveText("Recorded. It needs nobody's approval.");
-}
-
+const dayPath = (slug: string, day: string) => `${organisationPath(slug)}?day=${day}`;
+/** The Week view of the week `day` is in, which may be the week before this one. */
+const weekPath = (slug: string, day: string) =>
+	`${organisationPath(slug)}?view=week&start=${mondayOf(day)}`;
 const trackTime = (page: Page) => page.getByRole("button", { name: "Track time", exact: true });
 const trackSheet = (page: Page) => page.getByRole("dialog", { name: "Track time" });
 
@@ -172,9 +159,11 @@ test("half a day of leave leaves the day 3:45: the Day view shows what is left, 
 	page,
 }) => {
 	const { slug } = await ownerWithWeek(page);
-	await halfDaySickToday(page, slug);
+	// A past weekday, whose hours fit on it at any hour of the run (W08).
+	const day = await pastWeekday(page);
+	await recordSickLeave(page, slug, day, day, true);
 
-	await openShell(page, organisationPath(slug));
+	await openShell(page, dayPath(slug, day));
 	await expect(trackTime(page)).toHaveAccessibleDescription("3:45 left of 3:45");
 	await trackTime(page).click();
 	await trackSheet(page).getByRole("textbox", { name: "Hours" }).fill("1");
@@ -184,7 +173,7 @@ test("half a day of leave leaves the day 3:45: the Day view shows what is left, 
 
 	// The Week grid shows what is left in the cell's name, and refuses more before it
 	// sends: the cell's own hour is replaced by what is typed, so 3:45 fits in it.
-	await openShell(page, `${organisationPath(slug)}?view=week`);
+	await openShell(page, weekPath(slug, day));
 	const cell = page.getByRole("textbox", { name: /^Site, .*, 2:45 left$/ });
 	await cell.fill("4");
 	await cell.press("Enter");
@@ -196,7 +185,7 @@ test("half a day of leave leaves the day 3:45: the Day view shows what is left, 
 	await expect(page.getByRole("textbox", { name: /^Site, .*, 0:00 left$/ })).toHaveValue("3:45");
 
 	// The day is full: Track time is closed and says so.
-	await openShell(page, organisationPath(slug));
+	await openShell(page, dayPath(slug, day));
 	await expect(trackTime(page)).toBeDisabled();
 	await expect(trackTime(page)).toHaveAccessibleDescription("This day has 0:00 left.");
 });
@@ -296,24 +285,26 @@ for (const viewport of [
 				);
 				await expectNoProblems(page, "Time off", [EMPTY_INPUT]);
 
-				// Track 7:30 today, then record half a day of sick leave: the day is over by 3:45.
-				await openShell(page, organisationPath(slug));
+				// Track 7:30 on a past weekday, whose hours fit on it at any hour of the run
+				// (W08), then record half a day of sick leave: the day is over by 3:45.
+				const day = await pastWeekday(page);
+				await openShell(page, dayPath(slug, day));
 				await trackTime(page).click();
 				await trackSheet(page).getByRole("textbox", { name: "Hours" }).fill("7:30");
 				await trackSheet(page).getByRole("button", { name: "Save entry" }).click();
 				await expect(trackSheet(page)).toBeHidden();
-				await halfDaySickToday(page, slug);
-				await openShell(page, organisationPath(slug));
+				await recordSickLeave(page, slug, day, day, true);
+				await openShell(page, dayPath(slug, day));
 				await expect(page.getByRole("main")).toContainText("Over by 3:45");
 				await expect(page.getByRole("button", { name: "Submit week" })).toBeDisabled();
 				await expectNoProblems(page, "Timesheet");
 
-				await openShell(page, `${organisationPath(slug)}?view=week`);
+				await openShell(page, weekPath(slug, day));
 				await expect(page.getByRole("main")).toContainText("Over by 3:45");
 				// Where the grid is wider than the window it scrolls, and axe cannot measure what the scroll hides.
 				await expectNoProblems(page, "Timesheet", [EMPTY_INPUT, PARTLY_SCROLLED_AWAY]);
 
-				await openShell(page, `${organisationPath(slug)}?view=calendar`);
+				await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 				await expect(page.getByRole("main")).toContainText("Over by 3:45");
 				await expectNoProblems(page, "Timesheet", [PARTLY_SCROLLED_AWAY]);
 			});

@@ -7,7 +7,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject, workEveryDay } from "./timesheet";
+import { afternoonZone, createProject, workEveryDay } from "./timesheet";
 
 // Tasks, rates and budgets in a browser (TS-066, TS-067, TS-069): an owner
 // makes a task, opens a project's own page and moves between its tabs, sets
@@ -18,7 +18,9 @@ import { createProject, workEveryDay } from "./timesheet";
 // AA violation. Each test is a new person with an organisation of their own:
 // what they add is seen by no other test, and nothing is seeded.
 
-test.use({ storageState: SIGNED_OUT });
+// Hours are tracked today, which has room for them only once they have passed
+// (W08): the browser, and so the person, is where it is afternoon now.
+test.use({ storageState: SIGNED_OUT, timezoneId: afternoonZone() });
 test.describe.configure({ timeout: TIME_WITH_TURNS * 2 });
 
 test.beforeEach(async ({ context, baseURL }) => {

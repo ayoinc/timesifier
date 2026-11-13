@@ -90,6 +90,8 @@ Done means merged, deployed and the smoke test green, with all of these true:
 
 **What a preview proves.** A preview sends no email, so nobody signs in on it. Signed-in pages are verified locally on a production build and by `pnpm test:e2e`, and their screenshots come from those browser tests. The preview proves the public pages and the smoke test.
 
+**Browser tests hold on any day and at any hour.** The pipeline runs at any hour in UTC, and typed hours never run past now (audit W08), so just after midnight today has room for none. A test that tracks time does it on a day that has passed, `pastWeekday` in `e2e/timesheet.ts`, and opens that day's week (`mondayOf`), which on a Monday is the week before. A test that must track today, such as one whose rate starts today, runs its browser where it is afternoon now (`afternoonZone`), and `workEveryDay` makes today a working day and waits for the person's zone to be the browser's. `e2e/timesheet-days.spec.ts` checks these on every day of a week.
+
 ## Flow of one card
 
 This is the one procedure. Each step says who does it.
