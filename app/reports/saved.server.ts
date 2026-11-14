@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { type OrganisationScope, users, uuidv7 } from "~/db";
+import { among, type OrganisationScope, users, uuidv7 } from "~/db";
 import { addressLine, shownName } from "~/organisations/people";
 
 import { readSavedQuery, type SavedView } from "./saved";
@@ -47,7 +47,7 @@ async function peopleNamed(ids: readonly string[]) {
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name, email: users.email })
 		.from(users)
-		.where(inArray(users.id, wanted));
+		.where(among(users.id, wanted));
 	return new Map(rows.map((u) => [u.id, { name: shownName(u), address: addressLine(u) }]));
 }
 
@@ -61,13 +61,13 @@ export async function savedReportsFor(
 	const unique = await scope.savedReports.select((r) =>
 		sharedIds.length === 0
 			? eq(r.ownerId, viewerId)
-			: or(eq(r.ownerId, viewerId), inArray(r.id, sharedIds)),
+			: or(eq(r.ownerId, viewerId), among(r.id, sharedIds)),
 	);
 	const ownIds = unique.filter((r) => r.ownerId === viewerId).map((r) => r.id);
 	const shares =
 		ownIds.length === 0
 			? []
-			: await scope.savedReportShares.select((s) => inArray(s.reportId, ownIds));
+			: await scope.savedReportShares.select((s) => among(s.reportId, ownIds));
 	const names = await peopleNamed([
 		...unique.map((r) => r.ownerId),
 		...shares.map((s) => s.userId),

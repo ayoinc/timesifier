@@ -1,16 +1,15 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { changes, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, organisationScope, users } from "~/db";
+import { among, type OrganisationScope, users, waitingFor } from "~/db";
 import {
 	type Access,
 	isAdministrator,
 	mayDecidePeriodOf,
 	mayReopenPeriods,
 } from "~/organisations/access";
-import { accessOf } from "~/organisations/access.server";
 import { type Membership, viewerOf } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
 import { type PeriodDays, PeriodStatus, statusAfter } from "~/periods/periods";
@@ -78,8 +77,8 @@ export async function approvalsFor(
 		ids.length === 0
 			? [[], []]
 			: await Promise.all([
-					scope.periods.select((p) => and(inArray(p.userId, ids), eq(p.startsOn, period.startsOn))),
-					scope.memberships.select((m) => inArray(m.userId, ids)),
+					scope.periods.select((p) => and(among(p.userId, ids), eq(p.startsOn, period.startsOn))),
+					scope.memberships.select((m) => among(m.userId, ids)),
 				]);
 	// The day each person joined, in their zone: nobody is chased for a
 	// period that ended before they were a member (W13).
@@ -93,7 +92,7 @@ export async function approvalsFor(
 					await drizzle(env.DB)
 						.select({ id: users.id, name: users.name, email: users.email })
 						.from(users)
-						.where(inArray(users.id, deciders))
+						.where(among(users.id, deciders))
 				).map((user) => [user.id, nameOrEmail(user)]),
 	);
 
@@ -132,7 +131,7 @@ export async function pendingPeriods(
 	const ids = people.map((p) => p.id);
 	if (ids.length === 0) return [];
 	const rows = await scope.periods.select(
-		(p) => and(inArray(p.userId, ids), eq(p.status, "submitted")),
+		(p) => and(among(p.userId, ids), eq(p.status, "submitted")),
 		{ orderBy: (p) => [desc(p.startsOn)] },
 	);
 	const counts = new Map<Day, number>();
@@ -141,15 +140,19 @@ export async function pendingPeriods(
 }
 
 /**
- * The number on the Approvals link: the periods waiting for the person behind
- * `membership` to decide. Null for a person who is not shown Approvals, which
- * costs no query.
+ * The number on the Approvals link: the periods, and the requests for leave,
+ * overtime and weekend work, waiting for the person behind `membership` to
+ * decide, counted in one statement (`waitingFor`). Null for a person who is
+ * not shown Approvals, which costs no query.
  */
 export async function pendingApprovalsOf(membership: Membership): Promise<number | null> {
 	if (!canSee(viewerOf(membership), "approvals")) return null;
-	const scope = organisationScope(env.DB, membership.organisation.id);
-	const people = await decidablePeople(scope, membership.organisation, await accessOf(membership));
-	return (await pendingPeriods(scope, people)).reduce((sum, each) => sum + each.count, 0);
+	return waitingFor(
+		env.DB,
+		membership.organisation.id,
+		membership.user.id,
+		isAdministrator(membership.role),
+	);
 }
 
 /** A decision on one period. A return and a reopening carry the reason. */
@@ -239,7 +242,7 @@ export async function approveAll(
 	const ids = people.filter((p) => mayDecidePeriodOf(access, p.id)).map((p) => p.id);
 	if (ids.length === 0) return 0;
 	const periods = await scope.periods.select((p) =>
-		and(inArray(p.userId, ids), eq(p.startsOn, startsOn), eq(p.status, "submitted")),
+		and(among(p.userId, ids), eq(p.startsOn, startsOn), eq(p.status, "submitted")),
 	);
 	const statements = periods.flatMap((period) =>
 		statementsOf(scope, period, "approved", { action: "approved" }, access.userId, at),

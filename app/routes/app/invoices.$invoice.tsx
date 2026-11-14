@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { inArray, isNull } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { useState } from "react";
 import { Link, redirect } from "react-router";
@@ -11,7 +11,7 @@ import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
-import { users } from "~/db";
+import { among, users } from "~/db";
 import { BillingTabs } from "~/invoices/BillingTabs";
 import { billingOf } from "~/invoices/context.server";
 import { LineFieldsInSheet, NEW_LINE, PrintedSheet } from "~/invoices/DocumentParts";
@@ -93,7 +93,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 			: await drizzle(env.DB)
 					.select({ id: users.id, name: users.name })
 					.from(users)
-					.where(inArray(users.id, actorIds));
+					.where(among(users.id, actorIds));
 	const actorName = new Map(actors.map((a) => [a.id, a.name]));
 	const money = (minor: number) => formatMoney(minor, invoice.currency, locale);
 	return {
@@ -217,7 +217,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 	const { scope, organisation, today, locale, now, membership } = await billingOf(context, request);
 	const actor = membership.user.id;
 	const id = params.invoice;
-	const [invoice] = await scope.invoices.select((i) => inArray(i.id, [id]), { limit: 1 });
+	const [invoice] = await scope.invoices.select((i) => eq(i.id, id), { limit: 1 });
 	if (!invoice) throw notFound();
 
 	switch (input.intent) {

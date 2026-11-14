@@ -6,6 +6,8 @@
  * `biome.json` refuses an import of `~/db/schema` or `~/db/scope` anywhere else.
  */
 
+// A list of any length as one bound parameter (decision 40).
+export { among, notAmong } from "./among";
 export {
 	activityAfter,
 	apiTokenByHash,
@@ -38,3 +40,4 @@ export {
 } from "./scope";
 export { dueRecurringInvoices, estimateForLink, reminderOrganisations } from "./unscoped";
 export { uuidv7 } from "./uuidv7";
+export { waitingFor } from "./waiting";

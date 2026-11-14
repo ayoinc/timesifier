@@ -3,7 +3,14 @@ import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, ne } from "drizzle-o
 import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, organisationScope, organisations, users, uuidv7 } from "~/db";
+import {
+	among,
+	type OrganisationScope,
+	organisationScope,
+	organisations,
+	users,
+	uuidv7,
+} from "~/db";
 import { locksEntries, PeriodStatus, periodAfter, periodContaining } from "~/periods/periods";
 import { addDays, bounds, type Day, dayOf } from "~/time/calendar";
 import { zoneOf } from "~/time/zones";
@@ -149,7 +156,7 @@ export async function invoicedIds(
 ): Promise<Set<string>> {
 	if (ids.length === 0) return new Set();
 	const sources = await scope.invoiceLineSources.select((s) =>
-		kind === "time_entry" ? inArray(s.timeEntryId, [...ids]) : inArray(s.expenseId, [...ids]),
+		kind === "time_entry" ? among(s.timeEntryId, ids) : among(s.expenseId, ids),
 	);
 	return new Set(
 		sources.flatMap((s) => {
@@ -361,7 +368,7 @@ export async function submitUnsubmitted(
 		.select({ id: users.id, timeZone: users.timeZone })
 		.from(users)
 		.where(
-			inArray(
+			among(
 				users.id,
 				members.map((m) => m.userId),
 			),
@@ -394,7 +401,7 @@ export async function submitUnsubmitted(
 		);
 		if (starts.size === 0) continue;
 		const rows = await scope.periods.select((p) =>
-			and(eq(p.userId, person.id), inArray(p.startsOn, [...starts])),
+			and(eq(p.userId, person.id), among(p.startsOn, starts)),
 		);
 		for (const startsOn of [...starts].sort()) {
 			const row = rows.find((r) => r.startsOn === startsOn);

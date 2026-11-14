@@ -66,6 +66,16 @@ const INVITATIONS_PER_SENDER: Cap = { max: 20, seconds: 24 * 60 * 60 };
 /** Organisations one person may own. Creating one makes its creator its owner. */
 const ORGANISATIONS_PER_OWNER = 5;
 
+/**
+ * Where Better Auth's own ceilings are set, so that they never decide. Unless
+ * told otherwise its organization plugin holds an organisation to 100 members
+ * and 100 pending invitations, and every list Better Auth reads stops at 100
+ * rows. How many people an organisation holds is the application's to say:
+ * the seats on its plan (TS-099), checked in `beforeCreateInvitation`. This is
+ * far above any number of seats a plan may hold (TS-112).
+ */
+export const LIBRARY_CEILING = 1_000_000;
+
 // The plugin's own codes and wording, so a page reads one vocabulary. The
 // plugin sends them with status 400, and something else to a person who is
 // not a member or not the recipient.
@@ -290,8 +300,6 @@ const ENDPOINTS: Record<string, Endpoint> = {
 		"pending",
 	),
 
-	"/organization/get-full-organization": member("query", z.strictObject(organisation)),
-	"/organization/list-members": member("query", z.strictObject(organisation)),
 	"/organization/list-invitations": member("query", z.strictObject(organisation)),
 	"/organization/update": member(
 		"body",
@@ -360,6 +368,13 @@ export function organisationPlugins() {
 			invitationExpiresIn: INVITATION_LIFETIME_SECONDS,
 			// An invitation is for the person who has proved the address it was sent to.
 			requireEmailVerificationOnInvitation: true,
+			// The seats decide, not the plugin (`LIBRARY_CEILING`). A number, not a
+			// function: the plugin applies only a number to its lists of members.
+			membershipLimit: LIBRARY_CEILING,
+			invitationLimit: LIBRARY_CEILING,
+			// Teams are not enabled, and their two ceilings are unset, which the
+			// plugin reads as none. The plugin's `organizationLimit` is unset too:
+			// the gate's five organisations owned stands in its place.
 			organizationHooks: {
 				// The last thing before an invitation is stored and its message sent,
 				// after every check of the plugin's own, so only an invitation that

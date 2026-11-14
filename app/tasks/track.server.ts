@@ -1,7 +1,7 @@
-import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
 
 import { projectBudgets } from "~/budgets/budget.server";
-import type { OrganisationScope } from "~/db";
+import { among, type OrganisationScope } from "~/db";
 import type { Membership } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { recentProjectIds } from "~/projects/recent.server";
@@ -27,11 +27,7 @@ export async function trackChoices(
 			tasksOfProjects(scope),
 			tagOptions(scope),
 			warnedOverBudget(scope, membership, now),
-			shownEntryIds.length === 0
-				? []
-				: scope.timeEntries.select(
-						(e) => sql`${e.id} in (select value from json_each(${JSON.stringify(shownEntryIds)}))`,
-					),
+			shownEntryIds.length === 0 ? [] : scope.timeEntries.select((e) => among(e.id, shownEntryIds)),
 			tagsOfEntries(scope, shownEntryIds),
 			recentProjectIds(scope, membership.user.id),
 			scope.projects.select((p) => and(isNull(p.archivedAt), isNotNull(p.clientId))),

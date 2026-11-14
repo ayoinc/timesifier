@@ -291,7 +291,7 @@ describe("the organisation of a request", () => {
 			{ data: { name: "Globex" } },
 			{ cookie: ada.cookie },
 		);
-		const seen = await get("/organization/get-full-organization", { cookie: ada.cookie });
+		const seen = await get("/organization/list-invitations", { cookie: ada.cookie });
 
 		expect([invited.status, renamed.status, seen.status]).toEqual([400, 400, 400]);
 		expect(await value("select count(*) from invitations")).toBe(0);
@@ -305,6 +305,9 @@ describe("the organisation of a request", () => {
 		["GET", "/organization/get-active-member", null],
 		["GET", "/organization/get-active-member-role", null],
 		["GET", "/organization/get-organization?organizationSlug=acme", null],
+		// They read a member's person with a bound parameter each (TS-112).
+		["GET", "/organization/get-full-organization?organizationSlug=acme", null],
+		["GET", "/organization/list-members?organizationSlug=acme", null],
 	] as const)(
 		"answers 404 for an endpoint the application does not use: %s %s",
 		async (method, path, body) => {
@@ -326,12 +329,12 @@ describe("the organisation of a request", () => {
 		await createOrganisation(ada.cookie, "Acme");
 
 		const taken = await answer(
-			await get("/organization/get-full-organization?organizationSlug=acme", {
+			await get("/organization/list-invitations?organizationSlug=acme", {
 				cookie: grace.cookie,
 			}),
 		);
 		const free = await answer(
-			await get("/organization/get-full-organization?organizationSlug=nobody", {
+			await get("/organization/list-invitations?organizationSlug=nobody", {
 				cookie: grace.cookie,
 			}),
 		);

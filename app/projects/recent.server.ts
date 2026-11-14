@@ -1,6 +1,6 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
-import type { OrganisationScope } from "~/db";
+import { among, type OrganisationScope } from "~/db";
 
 /** How many of the person's latest entries are read for their recent projects. */
 const ENTRIES_READ = 50;
@@ -22,7 +22,7 @@ export async function recentProjectIds(
 	const ids = [...new Set(entries.map((e) => e.projectId))];
 	if (ids.length === 0) return [];
 	const active = new Set(
-		(await scope.projects.select((p) => and(inArray(p.id, ids), isNull(p.archivedAt)))).map(
+		(await scope.projects.select((p) => and(among(p.id, ids), isNull(p.archivedAt)))).map(
 			(p) => p.id,
 		),
 	);

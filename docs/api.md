@@ -71,7 +71,7 @@ The token's maker, organisation, role and scopes.
 
 ### `GET /users` — `people:read`
 
-`id`, `name`, `role`, `is_contractor`; `email` for an owner's or admin's token.
+Query: `per_page`, `cursor`. By `id`. `id`, `name`, `role`, `is_contractor`; `email` for an owner's or admin's token.
 
 ### `GET /clients` — `projects:read`
 
@@ -140,7 +140,7 @@ Any of `project_id`, `task_id`, `started_at`, `ended_at` or `hours` (not both), 
 
 ### `GET /leave` — `people:read`
 
-Query: `from`, `to`, `user_id`. `id`, `user`, `kind` (`{ id, name }` or null where the role may not see it), `starts_on`, `ends_on`, `starts_half`, `ends_half`, `status`.
+Query: `from`, `to`, `user_id`, `per_page`, `cursor`. By `starts_on`, then `id`. `id`, `user`, `kind` (`{ id, name }` or null where the role may not see it), `starts_on`, `ends_on`, `starts_half`, `ends_half`, `status`.
 
 ### `GET /work_days` — `time:read`
 

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import {
@@ -9,7 +9,14 @@ import {
 	recordStatementWhen,
 	recordsStatement,
 } from "~/activity/activity.server";
-import { type OrganisationScope, organisations, type ScopedStatement, users, uuidv7 } from "~/db";
+import {
+	among,
+	type OrganisationScope,
+	organisations,
+	type ScopedStatement,
+	users,
+	uuidv7,
+} from "~/db";
 import { type KindsMs, kindOfNewTime, type RulesCalendar, weekOf } from "~/leave/rules";
 import { rulesCalendarOf } from "~/leave/rules.server";
 import { nameKey, recordName } from "~/lib/names";
@@ -149,7 +156,7 @@ async function namesOf(ids: string[]) {
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name })
 		.from(users)
-		.where(inArray(users.id, unique));
+		.where(among(users.id, unique));
 	return new Map(rows.map((row) => [row.id, row.name]));
 }
 
@@ -206,7 +213,7 @@ async function membersOf(scope: OrganisationScope, organisationZone: string): Pr
 		.select({ id: users.id, name: users.name, email: users.email, timeZone: users.timeZone })
 		.from(users)
 		.where(
-			inArray(
+			among(
 				users.id,
 				memberships.map((m) => m.userId),
 			),
@@ -824,14 +831,11 @@ export async function revertImport(
 	const { zone: organisationZone, lockedThrough } = await organisationOf(scope.organisationId);
 	const entries = await scope.timeEntries.select((e) => eq(e.importId, id));
 	const ids = entries.map((e) => e.id);
-	const invoiced = new Set<string>();
-	for (const chunk of inChunks(ids, 90)) {
-		const sources = await scope.invoiceLineSources.select((s) => inArray(s.timeEntryId, chunk));
-		for (const source of sources) if (source.timeEntryId) invoiced.add(source.timeEntryId);
-	}
+	const sources = await scope.invoiceLineSources.select((s) => among(s.timeEntryId, ids));
+	const invoiced = new Set(sources.map((source) => source.timeEntryId));
 	const members = new Map((await membersOf(scope, organisationZone)).map((m) => [m.userId, m]));
 	const people = [...new Set(entries.map((e) => e.userId))];
-	const periods = people.length ? await scope.periods.select((p) => inArray(p.userId, people)) : [];
+	const periods = people.length ? await scope.periods.select((p) => among(p.userId, people)) : [];
 	const projects = new Map((await scope.projects.select()).map((p) => [p.id, p.name]));
 	const lockedEntries: string[] = [];
 	for (const entry of entries) {
@@ -866,7 +870,7 @@ export async function revertImport(
 		scope.timeEntries.statements.delete((e) =>
 			and(
 				eq(e.importId, id),
-				inArray(
+				among(
 					e.id,
 					chunk.map((entry) => entry.id),
 				),

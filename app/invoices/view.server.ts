@@ -1,10 +1,8 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 
-import type { OrganisationScope } from "~/db";
+import { among, type OrganisationScope } from "~/db";
 import type { Day } from "~/time/calendar";
-
 import { formatDayWithYear } from "~/time/format";
-
 import { invoiceDetailsOf, printedDocument, taxesOf } from "./documents.server";
 import {
 	findInvoice,
@@ -64,13 +62,13 @@ export async function invoiceViews(
 	const ids = invoices.map((i) => i.id);
 	const clientIds = [...new Set(invoices.map((i) => i.clientId))];
 	const [allLines, taxes, details, clients, allPayments, settledById] = await Promise.all([
-		scope.invoiceLines.select((l) => inArray(l.invoiceId, ids), {
+		scope.invoiceLines.select((l) => among(l.invoiceId, ids), {
 			orderBy: (l) => [asc(l.position)],
 		}),
 		taxesOf(scope),
 		invoiceDetailsOf(scope),
-		scope.clients.select((c) => inArray(c.id, clientIds)),
-		scope.payments.select((p) => inArray(p.invoiceId, ids), {
+		scope.clients.select((c) => among(c.id, clientIds)),
+		scope.payments.select((p) => among(p.invoiceId, ids), {
 			orderBy: (p) => [desc(p.paidOn)],
 		}),
 		settledOf(scope, ids),

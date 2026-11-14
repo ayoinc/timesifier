@@ -1,10 +1,16 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
-import { type OrganisationScope, organisationScope, organisations, users } from "~/db";
+import {
+	among,
+	notAmong,
+	type OrganisationScope,
+	organisationScope,
+	organisations,
+	users,
+} from "~/db";
 import { maySeeRates } from "~/organisations/access";
 import { type Membership, notFound } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
@@ -38,9 +44,6 @@ import {
  * entries stay when their membership goes, so their time is still there.
  */
 
-/** D1 takes at most 100 bound parameters a statement; a list of ids is read in chunks under that. */
-const IDS_A_QUERY = 90;
-
 /** Throws the organisation's 404 unless the person sees money. The report's routes run it before anything else. */
 export function requireSeesCost(membership: Membership): void {
 	if (!maySeeRates(membership.role)) throw notFound();
@@ -61,11 +64,6 @@ export interface ContractorReport {
 export interface RefusedContractorReport {
 	query: ReportQuery;
 	problem: RangeProblem;
-}
-
-/** `column` is one of `ids`, as one bound parameter however many they are. */
-function among(column: SQLiteColumn, ids: readonly string[]): SQL {
-	return sql`${column} in (select value from json_each(${JSON.stringify(ids)}))`;
 }
 
 /**
@@ -116,11 +114,7 @@ export async function contractorReport(
 				),
 		// The entries of people who are no longer members.
 		scope.timeEntries.select((e) =>
-			and(
-				gte(e.startedAt, span.from),
-				lt(e.startedAt, span.to),
-				sql`${e.userId} not in (select value from json_each(${JSON.stringify(memberIds)}))`,
-			),
+			and(gte(e.startedAt, span.from), lt(e.startedAt, span.to), notAmong(e.userId, memberIds)),
 		),
 		scope.rates.select((r) => eq(r.kind, "cost")),
 	]);
@@ -187,21 +181,14 @@ async function peopleOf(
 	organisation: Membership["organisation"],
 	left: ReadonlySet<string>,
 ): Promise<Contractor[]> {
-	const people: Contractor[] = [];
-	const db = drizzle(env.DB);
-	for (let at = 0; at < ids.length; at += IDS_A_QUERY) {
-		const rows = await db
-			.select({ id: users.id, name: users.name, email: users.email, timeZone: users.timeZone })
-			.from(users)
-			.where(inArray(users.id, ids.slice(at, at + IDS_A_QUERY)));
-		for (const row of rows) {
-			people.push({
-				id: row.id,
-				name: nameOrEmail(row),
-				zone: zoneOf(row, organisation),
-				left: left.has(row.id),
-			});
-		}
-	}
-	return people;
+	const rows = await drizzle(env.DB)
+		.select({ id: users.id, name: users.name, email: users.email, timeZone: users.timeZone })
+		.from(users)
+		.where(among(users.id, ids));
+	return rows.map((row) => ({
+		id: row.id,
+		name: nameOrEmail(row),
+		zone: zoneOf(row, organisation),
+		left: left.has(row.id),
+	}));
 }

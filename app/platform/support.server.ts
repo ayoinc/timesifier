@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { record } from "~/activity/activity.server";
-import { type OrganisationScope, organisationScope, platformData, users } from "~/db";
+import { among, type OrganisationScope, organisationScope, platformData, users } from "~/db";
 import { nameOrEmail } from "~/organisations/people";
 import type { SupportHours } from "./limits";
 
@@ -42,7 +42,7 @@ export async function grantHistory(scope: OrganisationScope) {
 			: await drizzle(env.DB)
 					.select({ id: users.id, name: users.name, email: users.email })
 					.from(users)
-					.where(inArray(users.id, people));
+					.where(among(users.id, people));
 	const nameOf = new Map(named.map((person) => [person.id, nameOrEmail(person)]));
 	return grants.map((g) => ({
 		id: g.id,
@@ -164,7 +164,7 @@ export async function supportView(organisationId: string, actorId: string, now: 
 			: await drizzle(env.DB)
 					.select({ id: users.id, name: users.name, email: users.email })
 					.from(users)
-					.where(inArray(users.id, people));
+					.where(among(users.id, people));
 	const personOf = new Map(named.map((person) => [person.id, person]));
 	const nameOf = (id: string) => {
 		const person = personOf.get(id);

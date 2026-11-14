@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { expect } from "vitest";
 import * as z from "zod";
 import { uuidv7 } from "~/db";
-import { get, type Mailbox, post, signIn } from "../auth/harness";
+import { type Mailbox, post, signIn } from "../auth/harness";
 
 export type Role = "owner" | "admin" | "finance" | "member";
 
@@ -86,10 +86,6 @@ export async function invite(
 
 export function accept(cookie: string, invitationId: string): Promise<Response> {
 	return post("/organization/accept-invitation", { invitationId }, { cookie });
-}
-
-export function fullOrganisation(cookie: string, organizationId: string): Promise<Response> {
-	return get(`/organization/get-full-organization?organizationId=${organizationId}`, { cookie });
 }
 
 /**

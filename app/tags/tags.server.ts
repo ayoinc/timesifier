@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, uuidv7 } from "~/db";
+import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 
 /**
@@ -149,7 +149,7 @@ export async function tagsAllowed(
 	const added = [...new Set(wanted)].filter((id) => !current.includes(id));
 	if (added.length === 0) return true;
 	if (added.length > 50) return false;
-	const active = await scope.tags.select((t) => and(inArray(t.id, added), isNull(t.archivedAt)));
+	const active = await scope.tags.select((t) => and(among(t.id, added), isNull(t.archivedAt)));
 	return active.length === added.length;
 }
 
@@ -160,9 +160,7 @@ export async function tagsOfEntries(
 ): Promise<Map<string, string[]>> {
 	const byEntry = new Map<string, string[]>();
 	if (entryIds.length === 0) return byEntry;
-	const rows = await scope.entryTags.select(
-		(et) => sql`${et.timeEntryId} in (select value from json_each(${JSON.stringify(entryIds)}))`,
-	);
+	const rows = await scope.entryTags.select((et) => among(et.timeEntryId, entryIds));
 	for (const row of rows) {
 		byEntry.set(row.timeEntryId, [...(byEntry.get(row.timeEntryId) ?? []), row.tagId]);
 	}
@@ -192,7 +190,7 @@ export function entryTagStatements(
 		...(removed.length > 0
 			? [
 					scope.entryTags.statements.delete((et) =>
-						and(eq(et.timeEntryId, entryId), inArray(et.tagId, removed)),
+						and(eq(et.timeEntryId, entryId), among(et.tagId, removed)),
 					),
 				]
 			: []),
@@ -209,9 +207,7 @@ export async function tagsOfExpenses(
 ): Promise<Map<string, string[]>> {
 	const byExpense = new Map<string, string[]>();
 	if (expenseIds.length === 0) return byExpense;
-	const rows = await scope.expenseTags.select(
-		(et) => sql`${et.expenseId} in (select value from json_each(${JSON.stringify(expenseIds)}))`,
-	);
+	const rows = await scope.expenseTags.select((et) => among(et.expenseId, expenseIds));
 	for (const row of rows) {
 		byExpense.set(row.expenseId, [...(byExpense.get(row.expenseId) ?? []), row.tagId]);
 	}
@@ -235,7 +231,7 @@ export function expenseTagStatements(
 		...(removed.length > 0
 			? [
 					scope.expenseTags.statements.delete((et) =>
-						and(eq(et.expenseId, expenseId), inArray(et.tagId, removed)),
+						and(eq(et.expenseId, expenseId), among(et.tagId, removed)),
 					),
 				]
 			: []),
@@ -271,7 +267,7 @@ export async function setProjectTags(
 		...(removed.length > 0
 			? [
 					scope.projectTags.statements.delete((pt) =>
-						and(eq(pt.projectId, projectId), inArray(pt.tagId, removed)),
+						and(eq(pt.projectId, projectId), among(pt.tagId, removed)),
 					),
 				]
 			: []),

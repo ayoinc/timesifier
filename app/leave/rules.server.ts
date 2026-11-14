@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, inArray, lt, lte } from "drizzle-orm";
+import { and, eq, gte, lt, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { ActivitySource } from "~/activity/actions";
 import { record } from "~/activity/activity.server";
-import { type OrganisationScope, organisationScope, organisations } from "~/db";
+import { among, type OrganisationScope, organisationScope, organisations } from "~/db";
 import { addDays, bounds, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { LeaveStatus } from "./kinds";
 import { calendarOf, leaveContext } from "./leave.server";
@@ -133,7 +133,7 @@ export async function approvedWorkOf(
 	if (ids.length === 0) return [];
 	const rows = await scope.workRequests.select((w) =>
 		and(
-			inArray(w.userId, ids),
+			among(w.userId, ids),
 			eq(w.status, "approved"),
 			lte(w.startsOn, last),
 			gte(w.endsOn, first),

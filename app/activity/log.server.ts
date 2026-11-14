@@ -3,7 +3,13 @@ import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
-import { type ActivitySummary, type ActivityValue, type OrganisationScope, users } from "~/db";
+import {
+	type ActivitySummary,
+	type ActivityValue,
+	among,
+	type OrganisationScope,
+	users,
+} from "~/db";
 import { NON_WORKING_RULE_LABELS, OVERTIME_RULE_LABELS, SHORT_NOTICE_LABELS } from "~/leave/rules";
 import { activityScopeOf, type TimeScope } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
@@ -120,7 +126,7 @@ export async function logRecords(log: LogRequest, limit: number, after?: LogCurs
 				after === undefined
 					? undefined
 					: or(lt(r.createdAt, after.at), and(eq(r.createdAt, after.at), lt(r.id, after.id))),
-				visible.everyone ? undefined : inArray(r.ownerId, visible.people),
+				visible.everyone ? undefined : among(r.ownerId, visible.people),
 				query.kind === undefined ? undefined : eq(r.subjectType, query.kind),
 				query.actor === undefined
 					? undefined
@@ -151,7 +157,7 @@ export function subjectRecords(
 			and(
 				eq(r.subjectType, subject.type),
 				eq(r.subjectId, subject.id),
-				visible.everyone ? undefined : inArray(r.ownerId, visible.people),
+				visible.everyone ? undefined : among(r.ownerId, visible.people),
 			),
 		{ orderBy: (r) => [r.createdAt, r.id] },
 	);
@@ -308,47 +314,104 @@ interface Names {
 	things: Map<string, string>;
 }
 
-/** The names of the people and things `records` name, read in a few queries. */
+/** The tables a record names things in, each looked up for the ids that can be its own. */
+type Named =
+	| "projects"
+	| "clients"
+	| "teams"
+	| "tasks"
+	| "tags"
+	| "leaveKinds"
+	| "expenseCategories"
+	| "workSchedules"
+	| "invoices"
+	| "estimates";
+
+/** The table whose row a record's subject is, for each kind of subject that has a name or number. */
+const SUBJECT_TABLES: Partial<Record<string, Named>> = {
+	project: "projects",
+	budget: "projects",
+	client: "clients",
+	team: "teams",
+	task: "tasks",
+	tag: "tags",
+	expense_category: "expenseCategories",
+	work_schedule: "workSchedules",
+	invoice: "invoices",
+	estimate: "estimates",
+};
+
+/** The table a changed field's id is a row of. `userId` is a person; `tags` holds comma-joined tag ids. */
+const FIELD_TABLES: Partial<Record<string, Named>> = {
+	projectId: "projects",
+	clientId: "clients",
+	teamId: "teams",
+	taskId: "tasks",
+	kindId: "leaveKinds",
+	categoryId: "expenseCategories",
+	scheduleId: "workSchedules",
+};
+
+/**
+ * The names of the people and things `records` name. Each table is asked
+ * only for the ids that can be its own, the subjects of its kind and the
+ * fields that name it, each as one list (decision 40): a page of 200 records,
+ * or an export's 500, names as many things as it likes.
+ */
 async function namesOf(scope: OrganisationScope, records: readonly RecordRow[]): Promise<Names> {
 	const people = new Set<string>();
-	const ids = new Set<string>();
+	const ids = new Map<Named, Set<string>>();
+	const add = (table: Named | undefined, id: string) => {
+		if (!table) return;
+		const set = ids.get(table) ?? new Set<string>();
+		ids.set(table, set.add(id));
+	};
 	for (const r of records) {
 		if (r.actorId) people.add(r.actorId);
 		if (r.ownerId) people.add(r.ownerId);
-		ids.add(r.subjectId);
+		add(SUBJECT_TABLES[r.subjectType], r.subjectId);
 		for (const side of [r.summary.before, r.summary.after]) {
 			for (const [key, value] of Object.entries(side ?? {})) {
-				if (key === "userId" && typeof value === "string") people.add(value);
-				else if (key === "tags" && typeof value === "string") {
-					for (const tag of value.split(",")) if (tag !== "") ids.add(tag);
-				} else if (key.endsWith("Id") && typeof value === "string") ids.add(value);
+				if (typeof value !== "string") continue;
+				if (key === "userId") people.add(value);
+				else if (key === "tags") {
+					for (const tag of value.split(",")) if (tag !== "") add("tags", tag);
+				} else add(FIELD_TABLES[key], value);
 			}
 		}
 	}
-	const list = [...ids];
-	const [accounts, projects, clients, teams, kinds, categories, tags, schedules] =
-		await Promise.all([
-			people.size === 0
-				? []
-				: drizzle(env.DB)
-						.select({ id: users.id, name: users.name, email: users.email })
-						.from(users)
-						.where(inArray(users.id, [...people])),
-			list.length === 0 ? [] : scope.projects.select((p) => inArray(p.id, list)),
-			list.length === 0 ? [] : scope.clients.select((c) => inArray(c.id, list)),
-			list.length === 0 ? [] : scope.teams.select((t) => inArray(t.id, list)),
-			list.length === 0 ? [] : scope.leaveKinds.select((k) => inArray(k.id, list)),
-			list.length === 0 ? [] : scope.expenseCategories.select((c) => inArray(c.id, list)),
-			list.length === 0 ? [] : scope.tags.select((t) => inArray(t.id, list)),
-			list.length === 0 ? [] : scope.workSchedules.select((s) => inArray(s.id, list)),
-		]);
+	/** The rows of `table` among the ids gathered for it, none read when there are none. */
+	const read = async <Row>(table: Named, select: (wanted: Set<string>) => Promise<Row[]>) => {
+		const wanted = ids.get(table);
+		return wanted ? select(wanted) : [];
+	};
+	const named = (rows: { id: string; name: string }[]) =>
+		rows.map((row) => [row.id, row.name] as const);
+	const numbered = (rows: { id: string; number: string }[]) =>
+		rows.map((row) => [row.id, row.number] as const);
+	const [accounts, ...things] = await Promise.all([
+		people.size === 0
+			? []
+			: drizzle(env.DB)
+					.select({ id: users.id, name: users.name, email: users.email })
+					.from(users)
+					.where(among(users.id, people)),
+		read("projects", (w) => scope.projects.select((p) => among(p.id, w))).then(named),
+		read("clients", (w) => scope.clients.select((c) => among(c.id, w))).then(named),
+		read("teams", (w) => scope.teams.select((t) => among(t.id, w))).then(named),
+		read("tasks", (w) => scope.tasks.select((t) => among(t.id, w))).then(named),
+		read("tags", (w) => scope.tags.select((t) => among(t.id, w))).then(named),
+		read("leaveKinds", (w) => scope.leaveKinds.select((k) => among(k.id, w))).then(named),
+		read("expenseCategories", (w) => scope.expenseCategories.select((c) => among(c.id, w))).then(
+			named,
+		),
+		read("workSchedules", (w) => scope.workSchedules.select((s) => among(s.id, w))).then(named),
+		read("invoices", (w) => scope.invoices.select((i) => among(i.id, w))).then(numbered),
+		read("estimates", (w) => scope.estimates.select((e) => among(e.id, w))).then(numbered),
+	]);
 	return {
 		people: new Map(accounts.map((a) => [a.id, nameOrEmail(a)])),
-		things: new Map(
-			[...projects, ...clients, ...teams, ...kinds, ...categories, ...tags, ...schedules].map(
-				(thing) => [thing.id, thing.name],
-			),
-		),
+		things: new Map(things.flat()),
 	};
 }
 

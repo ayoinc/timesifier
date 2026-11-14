@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { changes, recordStatement, recordStatementWhen } from "~/activity/activity.server";
-import { type OrganisationScope, uuidv7 } from "~/db";
+import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import type { Day } from "~/time/calendar";
 
@@ -51,8 +51,8 @@ export async function categoriesById(
 ): Promise<Map<string, Category>> {
 	if (ids.length === 0) return new Map();
 	const [categories, prices] = await Promise.all([
-		scope.expenseCategories.select((c) => inArray(c.id, [...ids])),
-		scope.expenseCategoryPrices.select((p) => inArray(p.categoryId, [...ids])),
+		scope.expenseCategories.select((c) => among(c.id, ids)),
+		scope.expenseCategoryPrices.select((p) => among(p.categoryId, ids)),
 	]);
 	return new Map(
 		categories.map((c) => [
