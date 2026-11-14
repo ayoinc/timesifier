@@ -111,11 +111,11 @@ export async function seedWork(crowd: Crowd): Promise<void> {
 	);
 	const days = ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"];
 	await insertAll(
-		"insert into time_entries (id, organisation_id, user_id, project_id, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+		"insert into time_entries (id, organisation_id, user_id, project_id, started_at, ended_at, spent_on, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		others.flatMap((id, i) =>
 			days.map((day) => {
 				const start = Date.parse(`${day}T10:00:00Z`);
-				return [uuidv7(), acme.id, id, projects[i], start, start + 3_600_000, now, now];
+				return [uuidv7(), acme.id, id, projects[i], start, start + 3_600_000, day, now, now];
 			}),
 		),
 	);
@@ -124,7 +124,7 @@ export async function seedWork(crowd: Crowd): Promise<void> {
 	const signed = [crowd.owner, crowd.admin, crowd.manager].map((who) => who.user.id);
 	const monday = Date.parse(`${WEEK}T10:00:00Z`);
 	await insertAll(
-		"insert into time_entries (id, organisation_id, user_id, project_id, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)",
+		"insert into time_entries (id, organisation_id, user_id, project_id, started_at, ended_at, spent_on, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		signed.map((id, i) => [
 			uuidv7(),
 			acme.id,
@@ -132,6 +132,7 @@ export async function seedWork(crowd: Crowd): Promise<void> {
 			projects[147 + i],
 			monday,
 			monday + 3_600_000,
+			WEEK,
 			now,
 			now,
 		]),
