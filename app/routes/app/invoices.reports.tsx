@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { DownloadLink } from "~/components/DownloadLink";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { LinkTabs } from "~/components/LinkTabs";
 import { PeriodStepper } from "~/components/PeriodStepper";
@@ -135,9 +136,9 @@ export default function InvoiceReports({ loaderData }: Route.ComponentProps) {
 						current={loaderData.steps.current}
 					/>
 				)}
-				<a href={loaderData.csv} className={ACTION_LINK} download>
+				<DownloadLink href={loaderData.csv} className={ACTION_LINK} pendingLabel="Downloading…">
 					Download CSV
-				</a>
+				</DownloadLink>
 			</div>
 
 			{report === "receivables" &&

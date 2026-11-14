@@ -20,6 +20,7 @@ import { moneyText, parseMoney } from "~/money/typed";
 import { declined } from "~/organisations/outcome.server";
 import type { Outcome } from "~/organisations/problems";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
+import { useSubmitting } from "~/shell/submitting";
 import { Day } from "~/time/calendar";
 import { formatDay } from "~/time/format";
 
@@ -262,6 +263,7 @@ export default function NewInvoice({ loaderData }: Route.ComponentProps) {
 	const { slug, clients, choices, preview } = loaderData;
 	const refused = useActionData<Outcome>();
 	const canCreate = preview !== null && "canCreate" in preview && preview.canCreate;
+	const submitting = useSubmitting();
 
 	return (
 		<>
@@ -392,7 +394,11 @@ export default function NewInvoice({ loaderData }: Route.ComponentProps) {
 								<p role="alert" className="text-body-medium text-error empty:hidden">
 									{refused && !refused.ok ? refused.problem : null}
 								</p>
-								<Button type="submit" isDisabled={!canCreate}>
+								<Button
+									type="submit"
+									isPending={submitting().isPending}
+									isDisabled={submitting().isDisabled || !canCreate}
+								>
 									Create draft invoice
 								</Button>
 							</Form>

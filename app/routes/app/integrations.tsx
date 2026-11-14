@@ -5,6 +5,7 @@ import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
+import { DownloadLink } from "~/components/DownloadLink";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { TextField } from "~/components/TextField";
@@ -365,15 +366,15 @@ export default function Integrations({ loaderData }: Route.ComponentProps) {
 						</Link>
 					</li>
 					<li>
-						<a className={ACTION_LINK} href={exportPath(organisation.slug)} download>
+						<DownloadLink href={exportPath(organisation.slug)} className={ACTION_LINK}>
 							Export all time as a CSV
-						</a>{" "}
+						</DownloadLink>{" "}
 						<span className="text-on-surface-variant">In the columns the import reads.</span>
 					</li>
 					<li>
-						<a className={ACTION_LINK} href={invoicesExportPath(organisation.slug)} download>
+						<DownloadLink href={invoicesExportPath(organisation.slug)} className={ACTION_LINK}>
 							Export all invoices as PDFs
-						</a>{" "}
+						</DownloadLink>{" "}
 						<span className="text-on-surface-variant">
 							One ZIP, a PDF for each invoice, drafts too, named by number.
 						</span>

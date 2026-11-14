@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { Form, useNavigation } from "react-router";
+import { Form } from "react-router";
 import * as z from "zod";
 import { MadeWith, OrganisationHeader } from "~/brand/OrganisationParts";
 import { organisationBrandOf } from "~/brand/organisation-brand.server";
@@ -19,6 +19,7 @@ import { notFound } from "~/organisations/membership.server";
 import { negotiateLocale } from "~/shell/locale";
 import { OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { useSubmitting } from "~/shell/submitting";
 
 import type { Route } from "./+types/estimate.$id.$token";
 
@@ -88,7 +89,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 export default function EstimateLink({ loaderData, actionData, params }: Route.ComponentProps) {
 	const { printed, status } = loaderData;
-	const busy = useNavigation().state !== "idle";
+	const submitting = useSubmitting();
 	const link = estimateLinkPath(params.id, params.token);
 	return (
 		<div className={OUTSIDE_FRAME}>
@@ -107,7 +108,12 @@ export default function EstimateLink({ loaderData, actionData, params }: Route.C
 				</div>
 				{status === "sent" && !actionData?.ok && (
 					<Form method="post" className="mt-8 flex flex-wrap gap-4">
-						<Button type="submit" name="decision" value="accepted" isDisabled={busy}>
+						<Button
+							type="submit"
+							name="decision"
+							value="accepted"
+							{...submitting("decision", "accepted")}
+						>
 							Accept estimate
 						</Button>
 						<Button
@@ -115,7 +121,7 @@ export default function EstimateLink({ loaderData, actionData, params }: Route.C
 							name="decision"
 							value="declined"
 							variant="outlined"
-							isDisabled={busy}
+							{...submitting("decision", "declined")}
 						>
 							Decline estimate
 						</Button>

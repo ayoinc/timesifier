@@ -119,7 +119,12 @@ export function GettingStartedList({ steps, slug }: { steps: GettingStarted; slu
 			</ol>
 			<fetcher.Form method="post" className="mt-2">
 				<input type="hidden" name="intent" value="put-away" />
-				<Button type="submit" variant="text" aria-label="Put away getting started">
+				<Button
+					type="submit"
+					variant="text"
+					aria-label="Put away getting started"
+					isPending={fetcher.state !== "idle"}
+				>
 					Put away
 				</Button>
 			</fetcher.Form>

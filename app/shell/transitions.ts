@@ -75,15 +75,20 @@ let ignoringSkips = false;
  * Skipping is the shell's design (design rule 8): a press that starts a
  * navigation ends the running transition, and when React starts the next one
  * the browser skips the one it supersedes. Each skip rejects that transition's
- * `ready` promise, which React holds and leaves unhandled, so nobody else can
- * catch it. `finishRunningTransition` catches its own skip; this catches the
- * browser's. Any other rejection is still reported. Installed once, in the
- * browser, by the root of the application.
+ * `ready` promise. Where React holds the promise and leaves it unhandled, the
+ * skip arrives as an unhandled rejection; where React handles it, it passes the
+ * error to its default `onRecoverableError`, which is `reportError`, and the
+ * skip arrives as an `error` event. Both are caught here;
+ * `finishRunningTransition` catches its own skip. Any other error is still
+ * reported. Installed once, in the browser, by the root of the application.
  */
 export function ignoreSkippedTransitions() {
 	if (ignoringSkips || typeof window === "undefined") return;
 	ignoringSkips = true;
 	window.addEventListener("unhandledrejection", (event) => {
 		if (isSkippedTransition(event.reason)) event.preventDefault();
+	});
+	window.addEventListener("error", (event) => {
+		if (isSkippedTransition(event.error)) event.preventDefault();
 	});
 }
