@@ -20,9 +20,11 @@ jobs:
   checks:
     name: checks
     runs-on: ubuntu-24.04
-    # Typecheck, lint, about 3,300 unit tests, the build and the audit: about
-    # 8 to 10 minutes on the runner, so 15 leaves room without hiding a hang.
-    timeout-minutes: 15
+    # Typecheck, lint, about 3,800 unit tests, the build and the audit: 12 to
+    # 15 minutes on the runner on 2026-11-14 (the tests alone took 14m07s in
+    # main's run 43597375543, which the old limit of 15 cancelled during the
+    # build), so 25 leaves room without hiding a hang.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
