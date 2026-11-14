@@ -2,8 +2,9 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Page } from "@playwright/test";
+import type { Browser, Locator, Page } from "@playwright/test";
 
+import { COLOR_SCHEME_COOKIE, type ColorSchemeChoice } from "../app/shell/color-scheme.server";
 import { destinationPath } from "../app/shell/destinations";
 import { newPerson, ownAddress, setName, signIn } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
@@ -17,8 +18,8 @@ import { createOrganisation } from "./organisation";
 // told whom to ask. Invoices opens on its overview: what is outstanding and
 // overdue, what was paid this year, and a year of issued against paid, the
 // bars beside a table; each figure leads to its list from the keyboard. Then
-// both pages and the sheet at 390px and 1280px in both schemes, with no WCAG
-// 2.2 A or AA violation.
+// both pages, the member's, the sheet and Workspace settings before and after
+// at 390px and 1280px in both schemes, with no WCAG 2.2 A or AA violation.
 //
 // A new person makes an organisation of their own, so nothing here touches
 // what another test looks at. As no page makes an organisation without
@@ -99,10 +100,65 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	);
 });
 
-/** Photographs the page when SHOT_DIR is set. */
-async function shot(page: Page, name: string) {
+/**
+ * Photographs the page when SHOT_DIR is set: the window as it stands, as for
+ * a sheet, which is laid out on the window; or, by default, the whole page or
+ * one `part` of it, in a window made as tall as the page for the photograph,
+ * so that what is fixed to the window's foot is at the page's and not across
+ * its middle.
+ */
+async function shot(
+	page: Page,
+	name: string,
+	{ window = false, part }: { window?: boolean; part?: Locator } = {},
+) {
 	const directory = process.env.SHOT_DIR;
-	if (directory) await page.screenshot({ path: join(directory, `${name}.png`), fullPage: true });
+	if (!directory) return;
+	const path = join(directory, `${name}.png`);
+	const size = page.viewportSize();
+	if (window || !size) {
+		await page.screenshot({ path });
+		return;
+	}
+	const height = await page.evaluate(() => document.documentElement.scrollHeight);
+	await page.setViewportSize({ width: size.width, height: Math.max(height, size.height) });
+	const box = await part?.boundingBox();
+	await page.screenshot({
+		path,
+		clip: box
+			? { x: 0, y: Math.max(0, box.y - 16), width: size.width, height: box.height + 32 }
+			: undefined,
+	});
+	await page.setViewportSize(size);
+}
+
+/** The member on Expenses in a browser of their own, at a size and in a scheme when given. */
+async function memberOnExpenses(
+	browser: Browser,
+	baseURL: string | undefined,
+	window?: { viewport: { width: number; height: number }; scheme: ColorSchemeChoice },
+): Promise<Page> {
+	const member = await browser.newContext({
+		baseURL,
+		storageState: MEMBER_SESSION,
+		viewport: window?.viewport,
+	});
+	if (window) {
+		// The cookie My account would have set, as the `chosenScheme` fixture gives it.
+		await member.addCookies([
+			{
+				name: COLOR_SCHEME_COOKIE,
+				value: window.scheme,
+				domain: new URL(baseURL ?? "http://localhost").hostname,
+				path: "/",
+				secure: true,
+				sameSite: "Lax",
+			},
+		]);
+	}
+	const page = await member.newPage();
+	await openShell(page, destinationPath(slug, "expenses"));
+	return page;
 }
 
 async function expectNoProblems(page: Page, heading: string, unmeasurable: string[] = []) {
@@ -119,15 +175,13 @@ test("an owner adds the usual categories from Expenses with the keyboard; a memb
 }) => {
 	noCategories();
 	// The member: no settings to open, the owner named instead.
-	const member = await browser.newContext({ baseURL, storageState: MEMBER_SESSION });
-	const theirs = await member.newPage();
-	await openShell(theirs, destinationPath(slug, "expenses"));
+	const theirs = await memberOnExpenses(browser, baseURL);
 	await expect(
 		theirs.getByText(`There are no expense categories to record in yet. Ask ${OWNER} to add them.`),
 	).toBeVisible();
 	await expect(theirs.getByRole("button", { name: "Add the usual categories" })).toHaveCount(0);
 	await expect(theirs.getByRole("link", { name: /Workspace settings/ })).toHaveCount(0);
-	await member.close();
+	await theirs.context().close();
 
 	await openShell(page, destinationPath(slug, "expenses"));
 	const add = page.getByRole("button", { name: "Add the usual categories" });
@@ -212,28 +266,52 @@ for (const viewport of [
 			test.use({ viewport, chosenScheme: colorScheme });
 			const suffix = `${viewport.width}-${colorScheme}`;
 
-			test("the usual categories on Expenses and their sheet, and Invoices' overview", async ({
+			test("the usual categories on Expenses, in their sheet and in Workspace settings, the member's message, and Invoices' overview", async ({
 				page,
+				browser,
+				baseURL,
 			}) => {
 				noCategories();
+				// The member, told whom to ask.
+				const theirs = await memberOnExpenses(browser, baseURL, { viewport, scheme: colorScheme });
+				await expect(theirs.getByText(`Ask ${OWNER} to add them.`)).toBeVisible();
+				await expectNoProblems(theirs, "Expenses");
+				await shot(theirs, `expenses-member-${suffix}`);
+				await theirs.context().close();
+
+				// The owner, offered the usual ones on Expenses.
 				await openShell(page, destinationPath(slug, "expenses"));
-				await expect(page.getByRole("button", { name: "Add the usual categories" })).toBeVisible();
+				const offer = page.getByRole("button", { name: "Add the usual categories" });
+				await expect(offer).toBeVisible();
 				await expectNoProblems(page, "Expenses");
 				await shot(page, `expenses-no-categories-${suffix}`);
-				await page.getByRole("button", { name: "Add the usual categories" }).click();
+				await offer.click();
 				const sheet = usualSheet(page);
 				await expect(sheet).toBeVisible();
 				expect(
 					await problems(page, [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS, EMPTY_INPUT]),
 					"problems with the sheet open",
 				).toEqual([]);
-				await shot(page, `usual-categories-sheet-${suffix}`);
+				await shot(page, `usual-categories-sheet-${suffix}`, { window: true });
 				await page.keyboard.press("Escape");
 				await expect(sheet).toBeHidden();
 
+				// And in Workspace settings, where they are added: what a new organisation starts with.
 				await openShell(page, destinationPath(slug, "settings"));
-				await expect(page.getByRole("button", { name: "Add the usual categories" })).toBeVisible();
+				const section = page.getByRole("region", { name: "Expense categories" });
+				await expect(offer).toBeVisible();
 				await expectNoProblems(page, "Workspace settings", [EMPTY_INPUT]);
+				await shot(page, `settings-no-categories-${suffix}`, { part: section });
+				await offer.click();
+				await sheet.getByRole("button", { name: "Add them" }).click();
+				await expect(sheet).toBeHidden();
+				await expect(page.getByRole("status")).toHaveText("8 expense categories added.");
+				await expect(page.getByRole("list", { name: "Expense categories" })).toContainText(
+					"£0.55 per mile from Monday 6 April 2026",
+				);
+				await expect(offer).toHaveCount(0);
+				await expectNoProblems(page, "Workspace settings", [EMPTY_INPUT]);
+				await shot(page, `settings-usual-categories-${suffix}`, { part: section });
 
 				await openShell(page, destinationPath(slug, "invoices"));
 				await expect(

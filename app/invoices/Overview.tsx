@@ -178,16 +178,17 @@ export function Overview({ slug, data }: { slug: string; data: OverviewData }) {
 					</span>
 				</figcaption>
 				{/* The bars; the table beside them is what assistive technology reads. */}
-				<div aria-hidden="true" className="flex items-end gap-1 border-b border-outline-variant">
+				<div aria-hidden="true" className="flex self-start">
 					{data.months.map((m) => (
 						<div key={m.month} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-							<div className="flex h-32 w-full items-end justify-center gap-px">
+							{/* The rule under each pair meets its neighbours': one line under the year. */}
+							<div className="flex h-32 w-full items-end justify-center gap-px border-b border-outline-variant px-0.5">
 								<span
 									className={cx("w-1/2 rounded-t-extra-small", ISSUED, HEIGHTS[m.issuedStep])}
 								/>
 								<span className={cx("w-1/2 rounded-t-extra-small", PAID, HEIGHTS[m.paidStep])} />
 							</div>
-							<span className="pb-1 text-label-small text-on-surface-variant">
+							<span className="text-label-small text-on-surface-variant">
 								<span className="medium:hidden">{m.short.slice(0, 1)}</span>
 								<span className="max-medium:hidden">{m.short}</span>
 							</span>
