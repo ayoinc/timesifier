@@ -7,7 +7,7 @@ import { newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject } from "./timesheet";
+import { createProject, workEveryDay } from "./timesheet";
 
 // The Timesheet's loading and quick actions (TS-096, docs/design-system.md):
 // Track time holds the shape of its fields while it reads the day's rules; a
@@ -35,10 +35,16 @@ const dayTimer = (page: Page) => main(page).getByRole("timer", { name: "Elapsed"
 const navTimer = (page: Page) =>
 	page.getByRole("navigation", { name: "Main" }).getByRole("region", { name: "Timer" });
 
+/**
+ * A new organisation with one project, whose people work every day: these
+ * tests press Track time on today's Day view, which a day off does not offer,
+ * so on a weekend they would find nothing to press (TS-095, `workEveryDay`).
+ */
 async function organisationWithProject(page: Page) {
 	await signIn(page, newPerson().email);
 	const { slug } = await createOrganisation(page);
 	await createProject(page, slug, "Site");
+	await workEveryDay(page, slug);
 	refused[`${organisationPath(slug)}.data`] = [400];
 	return slug;
 }
