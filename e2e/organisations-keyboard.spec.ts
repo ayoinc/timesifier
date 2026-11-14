@@ -181,6 +181,54 @@ for (const viewport of [
 	});
 }
 
+test("Escape closes a sheet whose menu is still leaving, and the menu goes with it", async ({
+	page,
+}) => {
+	const { slug, member } = homeOrganisation();
+	await openShell(page, membersPath(slug));
+	const actions = page.getByRole("button", { name: `Actions for ${member.name}` });
+	await actions.focus();
+	await page.keyboard.press("Enter");
+	await expect(page.getByRole("menuitem", { name: "Change role" })).toBeFocused();
+	// The menu has finished arriving, so it leaves by its whole exit: one that
+	// turns an arrival around is cut to the part of it that had passed.
+	const menu = page.locator(".popover-motion");
+	await expect.poll(() => menu.evaluate((popover) => popover.getAnimations().length)).toBe(0);
+
+	// The menu's way out is slowed a thousand times as it starts, so Escape
+	// meets it still leaving however long the keys take. Escape is not
+	// animated, and the menu must not be left waiting for an exit that Escape
+	// cut short (TS-114).
+	await page.evaluate(() => {
+		new MutationObserver((records) => {
+			for (const { target } of records) {
+				if (!(target instanceof Element) || !target.matches(".popover-motion[data-exiting]")) {
+					continue;
+				}
+				for (const animation of target.getAnimations()) animation.updatePlaybackRate(0.001);
+			}
+		}).observe(document.body, {
+			subtree: true,
+			attributes: true,
+			attributeFilter: ["data-exiting"],
+		});
+	});
+	await page.keyboard.press("Enter");
+	const role = page.getByRole("dialog", { name: `Change the role of ${member.name}` });
+	await expect(role).toBeVisible();
+	const leaving = page.locator(".popover-motion[data-exiting]");
+	await expect(leaving).toHaveCount(1);
+	await expect
+		.poll(() => role.evaluate((dialog) => dialog.contains(document.activeElement)))
+		.toBe(true);
+
+	await page.keyboard.press("Escape");
+	await expect(role).toBeHidden();
+	await expect(leaving).toHaveCount(0);
+	await expect(page.getByRole("menu")).toHaveCount(0);
+	await expectFocusShown(actions);
+});
+
 test("creating an organisation: the field, the action and the way out, with the keyboard alone", async ({
 	page,
 }) => {
