@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { uuidv7 } from "~/db";
-import { addDays, isoWeekday } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -19,10 +18,6 @@ import { seedLeave } from "./leave-seed";
 // role reads (`activityScopeOf`), the filters, the CSV, and the records the
 // pages write for entries, periods, leave and the lock date. Descriptions are
 // never shown, only that they changed.
-
-/** Today and the Monday its week starts on, in UTC, the organisation's zone: records are stamped by the real clock. */
-const TODAY = new Date().toISOString().slice(0, 10);
-const MONDAY = addDays(TODAY, 1 - isoWeekday(TODAY));
 
 let mailbox: Mailbox;
 let ada: Person;
@@ -223,11 +218,19 @@ describe("the pages record", () => {
 	};
 
 	it("a timer stopped, a week submitted, withdrawn, approved, reopened and returned", async () => {
-		expect(await post(sheet, { intent: "track", projectId: site, day: TODAY }, grace)).toBe(200);
+		// A Wednesday and its Monday: a new organisation's week has no weekend,
+		// which takes no time, so the timer is not started on the real clock.
+		const wednesday = Date.parse("2026-11-11T10:00:00Z");
+		const monday = "2026-11-09";
+		vi.spyOn(Date, "now").mockReturnValue(wednesday);
+		expect(await post(sheet, { intent: "track", projectId: site, day: "2026-11-11" }, grace)).toBe(
+			200,
+		);
+		vi.spyOn(Date, "now").mockReturnValue(wednesday + 60_000);
 		expect(await post(sheet, { intent: "stop" }, grace)).toBe(200);
-		expect(await post(sheet, { intent: "submit", startsOn: MONDAY }, grace)).toBe(200);
-		expect(await post(sheet, { intent: "withdraw", startsOn: MONDAY }, grace)).toBe(200);
-		expect(await post(sheet, { intent: "submit", startsOn: MONDAY }, grace)).toBe(200);
+		expect(await post(sheet, { intent: "submit", startsOn: monday }, grace)).toBe(200);
+		expect(await post(sheet, { intent: "withdraw", startsOn: monday }, grace)).toBe(200);
+		expect(await post(sheet, { intent: "submit", startsOn: monday }, grace)).toBe(200);
 		const period = (await value<string>(
 			"select id from periods where user_id = ?",
 			grace.user.id,
@@ -237,7 +240,7 @@ describe("the pages record", () => {
 		expect(
 			await post(approvals, { intent: "reopen", periodId: period, comment: "Wrong project" }, ada),
 		).toBe(200);
-		expect(await post(sheet, { intent: "submit", startsOn: MONDAY }, grace)).toBe(200);
+		expect(await post(sheet, { intent: "submit", startsOn: monday }, grace)).toBe(200);
 		expect(
 			await post(approvals, { intent: "return", periodId: period, comment: "Again" }, ada),
 		).toBe(200);

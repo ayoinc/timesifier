@@ -156,6 +156,8 @@ describe("the timer (TS-012a)", () => {
 	});
 
 	it("stores a description of 500 characters and refuses one of 501 with 400", async () => {
+		// A Wednesday: a new organisation's week has no weekend, which takes no time.
+		clockAt(T0);
 		expect(await post(track({ projectId: site, description: "x".repeat(501) }))).toBe(400);
 		expect(await countEntries()).toBe(0);
 		expect(await post(track({ projectId: site, description: "x".repeat(500) }))).toBe(200);
@@ -238,6 +240,7 @@ describe("the timer (TS-012a)", () => {
 	it("lets a person run one timer in each of two organisations", async () => {
 		const globex = await createOrganisation(ada.cookie, "Globex");
 		const theirs = await seedProject(globex.id, "Theirs");
+		clockAt(T0);
 		await post(track({ projectId: site }));
 		const response = await submit("/app/globex?index", track({ projectId: theirs }), ada, {
 			byScript: true,
@@ -266,6 +269,7 @@ describe("the timer in the navigation (TS-051)", () => {
 	});
 
 	it("stops through the Timesheet's stop, from any page", async () => {
+		clockAt(T0);
 		await post(track({ projectId: site }));
 		const html = await pageBody(await open("/app/acme/reports", ada));
 		const form = /<form[^>]*action="([^"]*)"[^>]*>(?:(?!<\/form>)[\s\S])*Stop timer for Site/.exec(
@@ -273,6 +277,7 @@ describe("the timer in the navigation (TS-051)", () => {
 		);
 		expect(form?.[1]).toBe(ACTION);
 
+		clockAt(T0 + MINUTE);
 		expect(await post({ intent: "stop" })).toBe(200);
 		expect(await value("select count(*) from time_entries where ended_at is null")).toBe(0);
 	});

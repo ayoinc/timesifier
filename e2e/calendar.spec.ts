@@ -12,7 +12,7 @@ import {
 } from "./axe";
 import { expect, openShell, takenOver, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { createProject, mondayOf, pastWeekday, zoneIsTheBrowsers } from "./timesheet";
+import { createProject, mondayOf, pastWeekday, workEveryDay, zoneIsTheBrowsers } from "./timesheet";
 
 // The Calendar view of Timesheet in a browser (TS-062): the week on an hour
 // axis and the month of days, their totals against the Day and Week views',
@@ -299,6 +299,8 @@ for (const viewport of [COMPACT, MEDIUM]) {
 				page,
 			}) => {
 				const { slug } = await personWithTime(page);
+				// Track time opens on a slot of today, which a day off does not offer.
+				await workEveryDay(page, slug);
 				const overflows = () =>
 					page.evaluate(
 						() => document.documentElement.scrollWidth > document.documentElement.clientWidth,
