@@ -129,6 +129,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		submission: PeriodSubmission;
 		/** With no active category: whether the usual ones may be added, or who to ask (TS-119). */
 		noCategories: { usual: boolean; ask: string | null } | null;
+		/** Whether the person keeps the categories, and so has the sheet that adds the usual ones. */
+		keepsCategories: boolean;
 	} | null = null;
 	if (own) {
 		const [projects, recent, categories, submission] = await Promise.all([
@@ -159,6 +161,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			recent,
 			categories: active.map(({ id, name, unitName, prices }) => ({ id, name, unitName, prices })),
 			submission,
+			keepsCategories: administers,
 			noCategories:
 				active.length > 0
 					? null
@@ -393,6 +396,27 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 	};
 	const keep = person.own ? "" : `&${PERSON_PARAM}=${person.id}`;
 	const canRecord = form !== null && form.projects.length > 0 && form.categories.length > 0;
+	// Why the person cannot record an expense of their own, said wherever
+	// "Record expense" is missing: with no category, how to add them or whom to
+	// ask (TS-119); otherwise there is no project.
+	const cannotRecord =
+		form === null || canRecord
+			? null
+			: form.noCategories
+				? (form.noCategories.ask ?? (
+						<>
+							There are no expense categories yet.{" "}
+							{form.noCategories.usual && "Add the usual ones, or choose your own in "}
+							<Link
+								to={`${destinationPath(organisation.slug, "settings")}#expense-categories`}
+								className={TEXT_LINK}
+							>
+								{form.noCategories.usual ? "Workspace settings" : "Add them in Workspace settings"}
+							</Link>
+							.
+						</>
+					))
+				: "There are no active projects to record an expense on yet.";
 
 	return (
 		<>
@@ -450,6 +474,11 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 				)}
 			</p>
 
+			{/* With expenses in the week there is no empty state to say it in. */}
+			{cannotRecord && expenses.length > 0 && (
+				<p className="mt-6 max-w-160 text-body-large text-on-surface-variant">{cannotRecord}</p>
+			)}
+
 			<Section id="week" heading={`Week of ${week.label}`} className="max-w-200">
 				{expenses.length === 0 ? (
 					<EmptySheet heading="Expenses">
@@ -457,23 +486,7 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 							? `${person.name} recorded no expenses this week.`
 							: canRecord
 								? "No expenses this week. Record one with its receipt, and it goes with your week's time when you submit it."
-								: form.noCategories
-									? (form.noCategories.ask ?? (
-											<>
-												There are no expense categories yet.{" "}
-												{form.noCategories.usual && "Add the usual ones, or choose your own in "}
-												<Link
-													to={`${destinationPath(organisation.slug, "settings")}#expense-categories`}
-													className={TEXT_LINK}
-												>
-													{form.noCategories.usual
-														? "Workspace settings"
-														: "Add them in Workspace settings"}
-												</Link>
-												.
-											</>
-										))
-									: "There are no active projects to record an expense on yet."}
+								: cannotRecord}
 					</EmptySheet>
 				) : (
 					<Ledger heading="Expenses" note={`${expenses.length}`}>
@@ -547,7 +560,10 @@ export default function Expenses({ loaderData }: Route.ComponentProps) {
 				</div>
 			)}
 
-			{form?.noCategories?.usual && (
+			{/* There for whoever keeps the categories, not only while there are none:
+			    its answer arrives with the page's new data, which has categories, and
+			    a sheet taken away by then would never say what it did. */}
+			{form?.keepsCategories && (
 				<UsualCategoriesSheet
 					currency={loaderData.currency}
 					isOpen={task === "usual"}

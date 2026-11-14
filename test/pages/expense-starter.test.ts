@@ -259,6 +259,43 @@ describe("who can add categories", () => {
 		);
 	});
 
+	it("tells a member above a week that already has expenses, where there is no empty state to say it", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(T0);
+		const project = crypto.randomUUID();
+		await env.DB.prepare(
+			"insert into projects (id, organisation_id, name, name_key, created_at, updated_at) values (?, ?, 'Apex', 'apex', 0, 0)",
+		)
+			.bind(project, acme.id)
+			.run();
+		const travel = await value<string>(
+			"select id from expense_categories where organisation_id = ? and name = 'Travel'",
+			acme.id,
+		);
+		const recorded = await ask(
+			people.member,
+			{
+				intent: "record",
+				spentOn: "2026-11-10",
+				projectId: project,
+				categoryId: travel ?? "",
+				amount: "12.50",
+			},
+			EXPENSES,
+		);
+		expect(recorded.status, recorded.said).toBe(200);
+		// Every category archived since: the expense keeps its own, and no more can be recorded.
+		await env.DB.prepare("update expense_categories set archived_at = ? where organisation_id = ?")
+			.bind(T0, acme.id)
+			.run();
+		const text = await textAt(EXPENSES, people.member);
+		expect(text).toContain("£12.50");
+		expect(text).not.toContain("Record expense");
+		expect(text).toContain(
+			"There are no expense categories to record in yet. Ask Ada Lovelace or Grace Hopper to add them.",
+		);
+		expect(text).not.toContain("Workspace settings");
+	});
+
 	it("says so in a sentence however many there are", () => {
 		const lead = "There are no expense categories to record in yet.";
 		expect(askToAddCategories({ names: [], others: 0 })).toBe(
