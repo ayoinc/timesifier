@@ -121,7 +121,7 @@ Builder: an AI session on branch `ts-111-rules-day`, on TS-111a (PR #66). No mig
 
 ### TS-120 · The console's Brand page
 
-Builder: an AI session on branch `ts-120-brand-page`. Decision 45, within 36 and 38. Migration `0022_platform_brand_dark_logo` (renumber at merge if main has taken 0022). In review: the pull request against `main`.
+Builder: an AI session on branch `ts-120-brand-page`. Decision 45, within 36 and 38. Migration `0024_platform_brand_dark_logo`, after TS-111's 0022 and 0023. In review: the pull request against `main`.
 
 - [x] **1. Where.** `/platform/brand`, the console's last tab, behind the allowlist and the step-up: a stepped-up platform owner opens it; one who has not is sent to the code and back, and their posts do nothing; an organisation's owner, a member and a signed-in stranger get the console's 404 (`test/platform/console-brand.test.ts` "who opens the Brand page"; every console route in `test/platform/console-roles.test.ts`).
 - [x] **2. Sender name and reply-to.** Saved through `setPlatformBrand`; each refusal says why (`test/platform/console-brand.test.ts` "a save that is not valid").
