@@ -122,6 +122,13 @@ export async function openGallery(page: Page, path = "/design") {
  * on a link is an ordinary one, and a button does nothing. The sign is the
  * record React keeps on each element it has hydrated, read from the first link
  * or button in `within`; nothing a person can see changes at that moment.
+ *
+ * The navigation is taken over before the page beside it, which is drawn under
+ * <Activity> (TS-096) and hydrated after it. A press, or a key pressed with the
+ * focus inside the page, makes React take the page over at once. A key the
+ * whole document listens for (N, [ and ], the calendar's - and +), pressed
+ * with the focus still on the document, is lost until React has reached the
+ * page: a test of such a key puts the focus on the page's heading first.
  */
 export async function takenOver(page: Page, within = "nav") {
 	await page.waitForFunction((container) => {

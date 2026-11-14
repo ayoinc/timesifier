@@ -59,6 +59,13 @@ const views = (page: Page) => page.getByRole("group", { name: "Timesheet views" 
 const weekGrid = (page: Page) => page.getByRole("table", { name: /^Week calendar, / });
 const monthGrid = (page: Page) => page.getByRole("table", { name: /^Month calendar, / });
 const zoom = (page: Page) => page.getByRole("group", { name: "Zoom" });
+/**
+ * The zoom control showing exactly `level`. Exactly, because "Week" is the
+ * start of "Week in detail": the address changes before the calendar is drawn
+ * again, and a press on the control in between is a press on the old one.
+ */
+const showing = (page: Page, level: "Week in detail" | "Week" | "Month") =>
+	zoom(page).getByText(`Showing ${level}`, { exact: true });
 /** Today's head in the week calendar, or today in the month: the link marked as today's date. */
 const todayLink = (grid: Locator) => grid.locator('a[aria-current="date"]');
 /** The head of `day` in the week calendar, or `day` in the month: the link that opens its Day view. */
@@ -137,9 +144,12 @@ test("zooms from the week in detail out to the week and the month, and in to the
 	await openShell(page, `${organisationPath(slug)}?view=calendar`);
 	await expect(zoom(page)).toContainText("Week in detail");
 
+	// - and + are keys of the whole document. With the focus on the page they are
+	// taken however soon after it opens they are pressed (`takenOver`).
+	await page.getByRole("heading", { level: 1, name: "Timesheet" }).focus();
 	await page.keyboard.press("-");
 	await expect(page).toHaveURL(new RegExp(`${base}&date=\\d{4}-\\d{2}-\\d{2}&zoom=compact$`));
-	await expect(zoom(page)).toContainText("Week");
+	await expect(showing(page, "Week")).toBeVisible();
 	await expect(weekGrid(page)).toBeVisible();
 
 	await zoom(page).getByRole("button", { name: "Zoom out" }).click();
@@ -152,8 +162,10 @@ test("zooms from the week in detail out to the week and the month, and in to the
 	await takenOver(page);
 	await expect(monthGrid(page)).toBeVisible();
 
+	await page.getByRole("heading", { level: 1, name: "Timesheet" }).focus();
 	await page.keyboard.press("+");
 	await expect(page).toHaveURL(/zoom=compact$/);
+	await expect(showing(page, "Week")).toBeVisible();
 	await zoom(page).getByRole("button", { name: "Zoom in" }).click();
 	await expect(page).toHaveURL(new RegExp(`${base}&date=\\d{4}-\\d{2}-\\d{2}$`));
 	await expect(zoom(page)).toContainText("Week in detail");
@@ -166,11 +178,13 @@ test("the week opens at the working hours; compact, the whole day is in view", a
 	const { slug, day } = await personWithTime(page);
 	await openShell(page, `${organisationPath(slug)}?view=calendar&date=${day}`);
 	const scroller = weekGrid(page).locator("..");
-	expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+	// The calendar scrolls to the working hours once React has reached the page.
+	await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 	await expect(weekGrid(page).getByRole("button", { name: /^Site, 09:00–11:00/ })).toBeInViewport();
 
 	await zoom(page).getByRole("button", { name: "Zoom out" }).click();
 	await expect(page).toHaveURL(/zoom=compact$/);
+	await expect(showing(page, "Week")).toBeVisible();
 	const fits = await scroller.evaluate((element) => element.scrollHeight <= element.clientHeight);
 	expect(fits).toBe(true);
 });
