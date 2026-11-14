@@ -11,6 +11,7 @@ import {
 	type Role,
 	row,
 	seedMembership,
+	seedNoCategories,
 	seedTeam,
 	value,
 } from "../organisations/harness";
@@ -43,6 +44,8 @@ beforeEach(async () => {
 	mailbox = captureEmail();
 	ada = await person(mailbox, "ada@example.com");
 	acme = await createOrganisation(ada.cookie, "Acme");
+	// The categories here are the tests' own (the usual set is test/pages/expense-starter.test.ts's).
+	await seedNoCategories(acme.id);
 }, 30_000);
 
 afterEach(() => {
@@ -88,9 +91,15 @@ async function seed() {
 		).status,
 	).toBe(200);
 	const travel =
-		(await value<string>("select id from expense_categories where name = 'Travel'")) ?? "";
+		(await value<string>(
+			"select id from expense_categories where organisation_id = ? and name = 'Travel'",
+			acme.id,
+		)) ?? "";
 	const mileage =
-		(await value<string>("select id from expense_categories where name = 'Mileage'")) ?? "";
+		(await value<string>(
+			"select id from expense_categories where organisation_id = ? and name = 'Mileage'",
+			acme.id,
+		)) ?? "";
 	return { hedy, fay, mona, grace, bob, apex, kyoto, internal, travel, mileage };
 }
 

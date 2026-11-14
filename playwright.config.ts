@@ -29,7 +29,8 @@ const SETUP = /auth\.setup\.ts/;
 // runs. A write from outside can hold the database's lock while the server
 // writes for another test, which then fails with a 500. They run after every
 // other Chromium test, one at a time.
-const SEEDS_THE_DATABASE = /[\\/](?:people|projects-search|reports|zz-fixes-shots)\.spec\.ts$/;
+const SEEDS_THE_DATABASE =
+	/[\\/](?:people|projects-search|reports|usual-and-owed|zz-fixes-shots)\.spec\.ts$/;
 // What the server under test is given. None of it is a secret: the first signs
 // cookies for this run only, the second is Cloudflare's published Turnstile
 // test secret, which passes every check, and the third makes the addresses of

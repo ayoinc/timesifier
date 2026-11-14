@@ -33,6 +33,8 @@ import * as z from "zod";
 import { deleteOrganisationLogos } from "~/brand/organisation-brand.server";
 import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { organisationScope, organisations } from "~/db";
+import { addUsualCategories } from "~/expenses/categories.server";
+import { termsOf } from "~/expenses/expenses.server";
 import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
 import { LOGOS_NOT_DELETED, RECEIPTS_NOT_DELETED } from "~/organisations/problems";
 import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
@@ -361,6 +363,18 @@ export function organisationPlugins() {
 			// An invitation is for the person who has proved the address it was sent to.
 			requireEmailVerificationOnInvitation: true,
 			organizationHooks: {
+				// A new organisation starts with the usual expense categories (TS-119),
+				// so a person can record an expense on their first visit. The system
+				// adds them, and the Activity log says so.
+				async afterCreateOrganization({ organization }) {
+					const { currency } = await termsOf(organization.id);
+					await addUsualCategories(
+						organisationScope(env.DB, organization.id),
+						null,
+						currency,
+						"system",
+					);
+				},
 				// The last thing before an invitation is stored and its message sent,
 				// after every check of the plugin's own, so only an invitation that
 				// is really made uses up one of the day's twenty. The count is kept
