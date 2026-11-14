@@ -212,12 +212,23 @@ test("every image has its size, a description, and comes from our own host", asy
 	expect(new Set(images.map((image) => image.alt)).size).toBe(images.length);
 });
 
-/** Where every heading, figure and section starts, and how tall the page is. */
+/**
+ * Where every heading, figure and section starts in the layout, and how tall the
+ * page is. A transform is not layout: the words that rise into place as the page
+ * is scrolled (`rise` in public.css) are moved by one, as a layout shift is not
+ * counted, so each top is read through `offsetTop`, which a transform leaves alone.
+ */
 function layout(page: Page) {
 	return page.evaluate(() => ({
 		height: document.documentElement.scrollHeight,
-		tops: [...document.querySelectorAll("h1, h2, figure, section, footer")].map((element) =>
-			Math.round(element.getBoundingClientRect().top + window.scrollY),
+		tops: [...document.querySelectorAll<HTMLElement>("h1, h2, figure, section, footer")].map(
+			(element) => {
+				let top = 0;
+				for (let at: HTMLElement | null = element; at; at = at.offsetParent as HTMLElement | null) {
+					top += at.offsetTop;
+				}
+				return top;
+			},
 		),
 	}));
 }
