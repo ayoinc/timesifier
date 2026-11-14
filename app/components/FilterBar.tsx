@@ -4,10 +4,12 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useId,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
-import { Form, useSearchParams, useSubmit } from "react-router";
+import { Form, useLocation, useNavigationType, useSearchParams, useSubmit } from "react-router";
 
 import { Button } from "./Button";
 import { IconButton } from "./IconButton";
@@ -23,7 +25,20 @@ import { TextField } from "./TextField";
 /** How long a field waits after the last keystroke before it applies. */
 const DEBOUNCE_MS = 300;
 
-const ApplyContext = createContext<(() => void) | null>(null);
+/**
+ * The name, in a location's state, of the bar whose apply asked for the
+ * address: how a field tells its own bar's address, arriving late, from one
+ * that came from elsewhere.
+ */
+const ASKED_BY = "filterBar";
+
+/** The bar that asked for the address `state` came with, if one did. */
+function askedBy(state: unknown): string | null {
+	if (typeof state !== "object" || state === null || !(ASKED_BY in state)) return null;
+	return typeof state[ASKED_BY] === "string" ? state[ASKED_BY] : null;
+}
+
+const BarContext = createContext<{ apply: () => void; bar: string } | null>(null);
 
 export interface FilterBarProps {
 	/** Accessible name of the search landmark: "Filter projects". */
@@ -43,17 +58,24 @@ export interface FilterBarProps {
 export function FilterBar({ name, keep, children }: FilterBarProps) {
 	const form = useRef<HTMLFormElement>(null);
 	const submit = useSubmit();
+	const bar = useId();
 	const apply = useCallback(() => {
 		if (!form.current) return;
 		const params = new URLSearchParams();
 		for (const [key, value] of new FormData(form.current)) {
 			if (typeof value === "string" && value.trim() !== "") params.append(key, value);
 		}
-		submit(params, { method: "get", replace: true, preventScrollReset: true });
-	}, [submit]);
+		submit(params, {
+			method: "get",
+			replace: true,
+			preventScrollReset: true,
+			state: { [ASKED_BY]: bar },
+		});
+	}, [submit, bar]);
+	const context = useMemo(() => ({ apply, bar }), [apply, bar]);
 
 	return (
-		<ApplyContext.Provider value={apply}>
+		<BarContext.Provider value={context}>
 			<Form
 				ref={form}
 				method="get"
@@ -77,15 +99,19 @@ export function FilterBar({ name, keep, children }: FilterBarProps) {
 					</Button>
 				</noscript>
 			</Form>
-		</ApplyContext.Provider>
+		</BarContext.Provider>
 	);
+}
+
+function useBar() {
+	const context = useContext(BarContext);
+	if (!context) throw new Error("useApplyFilters is used outside a FilterBar.");
+	return context;
 }
 
 /** Submits the enclosing FilterBar now. A Select's `onSelectionChange` calls it. */
 export function useApplyFilters(): () => void {
-	const apply = useContext(ApplyContext);
-	if (!apply) throw new Error("useApplyFilters is used outside a FilterBar.");
-	return apply;
+	return useBar().apply;
 }
 
 export interface FilterFieldProps {
@@ -107,16 +133,25 @@ export interface FilterFieldProps {
  * holds something; it empties the field and applies at once.
  */
 export function FilterField({ label, param, live = false }: FilterFieldProps) {
-	const apply = useApplyFilters();
+	const { apply, bar } = useBar();
 	const [params] = useSearchParams();
 	const applied = params.get(param) ?? "";
 	const [value, setValue] = useState(applied);
+	const [followed, setFollowed] = useState(applied);
 	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-	// The address changed from elsewhere (Back, a link): show what it holds.
-	useEffect(() => {
-		setValue(applied);
-	}, [applied]);
+	// The address changed. From elsewhere (Back, a link), the field shows what
+	// it holds. An address this bar asked for holds what the field held then,
+	// and may arrive after more was typed: what was typed since stays, or the
+	// keys pressed meanwhile would be lost. Back to such an address is a move
+	// from elsewhere.
+	const { state } = useLocation();
+	const arrivedBack = useNavigationType() === "POP";
+	const own = askedBy(state) === bar && !arrivedBack;
+	if (followed !== applied) {
+		setFollowed(applied);
+		if (!own) setValue(applied);
+	}
 
 	useEffect(() => () => clearTimeout(timer.current), []);
 

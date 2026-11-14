@@ -196,8 +196,11 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
 			await expect(main(page).getByRole("link", { name: "Payroll" })).toBeVisible();
 			await expect(main(page).getByRole("link", { name: "Site" })).toBeHidden();
 			await expect(page).toHaveURL(/[?&]q=pay$/);
+			// Every key typed is kept: the address, which follows the keys, takes none back.
+			await expect(search).toHaveValue("pay");
 			await page.keyboard.type("zz");
 			await expect(main(page)).toContainText("No active project has “payzz” in its name");
+			await expect(search).toHaveValue("payzz");
 			expect(requests).toEqual([]);
 
 			// Back to every project: the list the page holds is whole again.
