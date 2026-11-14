@@ -547,3 +547,23 @@ Decided for TS-119 (research/harvest-sweep-2.md, S2-05 and S2-11), on 2026-11-13
 | A migration giving every organisation the set                      | Puts categories in organisations whose owners chose none, and clashes with names they already use.                                                                        |
 | Mileage left unpriced, with a hint naming HMRC                     | What S2-05 proposed. A price that is HMRC's on each day is truer than a blank, and a UK business pays it; the hint alone leaves Mileage unusable until an owner sets one. |
 | A trigger on `organisations`, as work schedules have               | Atomic with the row, whichever way it is made; but the Activity log's records are written by `app/activity/`, and a trigger would have to build them in SQL.              |
+
+### 41. Who runs Timesifier: one company, named by the deployment
+
+Decided by the owner on 2026-11-14 (TS-121).
+
+Timesifier at `timesifier.com` is operated by Virtual Concept Technologies Limited, a company registered in England and Wales with company number 17581385. Its registered office is 16 Rapson End, Sittingbourne, England, ME10 3GW. It was incorporated on 14 November 2026 ([Companies House](https://find-and-update.company-information.service.gov.uk/company/17581385), read on that day: active, a private limited company). That company is who a person's terms are with, and the controller of what Timesifier stores. Until this entry nobody was named: the privacy notice said in so many words that it was incomplete (TS-030).
+
+A company must show its registered name on its websites, and with it the part of the United Kingdom it is registered in, its registered number and the address of its registered office ([the Company, Limited Liability Partnership and Business (Names and Trading Disclosures) Regulations 2015](https://www.legislation.gov.uk/uksi/2015/17/part/6), regulations 24 and 25). So the foot of every public page says all four, and the terms and the privacy notice say them again, in the same two sentences (`app/landing/operator.tsx`).
+
+The four details belong to one deployment, so none of them is in the code (TS-032). They are the settings `OPERATOR_NAME`, `OPERATOR_COMPANY_NUMBER`, `OPERATOR_REGISTERED_IN` and `OPERATOR_REGISTERED_OFFICE`: repository variables in GitHub, which the pipeline checks and writes into the Worker's variables for production and for the previews (`docs/security.md`, "Secrets"). A page that would name the company is not served while one is missing.
+
+| Option                                              | Evidence                                                                                                                                                                                                                          |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The company's details as four settings (chosen)     | The rule the repository already has for a host, a key and an address (TS-032): somebody else's deployment is run by somebody else, and would otherwise publish this company's name as its own. A missing detail fails the deploy. |
+| The company's details written in the code           | One place to read, and no step by hand. It breaks the rule above, and every copy of the repository that is deployed would say this company runs it.                                                                               |
+| The company's details in the platform console's row | Changed without a deploy, like the brand (entry 38). A legal identity would then be one form away from being changed by a platform owner, with no review, and a new deployment would have none until somebody typed it.           |
+
+**What it costs.** Four more variables to set by hand for a new deployment, and a deploy to change one. The home page, the sign-in page and both notices answer 500 where one is missing, which is the rule for every setting. A change of company is a new entry here and a new version of both notices.
+
+**Not decided, and nothing is said about them on any page:** a registration with the Information Commissioner's Office, a VAT number, and a representative in the European Union. The emails name no company: the owner decided that they carry no company name or address until they say otherwise.

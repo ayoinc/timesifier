@@ -123,16 +123,22 @@ You need a Cloudflare account with your domain on it as a zone, Workers with a `
 5. **A token for the pipeline**, in the dashboard under Manage Account, Account API tokens, with the three scopes listed in `docs/architecture.md`, "The pipeline's token", for your Worker and your zone.
 6. **The repository's settings** in GitHub, under Settings, Secrets and variables, Actions.
 
-   | Kind     | Name                     | Value                                                            |
-   | -------- | ------------------------ | ---------------------------------------------------------------- |
-   | Secret   | `CLOUDFLARE_API_TOKEN`   | The token from step 5                                            |
-   | Secret   | `CLOUDFLARE_ACCOUNT_ID`  | Your account id                                                  |
-   | Variable | `APP_HOST`               | The host to serve on, such as `app.example.org`; `www.` is added |
-   | Variable | `WORKERS_DEV_SUBDOMAIN`  | The `<name>` in your account's `<name>.workers.dev`              |
-   | Variable | `D1_DATABASE_ID`         | The id of `timesifier` from step 1                               |
-   | Variable | `D1_PREVIEW_DATABASE_ID` | The id of `timesifier-preview` from step 1                       |
-   | Variable | `TURNSTILE_SITE_KEY`     | The widget's site key from step 2                                |
-   | Variable | `EMAIL_FROM`             | The address from step 3, alone: `no-reply@mail.example.org`      |
+   | Kind     | Name                         | Value                                                            |
+   | -------- | ---------------------------- | ---------------------------------------------------------------- |
+   | Secret   | `CLOUDFLARE_API_TOKEN`       | The token from step 5                                            |
+   | Secret   | `CLOUDFLARE_ACCOUNT_ID`      | Your account id                                                  |
+   | Variable | `APP_HOST`                   | The host to serve on, such as `app.example.org`; `www.` is added |
+   | Variable | `WORKERS_DEV_SUBDOMAIN`      | The `<name>` in your account's `<name>.workers.dev`              |
+   | Variable | `D1_DATABASE_ID`             | The id of `timesifier` from step 1                               |
+   | Variable | `D1_PREVIEW_DATABASE_ID`     | The id of `timesifier-preview` from step 1                       |
+   | Variable | `TURNSTILE_SITE_KEY`         | The widget's site key from step 2                                |
+   | Variable | `EMAIL_FROM`                 | The address from step 3, alone: `no-reply@mail.example.org`      |
+   | Variable | `OPERATOR_NAME`              | The registered name of the company that runs your deployment     |
+   | Variable | `OPERATOR_COMPANY_NUMBER`    | The number that company is registered under                      |
+   | Variable | `OPERATOR_REGISTERED_IN`     | Where it is registered, such as `England and Wales`              |
+   | Variable | `OPERATOR_REGISTERED_OFFICE` | The address of its registered office, on one line                |
+
+   The four `OPERATOR_` values are shown at the foot of every public page, in the terms and in the privacy notice.
 
 7. **Deploy.** Push to `main`, or open a pull request for a preview. The job checks the settings before it builds anything, and fails with the name of each one that is missing or malformed. Then it migrates the database, deploys, and runs the smoke test against your host.
 

@@ -46,7 +46,7 @@ const STEPS = ["email", "code"] as const;
 type Step = (typeof STEPS)[number];
 
 export default function SignIn({ loaderData }: Route.ComponentProps) {
-	const { next, turnstileSiteKey } = loaderData;
+	const { next, turnstileSiteKey, operator } = loaderData;
 	const [step, setStep] = useState<Step>("email");
 	const [email, setEmail] = useState("");
 	// When the code this tab is waiting for runs out, as a time on its clock.
@@ -89,7 +89,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 	}
 
 	return (
-		<AuthPage step={STEPS.indexOf(step)}>
+		<AuthPage step={STEPS.indexOf(step)} operator={operator}>
 			<NeedsScript>Signing in needs JavaScript.</NeedsScript>
 			{step === "email" && (
 				<>

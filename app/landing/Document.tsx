@@ -2,6 +2,7 @@ import { Children, isValidElement, type ReactNode } from "react";
 
 import { cx } from "~/components/cx";
 
+import type { Operator } from "./operator";
 import { LINK, MAIN_ID, PAGE, SiteFooter, SiteHeader, SkipLink } from "./Site";
 
 // The frame of a page that is read from top to bottom: the privacy notice and
@@ -27,18 +28,19 @@ export interface DocumentProps {
 	version?: DocumentDate;
 	/** What the page is and what it covers, in a sentence or two. */
 	lead: ReactNode;
+	/** The company that runs this deployment, which the foot of the page names. */
+	operator: Operator;
 	/** The parts of the page: `DocumentSection`s. */
 	children: ReactNode;
 }
 
-export function Document({ path, title, version, lead, children }: DocumentProps) {
+export function Document({ path, title, version, lead, operator, children }: DocumentProps) {
 	// The parts are the children that are `DocumentSection`s, in their order.
 	const parts = Children.toArray(children).flatMap((child) =>
 		isValidElement<DocumentSectionProps>(child) && child.type === DocumentSection
 			? [{ id: child.props.id, title: child.props.title }]
 			: [],
 	);
-
 	return (
 		<>
 			<SkipLink />
@@ -84,7 +86,7 @@ export function Document({ path, title, version, lead, children }: DocumentProps
 				<div className={`${PAGE} pt-4 pb-16 expanded:pb-24`}>{children}</div>
 			</main>
 
-			<SiteFooter current={path} />
+			<SiteFooter current={path} operator={operator} />
 		</>
 	);
 }

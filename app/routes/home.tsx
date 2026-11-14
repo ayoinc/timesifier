@@ -1,7 +1,9 @@
+import { env } from "cloudflare:workers";
 import type { ReactNode } from "react";
 import { DayAnatomy } from "~/landing/DayAnatomy";
 import { DaySheet } from "~/landing/DaySheet";
 import { DaySum } from "~/landing/DaySum";
+import { deploymentOperator } from "~/landing/operator";
 import { Photo } from "~/landing/Photo";
 import { PHOTOS } from "~/landing/photos";
 import { RunningDayProvider, useRunningDay } from "~/landing/RunningDay";
@@ -83,11 +85,12 @@ function structuredData(origin: string) {
 export const middleware: Route.MiddlewareFunction[] = [requireSignedOut];
 
 /**
- * Nothing to load. Its being here makes a move to this page from inside the
+ * The company that runs this deployment, which the foot of the page names.
+ * A loader's being here also makes a move to this page from inside the
  * application ask the server, and so pass the middleware above.
  */
 export function loader() {
-	return null;
+	return { operator: deploymentOperator(env) };
 }
 
 const SECTIONS = [
@@ -176,7 +179,7 @@ function Accuracy() {
 	);
 }
 
-export default function Home() {
+export default function Home({ loaderData: { operator } }: Route.ComponentProps) {
 	return (
 		<RunningDayProvider>
 			<SkipLink />
@@ -334,7 +337,11 @@ export default function Home() {
 				</section>
 			</main>
 
-			<SiteFooter current="/" photos={[PHOTOS.workshop, PHOTOS.platform, PHOTOS.departure]} />
+			<SiteFooter
+				current="/"
+				operator={operator}
+				photos={[PHOTOS.workshop, PHOTOS.platform, PHOTOS.departure]}
+			/>
 		</RunningDayProvider>
 	);
 }

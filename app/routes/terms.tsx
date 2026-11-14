@@ -1,4 +1,7 @@
+import { env } from "cloudflare:workers";
+
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
+import { deploymentOperator, OperatorDetails } from "~/landing/operator";
 import {
 	LINK,
 	PRIVACY_EMAIL,
@@ -25,16 +28,22 @@ export function meta({ matches }: Route.MetaArgs) {
 	});
 }
 
-/** This version of the terms. */
-const VERSION = { date: "2026-11-12", inWords: "12 November 2026" };
+/** The company that runs this deployment, which the terms are with, from its settings. */
+export function loader() {
+	return { operator: deploymentOperator(env) };
+}
 
-export default function Terms() {
+/** This version of the terms. */
+const VERSION = { date: "2026-11-14", inWords: "14 November 2026" };
+
+export default function Terms({ loaderData: { operator } }: Route.ComponentProps) {
 	return (
 		<Document
 			path={TERMS_PATH}
 			title="Terms"
 			version={VERSION}
-			lead="What Timesifier is today, what an account and an organisation are, the limits on their use, and how to leave. They change as the product does, and their date with them."
+			lead="What Timesifier is today, who runs it, what an account and an organisation are, the limits on their use, and how to leave. They change as the product does, and their date with them."
+			operator={operator}
 		>
 			<DocumentSection id="what" title="What Timesifier is">
 				<p>
@@ -46,6 +55,13 @@ export default function Terms() {
 				<p>
 					It is an early version. It can be unavailable for a time, and what it does will change.
 				</p>
+			</DocumentSection>
+
+			<DocumentSection id="who" title="Who runs Timesifier">
+				<p>
+					<OperatorDetails operator={operator} />
+				</p>
+				<p>These terms are between you and that company.</p>
 			</DocumentSection>
 
 			<DocumentSection id="account" title="Your account">

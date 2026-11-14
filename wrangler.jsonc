@@ -45,13 +45,21 @@
 	//   a secret, because Wrangler loads from `.dev.vars` only the declared
 	//   secrets and the names of variables. Production replaces this list and
 	//   requires the secret (scripts/deploy-config.ts).
+	// OPERATOR_NAME, OPERATOR_COMPANY_NUMBER, OPERATOR_REGISTERED_IN,
+	//   OPERATOR_REGISTERED_OFFICE: the company that runs a deployment, which the
+	//   foot of every public page, the terms and the privacy notice name
+	//   (app/landing/operator.tsx). Here it is a company that does not exist.
 	"vars": {
 		"ENVIRONMENT": "development",
 		"APP_HOST": "",
 		"PREVIEW_HOST_SUFFIX": "",
 		"TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
 		"EMAIL_FROM": "no-reply@localhost",
-		"PLATFORM_OWNERS": ""
+		"PLATFORM_OWNERS": "",
+		"OPERATOR_NAME": "Example Operator Limited",
+		"OPERATOR_COMPANY_NUMBER": "00000000",
+		"OPERATOR_REGISTERED_IN": "England and Wales",
+		"OPERATOR_REGISTERED_OFFICE": "1 Example Street, Example Town, EX0 0EX"
 	},
 	// Each pull request gets a preview on workers.dev. Without this line a preview
 	// has no URL, because turning workers_dev off turns preview URLs off too. It
@@ -70,7 +78,8 @@
 		// The two Turnstile values are Cloudflare's published test keys, which pass
 		// every check. They are the same for everyone and are not secrets:
 		// https://developers.cloudflare.com/turnstile/troubleshooting/testing/
-		// The pipeline adds PREVIEW_HOST_SUFFIX.
+		// The pipeline adds PREVIEW_HOST_SUFFIX and the four OPERATOR_ variables:
+		// a preview is run by the company that runs production.
 		// BETTER_AUTH_SECRET is not here: it is set once for all previews with
 		// `wrangler preview base-config secret put BETTER_AUTH_SECRET`.
 		"vars": {

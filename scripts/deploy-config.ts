@@ -34,6 +34,8 @@ const NO_DATABASE = "00000000-0000-0000-0000-000000000000";
 const TURNSTILE_TEST_KEY = /^[123]x0+[A-Z]{2}$/;
 
 const databaseId = (value: string) => UUID.test(value) && value !== NO_DATABASE;
+/** Words on one line, with no space before or after them. */
+const oneLine = (value: string) => /^\S(?:.*\S)?$/.test(value);
 
 /** Each GitHub variable: what it must be, in words, and the test of that. */
 const VARIABLES = {
@@ -60,6 +62,24 @@ const VARIABLES = {
 	EMAIL_FROM: {
 		is: "the one address mail is sent from, such as no-reply@mail.example.org",
 		valid: (value: string) => new RegExp(`^[^\\s@<>",;:]+@${HOST}$`).test(value),
+	},
+	// The company that runs the deployment, as its public pages name it
+	// (app/landing/operator.tsx). Production and the previews are told the same.
+	OPERATOR_NAME: {
+		is: "the registered name of the company that runs this deployment, on one line",
+		valid: oneLine,
+	},
+	OPERATOR_COMPANY_NUMBER: {
+		is: "the number that company is registered under, in digits and capital letters, and not all zeros",
+		valid: (value: string) => /^[0-9A-Z]+$/.test(value) && !/^0+$/.test(value),
+	},
+	OPERATOR_REGISTERED_IN: {
+		is: "where that company is registered, such as England and Wales, on one line",
+		valid: oneLine,
+	},
+	OPERATOR_REGISTERED_OFFICE: {
+		is: "the address of that company's registered office, on one line",
+		valid: oneLine,
 	},
 };
 type Variable = keyof typeof VARIABLES;
@@ -144,12 +164,19 @@ function deploymentConfig(base: z.infer<typeof Config>, values: Values) {
 		pattern,
 		custom_domain: true,
 	}));
+	const operator = {
+		OPERATOR_NAME: values.OPERATOR_NAME,
+		OPERATOR_COMPANY_NUMBER: values.OPERATOR_COMPANY_NUMBER,
+		OPERATOR_REGISTERED_IN: values.OPERATOR_REGISTERED_IN,
+		OPERATOR_REGISTERED_OFFICE: values.OPERATOR_REGISTERED_OFFICE,
+	};
 	// The whole list is replaced: no value of a developer's machine is deployed.
 	config.vars = {
 		ENVIRONMENT: "production",
 		APP_HOST: values.APP_HOST,
 		TURNSTILE_SITE_KEY: values.TURNSTILE_SITE_KEY,
 		EMAIL_FROM: values.EMAIL_FROM,
+		...operator,
 	};
 	database.database_id = values.D1_DATABASE_ID;
 	email.allowed_sender_addresses = [values.EMAIL_FROM];
@@ -159,7 +186,7 @@ function deploymentConfig(base: z.infer<typeof Config>, values: Values) {
 
 	// A preview is `<its name>-<worker>.<subdomain>.workers.dev`.
 	const hostSuffix = `-${config.name}.${values.WORKERS_DEV_SUBDOMAIN}.workers.dev`;
-	config.previews.vars.PREVIEW_HOST_SUFFIX = hostSuffix;
+	config.previews.vars = { ...config.previews.vars, PREVIEW_HOST_SUFFIX: hostSuffix, ...operator };
 	previewDatabase.database_id = values.D1_PREVIEW_DATABASE_ID;
 
 	const previewMigrations = {

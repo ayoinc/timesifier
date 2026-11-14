@@ -146,6 +146,22 @@ describe("a Worker without a setting refuses sign-in", () => {
 	});
 });
 
+describe("a Worker without the company that runs it names nobody", () => {
+	it.each<Setting>([
+		"OPERATOR_NAME",
+		"OPERATOR_COMPANY_NUMBER",
+		"OPERATOR_REGISTERED_IN",
+		"OPERATOR_REGISTERED_OFFICE",
+	])("without %s the pages that name the company are not served", async (name) => {
+		setBinding(name, undefined);
+
+		for (const path of ["/", "/sign-in", "/privacy", "/terms"]) {
+			expect((await worker.fetch(`${ORIGIN}${path}`)).status, path).toBe(500);
+		}
+		expect(logged).toContain(`deployment: ${name} is not set`);
+	});
+});
+
 describe("the log, when a setting is wrong", () => {
 	it("names the setting and never holds its value", async () => {
 		setBinding("APP_HOST", "https://a-value-that-is-not-a-host.example/");
