@@ -142,10 +142,11 @@ test("an expense is recorded with its receipt, submitted with the week, and repo
 	await page.getByRole("button", { name: "Submit week" }).click();
 	const confirming = page.getByRole("dialog", { name: "Submit this week?" });
 	await confirming.getByRole("button", { name: "Submit week" }).click();
+	// The owner is alone, so nobody else can approve it: the system does, and says so (D5).
 	await expect(page.getByRole("status")).toHaveText(
-		"Week submitted. Its time and expenses are locked until it is decided.",
+		"Week submitted and approved automatically: nobody else can approve it.",
 	);
-	await expect(week).toContainText("Locked while the week is submitted");
+	await expect(week).toContainText("Locked: the week is approved");
 	await expect(week.getByRole("button", { name: /^Change / })).toHaveCount(0);
 
 	// Reports has an Expenses view, by category, among its tabs.
