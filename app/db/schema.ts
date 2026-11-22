@@ -2510,7 +2510,7 @@ export const workRequests = sqliteTable(
 			.notNull()
 			.references(() => organisations.id, { onDelete: "cascade" }),
 		userId: text("user_id").notNull(),
-		/** `overtime` or `weekend`. */
+		/** `overtime`, `weekend`, or `holiday`: work on a public holiday (decision 52). */
 		kind: text("kind").notNull(),
 		startsOn: text("starts_on").notNull(),
 		endsOn: text("ends_on").notNull(),
@@ -2542,7 +2542,7 @@ export const workRequests = sqliteTable(
 			columns: [table.organisationId, table.userId],
 			foreignColumns: [memberships.organisationId, memberships.userId],
 		}).onDelete("cascade"),
-		check("work_requests_kind_known", sql`${table.kind} IN ('overtime', 'weekend')`),
+		check("work_requests_kind_known", sql`${table.kind} IN ('overtime', 'weekend', 'holiday')`),
 		check(
 			"work_requests_status_known",
 			sql`${table.status} IN ('pending', 'approved', 'refused', 'withdrawn', 'cancelled')`,

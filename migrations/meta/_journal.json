@@ -176,6 +176,13 @@
 			"when": 1795387301640,
 			"tag": "0025_overtime_rate",
 			"breakpoints": true
+		},
+		{
+			"idx": 25,
+			"version": "6",
+			"when": 1795391093343,
+			"tag": "0026_work_on_holidays",
+			"breakpoints": true
 		}
 	]
 }
