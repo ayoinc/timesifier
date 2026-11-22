@@ -131,6 +131,7 @@ export async function projectBudget(
 					userId: entry.userId,
 					taskId: entry.taskId,
 					billable: entry.billable,
+					overtime: entry.overtime,
 					day: entry.spentOn,
 					minutes: wholeMinutes(seconds),
 				}),

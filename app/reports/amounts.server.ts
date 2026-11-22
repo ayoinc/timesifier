@@ -56,6 +56,7 @@ export async function billableSplitOf(
 			userId: entry.userId,
 			taskId: entry.taskId,
 			billable: entry.billable,
+			overtime: entry.overtime,
 			day,
 			minutes,
 		});

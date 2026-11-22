@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type BillableAmount, sumBillable } from "~/billing/billable";
 import { moneyText, parseBudgetHours, parseMoney, parsePercent } from "~/money/typed";
-import { type PricedProject, priceTime, rateFor, wholeMinutes } from "~/rates/price";
+import { overtimeRate, type PricedProject, priceTime, rateFor, wholeMinutes } from "~/rates/price";
 import type { RateRow } from "~/rates/rates";
 import { addDays } from "~/time/calendar";
 
@@ -26,6 +26,7 @@ const project = (more: Partial<PricedProject> = {}): PricedProject => ({
 	billingType: "hourly",
 	rateMode: "project",
 	currency: "GBP",
+	overtimeRateMilli: 1000,
 	...more,
 });
 
@@ -40,7 +41,14 @@ const rate = (more: Partial<RateRow>): RateRow => ({
 	...more,
 });
 
-const time = { userId: "ada", taskId: "design", billable: true, day: "2026-06-01", minutes: 60 };
+const time = {
+	userId: "ada",
+	taskId: "design",
+	billable: true,
+	overtime: false,
+	day: "2026-06-01",
+	minutes: 60,
+};
 
 const RATES: RateRow[] = [
 	rate({ projectId: "p1", amountMinor: 5000 }),
@@ -144,6 +152,35 @@ describe("what time is worth", () => {
 				total,
 			);
 		}
+	});
+
+	it("is, for overtime, the day's rate times the project's multiplier, rounded to the penny at the rate", () => {
+		const overtime = { ...time, overtime: true, minutes: 90 };
+		// The person's rate on the project in force that day, £75.00, × 1.5.
+		const byPerson = project({ rateMode: "person", overtimeRateMilli: 1500 });
+		expect(priceTime(byPerson, RATES, overtime)).toEqual({
+			kind: "billable",
+			minuteMinor: 90 * 11_250,
+		});
+		expect(priceTime(byPerson, RATES, { ...overtime, overtime: false })).toEqual({
+			kind: "billable",
+			minuteMinor: 90 * 7500,
+		});
+		// ×1 prices overtime as regular time.
+		expect(priceTime(project(), RATES, overtime)).toEqual({
+			kind: "billable",
+			minuteMinor: 90 * 5000,
+		});
+		// £60.01 × 1.25 is £75.0125 an hour: £75.01, half a penny and more rounding up.
+		expect(overtimeRate(6001, 1250)).toBe(7501);
+		expect(overtimeRate(6002, 1250)).toBe(7503);
+		expect(overtimeRate(6000, 1000)).toBe(6000);
+		expect(overtimeRate(6000, 10_000)).toBe(60_000);
+		// A later rate never prices earlier overtime.
+		const later = [rate({ projectId: "p1", amountMinor: 8000, effectiveFrom: "2026-07-01" })];
+		expect(priceTime(project({ overtimeRateMilli: 2000 }), [...RATES, ...later], overtime)).toEqual(
+			{ kind: "billable", minuteMinor: 90 * 10_000 },
+		);
 	});
 });
 

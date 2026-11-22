@@ -31,6 +31,7 @@ function project(id: string, fields: Partial<ProfitProject> = {}): ProfitProject
 		billingType: "hourly",
 		rateMode: "project",
 		currency: "GBP",
+		overtimeRateMilli: 1000,
 		feeMinor: null,
 		startsOn: null,
 		endsOn: null,
@@ -56,6 +57,7 @@ function row(
 	day: string,
 	minutes: number,
 	billable = true,
+	overtime = false,
 ): Row {
 	next += 1;
 	const start = Date.parse(`${day}T09:00:00Z`);
@@ -75,7 +77,7 @@ function row(
 			taskId: null,
 			task: null,
 			billable,
-			overtime: false,
+			overtime,
 		},
 		day,
 		start,
@@ -172,6 +174,19 @@ describe("Time & Materials: revenue is billable hours × rate plus billable expe
 			},
 		);
 		expect(lines[0]?.costMinor).toBe(100_00);
+	});
+
+	it("bills overtime at the rate times the project's multiplier: ×1.5 earns half as much again", () => {
+		const site = project("site", { overtimeRateMilli: 1500 });
+		const { lines } = run(
+			[site],
+			[row(ADA, "site", "2026-10-05", 120), row(ADA, "site", "2026-10-05", 60, true, true)],
+			{ billableRates: [rate({ kind: "billable", projectId: "site", amountMinor: 100_00 })] },
+		);
+		// Revenue: 2 h × £100 + 1 h × £150 = £350. Overtime costs what any hour does: 3 h × £40.
+		expect(lines[0]).toEqual(
+			expect.objectContaining({ revenueMinor: 350_00, costMinor: 120_00, profitMinor: 230_00 }),
+		);
 	});
 });
 

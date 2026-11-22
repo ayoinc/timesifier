@@ -3,9 +3,12 @@ import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { among, type OrganisationScope, users } from "~/db";
+import { daysOver } from "~/leave/rules.server";
+import { shownName } from "~/organisations/people";
 import { pricingOf } from "~/projects/money.server";
-import { rateFor, wholeMinutes } from "~/rates/price";
+import { hourlyPrice, wholeMinutes } from "~/rates/price";
 import { addDays, type Day, dayOf } from "~/time/calendar";
+import { formatDay } from "~/time/format";
 
 import {
 	type DraftLine,
@@ -22,7 +25,9 @@ import {
  * expenses of its projects that are on no invoice yet, priced, and each
  * fixed-fee project's fee still to invoice. The preview, the draft it saves,
  * the Uninvoiced view and a recurring invoice of uninvoiced time all read it,
- * so they agree.
+ * so they agree. Time on a day over its limit for its person is left out of
+ * all of them until the day is corrected (TR-09): once invoiced, an entry can
+ * no longer change.
  */
 
 /** A project as the invoice form offers it. */
@@ -56,6 +61,8 @@ export interface Sources {
 	/** Why it cannot be one invoice, or null. */
 	problem: string | null;
 	lines: DraftLine[];
+	/** A sentence for each person with time left out because its day is over its limit, by name. */
+	leftOut: string[];
 }
 
 /** What a person asked to invoice. */
@@ -123,7 +130,8 @@ export async function billableProjectsOf(
 /**
  * The billable, uninvoiced, finished time of `projectIds` in `days`, priced:
  * each entry on its stored day (decision 39), at the rate in force that day
- * (`rateFor`).
+ * (`hourlyPrice`), overtime at the project's multiplier. Time on a day over
+ * its person's limit is left out, and `leftOut` says whose and which days.
  */
 export async function uninvoicedTime(
 	scope: OrganisationScope,
@@ -131,9 +139,10 @@ export async function uninvoicedTime(
 	projectIds: readonly string[],
 	days: { first: Day; last: Day } | null,
 	now: number,
-): Promise<PreviewEntry[]> {
-	if (projectIds.length === 0) return [];
-	const [entries, pricing, tasks, projects] = await Promise.all([
+): Promise<{ entries: PreviewEntry[]; leftOut: string[] }> {
+	const none = { entries: [], leftOut: [] };
+	if (projectIds.length === 0) return none;
+	const [found, pricing, tasks, projects] = await Promise.all([
 		scope.timeEntries.select((t) =>
 			and(
 				among(t.projectId, projectIds),
@@ -148,15 +157,17 @@ export async function uninvoicedTime(
 		scope.tasks.select(),
 		scope.projects.select((p) => among(p.id, projectIds)),
 	]);
-	if (entries.length === 0) return [];
+	if (found.length === 0) return none;
 
+	const over = await daysOverOf(scope, found, now);
+	const entries = found.filter((entry) => !over.get(entry.userId)?.has(entry.spentOn));
 	const people = await drizzle(env.DB)
-		.select({ id: users.id, name: users.name })
+		.select({ id: users.id, name: users.name, email: users.email })
 		.from(users)
 		.where(
 			among(
 				users.id,
-				entries.map((e) => e.userId),
+				found.map((e) => e.userId),
 			),
 		);
 	const personById = new Map(people.map((p) => [p.id, p]));
@@ -170,8 +181,13 @@ export async function uninvoicedTime(
 			((entry.endedAt?.getTime() ?? entry.startedAt.getTime()) - entry.startedAt.getTime()) / 1000,
 		);
 		const project = pricing.projects.get(entry.projectId);
-		const rate = project
-			? rateFor(project, pricing.rates, { userId: entry.userId, taskId: entry.taskId, day })
+		const price = project
+			? hourlyPrice(project, pricing.rates, {
+					userId: entry.userId,
+					taskId: entry.taskId,
+					day,
+					overtime: entry.overtime,
+				})
 			: null;
 		return {
 			id: entry.id,
@@ -184,9 +200,10 @@ export async function uninvoicedTime(
 			description: entry.description,
 			day,
 			minutes,
-			rateMinor: rate?.amountMinor ?? 0,
-			minuteMinor: rate ? minutes * rate.amountMinor : 0,
-			priced: rate !== null,
+			overtime: entry.overtime,
+			rateMinor: price ?? 0,
+			minuteMinor: price === null ? 0 : minutes * price,
+			priced: price !== null,
 			approved: false,
 			startedAt: entry.startedAt.getTime(),
 		};
@@ -202,16 +219,70 @@ export async function uninvoicedTime(
 			gte(p.endsOn, dayList[0] ?? ""),
 		),
 	);
-	return items
-		.map(({ startedAt: _startedAt, ...item }) => ({
-			...item,
-			approved: approved.some(
-				(p) => p.userId === item.userId && p.startsOn <= item.day && item.day <= p.endsOn,
+	const leftOut = [...over].flatMap(([userId, days]) => {
+		const left = found.filter((e) => e.userId === userId && days.has(e.spentOn));
+		if (left.length === 0) return [];
+		const person = personById.get(userId);
+		const name = person?.name.trim().split(/\s+/u)[0] || shownName({ email: person?.email ?? "" });
+		const said = leftOutSentence(name, left.length, [...new Set(left.map((e) => e.spentOn))]);
+		return [{ name, said }];
+	});
+	return {
+		entries: items
+			.map(({ startedAt: _startedAt, ...item }) => ({
+				...item,
+				approved: approved.some(
+					(p) => p.userId === item.userId && p.startsOn <= item.day && item.day <= p.endsOn,
+				),
+			}))
+			.sort((a, b) =>
+				a.day < b.day ? -1 : a.day > b.day ? 1 : a.projectName.localeCompare(b.projectName),
 			),
-		}))
-		.sort((a, b) =>
-			a.day < b.day ? -1 : a.day > b.day ? 1 : a.projectName.localeCompare(b.projectName),
-		);
+		leftOut: leftOut.sort((a, b) => a.name.localeCompare(b.name, "en")).map(({ said }) => said),
+	};
+}
+
+/**
+ * The days over their limit (`daysOver`) of each person with time in
+ * `entries`, looked at once a person, over the span of their entries' days.
+ */
+async function daysOverOf(
+	scope: OrganisationScope,
+	entries: readonly { userId: string; spentOn: Day }[],
+	now: number,
+): Promise<Map<string, Set<Day>>> {
+	const spans = new Map<string, { first: Day; last: Day }>();
+	for (const { userId, spentOn } of entries) {
+		const span = spans.get(userId);
+		if (!span) spans.set(userId, { first: spentOn, last: spentOn });
+		else if (spentOn < span.first) span.first = spentOn;
+		else if (spentOn > span.last) span.last = spentOn;
+	}
+	const found = await Promise.all(
+		[...spans].map(async ([userId, { first, last }]) => {
+			const over = await daysOver(scope, userId, first, last, now);
+			return [userId, new Set(over.map((rule) => rule.day))] as const;
+		}),
+	);
+	return new Map(found);
+}
+
+/**
+ * What the preview says of `count` entries of `name`'s on `days` over their
+ * limit: "1 entry of Grace's is on a day over its limit (Tue 10). It is left
+ * out until the day is corrected."
+ */
+function leftOutSentence(name: string, count: number, days: readonly Day[]): string {
+	const listed = [...days]
+		.sort()
+		.map((day) => formatDay(day, "short"))
+		.join(", ");
+	if (count === 1) {
+		return `1 entry of ${name}'s is on a day over its limit (${listed}). It is left out until the day is corrected.`;
+	}
+	return days.length === 1
+		? `${count} entries of ${name}'s are on a day over its limit (${listed}). They are left out until the day is corrected.`
+		: `${count} entries of ${name}'s are on days over their limit (${listed}). They are left out until the days are corrected.`;
 }
 
 /** The billable, uninvoiced expenses of `projectIds` spent in `days`. */
@@ -277,12 +348,13 @@ export async function sourcesFor(
 	const includeTime = request.includeTime ?? true;
 	const hourly = chosen.filter((p) => p.billingType === "hourly").map((p) => p.id);
 	const all = chosen.map((p) => p.id);
-	const [entries, expenses] = includeTime
+	const [time, expenses] = includeTime
 		? await Promise.all([
 				uninvoicedTime(scope, organisation, hourly, request.days, now),
 				uninvoicedExpenses(scope, all, request.days, today),
 			])
-		: [[], []];
+		: [{ entries: [], leftOut: [] }, []];
+	const { entries, leftOut } = time;
 	const fixed = chosen
 		.filter((p) => p.billingType === "fixed_fee" && (p.feeLeftMinor ?? 0) > 0)
 		.map((project) => ({
@@ -317,6 +389,7 @@ export async function sourcesFor(
 		currency: currencies.length === 1 ? (currencies[0] ?? null) : null,
 		problem: currencies.length > 1 ? mixedCurrencies(currencies) : null,
 		lines,
+		leftOut,
 	};
 }
 

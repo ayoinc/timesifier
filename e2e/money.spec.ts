@@ -271,6 +271,19 @@ for (const viewport of [
 				const billing = page.getByRole("dialog", { name: "Billing" });
 				await expectNoProblemsInSheet(page, billing, billing.getByText("Project type").first());
 
+				await page.getByRole("button", { name: "Change what overtime is billed at" }).click();
+				const overtime = page.getByRole("dialog", { name: "Overtime billed at" });
+				await overtime
+					.getByRole("radiogroup", { name: "Overtime billed at" })
+					.getByText("Custom", { exact: true })
+					.click();
+				await expect(overtime.getByRole("textbox", { name: "Multiplier" })).toHaveValue("1");
+				await expectNoProblemsInSheet(
+					page,
+					overtime,
+					overtime.getByText("Custom", { exact: true }),
+				);
+
 				await page.getByRole("button", { name: "Change budget" }).click();
 				const budget = budgetSheet(page);
 				await budget.getByRole("button", { name: /Budget$/ }).click();

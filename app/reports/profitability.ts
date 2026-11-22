@@ -170,6 +170,7 @@ export function profitability(input: {
 				userId: entry.userId,
 				taskId: entry.taskId,
 				billable: entry.billable,
+				overtime: entry.overtime,
 				day: row.day,
 				minutes,
 			});

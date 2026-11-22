@@ -49,7 +49,13 @@ export function rateModeOf(stored: string): RateMode {
 
 /** A project row as pricing needs it, with the currency it bills in. */
 export function pricedProject(
-	project: { id: string; billingType: string; rateMode: string; currency: string | null },
+	project: {
+		id: string;
+		billingType: string;
+		rateMode: string;
+		currency: string | null;
+		overtimeRateMilli: number;
+	},
 	clientCurrency: string | null,
 	organisationCurrency: string,
 ): PricedProject {
@@ -58,6 +64,7 @@ export function pricedProject(
 		billingType: billingTypeOf(project.billingType),
 		rateMode: rateModeOf(project.rateMode),
 		currency: project.currency ?? clientCurrency ?? organisationCurrency,
+		overtimeRateMilli: project.overtimeRateMilli,
 	};
 }
 

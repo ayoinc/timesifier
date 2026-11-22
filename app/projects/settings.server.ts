@@ -58,6 +58,37 @@ export async function changeBilling(
 	return { ok: true, name: project.name };
 }
 
+/**
+ * Sets what a project's overtime is billed at: the rate in force on each
+ * entry's day times `overtimeRateMilli` thousandths (D9, OQ4). Unlike a rate
+ * it has no date: it prices all overtime not yet invoiced, earlier days' too,
+ * and reports with it; an invoice keeps what it was made with. A change is
+ * logged; the same multiplier again changes nothing. Null for no such project
+ * here.
+ */
+export async function changeOvertimeRate(
+	scope: OrganisationScope,
+	actor: string,
+	projectId: string,
+	overtimeRateMilli: number,
+): Promise<{ ok: true; name: string } | null> {
+	const [project] = await scope.projects.select((p) => eq(p.id, projectId), { limit: 1 });
+	if (!project) return null;
+	if (project.overtimeRateMilli === overtimeRateMilli) return { ok: true, name: project.name };
+	const changed = { overtimeRateMilli };
+	await scope.batch([
+		scope.projects.statements.update(changed, (p) => eq(p.id, projectId)),
+		recordStatement(
+			scope,
+			actor,
+			"project.updated",
+			{ type: "project", id: projectId },
+			changes(project, changed, ["overtimeRateMilli"]),
+		),
+	]);
+	return { ok: true, name: project.name };
+}
+
 /** A project's budget. Amounts are minutes for an hours budget, minor units for fees. */
 export interface BudgetInput {
 	kind: BudgetKind;

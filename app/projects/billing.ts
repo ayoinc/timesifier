@@ -1,5 +1,6 @@
 import type { BillingType } from "~/billing/billable";
 import type { BudgetKind } from "~/budgets/budget";
+import { parseQuantity, quantityText } from "~/invoices/lines";
 import type { RateMode } from "~/rates/price";
 
 /**
@@ -40,6 +41,35 @@ export const BUDGET_KIND_LABELS: Record<BudgetKind, string> = {
 
 /** The budget kinds in money, which only those who see rates are offered and shown. */
 export const FEES_BUDGETS: readonly BudgetKind[] = ["total_fees", "task_fees"];
+
+/**
+ * What overtime may be billed at, in thousandths of the day's rate (D9, OQ4):
+ * ×1 to ×10, the bounds of `projects.overtime_rate_milli`'s CHECK.
+ */
+export const OVERTIME_RATE_LEAST = 1000;
+export const OVERTIME_RATE_MOST = 10_000;
+
+/** The multipliers offered without typing one, as the field's values: ×1, the rate itself, first. */
+export const OVERTIME_RATE_CHOICES = ["1", "1.25", "1.5", "2"] as const;
+
+/** The field's value that asks for a multiplier typed. */
+export const CUSTOM_OVERTIME_RATE = "custom";
+
+export const NOT_A_MULTIPLIER =
+	"Type the multiplier as a number from 1 to 10 with at most three decimals, such as 1.75.";
+
+/** A multiplier as typed, in thousandths: "1.75" is 1750. Null for no number from 1 to 10 with at most three decimals. */
+export function parseOvertimeRate(text: string): number | null {
+	const milli = parseQuantity(text);
+	return milli !== null && milli >= OVERTIME_RATE_LEAST && milli <= OVERTIME_RATE_MOST
+		? milli
+		: null;
+}
+
+/** A multiplier in thousandths as the page shows it: 1500 is "×1.5". */
+export function overtimeRateText(milli: number): string {
+	return `×${quantityText(milli)}`;
+}
 
 /**
  * The currencies offered, by code: the common ones. Any ISO 4217 code is

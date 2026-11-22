@@ -17,6 +17,7 @@ import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { quantityText } from "~/invoices/lines";
 import { parseRequest } from "~/lib/validate";
 import { formatMoney, isCurrencyCode } from "~/money/money";
 import { moneyText, parseBudgetHours, parseMoney } from "~/money/typed";
@@ -30,7 +31,12 @@ import {
 	BILLING_TYPE_MEANINGS,
 	BUDGET_KIND_LABELS,
 	CURRENCIES,
+	CUSTOM_OVERTIME_RATE,
 	INHERITED,
+	NOT_A_MULTIPLIER,
+	OVERTIME_RATE_CHOICES,
+	overtimeRateText,
+	parseOvertimeRate,
 	RATE_MODE_LABELS,
 	RATE_MODES,
 } from "~/projects/billing";
@@ -43,7 +49,7 @@ import {
 	projectPath,
 	projectTabIn,
 } from "~/projects/projects";
-import { changeBilling, changeBudget } from "~/projects/settings.server";
+import { changeBilling, changeBudget, changeOvertimeRate } from "~/projects/settings.server";
 import { resolveRate } from "~/rates/rates";
 import { ratesForProject, setRate } from "~/rates/rates.server";
 import { dayLabel, hoursAndMinutes } from "~/reports/format";
@@ -151,6 +157,11 @@ const form = z.discriminatedUnion("intent", [
 		alertPercent: Typed.default(""),
 		warnMembers: Flag,
 		includesExpenses: Flag,
+	}),
+	z.object({
+		intent: z.literal("overtime-rate"),
+		overtimeRate: z.enum([...OVERTIME_RATE_CHOICES, CUSTOM_OVERTIME_RATE]),
+		customRate: Typed.default(""),
 	}),
 	z.object({ intent: z.literal("tags"), tagIds: TagIds }),
 	z.object({ intent: z.literal("add-task"), taskId: Id }),
@@ -284,6 +295,17 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 				);
 			}
 			return done(kind === "none" ? "The project has no budget." : "Budget saved.");
+		}
+
+		case "overtime-rate": {
+			if (!mayManageRates(role)) return declined(NOT_ALLOWED, 403);
+			const milli = parseOvertimeRate(
+				input.overtimeRate === CUSTOM_OVERTIME_RATE ? input.customRate : input.overtimeRate,
+			);
+			if (milli === null) return declined(NOT_A_MULTIPLIER);
+			const changed = await changeOvertimeRate(scope, user.id, projectId, milli);
+			if (!changed) throw notFound();
+			return done(`Overtime is billed at ${overtimeRateText(milli)} the day's rate.`);
 		}
 
 		case "tags": {
@@ -918,7 +940,12 @@ function Team({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) 
 function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) {
 	const { page, managesRates, managesTasks } = data;
 	const { project } = page;
-	const [open, setOpen] = useState<"billing" | "budget" | "tags" | null>(null);
+	const [open, setOpen] = useState<"billing" | "budget" | "overtime" | "tags" | null>(null);
+	const overtimeRate = project.overtimeRateMilli ?? 1000;
+	const [overtimeChoice, setOvertimeChoice] = useState<string>(
+		OVERTIME_RATE_CHOICES.find((choice) => parseOvertimeRate(choice) === overtimeRate) ??
+			CUSTOM_OVERTIME_RATE,
+	);
 	const close = () => setOpen(null);
 	const [billingType, setBillingType] = useState<string>(project.billingType);
 	const [budgetKind, setBudgetKind] = useState<string>(project.budgetKind);
@@ -991,6 +1018,21 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 								.join(" · ")}
 							action={
 								<Button variant="text" aria-label="Change budget" onPress={() => setOpen("budget")}>
+									Change
+								</Button>
+							}
+						/>
+					)}
+					{managesRates && project.overtimeRateMilli !== null && (
+						<LedgerRow
+							title="Overtime billed at"
+							detail={`${overtimeRateText(project.overtimeRateMilli)} the day's rate`}
+							action={
+								<Button
+									variant="text"
+									aria-label="Change what overtime is billed at"
+									onPress={() => setOpen("overtime")}
+								>
 									Change
 								</Button>
 							}
@@ -1160,6 +1202,45 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 							</Checkbox>
 						)}
 					</>
+				)}
+			</FormSheet>
+
+			<FormSheet
+				title="Overtime billed at"
+				intent="overtime-rate"
+				submitLabel="Save"
+				isOpen={open === "overtime"}
+				onClose={close}
+				onDone={onSaid}
+			>
+				<p>
+					Overtime is billed at the rate in force on its day times this, on a line of its own. It
+					prices overtime on no invoice yet.
+				</p>
+				<RadioGroup
+					label="Overtime billed at"
+					name="overtimeRate"
+					value={overtimeChoice}
+					onChange={setOvertimeChoice}
+				>
+					{OVERTIME_RATE_CHOICES.map((choice) => (
+						<Radio key={choice} value={choice}>
+							×{choice}
+							{choice === "1" ? ", the day's rate" : ""}
+						</Radio>
+					))}
+					<Radio value={CUSTOM_OVERTIME_RATE}>Custom</Radio>
+				</RadioGroup>
+				{overtimeChoice === CUSTOM_OVERTIME_RATE && (
+					<TextField
+						label="Multiplier"
+						name="customRate"
+						inputMode="decimal"
+						autoComplete="off"
+						defaultValue={quantityText(overtimeRate)}
+						description="From 1 to 10, such as 1.75."
+						isRequired
+					/>
 				)}
 			</FormSheet>
 

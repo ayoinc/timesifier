@@ -1,0 +1,12 @@
+-- Overtime billed at its own rate (D9, OQ4; docs/decisions.md entry 55).
+--
+-- Each project says what its overtime is billed at: the rate in force on the
+-- entry's day times a multiplier, kept in thousandths like every quantity
+-- (1000 is ×1, 1500 is ×1.5). Every project, as each new one, starts at ×1,
+-- which bills overtime as before.
+--
+-- The bounds are a CHECK on the column, which SQLite adds in place: a CHECK on
+-- the table, as drizzle-kit would write it, rebuilds the table every entry
+-- refers to. The snapshot is drizzle-kit's for the column; the CHECK is
+-- written by hand.
+ALTER TABLE `projects` ADD `overtime_rate_milli` integer DEFAULT 1000 NOT NULL CHECK (`overtime_rate_milli` BETWEEN 1000 AND 10000);

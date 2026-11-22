@@ -159,6 +159,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				canCreate: false,
 				unapproved: 0,
 				unpriced: 0,
+				leftOut: [],
 			},
 		};
 	const sources = await sourcesFor(scope, organisation, asked.request, now);
@@ -173,7 +174,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			entries: sources.entries.map((e) => ({
 				id: e.id,
 				title: e.description ?? e.taskName ?? "No description",
-				detail: [formatDay(e.day), e.personName, e.projectName, e.taskName]
+				detail: [
+					formatDay(e.day),
+					e.personName,
+					e.projectName,
+					e.taskName,
+					e.overtime ? "Overtime" : null,
+				]
 					.filter(Boolean)
 					.join(" · "),
 				approved: e.approved,
@@ -202,6 +209,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			canCreate: sources.problem === null && sources.lines.length > 0,
 			unapproved: sources.entries.filter((e) => !e.approved).length,
 			unpriced: sources.entries.filter((e) => !e.priced).length,
+			leftOut: sources.leftOut,
 		},
 	};
 }
@@ -361,6 +369,16 @@ export default function NewInvoice({ loaderData }: Route.ComponentProps) {
 						lead="What the draft will hold. Its subtotal is what the time and expenses below are worth together."
 					>
 						<div className="max-w-200">
+							{preview.leftOut.length > 0 && (
+								<ul
+									aria-label="Time left out"
+									className="mb-4 flex max-w-160 flex-col gap-1 text-body-large text-error"
+								>
+									{preview.leftOut.map((said) => (
+										<li key={said}>{said}</li>
+									))}
+								</ul>
+							)}
 							<Ledger heading="Lines" note={preview.lines.length}>
 								{preview.lines.length === 0 ? (
 									<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
