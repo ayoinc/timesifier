@@ -16,6 +16,10 @@ const SETTINGS = {
 	D1_PREVIEW_DATABASE_ID: "22222222-2222-4222-8222-222222222222",
 	TURNSTILE_SITE_KEY: "0x4AAAAAAA-not-a-real-site-key",
 	EMAIL_FROM: "hello@post.example.net",
+	OPERATOR_NAME: "Example Timekeeping Limited",
+	OPERATOR_COMPANY_NUMBER: "SC000001",
+	OPERATOR_REGISTERED_IN: "Scotland",
+	OPERATOR_REGISTERED_OFFICE: "1 Example Row, Exampleton, EX1 1EX",
 	CLOUDFLARE_API_TOKEN_IS_SET: "true",
 	CLOUDFLARE_ACCOUNT_ID_IS_SET: "true",
 };
@@ -77,6 +81,10 @@ describe("scripts/deploy-config.ts, the check before every deploy", () => {
 			"D1_PREVIEW_DATABASE_ID",
 			"TURNSTILE_SITE_KEY",
 			"EMAIL_FROM",
+			"OPERATOR_NAME",
+			"OPERATOR_COMPANY_NUMBER",
+			"OPERATOR_REGISTERED_IN",
+			"OPERATOR_REGISTERED_OFFICE",
 			"CLOUDFLARE_API_TOKEN",
 			"CLOUDFLARE_ACCOUNT_ID",
 		]);
@@ -111,6 +119,12 @@ describe("scripts/deploy-config.ts, the check before every deploy", () => {
 		["EMAIL_FROM", "Timesifier <no-reply@mail.example.org>", "the address alone"],
 		["EMAIL_FROM", "no-reply@mail.example.org,eve@attacker.example", "one address"],
 		["EMAIL_FROM", "no-reply", "an address"],
+		["OPERATOR_NAME", "Example Timekeeping Limited\nSC000001", "the name alone, on one line"],
+		["OPERATOR_NAME", " Example Timekeeping Limited", "no space before it"],
+		["OPERATOR_COMPANY_NUMBER", "00000000", "the number of a developer's machine"],
+		["OPERATOR_COMPANY_NUMBER", "company number SC000001", "the number alone"],
+		["OPERATOR_REGISTERED_IN", "Scotland\n", "one line"],
+		["OPERATOR_REGISTERED_OFFICE", "1 Example Row\nExampleton\nEX1 1EX", "on one line"],
 	])("refuses %s = %j (%s)", (name, value) => {
 		const directory = checkout();
 
@@ -163,6 +177,10 @@ describe("scripts/deploy-config.ts --write", () => {
 				APP_HOST: "time.example.org",
 				TURNSTILE_SITE_KEY: "0x4AAAAAAA-not-a-real-site-key",
 				EMAIL_FROM: "hello@post.example.net",
+				OPERATOR_NAME: "Example Timekeeping Limited",
+				OPERATOR_COMPANY_NUMBER: "SC000001",
+				OPERATOR_REGISTERED_IN: "Scotland",
+				OPERATOR_REGISTERED_OFFICE: "1 Example Row, Exampleton, EX1 1EX",
 			},
 			d1_databases: [
 				{
@@ -179,6 +197,11 @@ describe("scripts/deploy-config.ts --write", () => {
 					TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
 					TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
 					PREVIEW_HOST_SUFFIX: "-timesifier.acme.workers.dev",
+					// A preview is run by the company that runs production.
+					OPERATOR_NAME: "Example Timekeeping Limited",
+					OPERATOR_COMPANY_NUMBER: "SC000001",
+					OPERATOR_REGISTERED_IN: "Scotland",
+					OPERATOR_REGISTERED_OFFICE: "1 Example Row, Exampleton, EX1 1EX",
 				},
 				d1_databases: [
 					{
@@ -229,7 +252,7 @@ describe("scripts/deploy-config.ts --write", () => {
 describe("the committed wrangler.jsonc belongs to no deployment", () => {
 	const config = readJsonc(join(repository, "wrangler.jsonc"));
 
-	it("names no host, no key and no address of one", () => {
+	it("names no host, no key and no address of one, and a company that does not exist", () => {
 		expect(config.routes).toBeUndefined();
 		expect(config.vars).toEqual({
 			ENVIRONMENT: "development",
@@ -238,6 +261,10 @@ describe("the committed wrangler.jsonc belongs to no deployment", () => {
 			TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
 			EMAIL_FROM: "no-reply@localhost",
 			PLATFORM_OWNERS: "",
+			OPERATOR_NAME: "Example Operator Limited",
+			OPERATOR_COMPANY_NUMBER: "00000000",
+			OPERATOR_REGISTERED_IN: "England and Wales",
+			OPERATOR_REGISTERED_OFFICE: "1 Example Street, Example Town, EX0 0EX",
 		});
 		expect(config.previews.vars.PREVIEW_HOST_SUFFIX).toBeUndefined();
 		expect(config.send_email).toEqual([{ name: "EMAIL" }]);

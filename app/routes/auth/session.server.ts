@@ -6,7 +6,7 @@ import { env } from "cloudflare:workers";
 import { createContext, type MiddlewareFunction, redirectDocument } from "react-router";
 
 import { getSession, type SignedIn } from "~/auth/auth.server";
-
+import { deploymentOperator } from "~/landing/operator";
 import { required } from "~/lib/deployment";
 import { APP_PATH } from "~/shell/destinations";
 import { NEXT_PARAM, safeNext, signInPath } from "./paths";
@@ -49,13 +49,18 @@ export const requireSignedOut: MiddlewareFunction<Response> = async ({ request }
 };
 
 /**
- * What the sign-in page loads: Turnstile's public site key and
- * where to go afterwards. A person who already has a session is sent there at
- * once, again as a whole page load. A deployment without a site key has no
- * widget to show, so the page is not served.
+ * What the sign-in page loads: Turnstile's public site key, where to go
+ * afterwards, and the company that runs this deployment, which the foot of
+ * the page names. A person who already has a session is sent on at once,
+ * again as a whole page load. A deployment without a site key has no widget
+ * to show, so the page is not served.
  */
 export async function loadAuthPage(request: Request, url: URL) {
 	const next = safeNext(url.searchParams.get(NEXT_PARAM));
 	if (await getSession(request)) throw redirectDocument(next);
-	return { next, turnstileSiteKey: required(env, "TURNSTILE_SITE_KEY") };
+	return {
+		next,
+		turnstileSiteKey: required(env, "TURNSTILE_SITE_KEY"),
+		operator: deploymentOperator(env),
+	};
 }

@@ -9,6 +9,7 @@ import {
 
 import { cx } from "~/components/cx";
 import { CheckIcon } from "~/components/icons/CheckIcon";
+import type { Operator } from "~/landing/operator";
 import { Photo } from "~/landing/Photo";
 import { PHOTOS } from "~/landing/photos";
 import { MAIN_ID, PAGE, SiteFooter, SiteHeader, SkipLink } from "~/landing/Site";
@@ -23,6 +24,8 @@ import { SIGN_IN_PATH } from "./paths";
 export interface AuthPageProps {
 	/** The position of the view on screen in the page's sequence: a later one is "forward". */
 	step: number;
+	/** The company that runs this deployment, which the foot of the page names. */
+	operator: Operator;
 	/** The view: a heading, what it asks, and one primary action. */
 	children: ReactNode;
 }
@@ -68,7 +71,7 @@ const ARRIVAL =
  * it has none, so the next key press lands in the new view. The view a page
  * loads with is left alone, like any page the browser loads whole.
  */
-export function AuthPage({ step, children }: AuthPageProps) {
+export function AuthPage({ step, operator, children }: AuthPageProps) {
 	const travel = useTravel(step);
 	const view = useRef<HTMLDivElement>(null);
 
@@ -117,7 +120,7 @@ export function AuthPage({ step, children }: AuthPageProps) {
 				/>
 			</main>
 
-			<SiteFooter current={SIGN_IN_PATH} photos={[PHOTOS.platform]} />
+			<SiteFooter current={SIGN_IN_PATH} operator={operator} photos={[PHOTOS.platform]} />
 		</div>
 	);
 }

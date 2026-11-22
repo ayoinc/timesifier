@@ -10,6 +10,7 @@ import { EVENT_LABELS } from "~/integrations/scopes";
 import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
 import { DOCUMENT_EMAILS } from "~/invoices/mail.server";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
+import { deploymentOperator, OperatorDetails } from "~/landing/operator";
 import {
 	LINK,
 	PRIVACY_EMAIL,
@@ -43,13 +44,14 @@ export function meta({ matches }: Route.MetaArgs) {
 
 /**
  * What the notice says of this deployment comes from the deployment: the host
- * the page was asked for on, and the address its mail is sent from, which is
- * `null` where none is set. The numbers it states come from the modules that
- * act on them, which are the server's.
+ * the page was asked for on, the company that runs it, and the address its
+ * mail is sent from, which is `null` where none is set. The numbers it states
+ * come from the modules that act on them, which are the server's.
  */
 export function loader({ request }: Route.LoaderArgs) {
 	return {
 		host: new URL(request.url).host,
+		operator: deploymentOperator(env),
 		sender: setting(env, "EMAIL_FROM") ?? null,
 		facts: {
 			activityDays: ACTIVITY_RETENTION_DAYS,
@@ -61,35 +63,10 @@ export function loader({ request }: Route.LoaderArgs) {
 	};
 }
 
-/**
- * Who runs Timesifier and answers for what it stores: the controller, in the
- * words of the data protection law. THE OWNER MUST FILL THIS IN: the legal name
- * and a postal address. While it is `null` the notice says in so many words that
- * it is incomplete, and it is. Nothing may be put here that is not true.
- */
-const CONTROLLER: { name: string; address: string } | null = null;
-
 /** This version of the notice. */
-const VERSION = { date: "2026-11-12", inWords: "12 November 2026" };
+const VERSION = { date: "2026-11-14", inWords: "14 November 2026" };
 
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
-
-function Controller() {
-	if (CONTROLLER) {
-		return (
-			<p>
-				Timesifier is run by {CONTROLLER.name}, {CONTROLLER.address}, which decides what is stored
-				and answers for it.
-			</p>
-		);
-	}
-	return (
-		<p>
-			The legal name and the postal address of who runs Timesifier are not on this page yet. Until
-			they are, this notice is incomplete. To ask who that is, write to {PRIVACY_EMAIL}.
-		</p>
-	);
-}
 
 /** The kinds of event a webhook can be sent, as Integrations names them, in a sentence. */
 const EVENTS = Object.values(EVENT_LABELS)
@@ -100,7 +77,9 @@ const EVENTS = Object.values(EVENT_LABELS)
 	)
 	.join("");
 
-export default function Privacy({ loaderData: { host, sender, facts } }: Route.ComponentProps) {
+export default function Privacy({
+	loaderData: { host, operator, sender, facts },
+}: Route.ComponentProps) {
 	/** What each row of "What is stored" says. Every row of `STORED` has its words here. */
 	const stored: Record<StoredTerm, ReactNode> = {
 		"Your account": (
@@ -274,10 +253,17 @@ export default function Privacy({ loaderData: { host, sender, facts } }: Route.C
 			path={PRIVACY_PATH}
 			title="Privacy notice"
 			version={VERSION}
-			lead="What Timesifier stores about you and your organisation's work, who can see it, where and how long it is kept, who else handles it, and how to have it exported or deleted. It does not yet name who runs Timesifier, so it is not complete. It changes as the product does, and its date with it."
+			lead="What Timesifier stores about you and your organisation's work, who can see it, where and how long it is kept, who else handles it, and how to have it exported or deleted. It changes as the product does, and its date with it."
+			operator={operator}
 		>
 			<DocumentSection id="who-we-are" title="Who is responsible">
-				<Controller />
+				<p>
+					<OperatorDetails operator={operator} />
+				</p>
+				<p>
+					That company decides what Timesifier stores and answers for it. Data protection law calls
+					it the controller.
+				</p>
 			</DocumentSection>
 
 			<DocumentSection id="stored" title="What is stored">

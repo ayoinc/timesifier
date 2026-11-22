@@ -4,6 +4,7 @@ import { cx } from "~/components/cx";
 import { Wordmark } from "~/components/Wordmark";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 
+import { type Operator, OperatorDetails } from "./operator";
 import type { PhotoSource } from "./photos";
 
 // What moves on the public pages, and when it does not, is in this style sheet.
@@ -205,17 +206,20 @@ const NOTICES: readonly SiteLink[] = [
 export interface SiteFooterProps {
 	/** The address of the page the footer is on. Its own link is marked as the current page. */
 	current: string;
+	/** The company that runs this deployment, from the page's loader (`./operator`). */
+	operator: Operator;
 	/** The photographs on the page, whose photographers are credited here and only here. */
 	photos?: readonly PhotoSource[];
 }
 
 /**
  * The foot of every public page, on a surface of its own the width of the
- * window: what Timesifier is, the way to its notices, and the credits for the
- * page's photographs, in that order. From 600px they stand in three columns; on
- * a phone, one under another, the two notices side by side.
+ * window: what Timesifier is and which company runs it, the way to its notices,
+ * and the credits for the page's photographs, in that order. From 600px they
+ * stand in three columns; on a phone, one under another, the two notices side
+ * by side.
  */
-export function SiteFooter({ current, photos = [] }: SiteFooterProps) {
+export function SiteFooter({ current, operator, photos = [] }: SiteFooterProps) {
 	return (
 		<footer className="site-footer bg-surface-container-low text-body-medium">
 			<div
@@ -227,6 +231,9 @@ export function SiteFooter({ current, photos = [] }: SiteFooterProps) {
 					</p>
 					<p className="mt-3 max-w-80 text-on-surface-variant">
 						A time tracker for people and small teams who bill or account for their hours.
+					</p>
+					<p className="mt-4 max-w-80 text-on-surface-variant">
+						<OperatorDetails operator={operator} />
 					</p>
 				</div>
 				<nav aria-labelledby="site-notices" className="medium:col-span-3">

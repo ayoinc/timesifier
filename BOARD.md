@@ -38,6 +38,25 @@ Builder: an AI session on branch `ts-064-foundation-b2b`. It lays what the busin
 - [x] Migration `0008_business`, generated after TS-061 merged, with the trigger that refuses an UPDATE of `activity_records` added by hand. It drops and renames nothing: `time_entries` gains its three columns in place, so the CI migration check passes; applied by hand to a database holding an entry, it keeps the entry, and a new organisation still gets its leave defaults from `organisations_leave_defaults`.
 - [ ] typecheck, lint, tests and the shell's browser tests pass in the pipeline.
 
+### TS-121 · A person can see which company runs Timesifier
+
+Builder: an AI session on branch `ts-121-company-details`, the owner's own work of 2026-11-14 (commit 15fa8a6). Pushed on 2026-11-22 with the owner's approval; it merges only after the owner has accepted the screenshots. The owner decided on 2026-11-14 who runs Timesifier (`docs/decisions.md`, entry 46), which closes the open criterion of TS-030 about who runs it. An instruction from the owner, so this card is in the pull request of the work.
+
+**Depends on:** TS-030 (Review), whose pages and footer it changes; TS-032 (Done), whose settings it follows.
+**Reference for the screen:** the footer and the sections of the two notices as TS-030 built them (`docs/design-direction.md`). It adds one paragraph to the footer and one section to each notice, and the owner reviews them before they are published.
+**Owns:** `app/landing/operator.tsx`, `app/landing/Site.tsx`, `app/landing/Document.tsx`, `app/lib/deployment.ts`, `app/routes/home.tsx`, `app/routes/sign-in.tsx`, `app/routes/privacy.tsx`, `app/routes/terms.tsx`, `app/routes/auth/AuthPage.tsx`, `app/routes/auth/session.server.ts`, `scripts/deploy-config.ts`, `wrangler.jsonc`, `vitest.workers.config.ts`, `.github/workflows/ci.yml`, their tests, and the documents that describe them.
+**Interfaces:** gives `deploymentOperator(env)` and `<OperatorDetails>` from `app/landing/operator.tsx`, and `operator` as a required property of `SiteFooter`, `Document` and `AuthPage`. Takes `required` from `app/lib/deployment.ts`.
+
+- [x] The foot of `/`, `/sign-in`, `/privacy` and `/terms` states the registered name of the company the deployment names, its number, where it is registered and its registered office (`test/documents.test.ts`, "the foot of … names the company that runs this deployment, its number, where it is registered and its registered office").
+- [x] The terms say which company they are with, and the privacy notice says which company answers for what is stored (`test/documents.test.ts`, "the terms say which company they are with", "the privacy notice says which company answers for what is stored"; in a browser, `e2e/documents.spec.ts`, "says which company runs Timesifier, in the page and at its foot").
+- [x] No company is in the code: the four details are the settings `OPERATOR_NAME`, `OPERATOR_COMPANY_NUMBER`, `OPERATOR_REGISTERED_IN` and `OPERATOR_REGISTERED_OFFICE`, listed in `docs/security.md`, "Secrets". The pipeline refuses to deploy without each (`scripts/deploy-config.test.ts`, "with no setting at all fails, names every one, and writes nothing"), and a Worker without one serves none of the four pages (`test/deployment.test.ts`, "a Worker without the company that runs it names nobody").
+- [x] The four repository variables are set in GitHub with the values of entry 46 before this card's pull request is opened: its preview and the deploy fail the settings check without them. _The integrator's or the owner's to do; evidence is the settings step passing in the pull request's run._ _Set on 2026-11-22; the settings step passed in run 45074909880, and the preview `pr-78` names the company on `/`, `/sign-in`, `/terms` and `/privacy`._
+- [x] The owner has accepted screenshots of the foot of the home page and of both notices at 390px and 1280px, in both colour schemes. _The owner answered "Accepted: merge it" on 2026-11-22, of the 24 screenshots in `cmux-assets/browser/timesifier/TS-121/`._
+- [ ] In production, `https://timesifier.com/terms` and `https://timesifier.com/privacy` name Virtual Concept Technologies Limited, company number 17581385. _Proven after the deploy._
+- [ ] typecheck, lint and tests pass in the pipeline.
+
+Left for the owner, not part of this card: whether the emails name the company (see "Later"), and a way to the notices from the pages that have none (see "Later").
+
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
 ### TS-103 · The public pages at their best
@@ -536,7 +555,7 @@ Added while the card was built, each with its evidence:
 - [x] Nothing on the public pages is untrue. All 93 claims were audited on 11 November 2026; the 39 that were not plainly true were reworded to what is true or removed, and the checkable ones are tied to their facts. _`test/claims.test.ts`: "the privacy notice lists every cookie the application sets, and counts them"; "the pages say the database is in the EU because that is how the databases are created"; "wherever a page says the database is in the EU, it says what is not"; "the home page has one primary action, said the same at the top and at the end, and one way in". `e2e/landing.spec.ts`: "every drawing that shows a time carries the word that says it is an example". `docs/design-direction.md`, "Nothing on the page is untrue"._
 - [x] What the landing page shares with the product is in `app/components/`, in the gallery, with tests: the lockup, a sheet of rows, a changing time, the timer's mark. _`e2e/components.spec.ts`: "Digits is read as one time, is not announced as it changes, and redraws only the digit that changed"; "Ledger is a list of rows under a heading: a row is read as its title, its detail and its figure"._
 - [x] `docs/design-direction.md` gives the convention for the signed-in screens, concrete enough to restyle the shell and the existing pages, and the mindset as rules for every screen. _"For the product screens", "The mindset, on every screen". Guidance only: no signed-in screen is changed on this card._
-- [ ] The privacy notice names who runs Timesifier. _The owner's to supply: `CONTROLLER` in `app/routes/privacy.tsx`. Until then the notice says it is incomplete._
+- [x] The privacy notice names who runs Timesifier. _The owner supplied it on 2026-11-14: `docs/decisions.md`, entry 46. Built on TS-121, from the deployment's settings; ticked when TS-121's tests have run (`test/documents.test.ts`, "the privacy notice says which company answers for what is stored")._
 - [ ] `privacy@timesifier.com`, the address both notices give, receives mail and is read.
 
 ### TS-061 · Leave and working week
@@ -1191,3 +1210,5 @@ Not refined; no acceptance criteria yet. See "After release 1" in `docs/product.
 - Two-way calendar sync and meeting scoring
 - Integrations with chat, task and billing tools
 - Team analytics and workload balancing
+- The company's name in the emails. The messages name no company (TS-121): the owner decided that emails carry no company name or address until they say otherwise.
+- A way to the terms and the privacy notice, and so to the company's details, from the pages that have none: the signed-in application, the unsubscribe page, an invitation's page and an estimate's page (found on TS-121).

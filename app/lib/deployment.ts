@@ -1,7 +1,8 @@
 /**
  * What a deployment tells the Worker about itself: where it is served, which
  * Turnstile widget is its own, which address its mail comes from, its
- * secrets, and who the platform's owners are (TS-099).
+ * secrets, who the platform's owners are (TS-099), and which company runs it
+ * (TS-121).
  * docs/security.md, "Secrets", lists every one and where it is set.
  *
  * None has a default in the code. A value that is missing is never guessed:
@@ -16,7 +17,11 @@ export type Setting =
 	| "EMAIL_FROM"
 	| "BETTER_AUTH_SECRET"
 	| "TURNSTILE_SECRET_KEY"
-	| "PLATFORM_OWNERS";
+	| "PLATFORM_OWNERS"
+	| "OPERATOR_NAME"
+	| "OPERATOR_COMPANY_NUMBER"
+	| "OPERATOR_REGISTERED_IN"
+	| "OPERATOR_REGISTERED_OFFICE";
 
 /** Anything that may carry the settings: the Worker's `env`, or a part of it. */
 export type Settings = { readonly [Name in Setting]?: unknown };

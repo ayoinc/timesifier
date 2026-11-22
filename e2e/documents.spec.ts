@@ -12,6 +12,10 @@ const DOCUMENTS = [
 	{ path: "/terms", link: "Terms" },
 ] as const;
 
+/** Who runs the deployment, with the four details a company's website must show. */
+const OPERATOR =
+	/Timesifier is operated by .+, a company registered in .+ with company number [0-9A-Z]+\. Its registered office is .+\./;
+
 for (const { path, link } of DOCUMENTS) {
 	test.describe(path, () => {
 		for (const viewport of [
@@ -63,6 +67,13 @@ for (const { path, link } of DOCUMENTS) {
 				await expect(part.getByRole("heading", { level: 2 })).toHaveCount(1);
 				expect(await part.getAttribute("id")).toBeTruthy();
 			}
+		});
+
+		test("says which company runs Timesifier, in the page and at its foot", async ({ page }) => {
+			await page.goto(path);
+
+			await expect(page.getByRole("main")).toContainText(OPERATOR);
+			await expect(page.getByRole("contentinfo")).toContainText(OPERATOR);
 		});
 
 		test.describe("without script", () => {

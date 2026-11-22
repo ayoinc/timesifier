@@ -28,6 +28,11 @@ export default defineConfig({
 					APP_HOST: "timesifier.example",
 					PREVIEW_HOST_SUFFIX: "-timesifier.acme.workers.dev",
 					EMAIL_FROM: "no-reply@mail.timesifier.example",
+					// The company that runs it, which is nobody's. app/landing/operator.tsx.
+					OPERATOR_NAME: "Example Timekeeping Limited",
+					OPERATOR_COMPANY_NUMBER: "00000001",
+					OPERATOR_REGISTERED_IN: "Scotland",
+					OPERATOR_REGISTERED_OFFICE: "1 Example Row, Exampleton, EX1 1EX",
 				},
 			},
 		})),

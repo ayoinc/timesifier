@@ -19,6 +19,7 @@ import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
 import { DOCUMENT_EMAILS } from "~/invoices/mail.server";
 import { PHOTOS } from "~/landing/photos";
 import { PRIMARY_ACTION, PRIVACY_PATH, PUBLIC_PAGES, TERMS_PATH } from "~/landing/Site";
+import { homeStructuredData } from "~/landing/structured-data";
 import {
 	type Access,
 	mayChangeExpensesOf,
@@ -526,10 +527,29 @@ it("the structured data parses, and says no more than who and what Timesifier is
 	);
 	expect(Object.keys(byType).sort()).toEqual(["Organization", "SoftwareApplication"]);
 
-	// The brand, its address and its mark: the legal entity is not known yet.
-	const { logo, ...organisation } = byType.Organization as Record<string, string>;
-	expect(organisation).toEqual({ "@type": "Organization", name: "Timesifier", url: `${ORIGIN}/` });
-	const logoUrl = new URL(logo ?? "");
+	// The brand, its address and its mark, with the registered name and number of
+	// the company that runs it, from the same settings as the foot of the page.
+	const { logo, ...organisation } = byType.Organization as Record<string, unknown>;
+	expect(organisation).toEqual({
+		"@type": "Organization",
+		name: "Timesifier",
+		url: `${ORIGIN}/`,
+		legalName: env.OPERATOR_NAME,
+		identifier: {
+			"@type": "PropertyValue",
+			propertyID: "Company number",
+			value: env.OPERATOR_COMPANY_NUMBER,
+		},
+	});
+	// Where no company is named, the brand alone.
+	const [brandOnly] = homeStructuredData(ORIGIN, "")["@graph"];
+	expect(brandOnly).toEqual({
+		"@type": "Organization",
+		name: "Timesifier",
+		url: `${ORIGIN}/`,
+		logo: `${ORIGIN}/icon-512.png`,
+	});
+	const logoUrl = new URL(String(logo));
 	expect(logoUrl.origin).toBe(ORIGIN);
 	const files = import.meta.glob("../public/*.png");
 	expect(Object.keys(files)).toContain(`../public${logoUrl.pathname}`);
