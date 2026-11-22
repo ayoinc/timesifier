@@ -1,13 +1,12 @@
-import { and, asc, gte, inArray, lte, ne } from "drizzle-orm";
+import { and, asc, gte, lte, ne } from "drizzle-orm";
 import { data } from "react-router";
 import * as z from "zod";
-
+import { among } from "~/db";
 import { billingReportRequest } from "~/invoices/billing-reports.server";
 import { billingOf } from "~/invoices/context.server";
 import { taxesOf } from "~/invoices/documents.server";
 import { DEFAULT_XERO_OPTIONS, type XeroInvoice, xeroCsv } from "~/invoices/xero";
 import { exportFilename } from "~/organisations/export-filename";
-
 import type { Route } from "./+types/invoices.xero";
 
 // Issued invoices as a CSV for Xero's sales-invoice import (TS-088): those
@@ -48,13 +47,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const [lines, clients, contacts, taxes] = await Promise.all([
 		ids.length === 0
 			? []
-			: scope.invoiceLines.select((l) => inArray(l.invoiceId, ids), {
+			: scope.invoiceLines.select((l) => among(l.invoiceId, ids), {
 					orderBy: (l) => [asc(l.position)],
 				}),
-		clientIds.length === 0 ? [] : scope.clients.select((c) => inArray(c.id, clientIds)),
+		clientIds.length === 0 ? [] : scope.clients.select((c) => among(c.id, clientIds)),
 		clientIds.length === 0
 			? []
-			: scope.clientContacts.select((c) => inArray(c.clientId, clientIds), {
+			: scope.clientContacts.select((c) => among(c.clientId, clientIds), {
 					orderBy: (c) => [asc(c.createdAt)],
 				}),
 		taxesOf(scope),

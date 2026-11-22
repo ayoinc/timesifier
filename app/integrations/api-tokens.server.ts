@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gt, inArray, isNull, min } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, min } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { record } from "~/activity/activity.server";
 import { takeOne } from "~/auth/quota.server";
 import {
+	among,
 	apiTokenByHash,
 	type OrganisationScope,
 	organisationScope,
@@ -37,7 +38,7 @@ export async function listTokens(scope: OrganisationScope) {
 				.select({ id: users.id, name: users.name })
 				.from(users)
 				.where(
-					inArray(
+					among(
 						users.id,
 						tokens.map((t) => t.createdBy),
 					),

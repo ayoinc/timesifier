@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { useCallback, useState } from "react";
 import { Form, Link } from "react-router";
 import * as z from "zod";
@@ -7,7 +7,7 @@ import * as z from "zod";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Select } from "~/components/Select";
-import { type OrganisationScope, organisationScope } from "~/db";
+import { among, type OrganisationScope, organisationScope } from "~/db";
 import { categoryKeepers, listCategories } from "~/expenses/categories.server";
 import { UsualCategoriesSheet } from "~/expenses/ExpenseCategories";
 import {
@@ -143,7 +143,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			...new Set(projects.flatMap((p) => (p.clientId === null ? [] : [p.clientId]))),
 		];
 		const clients =
-			clientIds.length === 0 ? [] : await scope.clients.select((c) => inArray(c.id, clientIds));
+			clientIds.length === 0 ? [] : await scope.clients.select((c) => among(c.id, clientIds));
 		const clientOf = new Map(clients.map((c) => [c.id, c]));
 		const active = categories.filter((c) => !c.archived);
 		const administers = isAdministrator(membership.role);

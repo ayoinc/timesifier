@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record } from "~/activity/activity.server";
-import { type OrganisationScope, organisationScope, type ScopedAccessor, users } from "~/db";
+import { among, type OrganisationScope, type ScopedAccessor, users } from "~/db";
 import { lockDateOf } from "~/locks/locks.server";
 import {
 	type Access,
@@ -13,11 +13,8 @@ import {
 	mayDecideLeaveOf,
 	maySeeLeaveKindOf,
 } from "~/organisations/access";
-import { accessOf } from "~/organisations/access.server";
-import { type Membership, viewerOf } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
 import { type Timetables, timetableFor, timetablesOf } from "~/schedules/schedules.server";
-import { canSee } from "~/shell/destinations";
 import { type Person, peopleOf } from "~/teams/people.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { formatDayWithYear } from "~/time/format";
@@ -169,7 +166,7 @@ export async function leaveContext(
 			? Promise.resolve([])
 			: scope.leaveRequests.select((r) =>
 					and(
-						inArray(r.userId, ids),
+						among(r.userId, ids),
 						eq(r.status, "approved"),
 						lte(r.startsOn, last),
 						gte(r.endsOn, first),
@@ -501,7 +498,7 @@ export async function someoneElseDecides(
 	const managers = await scope.teamMembers.select(
 		(t) =>
 			and(
-				inArray(
+				among(
 					t.teamId,
 					mine.map((m) => m.teamId),
 				),
@@ -643,7 +640,7 @@ export async function requestsToDecide(
 		scope.leaveRequests.select(
 			(r) =>
 				and(
-					inArray(r.userId, ids),
+					among(r.userId, ids),
 					inArray(r.status, ["pending", "approved"]),
 					gte(r.endsOn, addDays(earliestToday, -366)),
 				),
@@ -691,43 +688,9 @@ async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name, email: users.email })
 		.from(users)
-		.where(inArray(users.id, wanted));
+		.where(among(users.id, wanted));
 	return new Map(rows.map((user) => [user.id, nameOrEmail(user)]));
 }
-
-/** How many requests wait for the decision of the person behind `membership`: part of the number on the Approvals link. */
-export async function pendingLeaveOf(membership: Membership): Promise<number | null> {
-	if (!canSee(viewerOf(membership), "approvals")) return null;
-	const scope = organisationScope(env.DB, membership.organisation.id);
-	const access = await accessOf(membership);
-	const people = await leaveDecidablePeople(scope, membership.organisation, access);
-	return countPending(scope, people);
-}
-
-/** How many requests of `people` wait for a decision: for leave, and for overtime and weekend work (TS-090). */
-export async function countPending(
-	scope: OrganisationScope,
-	people: readonly Person[],
-): Promise<number> {
-	const ids = people.map((p) => p.id);
-	if (ids.length === 0) return 0;
-	const [[leave], [work]] = await Promise.all([
-		scope.leaveRequests.sum(
-			() => sqlOne,
-			(r) => r.status,
-			(r) => and(inArray(r.userId, ids), eq(r.status, "pending")),
-		),
-		scope.workRequests.sum(
-			() => sqlOne,
-			(w) => w.status,
-			(w) => and(inArray(w.userId, ids), eq(w.status, "pending")),
-		),
-	]);
-	return (leave?.total ?? 0) + (work?.total ?? 0);
-}
-
-/** One for each row: what `sum` adds up to count them. */
-const sqlOne = sql<number>`1`;
 
 /** What owners and admins change of a kind. Public holidays have no allowance and need no decision. */
 export interface KindChange {
@@ -871,7 +834,7 @@ export async function teamLeaveAhead(
 		const mine = await scope.teamMembers.select((t) => eq(t.userId, access.userId));
 		if (mine.length > 0) {
 			const mates = await scope.teamMembers.select((t) =>
-				inArray(
+				among(
 					t.teamId,
 					mine.map((m) => m.teamId),
 				),
@@ -888,7 +851,7 @@ export async function teamLeaveAhead(
 			(r) =>
 				and(
 					ne(r.userId, access.userId),
-					only ? inArray(r.userId, [...only]) : undefined,
+					only ? among(r.userId, only) : undefined,
 					eq(r.status, "approved"),
 					lte(r.startsOn, last),
 					gte(r.endsOn, today),
@@ -935,7 +898,7 @@ export async function shortNoticeCounts(
 	if (ids.length === 0) return new Map();
 	const rows = await scope.leaveRequests.select((r) =>
 		and(
-			inArray(r.userId, ids),
+			among(r.userId, ids),
 			eq(r.shortNotice, true),
 			ne(r.status, "withdrawn"),
 			gte(r.startsOn, first),

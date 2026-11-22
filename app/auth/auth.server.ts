@@ -46,7 +46,11 @@ import { endpointPath, isOffered } from "./endpoints";
 import { allowedHosts, isOurHost } from "./hosts";
 import { keyedHash } from "./keyed-hash.server";
 import { errorName, logLibraryLine } from "./log.server";
-import { ORGANISATION_RATE_LIMITS, organisationPlugins } from "./organisations.server";
+import {
+	LIBRARY_CEILING,
+	ORGANISATION_RATE_LIMITS,
+	organisationPlugins,
+} from "./organisations.server";
 import { redirectRules } from "./redirects.server";
 import { signInCodeRules } from "./sign-in-code.server";
 import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
@@ -180,7 +184,13 @@ function createAuth(bindings: Bindings) {
 			// Cloudflare sets this header on every request and overwrites whatever
 			// the client sent; `X-Forwarded-For`, the default, can be forged.
 			ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
-			database: { generateId: () => uuidv7(), validateSchema: true },
+			// Every list Better Auth reads stops at 100 rows unless told otherwise:
+			// an organisation's invitations among them (`LIBRARY_CEILING`, TS-112).
+			database: {
+				generateId: () => uuidv7(),
+				validateSchema: true,
+				defaultFindManyLimit: LIBRARY_CEILING,
+			},
 			// The `__Host-` cookie that docs/security.md requires: `Secure`, `Path=/`
 			// and no `Domain`, so a browser accepts it from this host alone. Better
 			// Auth 1.7 has no option for it. `useSecureCookies: true` would put

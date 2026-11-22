@@ -1,7 +1,7 @@
-import { and, asc, count, desc, eq, gte, isNull, lt, max, or, type SQL, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull, lt, max, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
-
+import { among } from "./among";
 import {
 	invitations,
 	invoices,
@@ -148,14 +148,6 @@ function countsBy(
 		.from(table)
 		.where(among(table.organisationId, ids))
 		.groupBy(table.organisationId);
-}
-
-/**
- * `column` is one of `ids`, as one bound parameter however many they are: D1
- * takes at most 100 a statement, and the console lists up to 100 organisations.
- */
-function among(column: SQLiteColumn, ids: readonly string[]): SQL {
-	return sql`${column} in (select value from json_each(${JSON.stringify(ids)}))`;
 }
 
 /**

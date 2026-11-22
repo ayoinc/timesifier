@@ -1,9 +1,9 @@
 import { env, waitUntil } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, lt, lte, or, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, lt, lte, or, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
-import { users } from "~/db";
+import { among, users } from "~/db";
 import { dayStatus } from "~/leave/days";
 import { calendarOf, leaveContext } from "~/leave/leave.server";
 import {
@@ -195,6 +195,13 @@ function readCursor(cursor: string | undefined): { at: number; id: string } | nu
 	return Number.isSafeInteger(instant) && id ? { at: instant, id } : null;
 }
 
+/** A cursor of a list by day names the last row of the page before: its day and id. */
+function readDayCursor(cursor: string | undefined): { day: Day; id: string } | null {
+	if (!cursor) return null;
+	const [day, id] = cursor.split("_", 2);
+	return Day.safeParse(day).success && day && id ? { day, id } : null;
+}
+
 /** The page of `rows` to answer with: at most `perPage`, and the cursor of the next page, if one. */
 function page<R>(rows: R[], perPage: number, cursorOf: (row: R) => string) {
 	const shown = rows.slice(0, perPage);
@@ -220,7 +227,7 @@ async function namesOfPeople(ids: Iterable<string>): Promise<Map<string, string>
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name })
 		.from(users)
-		.where(inArray(users.id, unique));
+		.where(among(users.id, unique));
 	return new Map(rows.map((row) => [row.id, row.name]));
 }
 
@@ -233,7 +240,7 @@ async function zonesOfPeople(
 	const rows = await drizzle(env.DB)
 		.select({ id: users.id, timeZone: users.timeZone })
 		.from(users)
-		.where(inArray(users.id, unique));
+		.where(among(users.id, unique));
 	return new Map(rows.map((row) => [row.id, row.timeZone ?? fallback]));
 }
 
@@ -259,18 +266,28 @@ async function me({ caller }: Call) {
 	});
 }
 
-async function listUsers({ caller }: Call) {
+async function listUsers({ caller, url }: Call) {
+	const paging = queryOf(url, PageQuery);
+	if (!paging.success) return invalid(paging.error);
+	const perPage = paging.data.per_page;
+	const cursor = paging.data.cursor;
 	const people = peopleOf(caller.access, undefined);
-	if (people === "none") return json({ data: [] });
-	const memberships = await caller.scope.memberships.select((m) =>
-		people === null ? undefined : inArray(m.userId, people),
+	if (people === "none") return json({ data: [], next_cursor: null });
+	// By id, the cursor the last id of the page before.
+	const memberships = await caller.scope.memberships.select(
+		(m) =>
+			and(
+				people === null ? undefined : among(m.userId, people),
+				cursor ? gt(m.userId, cursor) : undefined,
+			),
+		{ orderBy: (m) => [asc(m.userId)], limit: perPage + 1 },
 	);
 	const rows = memberships.length
 		? await drizzle(env.DB)
 				.select({ id: users.id, name: users.name, email: users.email })
 				.from(users)
 				.where(
-					inArray(
+					among(
 						users.id,
 						memberships.map((m) => m.userId),
 					),
@@ -278,21 +295,18 @@ async function listUsers({ caller }: Call) {
 		: [];
 	const byId = new Map(rows.map((row) => [row.id, row]));
 	const administrator = isAdministrator(caller.role);
-	return json({
-		data: memberships
-			.map((membership) => {
-				const person = byId.get(membership.userId);
-				return {
-					id: membership.userId,
-					name: person?.name ?? null,
-					// An address is for those who administer people, as on Team.
-					...(administrator ? { email: person?.email ?? null } : {}),
-					role: membership.role,
-					is_contractor: membership.isContractor,
-				};
-			})
-			.sort((a, b) => String(a.name).localeCompare(String(b.name))),
+	const data = memberships.map((membership) => {
+		const person = byId.get(membership.userId);
+		return {
+			id: membership.userId,
+			name: person?.name ?? null,
+			// An address is for those who administer people, as on Team.
+			...(administrator ? { email: person?.email ?? null } : {}),
+			role: membership.role,
+			is_contractor: membership.isContractor,
+		};
 	});
+	return json(page(data, perPage, (row) => row.id));
 }
 
 async function listClients({ caller }: Call) {
@@ -386,12 +400,8 @@ async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number)
 			entries.map((e) => e.userId),
 			caller.organisation.timeZone,
 		),
-		caller.scope.projects.select((p) =>
-			inArray(
-				p.id,
-				entries.map((e) => e.projectId),
-			),
-		),
+		// Each project once: a page of 101 entries on one project is one id, not 101.
+		caller.scope.projects.select((p) => among(p.id, new Set(entries.map((e) => e.projectId)))),
 		caller.scope.clients.select(),
 		caller.scope.tasks.select(),
 	]);
@@ -445,7 +455,7 @@ async function listEntries({ caller, url, now }: Call) {
 	const entries = await caller.scope.timeEntries.select(
 		(e) => {
 			const conditions: (SQL | undefined)[] = [];
-			if (people !== null) conditions.push(inArray(e.userId, people));
+			if (people !== null) conditions.push(among(e.userId, people));
 			if (project_id) conditions.push(eq(e.projectId, project_id));
 			if (from) conditions.push(gte(e.startedAt, new Date(bounds(from, from, zone).from)));
 			if (to) conditions.push(lt(e.startedAt, new Date(bounds(to, to, zone).to)));
@@ -718,10 +728,15 @@ async function listWorkDays({ caller, url }: Call) {
 
 async function listLeave({ caller, url }: Call) {
 	const range = queryOf(url, RangeQuery);
+	const paging = queryOf(url, PageQuery);
 	if (!range.success) return invalid(range.error);
+	if (!paging.success) return invalid(paging.error);
 	const { from, to, user_id } = range.data;
+	const perPage = paging.data.per_page;
+	const cursor = readDayCursor(paging.data.cursor);
 	// Everyone sees that a colleague is on leave, as the live status says; the
 	// kind, and requests not yet approved, only where the pages show them.
+	// By the day each starts, then id; the cursor the last of the page before.
 	const requests = await caller.scope.leaveRequests.select(
 		(l) =>
 			and(
@@ -729,28 +744,28 @@ async function listLeave({ caller, url }: Call) {
 				to ? lte(l.startsOn, to) : undefined,
 				from ? gte(l.endsOn, from) : undefined,
 				or(eq(l.status, "approved"), eq(l.userId, caller.user.id)),
+				cursor
+					? or(gt(l.startsOn, cursor.day), and(eq(l.startsOn, cursor.day), gt(l.id, cursor.id)))
+					: undefined,
 			),
-		{ orderBy: (l) => [l.startsOn], limit: 1000 },
+		{ orderBy: (l) => [asc(l.startsOn), asc(l.id)], limit: perPage + 1 },
 	);
 	const [people, kinds] = await Promise.all([
 		namesOfPeople(requests.map((r) => r.userId)),
 		caller.scope.leaveKinds.select(),
 	]);
 	const kindNames = new Map(kinds.map((kind) => [kind.id, kind.name]));
-	return json({
-		data: requests.map((request) => ({
-			id: request.id,
-			user: ref(request.userId, people),
-			kind: maySeeLeaveKindOf(caller.access, request.userId)
-				? ref(request.kindId, kindNames)
-				: null,
-			starts_on: request.startsOn,
-			ends_on: request.endsOn,
-			starts_half: request.startsHalf,
-			ends_half: request.endsHalf,
-			status: request.status,
-		})),
-	});
+	const rows = requests.map((request) => ({
+		id: request.id,
+		user: ref(request.userId, people),
+		kind: maySeeLeaveKindOf(caller.access, request.userId) ? ref(request.kindId, kindNames) : null,
+		starts_on: request.startsOn,
+		ends_on: request.endsOn,
+		starts_half: request.startsHalf,
+		ends_half: request.endsHalf,
+		status: request.status,
+	}));
+	return json(page(rows, perPage, (row) => `${row.starts_on}_${row.id}`));
 }
 
 async function listExpenses({ caller, url }: Call) {
@@ -769,7 +784,7 @@ async function listExpenses({ caller, url }: Call) {
 	const expenses = await caller.scope.expenses.select(
 		(x) =>
 			and(
-				people === null ? undefined : inArray(x.userId, people),
+				people === null ? undefined : among(x.userId, people),
 				project_id ? eq(x.projectId, project_id) : undefined,
 				from ? gte(x.spentOn, from) : undefined,
 				to ? lte(x.spentOn, to) : undefined,

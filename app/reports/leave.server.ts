@@ -1,12 +1,11 @@
 import { and, gte, inArray, lte } from "drizzle-orm";
-
+import { among } from "~/db";
 import { halfDaysByDay } from "~/leave/days";
 import { HOLIDAY_KIND, LeaveStatus } from "~/leave/kinds";
 import { leaveKindsOf, publicHolidaysOf } from "~/leave/leave.server";
 import { maySeeLeaveKindOf } from "~/organisations/access";
 import { timetablesOf } from "~/schedules/schedules.server";
 import type { Day } from "~/time/calendar";
-
 import type { Person, ReportRequest } from "./reports.server";
 
 /**
@@ -71,7 +70,7 @@ export async function leaveBalances(
 		publicHolidaysOf(scope, { first, last }),
 		scope.leaveRequests.select((r) =>
 			and(
-				inArray(
+				among(
 					r.userId,
 					people.map((p) => p.id),
 				),

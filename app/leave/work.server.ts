@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
-import type { OrganisationScope, ScopedAccessor } from "~/db";
+import { among, type OrganisationScope, type ScopedAccessor } from "~/db";
 import {
 	type Access,
 	mayCancelLeaveOf,
@@ -9,7 +9,6 @@ import {
 } from "~/organisations/access";
 import type { Person } from "~/teams/people.server";
 import { addDays, type Day, daysFrom } from "~/time/calendar";
-
 import { LeaveStatus, LONGEST_REQUEST_DAYS } from "./kinds";
 import {
 	APPROVED_ALONE,
@@ -285,7 +284,7 @@ export async function workToDecide(
 	const rows = await scope.workRequests.select(
 		(w) =>
 			and(
-				inArray(w.userId, ids),
+				among(w.userId, ids),
 				inArray(w.status, ["pending", "approved"]),
 				gte(w.endsOn, addDays(earliestToday, -366)),
 			),

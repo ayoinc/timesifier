@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
-import { inArray } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { type OrganisationScope, users } from "~/db";
+import { among, type OrganisationScope, users } from "~/db";
 import { type Access, timeScopeOf } from "~/organisations/access";
 import { addressLine, nameOrEmail } from "~/organisations/people";
+import { Role } from "~/organisations/roles";
 import { zoneOf } from "~/time/zones";
 
 /**
@@ -37,14 +38,14 @@ export async function peopleOf(
 	const wanted = only === undefined ? undefined : [...new Set(only)];
 	if (wanted?.length === 0) return [];
 	const memberships = await scope.memberships.select((m) =>
-		wanted ? inArray(m.userId, wanted) : undefined,
+		wanted ? among(m.userId, wanted) : undefined,
 	);
 	const ids = memberships.map((m) => m.userId);
 	if (ids.length === 0) return [];
 	const accounts = await drizzle(env.DB)
 		.select({ id: users.id, name: users.name, email: users.email, timeZone: users.timeZone })
 		.from(users)
-		.where(inArray(users.id, ids));
+		.where(among(users.id, ids));
 	return accounts
 		.map((account) => ({
 			id: account.id,
@@ -67,4 +68,39 @@ export function teamPeopleOf(
 ): Promise<Person[]> {
 	if (timeScopeOf(access).everyone) return peopleOf(scope, organisation);
 	return peopleOf(scope, organisation, access.managed);
+}
+
+/** A membership as the Members page lists it. */
+export interface Member {
+	/** The membership's id. */
+	id: string;
+	userId: string;
+	role: Role;
+	user: { name: string | null; email: string };
+}
+
+/**
+ * Everyone in the organisation with their role, in the order they joined:
+ * what the Members page lists. Read here, through the organisation's scope,
+ * and not from Better Auth's `list-members`, which is not offered: it names
+ * the members' accounts in a parameter each, past D1's 100 (TS-112).
+ */
+export async function membersByJoining(scope: OrganisationScope): Promise<Member[]> {
+	const memberships = await scope.memberships.select(undefined, {
+		orderBy: (m) => [asc(m.createdAt), asc(m.id)],
+	});
+	const accounts = await drizzle(env.DB)
+		.select({ id: users.id, name: users.name, email: users.email })
+		.from(users)
+		.where(
+			among(
+				users.id,
+				memberships.map((m) => m.userId),
+			),
+		);
+	const byId = new Map(accounts.map(({ id, ...user }) => [id, user]));
+	return memberships.flatMap((m) => {
+		const user = byId.get(m.userId);
+		return user ? [{ id: m.id, userId: m.userId, role: Role.parse(m.role), user }] : [];
+	});
 }

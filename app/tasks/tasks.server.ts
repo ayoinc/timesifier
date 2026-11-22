@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, type ScopedStatement, uuidv7 } from "~/db";
+import { among, type OrganisationScope, type ScopedStatement, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 
 /**
@@ -181,10 +181,7 @@ export async function tasksOfProjects(
 	const [tasks, links] = await Promise.all([
 		scope.tasks.select(undefined, { orderBy: (t) => [asc(t.nameKey)] }),
 		scope.projectTasks.select(
-			projectIds === undefined
-				? undefined
-				: (pt) =>
-						sql`${pt.projectId} in (select value from json_each(${JSON.stringify(projectIds)}))`,
+			projectIds === undefined ? undefined : (pt) => among(pt.projectId, projectIds),
 		),
 	]);
 	const byProject = new Map<string, ProjectTask[]>();
@@ -298,16 +295,16 @@ export async function setProjectTaskBillable(
 		};
 	}
 	const links = await scope.projectTasks.select((pt) =>
-		and(eq(pt.projectId, projectId), inArray(pt.taskId, [...taskIds].slice(0, 90))),
+		and(eq(pt.projectId, projectId), among(pt.taskId, taskIds)),
 	);
 	const changing = links.filter((link) => link.billable !== billable).map((link) => link.taskId);
 	if (changing.length === 0) return { ok: true, count: links.length };
 	await scope.batch([
 		scope.projectTasks.statements.update({ billable }, (pt) =>
-			and(eq(pt.projectId, projectId), inArray(pt.taskId, changing)),
+			and(eq(pt.projectId, projectId), among(pt.taskId, changing)),
 		),
 		scope.timeEntries.statements.update({ billable }, (e) =>
-			and(eq(e.projectId, projectId), inArray(e.taskId, changing), notInvoiced(scope, e.id)),
+			and(eq(e.projectId, projectId), among(e.taskId, changing), notInvoiced(scope, e.id)),
 		),
 		recordStatement(
 			scope,
@@ -347,13 +344,12 @@ export async function rerateForBillingType(
 	const tasks = await scope.tasks.select((t) => eq(t.billableByDefault, true));
 	const billableIds = tasks.map((t) => t.id);
 	if (billableIds.length === 0) return [];
-	const among = sql`(select value from json_each(${JSON.stringify(billableIds)}))`;
 	return [
 		scope.projectTasks.statements.update({ billable: true }, (pt) =>
-			and(eq(pt.projectId, projectId), sql`${pt.taskId} in ${among}`),
+			and(eq(pt.projectId, projectId), among(pt.taskId, billableIds)),
 		),
 		scope.timeEntries.statements.update({ billable: true }, (e) =>
-			and(eq(e.projectId, projectId), sql`${e.taskId} in ${among}`, notInvoiced(scope, e.id)),
+			and(eq(e.projectId, projectId), among(e.taskId, billableIds), notInvoiced(scope, e.id)),
 		),
 	];
 }

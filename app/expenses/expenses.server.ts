@@ -1,10 +1,9 @@
 import { env } from "cloudflare:workers";
-import { and, asc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import { changes, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, organisations, uuidv7 } from "~/db";
+import { among, type OrganisationScope, organisations, uuidv7 } from "~/db";
 import type { LockReason } from "~/locks/locks";
 import { invoicedIds, lockNoticeOf, lockReasonsOn } from "~/locks/locks.server";
 import { lineAmount, type Money, totalsByCurrency } from "~/money/money";
@@ -123,11 +122,6 @@ export async function termsOf(organisationId: string) {
 		.where(eq(organisations.id, organisationId))
 		.limit(1);
 	return { currency: row?.currency ?? "GBP" };
-}
-
-/** `column` is one of `ids`, as one bound parameter however many they are. */
-export function among(column: SQLiteColumn, ids: readonly string[]): SQL {
-	return sql`${column} in (select value from json_each(${JSON.stringify(ids)}))`;
 }
 
 type ExpenseRow = Awaited<ReturnType<OrganisationScope["expenses"]["select"]>>[number];
@@ -419,7 +413,7 @@ export async function expensesOf(
 		tagsOfExpenses(scope, ids),
 		projectIds.length === 0
 			? Promise.resolve([])
-			: scope.projects.select((p) => inArray(p.id, projectIds)),
+			: scope.projects.select((p) => among(p.id, projectIds)),
 		categoriesById(scope, [...new Set(rows.map((row) => row.categoryId))]),
 	]);
 	const projectNames = new Map(projects.map((p) => [p.id, p.name]));

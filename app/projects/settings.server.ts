@@ -1,9 +1,9 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import type { BillingType } from "~/billing/billable";
 import type { BudgetKind } from "~/budgets/budget";
-import type { OrganisationScope, ScopedStatement } from "~/db";
+import { among, type OrganisationScope, type ScopedStatement } from "~/db";
 import type { RateMode } from "~/rates/price";
 import { rerateForBillingType } from "~/tasks/tasks.server";
 
@@ -96,11 +96,11 @@ export async function changeBudget(
 	if (keys.length > 0) {
 		if (perTask) {
 			const onProject = await scope.projectTasks.select((pt) =>
-				and(eq(pt.projectId, projectId), inArray(pt.taskId, keys.slice(0, 90))),
+				and(eq(pt.projectId, projectId), among(pt.taskId, keys)),
 			);
 			if (onProject.length !== keys.length) return { ok: false, reason: "not-on-project" };
 		} else if (perPerson) {
-			const members = await scope.memberships.select((m) => inArray(m.userId, keys.slice(0, 90)));
+			const members = await scope.memberships.select((m) => among(m.userId, keys));
 			if (members.length !== keys.length) return { ok: false, reason: "not-on-project" };
 		}
 	}

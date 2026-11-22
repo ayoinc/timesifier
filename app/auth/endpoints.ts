@@ -23,14 +23,15 @@ export const OFFERED_ENDPOINTS: Record<string, true> = {
 	"POST /sign-out": true,
 	"POST /revoke-sessions": true,
 
-	// Organisations: the fifteen that the gate in organisations.server.ts admits.
+	// Organisations: the thirteen that the gate in organisations.server.ts admits.
+	// Not `get-full-organization` or `list-members`: no page calls them, and the
+	// plugin reads their members' people with one bound parameter a member,
+	// past D1's 100 in any organisation of more than about 99 (decision 40).
 	"POST /organization/create": true,
 	"GET /organization/list": true,
 	"GET /organization/get-invitation": true,
 	"POST /organization/accept-invitation": true,
 	"POST /organization/reject-invitation": true,
-	"GET /organization/get-full-organization": true,
-	"GET /organization/list-members": true,
 	"GET /organization/list-invitations": true,
 	"POST /organization/update": true,
 	"POST /organization/delete": true,

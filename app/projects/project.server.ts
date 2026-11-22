@@ -1,10 +1,10 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { billableMinuteMinor } from "~/billing/billable";
 import { type BudgetFigures, projectBudget } from "~/budgets/budget.server";
-import { type OrganisationScope, users } from "~/db";
+import { among, type OrganisationScope, users } from "~/db";
 import { formatMoney, roundHalfUp } from "~/money/money";
 import { maySeeRates, type TimeScope } from "~/organisations/access";
 import type { Membership } from "~/organisations/membership.server";
@@ -38,22 +38,13 @@ import { organisationMoney, pricedProject, pricingOf } from "./money.server";
 /** The most entries without a rate the page lists. */
 const MISSING_SHOWN = 50;
 
-/** `column` is one of `people`, as one bound parameter however many they are. */
-function amongPeople(column: Parameters<typeof eq>[0], people: readonly string[]) {
-	return sql`${column} in (select value from json_each(${JSON.stringify(people)}))`;
-}
-
 /** How each of these people is named. */
 export async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
-	const names = new Map<string, string>();
-	for (let at = 0; at < ids.length; at += 90) {
-		const rows = await drizzle(env.DB)
-			.select({ id: users.id, name: users.name, email: users.email })
-			.from(users)
-			.where(inArray(users.id, ids.slice(at, at + 90)));
-		for (const row of rows) names.set(row.id, nameOrEmail(row));
-	}
-	return names;
+	const rows = await drizzle(env.DB)
+		.select({ id: users.id, name: users.name, email: users.email })
+		.from(users)
+		.where(among(users.id, ids));
+	return new Map(rows.map((row) => [row.id, nameOrEmail(row)]));
 }
 
 /** A rate as the page shows it: in force today, and any from a later day. */
@@ -112,10 +103,7 @@ export async function projectPage(
 
 	const [entries, taskLists, allTasks, tagIds, tags, members, pricing, alerts] = await Promise.all([
 		scope.timeEntries.select((e) =>
-			and(
-				eq(e.projectId, projectId),
-				whose.everyone ? undefined : amongPeople(e.userId, whose.people),
-			),
+			and(eq(e.projectId, projectId), whose.everyone ? undefined : among(e.userId, whose.people)),
 		),
 		tasksOfProjects(scope, [projectId]),
 		activeTasks(scope),

@@ -25,7 +25,7 @@ const ROLES: Role[] = ["owner", "admin", "finance", "member"];
  * that every cell has its evidence and that none is contradicted.
  */
 const TABLE = {
-	"See the organisation and its members": {
+	"See the organisation": {
 		owner: "yes",
 		admin: "yes",
 		finance: "yes",
@@ -135,36 +135,23 @@ const leave: Pick<Attempt, "request" | "done"> = {
 	done: async ({ actor }) => actor.memberId !== null && (await roleOf(actor.memberId)) === null,
 };
 
+/**
+ * Seeing the organisation is `GET /organization/list`. The plugin's
+ * `get-full-organization` and `list-members` are not offered: no page called
+ * them, and they fail past about 99 members (TS-112, decision 40). Who sees the
+ * members is the Members page's audience (docs/navigation.md).
+ */
+const see: Attempt = {
+	to: "see the organisation",
+	request: ({ actor }) => get("/organization/list", { cookie: actor.cookie }),
+	async done({ organisation }, response) {
+		if (!response.ok) return false;
+		const listed = (await response.json()) as { id: string; name: string }[];
+		return listed.some(({ id, name }) => id === organisation.id && name === "Acme");
+	},
+};
+
 const attempts = {
-	see: {
-		to: "see the organisation and its members",
-		request: ({ organisation, actor }) =>
-			get(`/organization/get-full-organization?organizationId=${organisation.id}`, {
-				cookie: actor.cookie,
-			}),
-		async done(_stage, response) {
-			if (!response.ok) return false;
-			const { name, members } = (await response.json()) as {
-				name: string;
-				members: { user: { email: string } }[];
-			};
-			const emails = members.map(({ user }) => user.email).sort();
-			return (
-				name === "Acme" &&
-				emails.join() === "actor@example.com,amara@example.com,mo@example.com,olu@example.com"
-			);
-		},
-	},
-	listMembers: {
-		to: "list the organisation's members",
-		request: ({ organisation, actor }) =>
-			get(`/organization/list-members?organizationId=${organisation.id}`, { cookie: actor.cookie }),
-		async done(_stage, response) {
-			if (!response.ok) return false;
-			const { members } = (await response.json()) as { members: unknown[] };
-			return members.length === 4;
-		},
-	},
 	rename: {
 		to: "rename the organisation",
 		request: ({ organisation, actor }) =>
@@ -263,13 +250,7 @@ function row(action: Action, attempt: Attempt, can: Record<Role, boolean>): Tria
 }
 
 const trials: Trial[] = [
-	...row("See the organisation and its members", attempts.see, {
-		owner: true,
-		admin: true,
-		finance: true,
-		member: true,
-	}),
-	...row("See the organisation and its members", attempts.listMembers, {
+	...row("See the organisation", see, {
 		owner: true,
 		admin: true,
 		finance: true,
@@ -492,11 +473,9 @@ describe("a role", () => {
 			const stage = await stageFor(as);
 
 			const listed = await attempts.listInvitations.request(stage);
-			const withTheOrganisation = await attempts.see.request(stage);
 
 			expect(listed.status).toBe(sees ? 200 : 403);
 			expect(await attempts.listInvitations.done(stage, listed)).toBe(sees);
-			expect((await withTheOrganisation.text()).includes(stage.invitationId)).toBe(sees);
 		},
 	);
 
