@@ -375,3 +375,54 @@ export async function daysOver(
 		(day) => day.overMinutes > 0,
 	);
 }
+
+/**
+ * The days over their limit in each of `periods`, by period, for many people
+ * at once (TR-01): what `daysOver` says of each, read in one query of each
+ * kind whatever the number of people, for Approvals and Approve all. A period
+ * with no day over is left out.
+ */
+export async function daysOverOf(
+	scope: OrganisationScope,
+	periods: readonly { id: string; userId: string; startsOn: Day; endsOn: Day }[],
+	now: number,
+): Promise<Map<string, DayRule[]>> {
+	const over = new Map<string, DayRule[]>();
+	if (periods.length === 0) return over;
+	const ids = [...new Set(periods.map((p) => p.userId))];
+	const first = periods.map((p) => p.startsOn).sort()[0] as Day;
+	const last = periods
+		.map((p) => p.endsOn)
+		.sort()
+		.at(-1) as Day;
+	const rules = await rulesRowOf(scope.organisationId);
+	const from = rules.overtimeWeekCap === null ? first : weekOf(rules, first);
+	const [context, work, rows] = await Promise.all([
+		leaveContext(scope, ids, first, last),
+		approvedWorkOf(scope, ids, first, last),
+		scope.timeEntries.select((e) =>
+			and(among(e.userId, ids), gte(e.spentOn, from), lte(e.spentOn, last)),
+		),
+	]);
+	for (const period of periods) {
+		const calendar = {
+			...calendarOf(context, period.userId),
+			rules,
+			work: work.filter((w) => w.userId === period.userId),
+		};
+		const entries: Timed[] = rows
+			.filter((row) => row.userId === period.userId)
+			.map((row) => ({
+				id: row.id,
+				startedAt: row.startedAt.getTime(),
+				endedAt: row.endedAt?.getTime() ?? null,
+				overtime: row.overtime,
+				day: row.spentOn,
+			}));
+		const days = dayRules(calendar, daysFrom(period.startsOn, period.endsOn), (day) =>
+			trackedOn(entries, day, now),
+		).filter((day) => day.overMinutes > 0);
+		if (days.length > 0) over.set(period.id, days);
+	}
+	return over;
+}

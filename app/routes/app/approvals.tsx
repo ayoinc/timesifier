@@ -4,11 +4,13 @@ import { data, Link, redirect, useNavigate } from "react-router";
 import * as z from "zod";
 
 import {
+	type ApprovedAll,
 	approvalsFor,
 	approveAll,
-	type Decided,
+	type DecisionOutcome,
 	decidablePeople,
 	decide,
+	managersAwayOf,
 	pendingPeriods,
 } from "~/approvals/approvals.server";
 import {
@@ -21,6 +23,8 @@ import {
 	STATUSES,
 	withoutTab,
 } from "~/approvals/choices";
+import { namesOf, refusersNamed, refusersOfAll } from "~/approvals/refusals.server";
+import { managersAwaySentence, refusedBeforeSentence } from "~/approvals/words";
 import { Button } from "~/components/Button";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
@@ -44,7 +48,7 @@ import { spanLabel } from "~/leave/words";
 import { decideWork, workToDecide } from "~/leave/work.server";
 import { parseRequest } from "~/lib/validate";
 import { formatMoney, type Money, totalsByCurrency } from "~/money/money";
-import { mayReopenPeriods } from "~/organisations/access";
+import { isAdministrator, mayApproveAfterRefusals, mayReopenPeriods } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -59,7 +63,7 @@ import { viewedPeriod } from "~/teams/viewed-period.server";
 import { timeByProject } from "~/teams/week.server";
 import { hours, periodLabel, regularAndOvertime, WEEK_PARAM } from "~/teams/words";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
-import { formatDayAndTime, formatDuration, formatRange } from "~/time/format";
+import { formatDay, formatDayAndTime, formatDuration, formatRange } from "~/time/format";
 
 import type { Route } from "./+types/approvals";
 import { FormSheet } from "./FormSheet";
@@ -148,6 +152,34 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			viewed.period.endsOn,
 		),
 	]);
+	// What waits on managers who are on leave today waits on owners and admins,
+	// and they are told so (D6, decision 48).
+	const away = isAdministrator(access.role)
+		? await managersAwayOf(
+				scope,
+				[
+					...approvals.pending.map((p) => p.person.id),
+					...leaveRequests.pending.map((r) => r.person.id),
+					...work.pending.map((w) => w.person.id),
+				],
+				organisation,
+				now,
+			)
+		: new Map<string, string[]>();
+	const awayNote = (personId: string) => {
+		const managers = away.get(personId);
+		return managers ? managersAwaySentence(managers) : null;
+	};
+	// A request someone else refused before, this person may not approve, and is told why (D5, decision 47).
+	const [leaveRefused, workRefused] = await Promise.all([
+		refusersOfAll(scope, "leave", leaveRequests.pending),
+		refusersOfAll(scope, "work", work.pending),
+	]);
+	const refusers = await namesOf([...leaveRefused.values(), ...workRefused.values()].flat());
+	const refusedNote = (by: readonly string[] | undefined) =>
+		by && !mayApproveAfterRefusals(access, by)
+			? refusedBeforeSentence(by.map((id) => refusers.get(id) ?? ""))
+			: null;
 	// A person whose whole period was leave, public holidays and days not worked
 	// had nothing to submit (TS-061).
 	const periodDays = daysFrom(viewed.period.startsOn, viewed.period.endsOn);
@@ -192,6 +224,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		periodId: string | null;
 		/** What their expenses in the week come to, or null when they have none (TS-070). */
 		expenses: string | null;
+		/** What Submit would have refused, "Over by 7:30 on Tue 10"; null when no day is over (TR-01). */
+		overLimit: string | null;
+		/** Why it waits for an owner or admin, when its managers are on leave (D6). */
+		waits: string | null;
 	};
 	const moneyWords = (totals: readonly Money[]) =>
 		totals.map((m) => formatMoney(m.amountMinor, m.currency, "en-GB")).join(" + ");
@@ -206,6 +242,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		detail: string,
 		periodId: string | null = null,
 		comment: string | null = null,
+		overLimit: string | null = null,
 	): Row => ({
 		id: periodId ?? person.id,
 		// The name, or the start of the address with the whole of it under (harvest-taste item 9).
@@ -223,11 +260,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		comment,
 		periodId,
 		expenses: expensesOf(person.id),
+		overLimit,
+		waits: periodId !== null && query.status === "pending" ? awayNote(person.id) : null,
 	});
 	const decided = (p: (typeof approvals.decided)[number]) =>
 		row(
 			p.person,
-			`${p.status === "approved" ? "Approved" : "Returned"} by ${p.decidedBy}, ${date.format(p.decidedAt)}`,
+			`${p.status === "approved" ? "Approved" : "Returned"} by ${p.decidedBy || "the system"}, ${date.format(p.decidedAt)}`,
 			p.id,
 			p.comment,
 		);
@@ -235,7 +274,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	switch (query.status) {
 		case "pending":
 			rows = approvals.pending.map((p) =>
-				row(p.person, `Submitted ${date.format(p.submittedAt)}`, p.id),
+				row(
+					p.person,
+					`Submitted ${p.bySystem ? "by the system, " : ""}${date.format(p.submittedAt)}`,
+					p.id,
+					null,
+					p.overLimit,
+				),
 			);
 			break;
 		case "approved":
@@ -281,6 +326,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			notice: noticeLabel(r),
 			shortNotice: r.shortNotice,
 			noticeReason: r.noticeReason,
+			/** Why it waits on someone else, or on owners and admins (D5, D6). */
+			waits: refusedNote(leaveRefused.get(r.id)) ?? awayNote(r.person.id),
 		})),
 		/** The requests for overtime and weekend work waiting for this person's decision (TS-090). */
 		workWaiting: work.pending.map((w) => ({
@@ -290,6 +337,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			days: formatRange(w.startsOn, w.endsOn),
 			perDay: `${formatDuration(w.minutesPerDay * 60)} a day`,
 			reason: w.reason,
+			/** Why it waits on someone else, or on owners and admins (D5, D6). */
+			waits: refusedNote(workRefused.get(w.id)) ?? awayNote(w.person.id),
 		})),
 		rows:
 			rows?.map((r) => ({ ...r, split: regularAndOvertime(r.seconds, r.overtimeSeconds) })) ?? null,
@@ -321,7 +370,7 @@ const Id = z.string().min(1).max(64);
 const Comment = z.string().trim().min(1).max(PERIOD_COMMENT_MAX_LENGTH);
 
 const form = z.discriminatedUnion("intent", [
-	z.object({ intent: z.literal("approve"), periodId: Id }),
+	z.object({ intent: z.literal("approve"), periodId: Id, overLimit: z.literal("on").optional() }),
 	z.object({ intent: z.literal("approve-all"), startsOn: z.string() }),
 	z.object({ intent: z.literal("return"), periodId: Id, comment: z.string() }),
 	z.object({ intent: z.literal("reopen"), periodId: Id, comment: z.string() }),
@@ -334,16 +383,56 @@ const form = z.discriminatedUnion("intent", [
 
 const COMMENT_PROBLEM = `Say why, in 1 to ${PERIOD_COMMENT_MAX_LENGTH} characters.`;
 
-const DECIDED: Record<Exclude<Decided, "done">, [string, number]> = {
-	missing: ["That timesheet is no longer there.", 404],
-	"not-allowed": [NOT_ALLOWED, 403],
-	stale: ["That timesheet has changed since this page was opened. Look at it again.", 409],
-};
+function outcome({ result, overLimit, lockedThrough }: DecisionOutcome, said: string) {
+	switch (result) {
+		case "done":
+			return done(said);
+		case "missing":
+			return declined("That timesheet is no longer there.", 404);
+		case "not-allowed":
+			return declined(NOT_ALLOWED, 403);
+		case "stale":
+			return declined(
+				"That timesheet has changed since this page was opened. Look at it again.",
+				409,
+			);
+		case "running":
+			return declined(
+				"A timer of theirs is running in this week. It can be approved once the timer has stopped.",
+				409,
+			);
+		case "over":
+			return declined(
+				`${overLimit}. Approve it over its limit only if that is what should be paid.`,
+				409,
+			);
+		case "locked":
+			return declined(
+				`This week is on or before the lock date${lockedThrough ? `, ${formatDay(lockedThrough)}` : ""}. Move the lock date back first, or approve it as it is.`,
+				409,
+			);
+	}
+}
 
-function outcome(result: Decided, said: string) {
-	if (result === "done") return done(said);
-	const [problem, status] = DECIDED[result];
-	return declined(problem, status);
+/** What Approve all says it did, and what it left and why (TR-01, TR-02). */
+function approvedAllSaid({ approved, over, running }: ApprovedAll): string {
+	if (approved + over + running === 0) return "Nothing was waiting.";
+	const said = [
+		approved === 0
+			? "No timesheet approved."
+			: `${approved} ${approved === 1 ? "timesheet" : "timesheets"} approved.`,
+	];
+	if (over > 0) {
+		said.push(
+			`${over} ${over === 1 ? "was left: it has" : "were left: each has"} a day over its limit.`,
+		);
+	}
+	if (running > 0) {
+		said.push(
+			`${running} ${running === 1 ? "was left: a timer is still running in it" : "were left: a timer is still running in each"}.`,
+		);
+	}
+	return said.join(" ");
 }
 
 const LEAVE_DECIDED: Record<Exclude<Stepped, "done">, [string, number]> = {
@@ -351,6 +440,7 @@ const LEAVE_DECIDED: Record<Exclude<Stepped, "done">, [string, number]> = {
 	"not-allowed": [NOT_ALLOWED, 403],
 	stale: ["That request has changed since this page was opened. Look at it again.", 409],
 	locked: ["Those days are on or before the lock date, so the request can no longer change.", 409],
+	"refused-before": ["", 403],
 };
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -369,6 +459,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (result === "done") {
 				return done(input.intent === "approve-leave" ? "Leave approved." : "Leave refused.");
 			}
+			if (result === "refused-before") {
+				return declined(
+					refusedBeforeSentence(await refusersNamed(scope, "leave", input.requestId)),
+					403,
+				);
+			}
 			const [problem, status] = LEAVE_DECIDED[result];
 			return declined(problem, status);
 		}
@@ -381,24 +477,31 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (result === "done") {
 				return done(input.intent === "approve-work" ? "Request approved." : "Request refused.");
 			}
+			if (result === "refused-before") {
+				return declined(
+					refusedBeforeSentence(await refusersNamed(scope, "work", input.requestId)),
+					403,
+				);
+			}
 			const [problem, status] = LEAVE_DECIDED[result];
 			return declined(problem, status);
 		}
 		case "approve":
 			return outcome(
-				await decide(scope, access, input.periodId, { action: "approved" }),
+				await decide(
+					scope,
+					access,
+					input.periodId,
+					{ action: "approved" },
+					{ overLimitConfirmed: input.overLimit === "on" },
+				),
 				"Timesheet approved.",
 			);
 		case "approve-all": {
 			const startsOn = Day.safeParse(input.startsOn);
 			if (!startsOn.success) return declined("That week is not one this page knows.");
 			const people = await decidablePeople(scope, membership.organisation, access);
-			const count = await approveAll(scope, access, people, startsOn.data);
-			return done(
-				count === 0
-					? "Nothing was waiting."
-					: `${count} ${count === 1 ? "timesheet" : "timesheets"} approved.`,
-			);
+			return done(approvedAllSaid(await approveAll(scope, access, people, startsOn.data)));
 		}
 		case "return":
 		case "reopen": {
@@ -424,7 +527,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 type Loaded = Route.ComponentProps["loaderData"];
-type Target = { id: string; name: string };
+type Target = { id: string; name: string; overLimit?: string | null };
 
 /** What a status with nothing in it says, for the week shown. */
 const NOTHING: Record<(typeof STATUSES)[number], string> = {
@@ -545,7 +648,11 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 						{query.group === "person" ? (
 							<LedgerRows label={`${status}, by person`}>
 								{rows.map((p) => {
-									const on = { id: p.periodId ?? "", name: `${p.person.name}'s` };
+									const on = {
+										id: p.periodId ?? "",
+										name: `${p.person.name}'s`,
+										overLimit: p.overLimit,
+									};
 									return (
 										<LedgerRow
 											key={p.id}
@@ -563,6 +670,8 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 														<span className="block wrap-anywhere">{p.person.address}</span>
 													)}
 													{p.detail}
+													{p.overLimit && <span className="block text-error">{p.overLimit}</span>}
+													{p.waits && <span className="block">{p.waits}</span>}
 													{p.comment && <span className="block wrap-anywhere">“{p.comment}”</span>}
 													{p.expenses && (
 														<span className="block">
@@ -695,6 +804,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 														{r.noticeReason ? `${r.notice}: “${r.noticeReason}”` : r.notice}
 													</span>
 													{r.note && <span className="block wrap-anywhere">“{r.note}”</span>}
+													{r.waits && <span className="block">{r.waits}</span>}
 												</>
 											}
 											action={
@@ -739,6 +849,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 													<>
 														{w.days} · {w.perDay}
 														{w.reason && <span className="block wrap-anywhere">“{w.reason}”</span>}
+														{w.waits && <span className="block">{w.waits}</span>}
 													</>
 												}
 												action={
@@ -805,14 +916,27 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
-				title={`Approve ${target?.name ?? "this"} timesheet?`}
+				title={
+					target?.overLimit
+						? `Approve ${target.name} timesheet over its limit?`
+						: `Approve ${target?.name ?? "this"} timesheet?`
+				}
 				intent="approve"
-				submitLabel="Approve"
+				submitLabel={target?.overLimit ? "Approve over its limit" : "Approve"}
 				isOpen={task === "approve"}
 				onClose={close}
 				onDone={setSaid}
 			>
 				<input type="hidden" name="periodId" value={target?.id ?? ""} />
+				{target?.overLimit && (
+					<>
+						<input type="hidden" name="overLimit" value="on" />
+						<p>
+							{target.overLimit}. Its person could not have submitted it as it is. Approved, it is
+							paid as it is, and the activity log says it was approved over its limit.
+						</p>
+					</>
+				)}
 				<p>Its entries stay locked. An owner or admin can reopen it if it needs changing.</p>
 			</FormSheet>
 
@@ -825,7 +949,11 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 				onDone={setSaid}
 			>
 				<input type="hidden" name="startsOn" value={week.period.startsOn} />
-				<p>Every timesheet waiting for the week of {week.label} is approved at once.</p>
+				<p>
+					Every timesheet waiting for the week of {week.label} is approved at once, but for any with
+					a day over its limit or a timer still running: those are left for you to look at one at a
+					time.
+				</p>
 			</FormSheet>
 
 			<FormSheet
