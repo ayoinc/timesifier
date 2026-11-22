@@ -42,6 +42,10 @@ const MONTH_DAYS = Array.from({ length: 31 }, (_, index) => ({
 	label: index === 30 ? "Last day of the month" : `The ${monthDayLabel(index + 1).slice(4)}`,
 }));
 
+/** Beside the field: where the lock date reaches each person (D7, decision 49). */
+const LOCK_REACH =
+	"The lock date reaches each person's day once that day has ended where they are, so a date of today closes nobody's day before it is over.";
+
 export function LockSettings({
 	data,
 	onDone,
@@ -71,11 +75,14 @@ export function LockSettings({
 									: `Locked through ${formatRange(data.lockedThrough, data.lockedThrough)}`
 							}
 							detail={
-								data.lockedThrough === null
-									? "All past time can still change."
-									: data.lockReason
-										? `Reason: ${data.lockReason}`
-										: "Set by auto-lock, or with no reason given."
+								<>
+									{data.lockedThrough === null
+										? "All past time can still change."
+										: data.lockReason
+											? `Reason: ${data.lockReason}`
+											: "Set by auto-lock, or with no reason given."}
+									<span className="block">{LOCK_REACH}</span>
+								</>
 							}
 							action={
 								<span className="flex flex-wrap gap-2">
@@ -145,6 +152,7 @@ export function LockSettings({
 					name="lockedThrough"
 					type="date"
 					defaultValue={data.lockedThrough ?? ""}
+					description={LOCK_REACH}
 					isRequired
 					validate={(typed) =>
 						typed > data.today ? "The lock date can be today at the latest." : null

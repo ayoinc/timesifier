@@ -281,6 +281,37 @@ describe("importing Harvest's export of all time", () => {
 		]);
 	});
 
+	it("reads the lock date in each row's person's zone: it reaches a day once that day has ended for them (D7)", async () => {
+		await env.DB.prepare("update users set time_zone = 'America/Los_Angeles' where id = ?")
+			.bind(max.user.id)
+			.run();
+		await env.DB.prepare("update organisations set locked_through = '2026-11-11' where id = ?")
+			.bind(acme.id)
+			.run();
+		// 03:00 on Thursday 12 in UTC, Ada's zone; 19:00 on Wednesday 11 in Los Angeles.
+		const now = Date.parse("2026-11-12T03:00:00Z");
+		vi.spyOn(Date, "now").mockReturnValue(now);
+		const csv = [
+			"Date,Project,Task,Notes,Hours,First Name,Last Name",
+			"2026-11-11,Website,Design,Ada,2,Ada,Lovelace",
+			"2026-11-11,Website,Design,Max,2,Max,Member",
+		].join("\n");
+		const { location } = await upload(csv);
+		const id = importIdOf(location);
+		await submit(`${IMPORT}?kind=time`, { intent: "import", importId: id }, ada);
+		const { results } = await env.DB.prepare(
+			"select description from time_entries where import_id = ? order by description",
+		)
+			.bind(id)
+			.all();
+		expect(results).toEqual([{ description: "Max" }]);
+		// His day is still open, so the import can be reverted.
+		const reverted = await submit(`${IMPORT}?kind=time`, { intent: "revert", importId: id }, ada, {
+			byScript: true,
+		});
+		expect(reverted.status).toBe(200);
+	});
+
 	it("matches people by email where the file has one", async () => {
 		const csv =
 			"Date,Project,Hours,Email,First name,Last name\r\n2026-10-05,Apollo,1,MAX@example.com,Someone,Else\r\n";

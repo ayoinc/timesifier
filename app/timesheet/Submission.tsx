@@ -52,18 +52,20 @@ export function PeriodHeader({
 	const status = submission?.status ?? null;
 	const submittable =
 		submission !== null && (status === null || status === "withdrawn" || status === "returned");
-	const offered = submittable && submission.started && !submission.runsInWeek;
+	// A returned week the lock date has reached is held by it: nothing can be done here (TR-07).
+	const held = submission?.heldByLock === true;
+	const offered = submittable && submission.started && !submission.runsInWeek && !held;
 	const over = submission?.over ?? [];
 	const send = (intent: "submit" | "withdraw") =>
 		submission &&
 		fetcher.submit({ intent, startsOn: submission.period.startsOn }, { method: "post" });
 
 	const notes: string[] = [];
-	if (submittable && !submission.started)
+	if (submittable && !held && !submission.started)
 		notes.push("This week can be submitted once it has begun.");
-	else if (submittable && submission.runsInWeek)
+	else if (submittable && !held && submission.runsInWeek)
 		notes.push("Stop the timer before you submit the week.");
-	if (submittable && over.length > 0) {
+	if (submittable && !held && over.length > 0) {
 		const days = new Intl.ListFormat("en-GB", { type: "conjunction" }).format(
 			over.map((d) => `${formatDay(d.day, "short")} (${overLabel(d.overMinutes).toLowerCase()})`),
 		);
@@ -113,8 +115,10 @@ export function PeriodHeader({
 			</div>
 			{submission?.state === "returned" && (
 				<p className="mt-2 max-w-160 text-body-large">
-					Returned{submission.comment ? `: ${submission.comment}` : "."} Correct the week and submit
-					it again.
+					Returned{submission.comment ? `: ${submission.comment}` : "."}{" "}
+					{held
+						? "The lock date holds this week, so it cannot be changed or submitted until an owner or admin moves the date back."
+						: "Correct the week and submit it again."}
 				</p>
 			)}
 			{notes.length > 0 && (

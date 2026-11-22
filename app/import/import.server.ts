@@ -20,7 +20,7 @@ import {
 import { type KindsMs, kindOfNewTime, type RulesCalendar, weekOf } from "~/leave/rules";
 import { rulesCalendarOf } from "~/leave/rules.server";
 import { nameKey, recordName } from "~/lib/names";
-import { lockOf } from "~/locks/locks";
+import { lockOf, lockReachOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
 import { addDays, type Day, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
@@ -461,7 +461,11 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			if (
 				lockOf({
 					day,
-					lockedThrough,
+					lockedThrough: lockReachOf(
+						lockedThrough,
+						memberOf.get(userId)?.zone ?? organisationZone,
+						now,
+					),
 					periodStatus: status.success ? status.data : null,
 					invoiced: false,
 				})
@@ -839,7 +843,11 @@ export async function revertImport(
 		const status = PeriodStatus.safeParse(period?.status);
 		const reason = lockOf({
 			day,
-			lockedThrough,
+			lockedThrough: lockReachOf(
+				lockedThrough,
+				members.get(entry.userId)?.zone ?? organisationZone,
+				Date.now(),
+			),
 			periodStatus: status.success ? status.data : null,
 			invoiced: invoiced.has(entry.id),
 		});
