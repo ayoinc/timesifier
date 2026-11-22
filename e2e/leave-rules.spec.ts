@@ -38,6 +38,15 @@ function weekdayFromToday(offset: number): string {
 	return at.toISOString().slice(0, 10);
 }
 
+/** A day as the pages name it: "Friday 20 November". */
+const inWords = (day: string) =>
+	new Intl.DateTimeFormat("en-GB", {
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		timeZone: "UTC",
+	}).format(new Date(`${day}T00:00:00Z`));
+
 /** Presses Tab until `target` has the focus. */
 async function tabTo(page: Page, target: Locator, most = 80) {
 	for (let step = 0; step < most; step++) {
@@ -180,17 +189,19 @@ test("half a day of leave leaves the day 3:45: the Day view shows what is left, 
 	await expect(trackTime(page)).toHaveAccessibleDescription("2:45 left of 3:45");
 
 	// The Week grid shows what is left in the cell's name, and refuses more before it
-	// sends: the cell's own hour is replaced by what is typed, so 3:45 fits in it.
+	// sends: the cell's own hour is replaced by what is typed, so 3:45 fits in it. The
+	// cell is found by its day: a weekend day of the same week has 0:00 left too.
 	await openShell(page, weekPath(slug, day));
-	const cell = page.getByRole("textbox", { name: /^Site, .*, 2:45 left$/ });
-	await cell.fill("4");
-	await cell.press("Enter");
+	const cell = (left: string) =>
+		page.getByRole("textbox", { name: `Site, ${inWords(day)}, ${left} left`, exact: true });
+	await cell("2:45").fill("4");
+	await cell("2:45").press("Enter");
 	await expect(page.getByRole("alert").filter({ hasText: "left" })).toContainText(
 		"This day has 3:45 left.",
 	);
-	await cell.fill("3:45");
-	await cell.press("Enter");
-	await expect(page.getByRole("textbox", { name: /^Site, .*, 0:00 left$/ })).toHaveValue("3:45");
+	await cell("2:45").fill("3:45");
+	await cell("2:45").press("Enter");
+	await expect(cell("0:00")).toHaveValue("3:45");
 
 	// The day is full: Track time is closed and says so.
 	await openShell(page, dayPath(slug, day));
@@ -211,14 +222,8 @@ test("a whole day of leave closes the day: no Track time, no calendar slots", as
 	await openShell(page, `${organisationPath(slug)}?view=calendar`);
 	const grid = page.getByRole("table", { name: /^Week calendar, / });
 	await expect(grid.getByRole("button", { name: /^New entry, / }).first()).toBeAttached();
-	const long = new Intl.DateTimeFormat("en-GB", {
-		weekday: "long",
-		day: "numeric",
-		month: "long",
-		timeZone: "UTC",
-	});
 	for (const offset of [-1, 0, 1]) {
-		const words = long.format(new Date(`${dayFromToday(offset)}T00:00:00Z`));
+		const words = inWords(dayFromToday(offset));
 		await expect(grid.getByRole("button", { name: `New entry, ${words}, from 09:00` })).toHaveCount(
 			0,
 		);
