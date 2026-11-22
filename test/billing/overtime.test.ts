@@ -17,9 +17,10 @@ import { open, type Person, person, submit, textOf } from "../pages/harness";
 import { seedDefaultWeek } from "../pages/schedule-seed";
 
 // Overtime billed at its own rate (D9, OQ4): a project bills its overtime at
-// the rate in force on the entry's day times the project's multiplier, on a
-// line of its own that says it is overtime, in the preview, the draft it
-// saves, a recurring invoice, the PDF and the Xero file.
+// the rate in force on the entry's day times the project's multiplier. Other
+// than ×1, it is on a line of its own that says it is overtime, in the
+// preview, the draft it saves, a recurring invoice, the PDF and the Xero file;
+// at ×1 it is billed as before, on its group's line, unmarked.
 
 const NOW = Date.parse("2026-11-02T12:00:00Z");
 const TODAY = "2026-11-02";
@@ -127,6 +128,7 @@ describe("lines of time", () => {
 		rateMinor: overtime ? 9000 : 6000,
 		minuteMinor: 60 * (overtime ? 9000 : 6000),
 		overtime,
+		overtimeApart: overtime,
 		...more,
 	});
 
@@ -158,6 +160,15 @@ describe("lines of time", () => {
 			"Site: Work: 2026-10-06 (overtime)",
 		]);
 	});
+
+	it("keep overtime billed at ×1 on its group's line, unmarked", () => {
+		const atOne = (id: string, overtime: boolean) =>
+			item(id, overtime, { overtimeApart: false, rateMinor: 6000, minuteMinor: 60 * 6000 });
+		const items = [atOne("r1", false), atOne("o1", true)];
+		expect(timeLines(items, "task").map((l) => [l.description, l.timeEntryIds])).toEqual([
+			["Site: Development", ["r1", "o1"]],
+		]);
+	});
 });
 
 describe("the preview", () => {
@@ -186,14 +197,17 @@ describe("the preview", () => {
 		expect(html).toContain("£270.00");
 	});
 
-	it("labels overtime at ×1 too, at the day's own rate", async () => {
+	it("bills overtime at ×1 as before: on its group's line, unmarked, at the day's own rate", async () => {
 		await scope.projects.update({ overtimeRateMilli: 1000 }, (p) => eq(p.id, siteId));
 		await aLongDay();
-		const sources = await sourcesFor(scope, ORGANISATION, request("project"), NOW);
-		expect(shown(sources.lines)).toEqual([
-			["Site", 7500, 6000, 45_000],
-			["Site (overtime)", 3000, 6000, 18_000],
-		]);
+		const byProject = await sourcesFor(scope, ORGANISATION, request("project"), NOW);
+		expect(shown(byProject.lines)).toEqual([["Site", 10_500, 6000, 63_000]]);
+		const byTask = await sourcesFor(scope, ORGANISATION, request("task"), NOW);
+		expect(shown(byTask.lines)).toEqual([["Site: Development", 10_500, 6000, 63_000]]);
+		const page = await (
+			await open(`/app/acme/invoices/new?client=${clientId}&group=task`, owner)
+		).text();
+		expect(page).not.toContain("(overtime)");
 	});
 
 	it("rounds an overtime hour's price to the penny once, at the rate", async () => {
@@ -250,6 +264,57 @@ describe("what is billed", () => {
 		expect(rows.find((r) => r.includes(",Site: Development,"))).toContain(
 			",Site: Development,7.5,60.00,",
 		);
+	});
+
+	it("at ×1, the saved draft, its PDF and its Xero row bill overtime as before, on one unmarked line", async () => {
+		await scope.projects.update({ overtimeRateMilli: 1000 }, (p) => eq(p.id, siteId));
+		await aLongDay();
+		const sources = await sourcesFor(scope, ORGANISATION, request("task"), NOW);
+		const made = await createDraft(scope, owner.user.id, {
+			clientId,
+			currency: "GBP",
+			issuedOn: TODAY,
+			lines: sources.lines,
+		});
+		if (!made.ok) throw new Error(made.problem);
+		expect(shown(await linesOf(scope, made.id))).toEqual([
+			["Site: Development", 10_500, 6000, 63_000],
+		]);
+		await issueInvoice(scope, owner.user.id, made.id);
+		const pdf = await open(`/app/acme/invoices/${made.id}/pdf`, owner);
+		const printed = new TextDecoder("latin1").decode(await pdf.arrayBuffer());
+		expect(printed).toContain("(Site: Development) Tj");
+		expect(printed).not.toContain("overtime");
+		const xero = await (
+			await open("/app/acme/invoices/xero?from=2026-11-01&to=2026-11-30", owner)
+		).text();
+		expect(xero).toContain(",Site: Development,10.5,60.00,");
+		expect(xero).not.toContain("overtime");
+	});
+
+	it("at ×1, a recurring invoice of uninvoiced time bills overtime on its group's line", async () => {
+		await scope.projects.update({ overtimeRateMilli: 1000 }, (p) => eq(p.id, siteId));
+		await aLongDay();
+		const [template] = await scope.recurringInvoices.insert({
+			clientId,
+			frequency: "monthly",
+			startsOn: TODAY,
+			nextIssueOn: TODAY,
+			currency: "GBP",
+			paymentTermsDays: 30,
+			includeUninvoicedTime: true,
+		});
+		if (!template) throw new Error("seed failed");
+		const made = await issueRecurring(
+			scope,
+			{ name: "Acme", ...ORGANISATION },
+			template.id,
+			TODAY,
+			NOW,
+			"en-GB",
+		);
+		if (!made) throw new Error("no invoice made");
+		expect(shown(await linesOf(scope, made))).toEqual([["Site", 10_500, 6000, 63_000]]);
 	});
 
 	it("a recurring invoice of uninvoiced time bills overtime on its own line", async () => {

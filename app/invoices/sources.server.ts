@@ -6,7 +6,7 @@ import { among, type OrganisationScope, users } from "~/db";
 import { daysOver } from "~/leave/rules.server";
 import { shownName } from "~/organisations/people";
 import { pricingOf } from "~/projects/money.server";
-import { hourlyPrice, wholeMinutes } from "~/rates/price";
+import { hourlyPrice, MULTIPLIER_ONE, wholeMinutes } from "~/rates/price";
 import { addDays, type Day, dayOf } from "~/time/calendar";
 import { formatDay } from "~/time/format";
 
@@ -201,6 +201,8 @@ export async function uninvoicedTime(
 			day,
 			minutes,
 			overtime: entry.overtime,
+			overtimeApart:
+				entry.overtime && (project?.overtimeRateMilli ?? MULTIPLIER_ONE) !== MULTIPLIER_ONE,
 			rateMinor: price ?? 0,
 			minuteMinor: price === null ? 0 : minutes * price,
 			priced: price !== null,

@@ -39,8 +39,14 @@ export interface TimeItem {
 	description: string | null;
 	day: Day;
 	minutes: number;
-	/** Whether it is overtime (TS-095): billed on a line of its own, priced at the project's multiplier. */
+	/** Whether it is overtime (TS-095). */
 	overtime: boolean;
+	/**
+	 * Whether it is billed on a line of its own, "(overtime)": overtime of a
+	 * project whose multiplier is not ×1 (decision 55). At ×1 it is billed as
+	 * regular time is, on its group's line, unmarked.
+	 */
+	overtimeApart: boolean;
 	/** The hourly price that priced it, in minor units: the rate, times the multiplier for overtime (`hourlyPrice`). */
 	rateMinor: number;
 	/** Minutes × that price: 60 times its amount, exact (`billableAmount`). */
@@ -86,7 +92,7 @@ function lineDescription(items: readonly TimeItem[], grouping: Grouping): string
 	const [first] = items;
 	if (!first) return "";
 	const said = groupDescription(first, grouping);
-	return first.overtime ? `${said} (overtime)` : said;
+	return first.overtimeApart ? `${said} (overtime)` : said;
 }
 
 /** What a line of `first`'s group under `grouping` says, overtime aside. */
@@ -107,9 +113,10 @@ function groupDescription(first: TimeItem, grouping: Grouping): string {
 
 /**
  * Tracked time as lines, grouped by `grouping`, in the order the groups are
- * first met. A group's overtime is a line of its own, after its regular
- * time's, whatever its multiplier: an invoice always says which hours were
- * overtime (D9, OQ4).
+ * first met. A group's overtime billed at a multiplier other than ×1 is a
+ * line of its own, after its regular time's (decision 55); at ×1 it is on
+ * its group's line, as before, so a client is not told which hours were
+ * overtime by a setting nobody changed.
  *
  * The lines add up to exactly what the entries are worth together: their
  * exact amounts are summed, rounded once (`sumBillable`), and that total is
@@ -127,7 +134,7 @@ export function timeLines(items: readonly TimeItem[], grouping: Grouping): Draft
 			group = { regular: [], overtime: [] };
 			groups.set(key, group);
 		}
-		(item.overtime ? group.overtime : group.regular).push(item);
+		(item.overtimeApart ? group.overtime : group.regular).push(item);
 	}
 	const lists = [...groups.values()]
 		.flatMap(({ regular, overtime }) => [regular, overtime])
