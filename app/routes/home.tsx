@@ -19,6 +19,7 @@ import {
 	SiteHeader,
 	SkipLink,
 } from "~/landing/Site";
+import { homeStructuredData } from "~/landing/structured-data";
 import { TimerStates } from "~/landing/TimerStates";
 import { WeekReport } from "~/landing/WeekReport";
 import { YearStrip } from "~/landing/YearStrip";
@@ -36,7 +37,7 @@ import type { Route } from "./+types/home";
 const DESCRIPTION =
 	"A timer, timesheets and reports for people and small teams who bill or account for their time, with approvals, leave, expenses and invoices. The database is in the EU.";
 
-export function meta({ matches }: Route.MetaArgs) {
+export function meta({ matches, loaderData }: Route.MetaArgs) {
 	const origin = rootOrigin(matches);
 	return [
 		...pageMeta({
@@ -45,48 +46,16 @@ export function meta({ matches }: Route.MetaArgs) {
 			title: "Timesifier: track your hours, trust the total",
 			description: DESCRIPTION,
 		}),
-		{ "script:ld+json": structuredData(origin) },
+		{ "script:ld+json": homeStructuredData(origin, DESCRIPTION, loaderData?.operator) },
 	];
-}
-
-/** The mark on its square, as the browser's install icon shows it: 512 by 512. */
-const LOGO_PATH = "/icon-512.png";
-
-/**
- * What the home page tells a search engine about who and what Timesifier is.
- * The organisation is named by its brand alone (`docs/decisions.md`, entry 43);
- * the company that runs the deployment is named at the foot of the page (entry
- * 46). The application carries no price and no rating: it has neither to
- * state. It is a data block, not a script: the browser runs nothing from it, so
- * it needs no nonce.
- */
-function structuredData(origin: string) {
-	return {
-		"@context": "https://schema.org",
-		"@graph": [
-			{
-				"@type": "Organization",
-				name: "Timesifier",
-				url: `${origin}/`,
-				logo: `${origin}${LOGO_PATH}`,
-			},
-			{
-				"@type": "SoftwareApplication",
-				name: "Timesifier",
-				url: `${origin}/`,
-				description: DESCRIPTION,
-				applicationCategory: "BusinessApplication",
-				operatingSystem: "Web",
-			},
-		],
-	};
 }
 
 /** A person who is signed in is sent to the application and never sees this page. */
 export const middleware: Route.MiddlewareFunction[] = [requireSignedOut];
 
 /**
- * The company that runs this deployment, which the foot of the page names.
+ * The company that runs this deployment, which the foot of the page and its
+ * structured data name.
  * A loader's being here also makes a move to this page from inside the
  * application ask the server, and so pass the middleware above.
  */
