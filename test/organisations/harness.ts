@@ -110,6 +110,16 @@ export async function seedOrganisation(name = "Acme", slug = "acme") {
 	return { id, name, slug };
 }
 
+/**
+ * Takes away an organisation's expense categories, with their prices, as an
+ * organisation made before TS-119 gave every new one the usual set has none.
+ */
+export async function seedNoCategories(organisationId: string) {
+	await env.DB.prepare("delete from expense_categories where organisation_id = ?")
+		.bind(organisationId)
+		.run();
+}
+
 /** Makes an existing person a member, and returns the membership's id. */
 export async function seedMembership(organisationId: string, userId: string, role: Role) {
 	const id = uuidv7();

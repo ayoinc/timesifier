@@ -1,11 +1,15 @@
-import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-
+import { env } from "cloudflare:workers";
+import { and, asc, eq, inArray, isNotNull, isNull, notInArray, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import type { ActivitySource } from "~/activity/actions";
 import { changes, recordStatement, recordStatementWhen } from "~/activity/activity.server";
-import { type OrganisationScope, uuidv7 } from "~/db";
+import { type OrganisationScope, type ScopedStatement, users, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
+import { nameOrEmail } from "~/organisations/people";
 import type { Day } from "~/time/calendar";
 
 import { type DatedPrice, parseAmount, UNIT_NAME_MAX_LENGTH } from "./expenses";
+import { usualCategories } from "./starter";
 
 /**
  * The organisation's expense categories (TS-070, B9), kept by its owners and
@@ -131,6 +135,125 @@ export async function createCategory(
 }
 
 /**
+ * Adds the starter categories (`app/expenses/starter.ts`) to an organisation
+ * that has no category at all, with a record of each, in one batch. Each is
+ * added only while the organisation still has no category but these, so two
+ * presses at once, or a press after someone added one, add nothing more.
+ * Returns how many it added: all of them, or none. `actor` is null for the
+ * system, which gives a new organisation its starter set.
+ */
+export async function addUsualCategories(
+	scope: OrganisationScope,
+	actor: string | null,
+	currency: string,
+	source: ActivitySource,
+): Promise<number> {
+	const usual = usualCategories(currency).map((category) => ({ ...category, id: uuidv7() }));
+	const ids = usual.map(({ id }) => id);
+	// No category other than the starter set exists: true all through this
+	// batch, as it adds them, and false from the start if anyone added one.
+	const stillEmpty = sql`not ${scope.expenseCategories.exists((c) => notInArray(c.id, ids))}`;
+	const statements: ScopedStatement<unknown>[] = usual.flatMap(({ id, name, unit }) => {
+		const latest = unit?.prices.at(-1);
+		const added = scope.expenseCategories.exists((c) => eq(c.id, id));
+		return [
+			scope.expenseCategories.statements.insertWhen(
+				{
+					id,
+					name,
+					nameKey: nameKey(name),
+					unitName: unit?.name ?? null,
+					unitPriceMinor: latest?.unitPriceMinor ?? null,
+				},
+				stillEmpty,
+			),
+			...(unit?.prices ?? []).map((price) =>
+				scope.expenseCategoryPrices.statements.insertWhen(
+					{ id: uuidv7(), categoryId: id, ...price },
+					added,
+				),
+			),
+			recordStatementWhen(
+				scope,
+				added,
+				actor,
+				"expense_category.created",
+				{ type: "expense_category", id },
+				changes(
+					null,
+					{
+						name,
+						unitName: unit?.name,
+						unitPriceMinor: latest?.unitPriceMinor,
+						effectiveFrom: latest?.effectiveFrom,
+					},
+					CATEGORY_FIELDS,
+				),
+				source,
+			),
+		];
+	});
+	const [first, ...rest] = statements;
+	if (!first) return 0;
+	await scope.batch([first, ...rest]);
+	const [made] = await scope.expenseCategories.sum(
+		() => sql<number>`1`,
+		(c) => c.organisationId,
+		(c) => inArray(c.id, ids),
+	);
+	return made?.total ?? 0;
+}
+
+/** Who may add categories, as a person who may not is told: a few by name, and how many more. */
+export interface CategoryKeepers {
+	names: string[];
+	others: number;
+}
+
+/** The most keepers named; the rest are counted. */
+const KEEPERS_NAMED = 3;
+
+/** The roles that keep the categories, as `isAdministrator` says. */
+const KEEPER_ROLES = ["owner", "admin"];
+
+/**
+ * The owners and admins, who keep the categories: owners first, then the
+ * longest-standing, the first few by name and the rest as a count, so the
+ * query is the same size however many there are.
+ */
+export async function categoryKeepers(scope: OrganisationScope): Promise<CategoryKeepers> {
+	const [first, counted] = await Promise.all([
+		scope.memberships.select((m) => inArray(m.role, KEEPER_ROLES), {
+			orderBy: (m) => [sql`${m.role} = 'owner' desc`, asc(m.createdAt), asc(m.id)],
+			limit: KEEPERS_NAMED,
+		}),
+		scope.memberships.sum(
+			() => sql<number>`1`,
+			(m) => m.organisationId,
+			(m) => inArray(m.role, KEEPER_ROLES),
+		),
+	]);
+	const accounts =
+		first.length === 0
+			? []
+			: await drizzle(env.DB)
+					.select({ id: users.id, name: users.name, email: users.email })
+					.from(users)
+					.where(
+						inArray(
+							users.id,
+							first.map((m) => m.userId),
+						),
+					);
+	const nameOf = new Map(accounts.map((a) => [a.id, nameOrEmail(a)]));
+	const names = first.flatMap((m) => {
+		const name = nameOf.get(m.userId);
+		return name ? [name] : [];
+	});
+	return { names, others: Math.max(0, (counted[0]?.total ?? 0) - names.length) };
+}
+
+/**
  * Renames category `id` and, for a unit-priced one, sets its unit and the
  * price from `unit.from` on. A price already set from that very day is
  * replaced. Whether a category is unit-priced is chosen when it is added.
@@ -250,7 +373,12 @@ export type CategoryIntent =
 			from?: Day;
 	  }
 	| { intent: "archive-category"; categoryId: string }
-	| { intent: "restore-category"; categoryId: string };
+	| { intent: "restore-category"; categoryId: string }
+	| { intent: "add-usual-categories" };
+
+/** Why the usual categories were not added: someone added a category first. */
+export const ALREADY_HAS_CATEGORIES =
+	"The organisation has categories now, so the usual ones were not added. Add any you need one at a time.";
 
 /** What a change to the categories did: the sentence to say, or why it was refused and with which status. */
 export type CategoryOutcome =
@@ -269,6 +397,12 @@ export async function keepCategory(
 	today: Day,
 ): Promise<CategoryOutcome> {
 	const missing = { ok: false as const, problem: "That category is no longer there.", status: 404 };
+	if (input.intent === "add-usual-categories") {
+		const added = await addUsualCategories(scope, actor, currency, "web");
+		return added === 0
+			? { ok: false, problem: ALREADY_HAS_CATEGORIES, status: 409 }
+			: { ok: true, said: `${added} expense categories added.` };
+	}
 	if (input.intent === "archive-category" || input.intent === "restore-category") {
 		const archived = input.intent === "archive-category";
 		const result = await setCategoryArchived(scope, actor, input.categoryId, archived);

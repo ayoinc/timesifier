@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { USUAL_CATEGORIES } from "~/expenses/starter";
 import { organisationPath } from "~/shell/destinations";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
@@ -352,7 +353,10 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from invoice_settings")).toBe(0);
 			expect(await value("select count(*) from api_tokens")).toBe(0);
 			expect(await value("select count(*) from calendar_feeds")).toBe(0);
-			expect(await value("select count(*) from expense_categories")).toBe(0);
+			// The two organisations' usual categories (TS-119), and nothing more.
+			expect(await value("select count(*) from expense_categories")).toBe(
+				2 * USUAL_CATEGORIES.length,
+			);
 			expect(await value("select count(*) from support_grants")).toBe(0);
 		},
 	);

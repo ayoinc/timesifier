@@ -197,7 +197,7 @@ beforeEach(async () => {
 	await track(linus, site, "2026-10-05T09:00:00Z", "2026-10-05T11:00:00Z");
 	await track(hedy, site, "2026-10-05T13:00:00Z", "2026-10-05T14:00:00Z", false);
 	// A billable £25 of Ada's on Site.
-	const [category] = await scope.expenseCategories.insert({ name: "Travel", nameKey: "travel" });
+	const [category] = await scope.expenseCategories.insert({ name: "Taxis", nameKey: "taxis" });
 	if (!category) throw new Error("seed failed");
 	await scope.expenses.insert({
 		userId: ada.user.id,

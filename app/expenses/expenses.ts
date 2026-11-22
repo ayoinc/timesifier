@@ -143,3 +143,21 @@ export function expenseGrouping(value: string | null): ExpenseGrouping | null {
 	if (value === null || value === "") return "category";
 	return EXPENSE_GROUPS.find((each) => each === value) ?? null;
 }
+
+/**
+ * What a person who may not add expense categories is told when there are
+ * none to record in (TS-119): who can, by name, rather than a page they cannot
+ * open. `names` are a few of the owners and admins; `others` counts the rest.
+ */
+export function askToAddCategories({ names, others }: { names: string[]; others: number }): string {
+	const lead = "There are no expense categories to record in yet.";
+	if (names.length === 0) return `${lead} An owner or admin adds them.`;
+	const rest =
+		others === 0
+			? []
+			: [others === 1 ? "another owner or admin" : `one of the ${others} other owners and admins`];
+	const people = [...names, ...rest];
+	const last = people.pop();
+	const who = people.length === 0 ? last : `${people.join(", ")} or ${last}`;
+	return `${lead} Ask ${who} to add them.`;
+}
