@@ -685,3 +685,45 @@ The lock date is still a day of the organisation's, set by owners and admins or 
 | Lock only days before today                                 | Still takes the end of yesterday from anyone behind the organisation's zone.           |
 
 **What it costs.** For up to a day after the date moves, a person behind the organisation's zone can still change the date's last day, and auto-submit reaches their week up to an hour after their day ends. A timer is stopped at the end of its day, so time worked past that midnight is not recorded by it.
+
+### 54. A row of a CSV import past its day's limit is cut as a timer is
+
+Decided by the owner on 2026-11-13 (OQ2 of research/time-rules-scenarios.md, D3), for TS-111f. It amends the last sentence of entry 33, under which a row was one kind or the other, never cut.
+
+A row of time that does not fit whole in what its day has left of its expected hours is cut where they are used, by the timer's own computation (`splitAtLimit` in `app/leave/rules.ts`, given what `dayLimit` leaves): regular time up to the limit, and the rest an entry of overtime that follows it, where the day takes overtime and its caps take the rest (`rowsOfLimit` in `app/import/import.server.ts`). A row wholly past the limit is overtime, as before. Where the day takes no overtime, or its caps do not take the rest, the row is skipped with the day's sentence, as before: an import does not make a day over. A file imported again finds a cut row already here, as its regular entry and the overtime after it.
+
+| Option                                                     | Evidence                                                                                                                                                                              |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cut as the timer is, with the timer's computation (chosen) | What the owner chose: the same hours make the same entries whichever way they arrive, and the cut stays one function, so a change to it (D2's half day, TR-17's minute) reaches both. |
+| One kind or the other, never cut (entry 33)                | A 3:00 row on a day with 1:30 left became 3:00 of overtime: the person's regular time was understated and the overtime overstated.                                                    |
+| Cut, and keep the rest whole where no overtime is allowed  | What a timer does, because a timer cannot be refused once it has run. A file can: keeping it would make the day over, and its week blocked, from a file nobody on the day typed.      |
+
+**What it costs.** One line of the file can be two entries: the preview counts lines, and lists the two parts. A file imported again with a different row length is not recognised as the same time.
+
+### 55. Overtime is billed at its own rate: the day's rate times the project's multiplier
+
+Decided by the owner on 2026-11-13 (OQ4 of research/time-rules-scenarios.md, D9), for TS-111f. It adds to entry 33, under which overtime was shown apart everywhere but billed as regular time.
+
+A project bills overtime at the rate in force on the entry's stored day (`rateFor`, as before) times its own multiplier, "Overtime billed at" on the project's settings: ×1, the default and the behaviour before, ×1.25, ×1.5, ×2, or a custom value from 1 to 10 with up to three decimals. It is stored as `projects.overtime_rate_milli`, an integer in thousandths with a CHECK of 1000 to 10000 (migration `0025_overtime_rate`), as invoice quantities already are. An overtime hour's price is rounded half up to a minor unit once, at the rate (`overtimeRate` in `app/rates/price.ts`), so a line's hours times its price is its amount and a total is still rounded once. Overtime is its own invoice line in every grouping, labelled "(overtime)" even at ×1 ("Site: Development (overtime)"), in the preview, the saved lines, recurring invoices, the PDF and the Xero CSV; budgets, reports and profitability's revenue price it the same way. It is set by those who set a project's billing (`mayManageRates`), and each change is in the activity log.
+
+| Option                              | Evidence                                                                                                                                                       |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One multiplier per project (chosen) | What the owner chose: one field, on the page where the project's billing is set, and every rate the project already has keeps working for its overtime.        |
+| No multiplier: overtime at the rate | The behaviour before. An invoice line did not say it held overtime (R1b), and an organisation that charges more for it had to write lines by hand.             |
+| Overtime rates as their own rows    | By person or task and dated, as rates are: the most exact, but it doubles the rate tables, their screens and their resolution for a need nobody has yet named. |
+
+**What it costs.** The multiplier has no date: changing it re-prices all overtime not yet invoiced, past days included, and changes past reports, unlike a rate. Issued invoices keep what they were made with.
+
+### 56. A copied entry keeps its kind, regular or overtime
+
+Decided by the owner on 2026-11-13 (OQ3 of research/time-rules-scenarios.md, D9), for TS-111f. It replaces the rule in `app/timesheet/copy.server.ts` that a copy is regular time whatever the entry copied was (TS-095, taste HT-F).
+
+Copy day and Copy week write each entry as the kind it was. The regular entries must fit in what the day copied onto has left of its expected hours, or nothing is copied onto it, as before. The overtime entries are held to that day's rules (allowed at all, its approval, its caps, `refusalOf`): where the day takes them they are copied as overtime, after the regular ones; where it does not, the regular entries are copied, the overtime is left out, and the answer says so with the day's own sentence ("Its 1:00 of overtime was left out. This organisation does not allow overtime."). Copy week names each day it left out, and why, and each day whose overtime it left out (TR-18e).
+
+| Option                                                               | Evidence                                                                                                                                                                  |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Each copy its entry's kind, overtime left out where refused (chosen) | What the owner chose. A day of 7:30 and 1:00 overtime is copied as it was where the day takes it, and its regular part otherwise, instead of not at all.                  |
+| Every copy regular (TS-095)                                          | A day holding overtime could not be copied at all ("This day has 7:30 left"), and a day of 6:00 and 1:00 overtime was copied as 7:00 of regular time, which it never was. |
+| All or nothing, overtime included                                    | Simple, but a person whose organisation has since stopped allowing overtime could never copy that day again, though its regular time fits.                                |
+
+**What it costs.** A copy can now hold overtime, so copying a day can use the week's overtime cap; and a copy that leaves overtime out is not all of the day copied, which the answer says.

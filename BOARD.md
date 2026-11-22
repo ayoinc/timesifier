@@ -59,6 +59,24 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-111f · The rules hold together, part 4: the writers and invoices
+
+Builder: an AI session on branch `ts-111f-writers`, on the merge train's stack (1146f18: #73, #72, #70, #66/#67/#68). Fixes TR-09, TR-13, TR-14 and TR-18b–e of research/time-rules-scenarios.md and applies the owner's D3 (OQ2) and D9 (OQ3, OQ4): decisions 54, 55 and 56. Migration `0025_overtime_rate` (renumbered at merge; its snapshot's `prevId` follows 0023 until 0024 merges). The system stop TS-111d adds calls `stopTimer(scope, userId, now, { actorId: null, source: "system" })`.
+
+- [x] A timer's end, its cut at the day's limit and their records are one batch, in Stop and in starting another; two Stops at once leave one end and one remainder (`stopTimer`, `startTimer`, `endingOf`; `test/pages/timesheet-rules.test.ts`, "the stop and the cut are one write", "two Stops at once leave exactly one end and one remainder"; `test/time/entries.test.ts`, "two stops at once write one end and one remainder").
+- [x] The invoice preview, the draft, Uninvoiced and recurring invoices leave out time on a day over its limit for its person, and say whose and which days (`uninvoicedTime`; `test/billing/sources.test.ts`, "time on a day over its limit is not offered", "says how many entries of whose are left out", "a recurring invoice of uninvoiced time leaves it out").
+- [x] A change to an entry on an invoice is refused naming the invoice and who can let it go (`invoicedRefusal`; `test/pages/timesheet-rules.test.ts`, "refuses a change to an entry on an invoice, naming it and who can let it go").
+- [x] An edit cannot end after now or last over 24 hours (`editEntry`; `test/pages/timesheet-rules.test.ts`, "an edit cannot put time ahead of now"); the API refuses the same, and hours that round to no minutes (`test/integrations/api.test.ts`, "a change cannot put time ahead of now, or make an entry longer than a day", "hours that round to nothing are refused"); the import skips a row dated after its member's today (`test/integrations/import.test.ts`, "skips a row dated after today").
+- [x] An end clock at or before the start is the next day's, the entry keeping its day, and the sheet says "+1 day" (`test/pages/timesheet-rules.test.ts`, "an entry that ends after midnight is saved with its end"; `e2e/timesheet.spec.ts`).
+- [x] A CSV row past its day's limit is cut as a timer is, regular to the limit and overtime after, and found again when the file is imported twice (decision 54; `test/integrations/import.test.ts`, "cuts a row past its day's limit as a timer is cut").
+- [x] A project's "Overtime billed at" (×1, ×1.25, ×1.5, ×2 or custom) prices overtime at the day's rate times it, on its own "(overtime)" line in the preview, the saved lines, recurring invoices, the PDF and the Xero CSV; reports, budgets and profitability follow (decision 55; `test/billing/overtime.test.ts`, `test/rates/price.test.ts`, `test/reports/profitability.test.ts`; `e2e/billing.spec.ts`, "a project bills overtime at its own rate").
+- [x] Copying a day keeps each entry regular or overtime within the day's rules (decision 56; `test/pages/timesheet-taste.test.ts`, "copying a day keeps each entry regular or overtime").
+- [x] Stop names every day it leaves over, the remainder's too (TR-18b; `test/pages/timesheet-rules.test.ts`, "names the day the timer started, and the remainder's day").
+- [x] The API's refusals use the Timesheet's sentences, lock date and invoice included (TR-18c; `test/integrations/api.test.ts`, "says what the Timesheet says of a locked day and of an entry on an invoice").
+- [x] The import names the person on leave: "Max is on annual leave that day." (TR-18d; `test/integrations/import.test.ts`, "names the person whose leave a row falls on").
+- [x] A day holding overtime the target does not take is copied without it, saying so, and Copy week names each day it left and why (TR-18e; `test/pages/timesheet-taste.test.ts`, "copies a day holding overtime…", "Copy week names the days it left out, and why").
+- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+
 ### TS-103 · The public pages at their best
 
 Builder: AI sessions on branch `ts-103-marketing`. The owner: "marketing on the side we'll beautify it". In review: the pull request against `main`; verifying the site in Google Search Console and Bing Webmaster Tools needs the owner (steps in the pull request). No migration. `docs/design-system.md` ("Pages outside the shell"), decision 43.
