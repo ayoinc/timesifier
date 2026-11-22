@@ -262,6 +262,60 @@ html {
 	}
 }
 
+/* Text selected on the sheet takes the sheet's ink, in both schemes: the
+   application's selection is the sheet's yellow, which would not show on it. */
+.bg-sheet ::selection {
+	background-color: var(--md-sys-color-on-sheet);
+	color: var(--md-sys-color-sheet);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	/* A button-shaped link on the public pages gives a little under the press
+	   (`motion-safe:active:scale-97`) and comes back quickly: `transition-control`
+	   with the scale added, where motion is allowed and nowhere else. */
+	.press {
+		transition:
+			color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+			background-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+			border-color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+			box-shadow var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+			scale var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+	}
+
+	@supports (animation-timeline: view()) {
+		/*
+		 * A section's opening words rise into place as they come up the window:
+		 * the heading, then what follows it, each settled by the time it is about
+		 * a quarter of the way up. They start where they end in the layout, a
+		 * little lower and clear, so nothing beside them moves; a part of the page
+		 * opened at its address is already further up, and stands settled.
+		 */
+		.rise > * {
+			animation-name: rise;
+			animation-duration: auto;
+			animation-timing-function: linear;
+			animation-fill-mode: both;
+			animation-timeline: view();
+			animation-range: entry 0% cover 22%;
+		}
+
+		.rise > * + * {
+			animation-range: entry 0% cover 30%;
+		}
+	}
+}
+
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(calc(var(--md-sys-spacing-unit) * 6));
+	}
+
+	to {
+		opacity: 1;
+	}
+}
+
 @keyframes sheet-arrive {
 	from {
 		opacity: 0;

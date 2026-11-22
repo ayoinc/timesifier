@@ -31,14 +31,52 @@ import type { Route } from "./+types/home";
 // With script, one clock runs through it (~/landing/RunningDay); what moves as
 // it is scrolled is in ~/landing/public.css.
 
+const DESCRIPTION =
+	"A timer, timesheets and reports for people and small teams who bill or account for their time, with approvals, leave, expenses and invoices. The database is in the EU.";
+
 export function meta({ matches }: Route.MetaArgs) {
-	return pageMeta({
-		origin: rootOrigin(matches),
-		path: "/",
-		title: "Timesifier: track your hours, trust the total",
-		description:
-			"A timer, timesheets and reports for people and small teams who bill or account for their time, with approvals, leave, expenses and invoices. The database is in the EU.",
-	});
+	const origin = rootOrigin(matches);
+	return [
+		...pageMeta({
+			origin,
+			path: "/",
+			title: "Timesifier: track your hours, trust the total",
+			description: DESCRIPTION,
+		}),
+		{ "script:ld+json": structuredData(origin) },
+	];
+}
+
+/** The mark on its square, as the browser's install icon shows it: 512 by 512. */
+const LOGO_PATH = "/icon-512.png";
+
+/**
+ * What the home page tells a search engine about who and what Timesifier is.
+ * The organisation is named by its brand alone: the legal entity behind it is
+ * not on any page yet (privacy notice, "Who is responsible"). The application
+ * carries no price and no rating: it has neither to state. It is a data block,
+ * not a script: the browser runs nothing from it, so it needs no nonce.
+ */
+function structuredData(origin: string) {
+	return {
+		"@context": "https://schema.org",
+		"@graph": [
+			{
+				"@type": "Organization",
+				name: "Timesifier",
+				url: `${origin}/`,
+				logo: `${origin}${LOGO_PATH}`,
+			},
+			{
+				"@type": "SoftwareApplication",
+				name: "Timesifier",
+				url: `${origin}/`,
+				description: DESCRIPTION,
+				applicationCategory: "BusinessApplication",
+				operatingSystem: "Web",
+			},
+		],
+	};
 }
 
 /** A person who is signed in is sent to the application and never sees this page. */
@@ -61,7 +99,23 @@ const SECTIONS = [
 
 const SECTION = `${PAGE} py-16 expanded:py-24`;
 const HEADING = "text-headline-large text-balance medium:text-display-small";
-const LEAD = "mt-4 max-w-136 text-body-large text-on-surface-variant";
+const LEAD = "max-w-136 text-body-large text-on-surface-variant";
+
+/**
+ * The opening of a section that runs the width of the page: from 840px the
+ * heading stands at the left and the words that lead into the section at the
+ * right, on the heading's first line. They rise into place (`rise` in public.css).
+ */
+function SectionHead({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+	return (
+		<div className="rise grid gap-4 expanded:grid-cols-12 expanded:items-baseline expanded:gap-8">
+			<h2 id={id} className={`${HEADING} expanded:col-span-6`}>
+				{title}
+			</h2>
+			<p className={`${LEAD} expanded:col-span-5 expanded:col-start-8`}>{children}</p>
+		</div>
+	);
+}
 
 /**
  * The page's one primary action, and the one way in: the sign-in page takes a
@@ -73,7 +127,7 @@ function GetStarted() {
 	return (
 		<a
 			href={SIGN_IN_PATH}
-			className="inline-flex h-12 items-center rounded-small px-6 text-title-medium text-sheet outline-none state-layer over-on-sheet transition-control hover:state-hover focus-visible:state-focus focus-visible:focus-indicator active:state-pressed"
+			className="inline-flex h-12 items-center rounded-small px-6 text-title-medium text-sheet outline-none state-layer over-on-sheet press transition-control hover:state-hover focus-visible:state-focus focus-visible:focus-indicator active:state-pressed motion-safe:active:scale-97"
 		>
 			{PRIMARY_ACTION}
 		</a>
@@ -110,13 +164,10 @@ function Accuracy() {
 
 	return (
 		<>
-			<h2 id="accuracy-heading" className={HEADING}>
-				Numbers you can show.
-			</h2>
-			<p className={LEAD}>
+			<SectionHead id="accuracy-heading" title="Numbers you can show.">
 				An entry keeps its start and its end, and a total is the entries under it added together.
 				When a client or a manager asks what {day.weekday} was, the answer is on the page.
-			</p>
+			</SectionHead>
 			<div className="mt-10">
 				<DayAnatomy />
 			</div>
@@ -161,14 +212,16 @@ export default function Home() {
 				<section id="track" aria-labelledby="track-heading" className={SECTION}>
 					<div className="grid gap-10 expanded:grid-cols-12 expanded:items-center expanded:gap-8">
 						<div className="min-w-0 expanded:col-span-6 expanded:col-start-7">
-							<h2 id="track-heading" className={HEADING}>
-								One press starts the clock.
-							</h2>
-							<p className={LEAD}>
-								You say what you are working on, choose the project and start. When you stop, the
-								entry is on the day with its start and its end. If you forgot to start it, you add
-								the entry by hand.
-							</p>
+							<div className="rise">
+								<h2 id="track-heading" className={HEADING}>
+									One press starts the clock.
+								</h2>
+								<p className={`mt-4 ${LEAD}`}>
+									You say what you are working on, choose the project and start. When you stop, the
+									entry is on the day with its start and its end. If you forgot to start it, you add
+									the entry by hand.
+								</p>
+							</div>
 							<div className="mt-10">
 								<TimerStates />
 							</div>
@@ -185,13 +238,10 @@ export default function Home() {
 
 				<section id="week" aria-labelledby="week-heading" className="bg-surface-container-low">
 					<div className={SECTION}>
-						<h2 id="week-heading" className={HEADING}>
-							See where the week went.
-						</h2>
-						<p className={LEAD}>
+						<SectionHead id="week-heading" title="See where the week went.">
 							Every entry lands in the week, under its project and its day. In the example below,
 							read across for a project, down for a day; the longest bar is where the week went.
-						</p>
+						</SectionHead>
 						<div className="mt-10">
 							<WeekReport />
 						</div>
@@ -211,9 +261,11 @@ export default function Home() {
 						className={`${SECTION} grid gap-10 expanded:grid-cols-12 expanded:items-start expanded:gap-8`}
 					>
 						<div className="min-w-0 expanded:col-span-5 expanded:col-start-8">
-							<h2 id="privacy-heading" className={HEADING}>
-								Stored in the EU. Closed to everyone outside your organisation.
-							</h2>
+							<div className="rise">
+								<h2 id="privacy-heading" className={HEADING}>
+									Stored in the EU. Closed to everyone outside your organisation.
+								</h2>
+							</div>
 							<dl className="mt-8 border-b border-outline-variant">
 								<Fact term="Stored in the European Union">
 									Your account and your organisation’s work, its time, leave, expenses and invoices,
@@ -241,11 +293,12 @@ export default function Home() {
 								</a>
 							</p>
 						</div>
+						{/* From 840px the photograph stays beside the facts while they are read. */}
 						<Photo
 							photo={PHOTOS.platform}
 							alt="An empty railway platform in the rain, with a yellow-rimmed station clock above a departure screen."
 							sizes="(min-width: 75rem) 560px, (min-width: 52.5rem) 48vw, 100vw"
-							className="max-medium:hidden expanded:order-first expanded:col-span-6 expanded:row-start-1"
+							className="max-medium:hidden expanded:sticky expanded:top-28 expanded:order-first expanded:col-span-6 expanded:row-start-1"
 						/>
 					</div>
 				</section>
@@ -258,12 +311,14 @@ export default function Home() {
 						className={`${PAGE} grid gap-10 pt-12 pb-16 expanded:grid-cols-12 expanded:items-center expanded:gap-8 expanded:pt-16 expanded:pb-24`}
 					>
 						<div className="min-w-0 expanded:col-span-5">
-							<h2
-								id="start-heading"
-								className="text-display-small text-balance large:text-display-medium"
-							>
-								The hour is passing either way. Put it on the record.
-							</h2>
+							<div className="rise">
+								<h2
+									id="start-heading"
+									className="text-display-small text-balance large:text-display-medium"
+								>
+									The hour is passing either way. Put it on the record.
+								</h2>
+							</div>
 							<p className="mt-8">
 								<GetStarted />
 							</p>

@@ -18,7 +18,7 @@ import { EVENT_LABELS } from "~/integrations/scopes";
 import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
 import { DOCUMENT_EMAILS } from "~/invoices/mail.server";
 import { PHOTOS } from "~/landing/photos";
-import { PRIMARY_ACTION, PRIVACY_PATH, TERMS_PATH } from "~/landing/Site";
+import { PRIMARY_ACTION, PRIVACY_PATH, PUBLIC_PAGES, TERMS_PATH } from "~/landing/Site";
 import {
 	type Access,
 	mayChangeExpensesOf,
@@ -436,4 +436,121 @@ it("the privacy notice says the email with a code fetches nothing, and it does n
 	expect(
 		message.attachments?.map(({ disposition, contentId }) => ({ disposition, contentId })),
 	).toEqual([{ disposition: "inline", contentId: "timesifier-logo" }]);
+});
+
+// What search engines read (TS-103): the sitemap, each page's canonical address
+// and description, and the structured data. They are claims like any other.
+
+/** The pages the sitemap lists, in its order. */
+async function sitemap(): Promise<string[]> {
+	const response = await exports.default.fetch(`${ORIGIN}/sitemap.xml`);
+	expect(response.status).toBe(200);
+	expect(response.headers.get("Content-Type")).toBe("application/xml; charset=utf-8");
+	return [...(await response.text()).matchAll(/<loc>([^<]*)<\/loc>/g)].map(([, loc]) => loc);
+}
+
+/** A tag's attribute, read from the tag's markup. */
+const attribute = (tag: string, name: string) => tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
+
+it("the sitemap lists exactly the public pages, which link to one another and nowhere else", async () => {
+	const listed = await sitemap();
+	expect(listed).toEqual(PUBLIC_PAGES.map((path) => `${ORIGIN}${path}`));
+
+	// Every page the home page leads to, through every link on every page reached.
+	const reached = new Set<string>();
+	const queue = [`${ORIGIN}/`];
+	for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+		if (reached.has(next)) continue;
+		reached.add(next);
+		const html = await page(new URL(next).pathname);
+		for (const [tag] of html.matchAll(/<a\b[^>]*>/g)) {
+			const href = attribute(tag, "href") ?? "";
+			if (href.startsWith("mailto:")) continue;
+			const url = new URL(href, next);
+			// A public page links to the public pages only: no other site, and not the application.
+			expect(url.origin, `${next}: ${href}`).toBe(ORIGIN);
+			queue.push(`${url.origin}${url.pathname}`);
+		}
+	}
+	expect([...reached].sort()).toEqual([...listed].sort());
+
+	// And every page that describes itself to search engines is one of them.
+	const routes = import.meta.glob<string>("../app/routes/**/*.tsx", {
+		eager: true,
+		query: "?raw",
+		import: "default",
+	});
+	const described = Object.values(routes).filter((source) => /\bpageMeta\(/.test(source));
+	expect(described).toHaveLength(listed.length);
+
+	const robots = await exports.default.fetch(`${ORIGIN}/robots.txt`);
+	expect(robots.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+	expect((await robots.text()).split("\n")).toContain(`Sitemap: ${ORIGIN}/sitemap.xml`);
+});
+
+it("each public page names itself as its canonical address, and describes itself in its own words", async () => {
+	const descriptions = new Set<string>();
+	for (const url of await sitemap()) {
+		const path = new URL(url).pathname;
+		const html = await page(`${path}?from=elsewhere`);
+		const canonical = [...html.matchAll(/<link\b[^>]*\srel="canonical"[^>]*>/g)];
+		expect(
+			canonical.map(([tag]) => attribute(tag, "href")),
+			path,
+		).toEqual([url]);
+		expect(html, path).toContain(`<meta property="og:url" content="${url}"/>`);
+
+		const description = html.match(/<meta name="description" content="([^"]*)"\/>/)?.[1] ?? "";
+		expect(description.length, path).toBeGreaterThan(50);
+		descriptions.add(description);
+	}
+	expect(descriptions.size).toBe(PUBLIC_PAGES.length);
+});
+
+it("the structured data parses, and says no more than who and what Timesifier is", async () => {
+	const blocks = (html: string) =>
+		[...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].map(
+			([, json]) => json,
+		);
+	for (const path of PUBLIC_PAGES.filter((path) => path !== "/")) {
+		expect(blocks(await page(path)), path).toEqual([]);
+	}
+
+	const html = await page("/");
+	const [json, ...more] = blocks(html);
+	expect(more).toEqual([]);
+	const data = JSON.parse(json ?? "");
+	expect(data["@context"]).toBe("https://schema.org");
+	const byType = Object.fromEntries(
+		(data["@graph"] as { "@type": string }[]).map((node) => [node["@type"], node]),
+	);
+	expect(Object.keys(byType).sort()).toEqual(["Organization", "SoftwareApplication"]);
+
+	// The brand, its address and its mark: the legal entity is not known yet.
+	const { logo, ...organisation } = byType.Organization as Record<string, string>;
+	expect(organisation).toEqual({ "@type": "Organization", name: "Timesifier", url: `${ORIGIN}/` });
+	const logoUrl = new URL(logo ?? "");
+	expect(logoUrl.origin).toBe(ORIGIN);
+	const files = import.meta.glob("../public/*.png");
+	expect(Object.keys(files)).toContain(`../public${logoUrl.pathname}`);
+
+	// The application, in the words of the page's own description.
+	const description = html.match(/<meta name="description" content="([^"]*)"\/>/)?.[1];
+	expect(byType.SoftwareApplication).toEqual({
+		"@type": "SoftwareApplication",
+		name: "Timesifier",
+		url: `${ORIGIN}/`,
+		description,
+		applicationCategory: "BusinessApplication",
+		operatingSystem: "Web",
+	});
+	// No price and no rating, under any name: Timesifier has neither to state.
+	const keys: string[] = [];
+	JSON.parse(json ?? "", (key, value) => {
+		keys.push(key);
+		return value;
+	});
+	expect(
+		keys.filter((key) => /^(offers?|price\w*|aggregateRating|reviews?|award)$/.test(key)),
+	).toEqual([]);
 });

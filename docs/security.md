@@ -378,6 +378,7 @@ object-src 'none'
 
 - The nonce is 128 random bits from Web Crypto, new for every request. The Worker creates it, passes it to `app/entry.server.tsx` through the router context, and writes the header. `ServerRouter` and React put it on every inline script they emit.
 - There is no `unsafe-inline`, no `unsafe-eval` and no `strict-dynamic`. Scripts are our own files, allowed by `'self'`; only the inline scripts need the nonce.
+- The home page's structured data is a `<script type="application/ld+json">` data block (decision 43). A browser does not run a data block, so the policy does not apply to it and it carries no nonce; `test/browser-policy.test.ts` checks every other script for the nonce.
 - **`style-src` allows our own stylesheets and two `<style>` elements by hash, nothing else.** A `style` attribute, and any other `<style>` element, is ignored by the browser, so the page looks wrong without failing. React's `style` prop becomes a `style` attribute in the server-rendered HTML, so it is blocked on first paint. Style with classes and design tokens. A value that must be computed at run time is set from script after hydration through the CSSOM (`element.style.setProperty(…)`), which the policy allows. Check what a library renders on the server before adding it.
 - Add a new source only with the card that needs it, and record it here. One has been added, for one page only: see "Turnstile on the page".
 
