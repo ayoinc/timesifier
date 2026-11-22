@@ -6,6 +6,8 @@ import {
 	periodAfter,
 	periodBounds,
 	periodContaining,
+	periodOfDay,
+	periodOfWeek,
 	statusAfter,
 	WeekStart,
 } from "~/periods/periods";
@@ -105,5 +107,34 @@ describe("a period's status", () => {
 		// Every status and action is in the table above at least once.
 		expect(new Set(table.map(([from]) => from))).toEqual(new Set([null, ...PeriodStatus.options]));
 		expect(new Set(table.map(([, action]) => action))).toEqual(new Set(PeriodAction.options));
+	});
+});
+
+describe("a person's period found by range (TR-12)", () => {
+	const approved = { id: "a", startsOn: "2026-11-02", endsOn: "2026-11-08" };
+	const sundayWeek = { startsOn: "2026-11-08", endsOn: "2026-11-14" };
+
+	it("is the period on record that begins in the week", () => {
+		const later = { id: "b", startsOn: "2026-11-09", endsOn: "2026-11-14" };
+		expect(periodOfWeek([approved, later], sundayWeek)).toEqual({
+			period: { startsOn: "2026-11-09", endsOn: "2026-11-14" },
+			row: later,
+		});
+	});
+
+	it("else begins after every period on record that reaches into the week", () => {
+		expect(periodOfWeek([approved], sundayWeek)).toEqual({
+			period: { startsOn: "2026-11-09", endsOn: "2026-11-14" },
+			row: null,
+		});
+		expect(periodOfWeek([], sundayWeek)).toEqual({ period: sundayWeek, row: null });
+	});
+
+	it("finds a day's period on record before drawing one", () => {
+		expect(periodOfDay([approved], "2026-11-08", 7).row).toBe(approved);
+		expect(periodOfDay([approved], "2026-11-10", 7)).toEqual({
+			period: { startsOn: "2026-11-09", endsOn: "2026-11-14" },
+			row: null,
+		});
 	});
 });

@@ -39,6 +39,51 @@ export function periodBounds(period: PeriodDays, zone: string): { from: number; 
 	return bounds(period.startsOn, period.endsOn, zone);
 }
 
+/**
+ * A person's period for the week `week` as the organisation now draws it,
+ * given their periods on record that overlap it (TR-12): the one that begins
+ * in it, if any; else a new one, which begins after every period on record
+ * that reaches into the week, so that no two periods of a person ever
+ * overlap when the day a week starts on changes. `row` is the period on
+ * record, or null for a period not yet written. A week wholly inside a
+ * period on record is that period.
+ */
+export function periodOfWeek<Row extends PeriodDays>(
+	rows: readonly Row[],
+	week: PeriodDays,
+): { period: PeriodDays; row: Row | null } {
+	const begun = rows.find((r) => week.startsOn <= r.startsOn && r.startsOn <= week.endsOn);
+	if (begun) return { period: { startsOn: begun.startsOn, endsOn: begun.endsOn }, row: begun };
+	let startsOn = week.startsOn;
+	let holding: Row | null = null;
+	for (const r of rows) {
+		if (r.startsOn < week.startsOn && r.endsOn >= startsOn) {
+			startsOn = addDays(r.endsOn, 1);
+			holding = r;
+		}
+	}
+	if (holding && startsOn > week.endsOn) {
+		return { period: { startsOn: holding.startsOn, endsOn: holding.endsOn }, row: holding };
+	}
+	return { period: { startsOn, endsOn: week.endsOn }, row: null };
+}
+
+/**
+ * A person's period that holds `day`: the period on record that holds it, or
+ * else their period for the week the organisation now draws around it
+ * (`periodOfWeek`).
+ */
+export function periodOfDay<Row extends PeriodDays>(
+	rows: readonly Row[],
+	day: Day,
+	weekStartsOn: number,
+): { period: PeriodDays; row: Row | null } {
+	const holding = rows.find((r) => r.startsOn <= day && day <= r.endsOn);
+	if (holding)
+		return { period: { startsOn: holding.startsOn, endsOn: holding.endsOn }, row: holding };
+	return periodOfWeek(rows, periodContaining(day, weekStartsOn));
+}
+
 export const PeriodStatus = z.enum(["submitted", "withdrawn", "approved", "returned"]);
 export type PeriodStatus = z.infer<typeof PeriodStatus>;
 
