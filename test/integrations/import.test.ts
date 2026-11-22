@@ -13,6 +13,7 @@ import {
 	value,
 } from "../organisations/harness";
 import { open, type Person, person, submit, textOf } from "../pages/harness";
+import { seedLeave } from "../pages/leave-seed";
 import { seedEntry, seedPeriod, seedProject } from "../pages/periods-seed";
 import harvestExport from "./fixtures/harvest-time-export.csv?raw";
 
@@ -252,6 +253,63 @@ describe("importing Harvest's export of all time", () => {
 				id,
 			),
 		).toBe(1);
+	});
+
+	it("cuts a row past its day's limit as a timer is cut: regular to the limit, overtime after (decision 54)", async () => {
+		await env.DB.prepare("update organisations set overtime_policy = 'allowed' where id = ?")
+			.bind(acme.id)
+			.run();
+		const csv = [
+			"Date,Project,Task,Notes,Hours,First Name,Last Name",
+			// Monday 5 October: 6:00, then 3:00 of which 1:30 is left of the day's 7:30.
+			"2026-10-05,Website,Design,Morning,6,Ada,Lovelace",
+			"2026-10-05,Website,Design,Evening,3,Ada,Lovelace",
+		].join("\n");
+		const uploaded = await upload(csv);
+		const page = textOf(await (await open(uploaded.location, ada)).text());
+		expect(page).toContain("2 to import, 0 to skip.");
+		expect(page).toContain("1:30 overtime");
+		const id = importIdOf(uploaded.location);
+		await submit(`${IMPORT}?kind=time`, { intent: "import", importId: id }, ada);
+		const { results } = await env.DB.prepare(
+			"select description, (ended_at - started_at) / 60000 as minutes, overtime from time_entries where import_id = ? order by started_at",
+		)
+			.bind(id)
+			.all();
+		expect(results).toEqual([
+			{ description: "Morning", minutes: 360, overtime: 0 },
+			{ description: "Evening", minutes: 90, overtime: 0 },
+			{ description: "Evening", minutes: 90, overtime: 1 },
+		]);
+
+		// The same file again: both rows are already here, the cut one too.
+		const again = await upload(csv);
+		const shown = textOf(await (await open(again.location, ada)).text());
+		expect(shown).toContain("0 to import, 2 to skip.");
+	});
+
+	it("skips a row dated after today", async () => {
+		const ahead = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
+		const csv = [
+			"Date,Project,Task,Notes,Hours,First Name,Last Name",
+			`${ahead},Website,Design,Later,2,Ada,Lovelace`,
+			"2026-10-05,Website,Design,Before,2,Ada,Lovelace",
+		].join("\n");
+		const uploaded = await upload(csv);
+		const page = textOf(await (await open(uploaded.location, ada)).text());
+		expect(page).toContain("1 to import, 1 to skip.");
+		expect(page).toContain("That day has not come yet.");
+	});
+
+	it("names the person whose leave a row falls on (TR-18d)", async () => {
+		await seedLeave(acme.id, max.user.id, "annual", "2026-10-06", "2026-10-06");
+		const csv = [
+			"Date,Project,Task,Notes,Hours,First Name,Last Name",
+			"2026-10-06,Website,Design,Away,2,Max,Member",
+		].join("\n");
+		const uploaded = await upload(csv);
+		const page = textOf(await (await open(uploaded.location, ada)).text());
+		expect(page).toContain("Max is on annual leave that day.");
 	});
 
 	it("stores each row's day as its date, in each person's zone (TS-111)", async () => {

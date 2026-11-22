@@ -91,7 +91,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		preview: preview
 			? {
 					...preview,
-					toImport: preview.kind === "time" ? preview.rows.length : preview.records.length,
+					toImport:
+						preview.kind === "time"
+							? // A row cut at its day's limit is two entries of one line (decision 54).
+								new Set(preview.rows.map((row) => row.line)).size
+							: preview.records.length,
 					rows: preview.rows.slice(0, SHOWN_ROWS),
 					records: preview.records.slice(0, SHOWN_ROWS),
 					skippedCount: preview.skipped.length,

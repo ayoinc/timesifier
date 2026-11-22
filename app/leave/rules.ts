@@ -335,14 +335,18 @@ function weekdayName(day: Day): string {
 
 /**
  * Why a closed day takes no time, as a sentence: "Christmas Day is a public
- * holiday: no time can be tracked on it."
+ * holiday: no time can be tracked on it." `who` names the person whose day it
+ * is, for someone else's time (an import, TR-18d): "Grace is on annual leave
+ * that day."
  */
-export function closedReason(closed: Closed, day: Day): string {
+export function closedReason(closed: Closed, day: Day, who?: string): string {
 	switch (closed.why) {
 		case "holiday":
 			return `${closed.name} is a public holiday: no time can be tracked on it.`;
 		case "leave":
-			return `You are on ${closed.kindName.toLowerCase()} that day: no time can be tracked on it.`;
+			return who
+				? `${who} is on ${closed.kindName.toLowerCase()} that day.`
+				: `You are on ${closed.kindName.toLowerCase()} that day: no time can be tracked on it.`;
 		case "weekend-not-allowed":
 			return `${weekdayName(day)} is not a working day, and this organisation does not allow time on it.`;
 	}
