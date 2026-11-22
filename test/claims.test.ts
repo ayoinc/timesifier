@@ -526,7 +526,7 @@ it("the structured data parses, and says no more than who and what Timesifier is
 	);
 	expect(Object.keys(byType).sort()).toEqual(["Organization", "SoftwareApplication"]);
 
-	// The brand, its address and its mark: the legal entity is not known yet.
+	// The brand, its address and its mark; the company that runs it is named on the page, not here.
 	const { logo, ...organisation } = byType.Organization as Record<string, string>;
 	expect(organisation).toEqual({ "@type": "Organization", name: "Timesifier", url: `${ORIGIN}/` });
 	const logoUrl = new URL(logo ?? "");

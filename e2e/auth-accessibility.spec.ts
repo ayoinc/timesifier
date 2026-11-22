@@ -142,9 +142,9 @@ async function walkEveryView(page: Page): Promise<number[]> {
 // scrollbar would come and go with the change of view. At this width the
 // photograph is not shown and the view that takes the address, with the
 // newsletter's box (TS-099) and the company that runs Timesifier at the foot
-// (TS-121), stands 881px tall with the band and the foot; the one that takes
-// the code, 990px.
-const BETWEEN = { width: 700, height: 940 };
+// (TS-121), stands 877px tall with the band and the foot; the one that takes
+// the code, 986px.
+const BETWEEN = { width: 700, height: 930 };
 
 test.describe("with reduced motion requested", () => {
 	test.use({ reducedMotion: "reduce" });

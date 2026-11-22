@@ -567,3 +567,5 @@ The four details belong to one deployment, so none of them is in the code (TS-03
 **What it costs.** Four more variables to set by hand for a new deployment, and a deploy to change one. The home page, the sign-in page and both notices answer 500 where one is missing, which is the rule for every setting. A change of company is a new entry here and a new version of both notices.
 
 **Not decided, and nothing is said about them on any page:** a registration with the Information Commissioner's Office, a VAT number, and a representative in the European Union. The emails name no company: the owner decided that they carry no company name or address until they say otherwise.
+
+**Not changed by this entry:** the home page's structured data still names the brand alone (entry 43, which was written before the company was known). Whether it should also carry the company's legal name is the owner's to decide.

@@ -54,10 +54,11 @@ const LOGO_PATH = "/icon-512.png";
 
 /**
  * What the home page tells a search engine about who and what Timesifier is.
- * The organisation is named by its brand alone: the legal entity behind it is
- * not on any page yet (privacy notice, "Who is responsible"). The application
- * carries no price and no rating: it has neither to state. It is a data block,
- * not a script: the browser runs nothing from it, so it needs no nonce.
+ * The organisation is named by its brand alone (`docs/decisions.md`, entry 43);
+ * the company that runs the deployment is named at the foot of the page (entry
+ * 46). The application carries no price and no rating: it has neither to
+ * state. It is a data block, not a script: the browser runs nothing from it, so
+ * it needs no nonce.
  */
 function structuredData(origin: string) {
 	return {
