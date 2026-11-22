@@ -48,7 +48,8 @@ async function seedThings(organisationId: string) {
 	await named("clients", ids.client, "Globex");
 	await named("tasks", ids.task, "Design");
 	await named("tags", ids.tag, "Urgent");
-	await named("expense_categories", ids.category, "Travel");
+	// Not one of the usual categories a new organisation is given (TS-119).
+	await named("expense_categories", ids.category, "Parking");
 	await named("work_schedules", ids.schedule, "Nights");
 	await insert(
 		"insert into invoices (id, organisation_id, number, client_id, currency, issued_on, due_on, created_at, updated_at) values (?, ?, 'INV-0042', ?, 'GBP', '2026-01-05', '2026-02-04', 0, 0)",
@@ -185,8 +186,14 @@ beforeEach(async () => {
 		subject: uuidv7(),
 		summary: { before: { projectId: projects[i] }, after: { projectId: projects[i + 1] } },
 	}));
+	// What the organisation recorded before: its usual expense categories (TS-119).
+	const before = await env.DB.prepare(
+		"select count(*) as total from activity_records where organisation_id = ?",
+	)
+		.bind(acme.id)
+		.first<number>("total");
 	await seedRecords(acme.id, [...named, ...entries]);
-	recorded = named.length + entries.length;
+	recorded = (before ?? 0) + named.length + entries.length;
 }, 60_000);
 
 describe("the Activity log naming 150 things", () => {
@@ -200,7 +207,7 @@ describe("the Activity log naming 150 things", () => {
 		expect(text).toContain("Renamed team Many");
 		expect(text).toContain("Archived task Design");
 		expect(text).toContain("Archived tag Urgent");
-		expect(text).toContain("Archived expense category Travel");
+		expect(text).toContain("Archived expense category Parking");
 		expect(text).toContain("Archived work schedule Nights");
 		expect(text).toContain("Sent invoice INV-0042");
 		expect(text).toContain("Sent estimate EST-0042");

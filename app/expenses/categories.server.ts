@@ -3,14 +3,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { ActivitySource } from "~/activity/actions";
 import { changes, recordStatement, recordStatementWhen } from "~/activity/activity.server";
-import {
-	among,
-	notAmong,
-	type OrganisationScope,
-	type ScopedStatement,
-	users,
-	uuidv7,
-} from "~/db";
+import { among, notAmong, type OrganisationScope, type ScopedStatement, users, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import { nameOrEmail } from "~/organisations/people";
 import type { Day } from "~/time/calendar";
