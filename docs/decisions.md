@@ -548,7 +548,7 @@ Decided for TS-119 (research/harvest-sweep-2.md, S2-05 and S2-11), on 2026-11-13
 | Mileage left unpriced, with a hint naming HMRC                     | What S2-05 proposed. A price that is HMRC's on each day is truer than a blank, and a UK business pays it; the hint alone leaves Mileage unusable until an owner sets one. |
 | A trigger on `organisations`, as work schedules have               | Atomic with the row, whichever way it is made; but the Activity log's records are written by `app/activity/`, and a trigger would have to build them in SQL.              |
 
-### 41. Who runs Timesifier: one company, named by the deployment
+### 46. Who runs Timesifier: one company, named by the deployment
 
 Decided by the owner on 2026-11-14 (TS-121).
 
