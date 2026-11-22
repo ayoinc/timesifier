@@ -7,7 +7,13 @@ import { gridEntryStart } from "~/time/grid";
 import { GETTING_STARTED_COOKIE } from "~/timesheet/getting-started.server";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { createOrganisation, type Role, seedMembership, value } from "../organisations/harness";
+import {
+	createOrganisation,
+	type Role,
+	seedMember,
+	seedMembership,
+	value,
+} from "../organisations/harness";
 import { open, openData, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
 import { entryDay } from "./periods-seed";
@@ -644,8 +650,10 @@ describe("submitting a week (TS-046)", () => {
 			}>()
 		).results;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		clockAt(T0);
+		// Someone else approves Ada's week, so it waits for them (D5).
+		await seedMember(acme.id, "admin", "hedy@example.com");
 	});
 
 	it("locks its entries once submitted, until it is withdrawn; both steps are recorded", async () => {
@@ -963,8 +971,10 @@ describe("the week's days above the day (TS-056)", () => {
 describe("the Day view's foot (TS-056)", () => {
 	const DAY = `${PAGE}?day=2026-11-10`;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		clockAt(T0);
+		// Someone else approves Ada's week, so it waits for them (D5).
+		await seedMember(acme.id, "admin", "hedy@example.com");
 	});
 
 	it("shows the period and its status, and Submit week, whose submission both views then show", async () => {

@@ -68,7 +68,8 @@ describe("the page", () => {
 		expect(text).toContain("Pending (1)");
 		expect(text).toContain("Approved (1)");
 		expect(text).toContain("Returned (0)");
-		expect(text).toContain("Not submitted (2)");
+		// Mona; not Ada, whose own week nobody shows her to decide (D5).
+		expect(text).toContain("Not submitted (1)");
 		expect(html).toContain('href="/app/acme/approvals?week=2025-12-29"');
 		expect(html).toContain('href="/app/acme/approvals?week=2026-01-12"');
 		// A pending person's name opens their week on Team.
@@ -77,7 +78,7 @@ describe("the page", () => {
 		const missing = textOf(
 			await pageBody(await open(`${APPROVALS}?week=${WEEK}&status=not-submitted`, ada)),
 		);
-		expect(missing).toContain("ada@example.com");
+		expect(missing).not.toContain("ada@example.com");
 		expect(missing).toContain("mona@example.com");
 		// The current week, which a later one is shown as, has not closed, so nobody is listed yet.
 		const current = textOf(
@@ -308,9 +309,9 @@ describe("status and grouping (TS-058)", () => {
 		const returned = textOf(await page(ada, "&status=returned&group=project"));
 		expect(returned).toMatch(/Site linus 4:00 Total 4:00/);
 
-		// Not submitted: Ada, who has no time, and Mona, who has eight hours.
+		// Not submitted: Mona, who has eight hours; Ada's own week is not hers to decide (D5).
 		const missing = textOf(await page(ada, "&status=not-submitted"));
-		expect(missing).toContain("ada@example.com");
+		expect(missing).not.toContain("ada@example.com");
 		expect(missing).toMatch(/mona@example\.com Not submitted 8:00/);
 		expect(missing).toContain("Total 8:00");
 		expect(missing).not.toContain(grace.user.email);
@@ -354,7 +355,7 @@ describe("status and grouping (TS-058)", () => {
 			grace.user.id,
 		);
 		const text = textOf(await page(ada, "&status=not-submitted"));
-		expect(text).toContain("ada@example.com");
+		expect(text).toContain("Everyone has submitted this week.");
 		expect(text).not.toContain("grace@example.com");
 	});
 	it.each([
@@ -551,8 +552,8 @@ describe("time off waiting (TS-061)", () => {
 		const text = textOf(
 			await pageBody(await open(`${APPROVALS}?week=${WEEK}&status=not-submitted`, ada)),
 		);
-		expect(text).toContain("Not submitted (4)");
-		for (const listed of ["ada@", "linus@", "nils@", "bob@"]) expect(text).toContain(listed);
+		expect(text).toContain("Not submitted (3)");
+		for (const listed of ["linus@", "nils@", "bob@"]) expect(text).toContain(listed);
 		for (const away of ["grace@", "mona@"]) expect(text).not.toContain(away);
 	});
 });

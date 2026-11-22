@@ -382,12 +382,13 @@ test.describe("the Day view", () => {
 		await page.keyboard.press("Enter");
 		const dialog = page.getByRole("dialog", { name: "Submit this week?" });
 		await dialog.getByRole("button", { name: "Submit week" }).press("Enter");
-		await expect(page.getByRole("main")).toContainText("Status: Submitted");
-		await expect(page.getByRole("button", { name: "Withdraw submission" })).toBeVisible();
+		// The owner is alone, so nobody else can approve it: the system does, and says so (D5).
+		await expect(page.getByRole("main")).toContainText("Status: Approved");
+		await expect(page.getByText("Week submitted and approved automatically")).toBeAttached();
 		await expect(page.getByRole("button", { name: "Track time", exact: true })).toHaveCount(0);
 
 		await views(page).getByRole("link", { name: "Week" }).click();
-		await expect(page.getByText("Status: Submitted")).toBeAttached();
+		await expect(page.getByText("Status: Approved")).toBeAttached();
 	});
 
 	test("getting started counts what is done, ticks each step, and is gone once all three are", async ({
@@ -495,16 +496,17 @@ test.describe("the Week view", () => {
 		await page.getByRole("button", { name: "Submit week" }).click();
 		const dialog = page.getByRole("dialog", { name: "Submit this week?" });
 		await dialog.getByRole("button", { name: "Submit week" }).click();
-		await expect(page.getByText("Status: Submitted")).toBeAttached();
+		// The owner is alone, so the system approves it as it is submitted (D5).
+		await expect(page.getByText("Status: Approved")).toBeAttached();
 		await expect(page.getByRole("textbox", { name: /^Site, / })).toHaveCount(0);
 
 		await page
 			.getByRole("group", { name: "Timesheet views" })
 			.getByRole("link", { name: "History" })
 			.click();
-		// This week first, then the week submitted.
+		// This week first, then the week submitted and approved.
 		const submitted = page.getByRole("list", { name: "Periods" }).getByRole("listitem").nth(1);
-		await expect(submitted).toContainText("Submitted");
+		await expect(submitted).toContainText("Approved");
 		await expect(submitted).toContainText("3:30");
 	});
 

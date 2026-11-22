@@ -309,7 +309,13 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				weekStartsOn: organisation.weekStartsOn,
 				now,
 			});
-			if (submitted.ok) return done("Week submitted. Its entries are locked until it is decided.");
+			if (submitted.ok) {
+				return done(
+					submitted.alone
+						? "Week submitted and approved automatically: nobody else can approve it."
+						: "Week submitted. Its entries are locked until it is decided.",
+				);
+			}
 			const over = (("over" in submitted && submitted.over) || [])
 				.map((d) => `${formatDay(d.day, "short")} ${overLabel(d.overMinutes).toLowerCase()}`)
 				.join(", ");
@@ -323,7 +329,11 @@ export async function timesheetAction(request: Request, membership: Membership) 
 		}
 
 		case "withdraw": {
-			const withdrawn = await withdrawPeriod(scope, { userId: user.id, startsOn: input.startsOn });
+			const withdrawn = await withdrawPeriod(scope, {
+				userId: user.id,
+				startsOn: input.startsOn,
+				weekStartsOn: organisation.weekStartsOn,
+			});
 			return withdrawn.ok
 				? done("Submission withdrawn. You can change the week's entries again.")
 				: declined("Only a submission nobody has decided yet can be withdrawn.", 409);

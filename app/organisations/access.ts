@@ -8,8 +8,8 @@ import type { Role } from "./roles";
  *
  * - A person sees, adds and changes their own entries and expenses, and
  *   submits and withdraws their own periods.
- * - An owner or admin sees everyone's time and decides everyone's periods,
- *   their own included, and alone reopens an approved period. They change
+ * - An owner or admin sees everyone's time and decides everyone's periods
+ *   but their own (D5, decision 47), and alone reopens an approved period. They change
  *   nobody's entries but their own (decision 25).
  * - Finance (TS-064) sees everyone's time and expenses, every rate and every
  *   amount, and runs Bill. It decides no period unless it manages a team, and
@@ -99,10 +99,15 @@ export function mayChangeTimeOf(access: Access, personId: string): boolean {
 	return personId === access.userId;
 }
 
-/** Whether `access` may approve or return a period of `personId`. */
+/**
+ * Whether `access` may approve or return a period of `personId`: an owner or
+ * admin, or a manager of a team the person is in, and never the person
+ * themselves, whatever their role (D5, decision 47). A week nobody else may
+ * decide is approved by the system as it is submitted.
+ */
 export function mayDecidePeriodOf(access: Access, personId: string): boolean {
-	if (isAdministrator(access.role)) return true;
-	return personId !== access.userId && access.managed.has(personId);
+	if (personId === access.userId) return false;
+	return isAdministrator(access.role) || access.managed.has(personId);
 }
 
 /** Whether `access` may reopen an approved period: an owner or admin alone (TS-047). */
@@ -118,6 +123,16 @@ export function mayReopenPeriods(access: Access): boolean {
 export function mayDecideLeaveOf(access: Access, personId: string): boolean {
 	if (personId === access.userId) return false;
 	return isAdministrator(access.role) || access.managed.has(personId);
+}
+
+/**
+ * Whether `access` may approve a request for days that the people
+ * `refusedBy` refused before (D5, decision 47): an owner or admin may, and
+ * so may the one who refused; any other manager may not, so that a request
+ * refused by one manager is not asked of the next.
+ */
+export function mayApproveAfterRefusals(access: Access, refusedBy: readonly string[]): boolean {
+	return isAdministrator(access.role) || refusedBy.every((id) => id === access.userId);
 }
 
 /**
