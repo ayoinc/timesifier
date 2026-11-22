@@ -405,7 +405,8 @@ function EmptyDay({
  * inputs, which write no `style` attribute (docs/security.md). The date is
  * the one its start reads in the person's zone now, with its clock times, so
  * a form saved unchanged keeps the entry's start, and its stored day with it
- * (TS-111), even when the person's zone has changed since it was tracked.
+ * (TS-111), even when the person's zone has changed since it was tracked. An
+ * end at or before the start is the next day's, and says "+1 day" (TR-14).
  */
 export function EntryFields({
 	data,
@@ -417,6 +418,9 @@ export function EntryFields({
 	clock: (instant: number) => string;
 }) {
 	const offered = data.projects.filter((p) => !p.archived || p.id === entry.projectId);
+	const [start, setStart] = useState(() => clock(entry.startedAt));
+	const [end, setEnd] = useState(() => (entry.endedAt ? clock(entry.endedAt) : ""));
+	const endsNextDay = start !== "" && end !== "" && end <= start;
 	return (
 		<>
 			<EntryChoices projects={offered} defaultProjectId={entry.projectId} entryId={entry.id} />
@@ -426,14 +430,17 @@ export function EntryFields({
 					label="Start"
 					name="start"
 					type="time"
-					defaultValue={clock(entry.startedAt)}
+					value={start}
+					onChange={setStart}
 					isRequired
 				/>
 				<TextField
 					label="End"
 					name="end"
 					type="time"
-					defaultValue={entry.endedAt ? clock(entry.endedAt) : ""}
+					value={end}
+					onChange={setEnd}
+					description={endsNextDay ? "+1 day" : undefined}
 					isRequired
 				/>
 			</div>

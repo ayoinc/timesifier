@@ -9,6 +9,7 @@ import { type PeriodDays, periodAfter } from "~/periods/periods";
 import { entryTagStatements, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { formatDay } from "~/time/format";
 import { gridEntryStart, placeOnDay } from "~/time/grid";
 import { ENTRY_FIELDS, entriesOfDay, subject } from "~/time/manual.server";
 
@@ -25,6 +26,11 @@ import { formatDuration } from "./durations";
  * description and length, and are laid end to end from 09:00 on their day, as
  * hours typed into the week's grid are (`gridEntryStart`); none ends past the
  * end of its day or past now.
+ *
+ * Each copy is the kind its entry was, regular or overtime (decision 56),
+ * within the rules of the day it lands on: where that day does not take the
+ * overtime, the regular entries are copied and the overtime is left out, and
+ * the copy says so (TR-18e). Copy week names each day it leaves, and why.
  */
 
 /** How far back a copy looks: three weeks (Harvest's "Copy your last timesheet"). */
@@ -39,6 +45,8 @@ export interface CopySource {
 	description: string | null;
 	startedAt: number;
 	lengthMs: number;
+	/** Whether it is overtime (TS-095): its copy is too, where the day takes it. */
+	overtime: boolean;
 }
 
 /** The person's ended entries on active projects from `first` to `last`, earliest first. */
@@ -65,6 +73,7 @@ async function sourcesIn(
 			description: row.description,
 			startedAt: row.startedAt.getTime(),
 			lengthMs: (row.endedAt as Date).getTime() - row.startedAt.getTime(),
+			overtime: row.overtime,
 		}))
 		.sort((a, b) => a.startedAt - b.startedAt);
 }
@@ -117,30 +126,69 @@ export async function copySourceWeek(
 
 type Statement = Parameters<OrganisationScope["batch"]>[0][number];
 
+/**
+ * What a copy onto a day leaves out: its overtime, where the day does not
+ * take it, with the sentence that says why.
+ */
+export interface LeftOut {
+	day: Day;
+	overtimeMs: number;
+	why: string;
+}
+
+/** What a copy left out, as a sentence: "Its 1:00 of overtime was left out. This organisation does not allow overtime." */
+export function leftOutSentence(left: LeftOut, { naming }: { naming: boolean }): string {
+	const on = naming ? ` on ${formatDay(left.day, "short")}` : "";
+	return `Its ${formatDuration(left.overtimeMs)} of overtime${on} was left out. ${left.why}`;
+}
+
 /** Why `day` takes no copy, or the statements that write the copies onto it. */
 async function copyOnto(
 	scope: OrganisationScope,
 	userId: string,
 	day: Day,
-	sources: readonly CopySource[],
+	all: readonly CopySource[],
 	zone: string,
 	now: number,
-): Promise<{ ok: true; statements: Statement[]; ids: string[] } | { ok: false; problem: string }> {
+): Promise<
+	| { ok: true; statements: Statement[]; ids: string[]; leftOut: LeftOut | null }
+	| { ok: false; problem: string }
+> {
 	if ((await entriesOfDay(scope, userId, day)).length > 0) {
 		return { ok: false, problem: "That day already has time: nothing was copied onto it." };
 	}
 	if ((await lockedDays(scope, userId, [day])).size > 0) {
 		return { ok: false, problem: "That day is locked: nothing can be copied onto it." };
 	}
-	const totalMs = sources.reduce((sum, s) => sum + s.lengthMs, 0);
-	const over = await refusalOf(scope, userId, now, {
-		day,
-		replaces: null,
-		afterMs: totalMs,
-		// A copy is regular time, whatever the entries copied were (TS-095).
-		overtime: false,
-	});
+	const lengthOf = (entries: readonly CopySource[]) =>
+		entries.reduce((sum, s) => sum + s.lengthMs, 0);
+	const regularMs = lengthOf(all.filter((s) => !s.overtime));
+	const overtimeMs = lengthOf(all.filter((s) => s.overtime));
+	// A copy is the kind its entry was (decision 56): regular time must fit,
+	// and overtime the day does not take is left out, with why.
+	const over =
+		regularMs > 0
+			? await refusalOf(scope, userId, now, {
+					day,
+					replaces: null,
+					afterMs: regularMs,
+					overtime: false,
+				})
+			: null;
 	if (over) return { ok: false, problem: over };
+	const overtimeRefused =
+		overtimeMs > 0
+			? await refusalOf(scope, userId, now, {
+					day,
+					replaces: null,
+					afterMs: overtimeMs,
+					overtime: true,
+				})
+			: null;
+	if (overtimeRefused && regularMs === 0) return { ok: false, problem: overtimeRefused };
+	const leftOut = overtimeRefused ? { day, overtimeMs, why: overtimeRefused } : null;
+	const sources = leftOut ? all.filter((s) => !s.overtime) : all;
+	const totalMs = lengthOf(sources);
 	const tags = await tagsOfEntries(
 		scope,
 		sources.map((s) => s.id),
@@ -175,6 +223,7 @@ async function copyOnto(
 			startedAt: new Date(at),
 			endedAt: new Date(at + source.lengthMs),
 			spentOn: day,
+			overtime: source.overtime,
 		};
 		statements.push(
 			scope.timeEntries.statements.insert(added),
@@ -190,7 +239,7 @@ async function copyOnto(
 		ids.push(added.id);
 		at += source.lengthMs;
 	}
-	return { ok: true, statements, ids };
+	return { ok: true, statements, ids, leftOut };
 }
 
 /** Copies the entries of the person's last working day with time onto the empty `day`. */
@@ -200,7 +249,9 @@ export async function copyDay(
 	day: Day,
 	zone: string,
 	now: number,
-): Promise<{ ok: true; from: Day; ids: string[] } | { ok: false; problem: string }> {
+): Promise<
+	{ ok: true; from: Day; ids: string[]; leftOut: LeftOut | null } | { ok: false; problem: string }
+> {
 	const source = await copySourceDay(scope, userId, day);
 	if (!source) return { ok: false, problem: "No working day in the last three weeks has time." };
 	const onto = await copyOnto(scope, userId, day, source.entries, zone, now);
@@ -208,13 +259,15 @@ export async function copyDay(
 	if (onto.statements.length > 0) {
 		await scope.batch(onto.statements as [Statement, ...Statement[]]);
 	}
-	return { ok: true, from: source.day, ids: onto.ids };
+	return { ok: true, from: source.day, ids: onto.ids, leftOut: onto.leftOut };
 }
 
 /**
  * Copies the hours of the last week with time onto the week `period`, each
  * day onto the same day of this week. A day of this week with time, locked,
- * yet to come, or that does not take the time is left as it is.
+ * yet to come, or that does not take the time is left as it is; each day left
+ * that had time to copy is named with why (TR-18e), and so is overtime a day
+ * left out.
  */
 export async function copyWeek(
 	scope: OrganisationScope,
@@ -222,12 +275,15 @@ export async function copyWeek(
 	period: PeriodDays,
 	zone: string,
 	now: number,
-): Promise<{ ok: true; days: number; ids: string[] } | { ok: false; problem: string }> {
+): Promise<
+	{ ok: true; days: number; ids: string[]; notes: string[] } | { ok: false; problem: string }
+> {
 	const source = await copySourceWeek(scope, userId, period);
 	if (!source) return { ok: false, problem: "No week in the last three has time." };
 	const today = dayOf(now, zone);
 	const statements: Statement[] = [];
 	const ids: string[] = [];
+	const notes: string[] = [];
 	let days = 0;
 	for (const [index, day] of daysFrom(period.startsOn, period.endsOn).entries()) {
 		if (day > today) continue;
@@ -235,7 +291,12 @@ export async function copyWeek(
 		const ofDay = source.entries.filter((s) => s.day === from);
 		if (ofDay.length === 0) continue;
 		const onto = await copyOnto(scope, userId, day, ofDay, zone, now);
-		if (!onto.ok || onto.ids.length === 0) continue;
+		if (!onto.ok) {
+			notes.push(`${formatDay(day, "short")} was left out. ${onto.problem}`);
+			continue;
+		}
+		if (onto.leftOut) notes.push(leftOutSentence(onto.leftOut, { naming: true }));
+		if (onto.ids.length === 0) continue;
 		statements.push(...onto.statements);
 		ids.push(...onto.ids);
 		days++;
@@ -243,10 +304,12 @@ export async function copyWeek(
 	if (statements.length === 0) {
 		return {
 			ok: false,
-			problem:
+			problem: [
 				"Nothing was copied: every day with time last week has time, is locked or takes none.",
+				...notes,
+			].join(" "),
 		};
 	}
 	await scope.batch(statements as [Statement, ...Statement[]]);
-	return { ok: true, days, ids };
+	return { ok: true, days, ids, notes };
 }

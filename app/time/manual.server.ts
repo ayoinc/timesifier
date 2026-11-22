@@ -4,7 +4,6 @@ import type { ActivitySource } from "~/activity/actions";
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
 import { refusalOf } from "~/leave/rules.server";
-import { invoicedIds } from "~/locks/locks.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
@@ -39,7 +38,9 @@ export type NotWritten =
 	| "limit"
 	| "invoiced"
 	| "no-task"
-	| "no-tag";
+	| "no-tag"
+	| "ahead"
+	| "too-long";
 
 export interface Span {
 	projectId: string;
@@ -54,13 +55,52 @@ export interface Span {
 	overtime?: boolean;
 }
 
-export const refuse = (reason: Exclude<NotWritten, "limit">) => ({ ok: false as const, reason });
+export const refuse = (reason: Exclude<NotWritten, "limit" | "invoiced">) => ({
+	ok: false as const,
+	reason,
+});
 /** A change the day's limit does not take, with what to tell the person (TS-090). */
 export const limited = (message: string) => ({
 	ok: false as const,
 	reason: "limit" as const,
 	message,
 });
+
+/**
+ * What a refused change says, wherever it came from: the Timesheet, and the
+ * API in the same words (TR-18c).
+ */
+export const REFUSAL_SENTENCES = {
+	locked:
+		"That day is locked: its week is submitted or approved, or it is on or before the lock date. Withdraw the week, or ask an owner or admin to move the lock date back.",
+	ahead: "That is ahead of now.",
+	"too-long": "An entry cannot be longer than 24 hours.",
+} as const;
+
+/** The longest an entry can be: a day holds no more (TR-13). */
+export const LONGEST_ENTRY_MS = 24 * 60 * 60_000;
+
+/**
+ * Refuses a change to an entry on an invoice, naming the invoice and who can
+ * let the entry go (TR-09): an owner, admin or Finance, by taking it off a
+ * draft or voiding the invoice once it is issued. Null when it is on none.
+ */
+export async function invoicedRefusal(scope: OrganisationScope, entryId: string) {
+	const [source] = await scope.invoiceLineSources.select((s) => eq(s.timeEntryId, entryId), {
+		limit: 1,
+	});
+	if (!source) return null;
+	const [line] = await scope.invoiceLines.select((l) => eq(l.id, source.lineId), { limit: 1 });
+	const [invoice] = line
+		? await scope.invoices.select((i) => eq(i.id, line.invoiceId), { limit: 1 })
+		: [];
+	const message = !invoice
+		? "That entry is on an invoice, so it cannot be changed until it is taken off."
+		: invoice.status === "draft"
+			? `That entry is on the draft invoice ${invoice.number}, so it cannot be changed. An owner, admin or Finance can take it off the draft, or delete the draft.`
+			: `That entry is on invoice ${invoice.number}, so it cannot be changed. An owner, admin or Finance can void the invoice to let it go.`;
+	return { ok: false as const, reason: "invoiced" as const, message };
+}
 
 /** What the activity log records of an entry. */
 export const ENTRY_FIELDS = [
@@ -105,6 +145,8 @@ export async function editEntry(
 	if (!entry) return refuse("not-found");
 	if (entry.endedAt === null) return refuse("running");
 	if (span.endedAt <= span.startedAt) return refuse("ends-before-start");
+	if (span.endedAt > now) return refuse("ahead");
+	if (span.endedAt - span.startedAt > LONGEST_ENTRY_MS) return refuse("too-long");
 	if (span.projectId !== entry.projectId && !(await findActiveProject(scope, span.projectId))) {
 		return refuse("no-project");
 	}
@@ -114,7 +156,8 @@ export async function editEntry(
 	if ((await lockedDays(scope, userId, [entry.spentOn, spentOn])).size > 0) {
 		return refuse("locked");
 	}
-	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
+	const invoiced = await invoicedRefusal(scope, id);
+	if (invoiced) return invoiced;
 	const overtime = span.overtime ?? entry.overtime;
 	const over = await refusalOf(scope, userId, now, {
 		day: spentOn,
@@ -185,7 +228,8 @@ export async function deleteEntry(
 	if (!entry) return refuse("not-found");
 	if (entry.endedAt === null) return refuse("running");
 	if ((await lockedDays(scope, userId, [entry.spentOn])).size > 0) return refuse("locked");
-	if ((await invoicedIds(scope, "time_entry", [id])).size > 0) return refuse("invoiced");
+	const invoiced = await invoicedRefusal(scope, id);
+	if (invoiced) return invoiced;
 	const tagIds = (await tagsOfEntries(scope, [id])).get(id) ?? [];
 	await scope.batch([
 		scope.timeEntries.statements.delete((e) => and(eq(e.id, id), eq(e.userId, userId))),
@@ -390,9 +434,8 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 		return refuse("in-day-view");
 	}
 	const [entry] = inCell;
-	if (entry && (await invoicedIds(scope, "time_entry", [entry.id])).size > 0) {
-		return refuse("invoiced");
-	}
+	const invoiced = entry ? await invoicedRefusal(scope, entry.id) : null;
+	if (invoiced) return invoiced;
 	const over = await refusalOf(scope, userId, now, {
 		day,
 		replaces: entry?.id ?? null,

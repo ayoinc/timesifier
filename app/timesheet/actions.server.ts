@@ -12,7 +12,7 @@ import type { Outcome } from "~/organisations/problems";
 import { periodContaining } from "~/periods/periods";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
 import { TagIds } from "~/tags/tags";
-import { Day, dayOf, exactInstantAt } from "~/time/calendar";
+import { addDays, Day, dayOf, exactInstantAt } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { startTimer, stopTimer } from "~/time/entries.server";
 import { formatDay, formatDuration } from "~/time/format";
@@ -21,11 +21,12 @@ import {
 	deleteEntry,
 	editEntry,
 	type NotWritten,
+	REFUSAL_SENTENCES,
 	restoreEntry,
 	setCellHours,
 } from "~/time/manual.server";
 import { zoneOfMember } from "~/time/zones.server";
-import { copyDay, copyWeek } from "./copy.server";
+import { copyDay, copyWeek, leftOutSentence } from "./copy.server";
 import { TypedHours } from "./durations";
 import { markCookie } from "./getting-started.server";
 import { entryOfUndo, undoToken } from "./undo.server";
@@ -107,16 +108,14 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 ]);
 
 /** What each refusal says to the person, and the status it is answered with. A day's limit says its own. */
-const REFUSALS: Record<Exclude<NotWritten, "limit">, [string, number]> = {
+const REFUSALS: Record<Exclude<NotWritten, "limit" | "invoiced">, [string, number]> = {
 	"no-project": ["Choose an active project of this organisation.", 400],
-	locked: [
-		"That day is locked: its week is submitted or approved, or it is on or before the lock date. Withdraw the week, or ask an owner or admin to move the lock date back.",
-		409,
-	],
-	invoiced: ["That entry is on an invoice, so it cannot be changed until it is taken off.", 409],
+	locked: [REFUSAL_SENTENCES.locked, 409],
 	"not-found": ["That entry is not one of yours.", 404],
 	running: ["That entry is running. Stop the timer first.", 409],
 	"ends-before-start": ["An entry ends after it starts.", 400],
+	ahead: [REFUSAL_SENTENCES.ahead, 400],
+	"too-long": [REFUSAL_SENTENCES["too-long"], 400],
 	"in-day-view": [
 		"That day holds more than one entry of this project. Change it in the Day view.",
 		409,
@@ -127,14 +126,17 @@ const REFUSALS: Record<Exclude<NotWritten, "limit">, [string, number]> = {
 
 /**
  * A refused change in words. A day's limit says what it has left (TS-090),
- * and so does a day with no room left before its end or now (TS-091, W08).
+ * and so does a day with no room left before its end or now (TS-091, W08),
+ * and an invoice its number and who can let the entry go (TR-09).
  */
 const refusal = (
 	refused:
-		| { reason: Exclude<NotWritten, "limit"> }
-		| { reason: "limit" | "day-full"; message: string },
+		| { reason: Exclude<NotWritten, "limit" | "invoiced"> }
+		| { reason: "limit" | "day-full" | "invoiced"; message: string },
 ) => {
-	if (refused.reason === "limit") return declined(refused.message, 409);
+	if (refused.reason === "limit" || refused.reason === "invoiced") {
+		return declined(refused.message, 409);
+	}
 	if (refused.reason === "day-full") return declined(refused.message);
 	return declined(...REFUSALS[refused.reason]);
 };
@@ -203,28 +205,40 @@ export async function timesheetAction(request: Request, membership: Membership) 
 		// A timer that ran past its day's expected hours is cut there, the rest
 		// overtime, where the day takes overtime (TS-095); else, or past a cap,
 		// it is kept and the day flagged over until an entry is trimmed or
-		// moved (TS-090).
+		// moved (TS-090). Every day it puts over is named: its own, the
+		// remainder's, and a later day of the week whose overtime its overtime
+		// pushed past the week's cap (TR-18b).
 		case "stop": {
 			const stopped = await stopTimer(scope, user.id, now);
 			if (!stopped) return done("No timer was running.");
-			const [over] = await daysOver(scope, user.id, stopped.spentOn, stopped.spentOn, now);
-			const ended = stopped.endedAt?.getTime() ?? now;
-			const split =
-				ended < now
-					? ` ${formatDuration((now - ended) / 1000)} past the day's expected hours is recorded as overtime.`
-					: stopped.overtime
-						? " It is recorded as overtime."
-						: "";
+			const { ended, rest } = stopped;
+			const last = [rest?.spentOn ?? ended.spentOn, dayOf(now, zone)].sort().at(-1) as Day;
+			const over = await daysOver(scope, user.id, ended.spentOn, last, now);
+			const split = rest
+				? ` ${formatDuration((now - (ended.endedAt?.getTime() ?? now)) / 1000)} past the day's expected hours is recorded as overtime.`
+				: ended.overtime
+					? " It is recorded as overtime."
+					: "";
+			const named = over
+				.map((d) => `${formatDay(d.day, "short")} is ${overLabel(d.overMinutes).toLowerCase()}`)
+				.join(" and ");
 			return done(
-				over
-					? `Timer stopped.${split} ${formatDay(stopped.spentOn, "short")} is ${overLabel(over.overMinutes).toLowerCase()}: trim or move an entry before you submit the week.`
+				over.length > 0
+					? `Timer stopped.${split} ${named}: trim or move an entry before you submit the week.`
 					: `Timer stopped.${split}`,
 			);
 		}
 
+		// An end at or before the start is the next day's (TR-14): an entry
+		// that crosses midnight keeps its day, the one it starts on.
 		case "edit": {
 			const startedAt = typedInstant(input.date, input.start, zone);
-			const endedAt = typedInstant(input.date, input.end, zone);
+			const endsNextDay = input.end <= input.start;
+			const endedAt = typedInstant(
+				endsNextDay ? addDays(input.date, 1) : input.date,
+				input.end,
+				zone,
+			);
 			if (startedAt === null || endedAt === null) return declined(SKIPPED);
 			const written = await editEntry(
 				scope,
@@ -269,7 +283,10 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			const count = copied.ids.length;
 			return {
 				...done(
-					`Copied ${count} ${count === 1 ? "entry" : "entries"} from ${formatDay(copied.from, "short")}.`,
+					[
+						`Copied ${count} ${count === 1 ? "entry" : "entries"} from ${formatDay(copied.from, "short")}.`,
+						...(copied.leftOut ? [leftOutSentence(copied.leftOut, { naming: false })] : []),
+					].join(" "),
 				),
 				changed: copied.ids,
 			};
@@ -281,7 +298,10 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			if (!copied.ok) return declined(copied.problem, 409);
 			return {
 				...done(
-					`Copied ${copied.ids.length} ${copied.ids.length === 1 ? "entry" : "entries"} onto ${copied.days} ${copied.days === 1 ? "day" : "days"}.`,
+					[
+						`Copied ${copied.ids.length} ${copied.ids.length === 1 ? "entry" : "entries"} onto ${copied.days} ${copied.days === 1 ? "day" : "days"}.`,
+						...copied.notes,
+					].join(" "),
 				),
 				changed: copied.ids,
 			};
