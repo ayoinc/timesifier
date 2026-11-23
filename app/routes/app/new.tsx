@@ -3,6 +3,8 @@ import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { TextField } from "~/components/TextField";
+import { DPA_PATH, TERMS_PATH } from "~/landing/Site";
+import { DPA_VERSION } from "~/landing/trust";
 import { parseRequest } from "~/lib/validate";
 import { createOrganisation, listOrganisations } from "~/organisations/api.server";
 import { NAME_MAX_LENGTH, Name, nameProblem } from "~/organisations/name";
@@ -14,7 +16,8 @@ import { useSubmitting } from "~/shell/submitting";
 
 import type { Route } from "./+types/new";
 
-// `/app/new`: creating an organisation. One field, its name, and one action.
+// `/app/new`: creating an organisation. One field, its name, and one action,
+// which accepts the terms and the data processing agreement for it (TS-105).
 // The server chooses the address from the name.
 
 /** A person's first organisation is "yours"; any after it is one more. */
@@ -38,20 +41,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 			only && others.length === 0
 				? { to: organisationPath(only.slug), label: `Back to ${only.name}` }
 				: { to: APP_PATH, label: "Back to your organisations" },
+		/** The version of the data processing agreement the person accepts in creating it. */
+		dpaVersion: DPA_VERSION.date,
 	};
 }
 
-const form = z.object({ name: Name });
+const form = z.object({ name: Name, dpaVersion: z.string().max(20) });
 
 /**
  * Creates the organisation, with the person as its owner, and goes to its
  * Today. The first one a person creates arrives with a welcome.
  */
 export async function action({ request }: Route.ActionArgs) {
-	const { name } = await parseRequest(request, form);
+	const { name, dpaVersion } = await parseRequest(request, form);
 
 	const before = await listOrganisations(request);
-	const created = await createOrganisation(request, name);
+	const created = await createOrganisation(request, name, dpaVersion);
 	if (!created.ok) return refused(created);
 
 	const first = before.ok && before.data.length === 0;
@@ -60,7 +65,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function NewOrganisation({ loaderData, actionData }: Route.ComponentProps) {
-	const { first, back } = loaderData;
+	const { first, back, dpaVersion } = loaderData;
 	const busy = useNavigation().state !== "idle";
 	const submitting = useSubmitting();
 
@@ -90,6 +95,19 @@ export default function NewOrganisation({ loaderData, actionData }: Route.Compon
 				/>
 				<p role="alert" className="text-body-medium text-error empty:hidden">
 					{actionData && !actionData.ok && !busy ? actionData.problem : null}
+				</p>
+				{/* The version this page showed: a newer one is refused, and the page then shows it. */}
+				<input type="hidden" name="dpaVersion" value={dpaVersion} />
+				<p className="text-body-large text-on-surface-variant">
+					By creating it you accept the{" "}
+					<a href={TERMS_PATH} className={TEXT_LINK}>
+						terms
+					</a>{" "}
+					and the{" "}
+					<a href={DPA_PATH} className={TEXT_LINK}>
+						data processing agreement
+					</a>{" "}
+					for it.
 				</p>
 				<div className="flex flex-wrap items-center gap-4">
 					<Button type="submit" {...submitting()}>

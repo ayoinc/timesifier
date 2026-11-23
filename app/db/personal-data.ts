@@ -115,3 +115,18 @@ export const STORED = [
 
 /** The name of a row of "What is stored". */
 export type StoredTerm = (typeof STORED)[number]["rows"][number]["term"];
+
+/** The heading of a part of "What is stored". */
+export type StoredHeading = (typeof STORED)[number]["heading"];
+
+/**
+ * The parts of "What is stored" that belong to an organisation, which is their
+ * controller: Timesifier processes them for it, under the data processing
+ * agreement (`/dpa`, TS-105). The company is the controller of the rest: a
+ * person's account, sign-ins and mail, and Timesifier's own records.
+ */
+export const PROCESSED_FOR_ORGANISATIONS = [
+	"Your organisation's work",
+	"Integrations",
+	"The activity log",
+] as const satisfies readonly StoredHeading[];

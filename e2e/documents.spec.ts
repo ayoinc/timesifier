@@ -2,7 +2,8 @@ import { SIGNED_OUT } from "./auth-state";
 import { problems } from "./axe";
 import { expect, test } from "./fixtures";
 
-// The privacy notice and the terms, as anybody meets them: nobody is signed in.
+// The privacy notice, the terms, the data processing agreement and the trust
+// pages, as anybody meets them: nobody is signed in.
 // They run in Chromium and in WebKit, like the home page they hang from.
 
 test.use({ storageState: SIGNED_OUT });
@@ -10,6 +11,7 @@ test.use({ storageState: SIGNED_OUT });
 const DOCUMENTS = [
 	{ path: "/privacy", link: "Privacy notice" },
 	{ path: "/terms", link: "Terms" },
+	{ path: "/dpa", link: "Data processing agreement" },
 	{ path: "/security", link: "Security" },
 	{ path: "/accessibility", link: "Accessibility" },
 ] as const;

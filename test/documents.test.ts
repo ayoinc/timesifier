@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { deploymentOperator, icoReference } from "~/landing/operator";
 import {
 	ACCESSIBILITY_PATH,
+	DPA_PATH,
 	OUTSIDE_LINKS,
 	PRICING_PATH,
 	PRIVACY_EMAIL,
@@ -74,11 +75,15 @@ it("the terms say which company they are with", async () => {
 	expect(terms).toContain("These terms are between you and that company.");
 });
 
-it("the privacy notice says which company answers for what is stored", async () => {
+it("the privacy notice names each organisation the controller of its work, and the company its processor and the controller of the rest", async () => {
 	const notice = wordsOf(await page(PRIVACY_PATH), "main");
 
 	expect(notice).toContain(operatorSentences());
-	expect(notice).toContain("Data protection law calls it the controller.");
+	expect(notice).toContain("Each organisation is the controller of its people");
+	expect(notice).toContain("the company processes it for the organisation, as its processor");
+	expect(notice).toContain(
+		"The company remains the controller of your account, your sessions and sign-ins",
+	);
 });
 
 it("the home page links to both", async () => {
@@ -105,7 +110,7 @@ it("the terms' Price section says what the pricing page says, from the same pric
 	}
 });
 
-it.each([SECURITY_PATH, ACCESSIBILITY_PATH])(
+it.each([SECURITY_PATH, ACCESSIBILITY_PATH, DPA_PATH])(
 	"%s is answered whole by the server, with its date, and says which company runs Timesifier",
 	async (path) => {
 		const html = await page(path);
@@ -115,6 +120,21 @@ it.each([SECURITY_PATH, ACCESSIBILITY_PATH])(
 		expect(html).toContain('href="mailto:security@timesifier.com"');
 	},
 );
+
+it("the terms incorporate the data processing agreement, which offers a signed copy on request", async () => {
+	const terms = await page(TERMS_PATH);
+	const processing = terms.match(/<section id="processing"[\s\S]*?<\/section>/)?.[0] ?? "";
+	expect(processing).toContain("Processing your organisation&#x27;s data");
+	expect(processing).toContain(`href="${DPA_PATH}"`);
+	expect(wordsOf(terms, "main")).toContain("sets out how, and is part of these terms.");
+
+	const dpa = wordsOf(await page(DPA_PATH), "main");
+	expect(dpa).toContain(operatorSentences());
+	expect(dpa).toContain(
+		"A copy signed by the company is available on request, from security@timesifier.com",
+	);
+	expect(await page(DPA_PATH)).toContain(`href="${TERMS_PATH}"`);
+});
 
 // The company's registration with the ICO (TS-105) is optional: shown from its
 // setting when the deployment has one, and nothing said of the ICO when not.

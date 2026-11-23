@@ -4,7 +4,7 @@ import { OFFERED_ENDPOINTS } from "~/auth/endpoints";
 import { uuidv7 } from "~/db";
 import { captureEmail, get, type Mailbox, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { accept, createOrganisation, invite, value } from "../organisations/harness";
+import { ACCEPTED, accept, createOrganisation, invite, value } from "../organisations/harness";
 import { open, type Person, pageBody, person, textOf } from "../pages/harness";
 import { insertAll } from "./crowd";
 
@@ -102,7 +102,8 @@ type Stage = { ida: Person; invitationId: string; memberId: string };
  * below until it has a request here.
  */
 const REQUESTS: Record<string, (stage: Stage) => Promise<Response>> = {
-	"POST /organization/create": () => post("/organization/create", { name: "Globex" }, as(owner)),
+	"POST /organization/create": () =>
+		post("/organization/create", { name: "Globex", ...ACCEPTED }, as(owner)),
 	"GET /organization/list": () => get("/organization/list", as(owner)),
 	"GET /organization/get-invitation": ({ ida, invitationId }) =>
 		get(`/organization/get-invitation?id=${invitationId}`, as(ida)),

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DPA_VERSION } from "~/landing/trust";
 import { captureEmail, type Mailbox, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { createOrganisation, row, value } from "../organisations/harness";
+import { ACCEPTED, createOrganisation, row, value } from "../organisations/harness";
 import { open, openData, pageBody, person, submit, textOf } from "./harness";
 
 // `/app`, where a signed-in person goes when no organisation is named, and
@@ -85,22 +86,31 @@ describe("/app/new", () => {
 		expect(two).toMatch(/<a[^>]*href="\/app"[^>]*>Back to your organisations<\/a>/);
 	});
 
-	it("asks a person with no organisation for its name, and nothing else", async () => {
+	it("asks a person with no organisation for its name, and nothing else: creating it accepts the terms and the agreement", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 
 		const response = await open("/app/new", ada);
 		expect(response.status).toBe(200);
 		const html = await pageBody(response);
 		expect(textOf(html)).toContain("Create your organisation");
-		expect(html.match(/<input\b[^>]*>/g)).toHaveLength(1);
+		expect(html.match(/<input\b(?![^>]*type="hidden")[^>]*>/g)).toHaveLength(1);
 		expect(html).toMatch(/<input[^>]*name="name"/);
+		// The version the page shows is the one the person accepts (TS-105).
+		expect(html).toMatch(
+			new RegExp(`<input[^>]*type="hidden"[^>]*name="dpaVersion"[^>]*value="${DPA_VERSION.date}"`),
+		);
+		expect(textOf(html)).toContain(
+			"By creating it you accept the terms and the data processing agreement for it.",
+		);
+		expect(html).toMatch(/<a[^>]*href="\/terms"[^>]*>terms<\/a>/);
+		expect(html).toMatch(/<a[^>]*href="\/dpa"[^>]*>data processing agreement<\/a>/);
 		expect(html.match(/<button[^>]*type="submit"/g)).toHaveLength(1);
 	});
 
 	it("creates the organisation, makes the person its owner and goes to its Today", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 
-		const response = await submit("/app/new", { name: "  Acme Ltd  " }, ada);
+		const response = await submit("/app/new", { name: "  Acme Ltd  ", ...ACCEPTED }, ada);
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get("Location")).toBe("/app/acme-ltd?welcome=1");
@@ -119,14 +129,14 @@ describe("/app/new", () => {
 	it("welcomes the person to the first organisation they create, and to no other", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 
-		const first = await submit("/app/new", { name: "Acme" }, ada);
+		const first = await submit("/app/new", { name: "Acme", ...ACCEPTED }, ada);
 		expect(first.headers.get("Location")).toBe("/app/acme?welcome=1");
 		const welcomed = textOf(await pageBody(await open("/app/acme?welcome=1", ada)));
 		expect(welcomed).toContain("Acme is ready");
 		// The welcome is for the moment of creating: the page without the mark has none.
 		expect(textOf(await pageBody(await open("/app/acme", ada)))).not.toContain("is ready");
 
-		const second = await submit("/app/new", { name: "Globex" }, ada);
+		const second = await submit("/app/new", { name: "Globex", ...ACCEPTED }, ada);
 		expect(second.headers.get("Location")).toBe("/app/globex");
 		expect(textOf(await pageBody(await open("/app/new", ada)))).toContain("Create an organisation");
 	});
@@ -135,8 +145,8 @@ describe("/app/new", () => {
 		const ada = await person(mailbox, "ada@example.com");
 		const grace = await person(mailbox, "grace@example.com");
 
-		await submit("/app/new", { name: "Acme" }, ada);
-		const response = await submit("/app/new", { name: "Acme" }, grace);
+		await submit("/app/new", { name: "Acme", ...ACCEPTED }, ada);
+		const response = await submit("/app/new", { name: "Acme", ...ACCEPTED }, grace);
 
 		expect(response.headers.get("Location")).toBe("/app/acme-2?welcome=1");
 		expect((await open("/app/acme-2", grace)).status).toBe(200);
@@ -148,7 +158,7 @@ describe("/app/new", () => {
 
 		const response = await submit(
 			"/app/new",
-			{ name: "Acme", slug: "admin", userId: "someone-else", role: "member" },
+			{ name: "Acme", slug: "admin", userId: "someone-else", role: "member", ...ACCEPTED },
 			ada,
 		);
 
@@ -167,7 +177,7 @@ describe("/app/new", () => {
 	])("refuses a name that is %s with 400 and creates nothing", async (_case, name) => {
 		const ada = await person(mailbox, "ada@example.com");
 
-		const response = await submit("/app/new", { name }, ada);
+		const response = await submit("/app/new", { name, ...ACCEPTED }, ada);
 
 		expect(response.status).toBe(400);
 		expect(await value("select count(*) from organisations")).toBe(0);
@@ -176,10 +186,14 @@ describe("/app/new", () => {
 	it("refuses a sixth organisation for one owner, and says what the limit is", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 		for (let n = 1; n <= 5; n++) {
-			expect((await post("/organization/create", { name: `Acme ${n}` }, ada)).status).toBe(200);
+			expect(
+				(await post("/organization/create", { name: `Acme ${n}`, ...ACCEPTED }, ada)).status,
+			).toBe(200);
 		}
 
-		const response = await submit("/app/new", { name: "Acme 6" }, ada, { byScript: true });
+		const response = await submit("/app/new", { name: "Acme 6", ...ACCEPTED }, ada, {
+			byScript: true,
+		});
 
 		expect(response.status).toBe(403);
 		expect(await response.text()).toContain("You have reached the limit of 5 organisations.");
@@ -194,7 +208,9 @@ describe("/app/new", () => {
 			expect((await post("/organization/create", {}, ada)).status).toBe(400);
 		}
 
-		const response = await submit("/app/new", { name: "One too many" }, ada, { byScript: true });
+		const response = await submit("/app/new", { name: "One too many", ...ACCEPTED }, ada, {
+			byScript: true,
+		});
 
 		expect(response.status).toBe(429);
 		expect(await response.text()).toContain("Too many attempts. Try again in a minute.");

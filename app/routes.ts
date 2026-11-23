@@ -147,8 +147,8 @@ const platform = route(PLATFORM_PATH, "routes/platform/layout.tsx", [
 	]),
 ]);
 
-// The privacy notice, the terms, the security page and the accessibility
-// statement have their addresses in landing/Site.tsx.
+// The privacy notice, the terms, the data processing agreement, the security
+// page and the accessibility statement have their addresses in landing/Site.tsx.
 // The one page a person uses without a session has its address in
 // routes/auth/paths.ts as well, which the guard and the pages read. An
 // invitation's page is outside `/app`: the person it is for is not a member yet.
@@ -157,6 +157,7 @@ export default [
 	route("sign-in", "routes/sign-in.tsx"),
 	route("privacy", "routes/privacy.tsx"),
 	route("terms", "routes/terms.tsx"),
+	route("dpa", "routes/dpa.tsx"),
 	route("security", "routes/security.tsx"),
 	route("accessibility", "routes/accessibility.tsx"),
 	// What a buyer reads before signing in (TS-106).

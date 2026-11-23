@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import { deploymentOperator, OperatorDetails } from "~/landing/operator";
 import {
+	DPA_PATH,
 	LINK,
 	PRIVACY_EMAIL,
 	PRIVACY_PATH,
@@ -108,6 +109,19 @@ export default function Terms({ loaderData: { operator } }: Route.ComponentProps
 				</p>
 				<p>
 					To anyone who is not in it, an organisation answers exactly as one that does not exist.
+				</p>
+			</DocumentSection>
+
+			<DocumentSection id="processing" title="Processing your organisation's data">
+				<p>
+					An organisation decides what is done with the personal data in it, and the company
+					processes that data for it. The{" "}
+					<a href={DPA_PATH} className={LINK}>
+						data processing agreement
+					</a>{" "}
+					sets out how, and is part of these terms. An owner accepts it for the organisation when
+					they create it; for an organisation made before it, an owner accepts it once in Workspace
+					settings.
 				</p>
 			</DocumentSection>
 

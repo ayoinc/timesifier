@@ -1,8 +1,25 @@
+import { Row, Rows } from "./Document";
 import { LINK, OUTSIDE_LINKS, type OutsideLink, PRIVACY_EMAIL, SECURITY_EMAIL } from "./Site";
 
-// What the privacy notice and the security page both state about Timesifier's
-// hosting, each fact once (TS-105). Every number here is a provider's, quoted
-// beside it; test/claims.test.ts ties each page to these constants.
+// What the privacy notice, the security page and the data processing agreement
+// state about Timesifier's hosting, each fact once (TS-105). Every number here
+// is a provider's, quoted beside it, or the agreement's own; test/claims.test.ts
+// ties each page to these constants.
+
+/**
+ * This version of the data processing agreement (`/dpa`), by the date it was
+ * written. An organisation keeps the version an owner accepted
+ * (`organisations.dpa_version`); while it is not this one, its owners are asked
+ * in Settings. A new version is a new date here: every organisation is then
+ * asked again (docs/decisions.md, entry 60).
+ */
+export const DPA_VERSION = { date: "2026-11-23", inWords: "23 November 2026" } as const;
+
+/** How soon after becoming aware of a personal data breach the company tells an organisation's owners, at the latest (owner's answer 2, 23 November 2026). */
+export const BREACH_NOTICE_HOURS = 48;
+
+/** How many days before a new sub-processor starts the company tells every organisation's owners (owner's answer 2, 23 November 2026). */
+export const SUB_PROCESSOR_NOTICE_DAYS = 30;
 
 /**
  * How far back the database can be restored. D1's Time Travel "can restore a
@@ -78,6 +95,68 @@ export const SUB_PROCESSORS: readonly SubProcessor[] = [
 		dpa: OUTSIDE_LINKS.microsoftDpa,
 	},
 ];
+
+/**
+ * The sub-processors, each with where it is, what it receives, and its own
+ * agreement and list: the same rows on /security and /dpa. The anchor of each
+ * row is its `id`.
+ */
+export function SubProcessorRows() {
+	return (
+		<Rows>
+			{SUB_PROCESSORS.map((each) => (
+				<Row key={each.id} term={each.name}>
+					<p id={each.id}>{each.based}. It receives:</p>
+					<ul className="mt-2 list-disc ps-6">
+						{each.receives.map((what, at) => (
+							<li key={what}>
+								{what}
+								{at === each.receives.length - 1 ? "." : ";"}
+							</li>
+						))}
+					</ul>
+					<p className="mt-2">
+						<a href={each.dpa.href} className={LINK}>
+							{each.name}'s data processing agreement
+						</a>
+						{each.list && (
+							<>
+								{" "}
+								and{" "}
+								<a href={each.list.href} className={LINK}>
+									its own sub-processors
+								</a>
+							</>
+						)}
+						.
+					</p>
+				</Row>
+			))}
+		</Rows>
+	);
+}
+
+/** Where the database and the files are, and what is not restricted to the EU: the same words on /security and /dpa. */
+export function WhereItIsKept() {
+	return (
+		<>
+			<p>
+				In one database, Cloudflare D1, restricted to the European Union: it runs and stores its
+				data only inside the EU. Receipts and organisations' logos are kept in Cloudflare R2, in
+				buckets restricted to the EU, whose files are stored only inside the EU.
+			</p>
+			<p>
+				The application runs on Cloudflare Workers in Frankfurt, near the database. Your request
+				reaches Cloudflare at the data centre nearest to you, which may be outside the EU, and is
+				passed to Frankfurt, where it is handled and the database is read.
+			</p>
+			<p>
+				Cloudflare's log of requests, its record of each email sent, and what Turnstile and Web
+				Analytics collect are not restricted to the EU.
+			</p>
+		</>
+	);
+}
 
 /**
  * The company's registration with the ICO, when the deployment names it

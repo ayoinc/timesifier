@@ -161,6 +161,17 @@ export const organisations = sqliteTable("organisations", {
 	seats: integer("seats"),
 	/** When a trial of `plan` ends; after it the organisation is on Free. Null when the plan is not a trial. */
 	trialEndsAt: integer("trial_ends_at", { mode: "timestamp_ms" }),
+	/**
+	 * The version of the data processing agreement an owner accepted for the
+	 * organisation (TS-105, `DPA_VERSION` in `app/landing/trust.tsx`): its date.
+	 * Null for an organisation made before there was one, until an owner accepts
+	 * in Settings. `app/organisations/dpa.server.ts` is the only writer.
+	 */
+	dpaVersion: text("dpa_version"),
+	/** When that owner accepted it. */
+	dpaAcceptedAt: integer("dpa_accepted_at", { mode: "timestamp_ms" }),
+	/** Who accepted it; null once their account is deleted. */
+	dpaAcceptedBy: text("dpa_accepted_by").references(() => users.id, { onDelete: "set null" }),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
 });

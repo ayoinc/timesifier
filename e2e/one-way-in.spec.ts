@@ -160,6 +160,7 @@ for (const viewport of [COMPACT, WIDE]) {
 			await expect(foot.getByRole("link")).toHaveText([
 				"Privacy notice",
 				"Terms",
+				"Data processing agreement",
 				"Security",
 				"Accessibility",
 				"Features",

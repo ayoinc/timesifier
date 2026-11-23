@@ -114,6 +114,8 @@ export const ActivityAction = z.enum([
 	"support_access.granted",
 	"support_access.revoked",
 	"support_access.used",
+	// An owner accepted the data processing agreement for the organisation (TS-105).
+	"dpa.accepted",
 ]);
 export type ActivityAction = z.infer<typeof ActivityAction>;
 

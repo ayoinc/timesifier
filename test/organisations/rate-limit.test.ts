@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureEmail, type Mailbox, post, signIn } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { createOrganisation, value } from "./harness";
+import { ACCEPTED, createOrganisation, value } from "./harness";
 
 let mailbox: Mailbox;
 
@@ -30,7 +30,7 @@ describe("the rate limit on organisations", () => {
 		const statuses = await statusesOf(11, (n) =>
 			post(
 				"/organization/create",
-				{ name: `Acme ${n}` },
+				{ name: `Acme ${n}`, ...ACCEPTED },
 				{ cookie: n % 2 ? grace.cookie : ada.cookie },
 			),
 		);

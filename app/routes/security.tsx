@@ -4,6 +4,7 @@ import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import { deploymentOperator, icoReference, OperatorDetails } from "~/landing/operator";
 import {
+	DPA_PATH,
 	LINK,
 	OUTSIDE_LINKS,
 	PRIVACY_PATH,
@@ -14,8 +15,9 @@ import {
 } from "~/landing/Site";
 import {
 	IcoRegistration,
-	SUB_PROCESSORS,
+	SubProcessorRows,
 	TIME_TRAVEL_DAYS,
+	WhereItIsKept,
 	WORKERS_LOGS_DAYS,
 } from "~/landing/trust";
 import { WhoSeesWhat } from "~/landing/WhoSees";
@@ -63,20 +65,7 @@ export default function Security({
 			operator={operator}
 		>
 			<DocumentSection id="where" title="Where data is kept">
-				<p>
-					In one database, Cloudflare D1, restricted to the European Union: it runs and stores its
-					data only inside the EU. Receipts and organisations' logos are kept in Cloudflare R2, in
-					buckets restricted to the EU, whose files are stored only inside the EU.
-				</p>
-				<p>
-					The application runs on Cloudflare Workers in Frankfurt, near the database. Your request
-					reaches Cloudflare at the data centre nearest to you, which may be outside the EU, and is
-					passed to Frankfurt, where it is handled and the database is read.
-				</p>
-				<p>
-					Cloudflare's log of requests, its record of each email sent, and what Turnstile and Web
-					Analytics collect are not restricted to the EU.
-				</p>
+				<WhereItIsKept />
 			</DocumentSection>
 
 			<DocumentSection id="encryption" title="Encryption">
@@ -159,36 +148,7 @@ export default function Security({
 
 			<DocumentSection id="sub-processors" title="Sub-processors">
 				<p>Two companies process personal data for Timesifier, and no others.</p>
-				<Rows>
-					{SUB_PROCESSORS.map((each) => (
-						<Row key={each.id} term={each.name}>
-							<p id={each.id}>{each.based}. It receives:</p>
-							<ul className="mt-2 list-disc ps-6">
-								{each.receives.map((what, at) => (
-									<li key={what}>
-										{what}
-										{at === each.receives.length - 1 ? "." : ";"}
-									</li>
-								))}
-							</ul>
-							<p className="mt-2">
-								<a href={each.dpa.href} className={LINK}>
-									{each.name}'s data processing agreement
-								</a>
-								{each.list && (
-									<>
-										{" "}
-										and{" "}
-										<a href={each.list.href} className={LINK}>
-											its own sub-processors
-										</a>
-									</>
-								)}
-								.
-							</p>
-						</Row>
-					))}
-				</Rows>
+				<SubProcessorRows />
 				<p>
 					An organisation's webhook addresses, and its clients' billing contacts, are sent what the
 					organisation chooses to send them. They are its choice, and not Timesifier's
@@ -248,7 +208,12 @@ export default function Security({
 					</p>
 				)}
 				<p>
-					A data processing agreement under Article 28 of the UK GDPR is available on request, from{" "}
+					What Timesifier does with an organisation's data on its behalf is set out in{" "}
+					<a href={DPA_PATH} className={LINK}>
+						the data processing agreement
+					</a>
+					, under Article 28 of the UK GDPR, which is part of the terms. A signed copy is available
+					on request, from{" "}
 					<a href={`mailto:${SECURITY_EMAIL}`} className={LINK}>
 						{SECURITY_EMAIL}
 					</a>

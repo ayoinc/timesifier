@@ -236,6 +236,10 @@ test("creating an organisation: the field, the action and the way out, with the 
 
 	// The field has the focus when the page arrives, so typing can begin at once.
 	await expect(page.getByLabel("Organisation name")).toBeFocused();
+	// What creating it accepts, each a link, then the action (TS-105).
+	const main = page.getByRole("main");
+	await tabTo(page, main.getByRole("link", { name: "terms", exact: true }));
+	await tabTo(page, main.getByRole("link", { name: "data processing agreement", exact: true }));
 	await tabTo(page, page.getByRole("button", { name: "Create organisation" }));
 	// Named for where it goes: the one organisation, or the list of several (W31).
 	await tabTo(page, page.getByRole("link", { name: /^Back to / }));
