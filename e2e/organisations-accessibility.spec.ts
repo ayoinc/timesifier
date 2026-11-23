@@ -2,7 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { Locator, Page } from "@playwright/test";
 
-import { accountPath, membersPath } from "../app/shell/destinations";
+import { accountPath, type DestinationId, membersPath } from "../app/shell/destinations";
 import { SIGNED_IN_AS_GUEST, SIGNED_IN_AS_MEMBER } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
@@ -195,11 +195,12 @@ for (const viewport of [
 /**
  * Every change of view these pages make without sending anything: the welcome
  * arriving, a move to Workspace settings, to Team and on to the members, the menu, and a sheet
- * opening and closing on each page.
+ * opening and closing on each page. Moves to the destinations in `atOnce` are answered at once.
  */
-async function walkTheViews(page: Page) {
+async function walkTheViews(page: Page, atOnce: DestinationId[] = []) {
 	const { slug, name, member } = homeOrganisation();
 	await openShell(page, `${homePath("timesheet")}?welcome=1`);
+	await answerAtOnce(page, ...atOnce);
 	await expect(page.getByText(`${name} is ready`)).toBeVisible();
 
 	await page.getByRole("navigation").getByRole("link", { name: "Workspace settings" }).click();
@@ -227,12 +228,13 @@ async function walkTheViews(page: Page) {
 }
 
 // A move to another destination takes one of two designed paths (app/shell/arrival.ts).
-// An answer within SKELETON_DELAY_MS (150ms) slides the page in from the side it lies on, a
-// view transition on <html>. A later one shows the destination's shape first, and
-// the page that takes its place brings its sections in one after another
-// (`data-reveal`, app/app.css). In the pipeline the server's answers took 135–158ms,
-// around that delay, so a test that let the server decide saw either path. These
-// tests decide: the answer comes at once, or after LATE_MS.
+// When its route's code and data are both in within SKELETON_DELAY_MS (150ms), the
+// page slides in from the side it lies on, a view transition on <html>. Later, the
+// destination's shape shows first, and the page that takes its place brings its
+// sections in one after another (`data-reveal`, app/app.css). In the pipeline the
+// server's answers took 135–158ms, and a route's code up to 220ms on its first
+// load, around that delay, so a test that let them decide saw either path. These
+// tests decide: everything is in at once, or the answer comes after LATE_MS.
 
 /** How long a late answer is held: well past SKELETON_DELAY_MS, when the destination's shape shows. */
 const LATE_MS = 400;
@@ -241,6 +243,10 @@ declare global {
 	interface Window {
 		/** What watchArrivals saw, in order: each shape shown, and each page whose sections came in. */
 		__destinationArrivals?: string[];
+		/** React Router's manifest of the build: each route's module, the modules it imports and its style sheets. */
+		__reactRouterManifest?: {
+			routes: Record<string, { module: string; imports?: string[]; css?: string[] }>;
+		};
 	}
 }
 
@@ -248,13 +254,15 @@ declare global {
 const NOT_COPIED = ["content-encoding", "content-length", "transfer-encoding", "set-cookie"];
 
 /**
- * Moves to these destinations are answered at once, with an answer read before the
- * move and given back without going to the server. The read names no routes, so it
- * carries every matched route's data; the router takes the routes it asked for. The
- * route matches the move's `.data` request whichever routes it names.
+ * Moves to these destinations, from a page already open, are answered at once: their
+ * routes' code is loaded beforehand, as a move would load it, and their answer is
+ * read beforehand and given back without going to the server. The read names no
+ * routes, so it carries every matched route's data; the router takes the routes it
+ * asked for. The route matches the move's `.data` request whichever routes it names.
  */
-async function answerAtOnce(page: Page, ...paths: string[]) {
-	for (const path of paths) {
+async function answerAtOnce(page: Page, ...ids: DestinationId[]) {
+	for (const id of ids) {
+		const path = homePath(id);
 		const read = await page.request.get(`${path}.data`);
 		expect(read.status(), `the read of ${path}.data`).toBe(200);
 		const body = await read.body();
@@ -265,6 +273,29 @@ async function answerAtOnce(page: Page, ...paths: string[]) {
 			(url) => url.pathname === `${path}.data`,
 			(route) => route.fulfill({ status: 200, headers, body }),
 		);
+		// What React Router's loadRouteModuleWithBlockingLinks waits for: the route's
+		// module, and its style sheets. Once imported, the move's import is the same module.
+		const loaded = await page.evaluate(async (routeId) => {
+			const route = window.__reactRouterManifest?.routes[routeId];
+			if (!route) return false;
+			await Promise.all([
+				...[route.module, ...(route.imports ?? [])].map((url) => import(url)),
+				...(route.css ?? []).map((href) => {
+					const { promise, resolve } = Promise.withResolvers<unknown>();
+					const link = Object.assign(document.createElement("link"), {
+						rel: "preload",
+						as: "style",
+						href,
+						onload: resolve,
+						onerror: resolve,
+					});
+					document.head.append(link);
+					return promise;
+				}),
+			]);
+			return true;
+		}, `routes/app/${id}`);
+		expect(loaded, `the route routes/app/${id}`).toBe(true);
 	}
 }
 
@@ -321,8 +352,7 @@ test.describe("with motion allowed", () => {
 	test("the watcher sees the welcome, the pages and the sheets move", async ({ page }) => {
 		await watchForMovement(page);
 		await watchArrivals(page);
-		await answerAtOnce(page, homePath("settings"), homePath("team"));
-		await walkTheViews(page);
+		await walkTheViews(page, ["settings", "team"]);
 
 		// Each destination came at once: no shape showed, no page's sections came in.
 		expect(await page.evaluate(() => window.__destinationArrivals)).toEqual([]);
@@ -351,8 +381,8 @@ test.describe("with motion allowed", () => {
 			}) => {
 				await watchForMovement(page);
 				await watchArrivals(page);
-				await answerAtOnce(page, homePath("projects"));
 				await openShell(page, homePath("timesheet"));
+				await answerAtOnce(page, "projects");
 				await page.evaluate(() => window.__movement?.clear());
 
 				await page
