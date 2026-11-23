@@ -257,6 +257,7 @@ const NOUNS: Record<string, string> = {
 	leave_kind: "kind of leave",
 	public_holiday: "public holiday",
 	organisation: "the organisation's settings",
+	dpa: "the data processing agreement",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */
@@ -325,6 +326,7 @@ const FIELD_LABELS: Record<string, string> = {
 	noticeDays: "Notice (working days)",
 	kind: "Kind",
 	minutesPerDay: "Hours a day",
+	dpaVersion: "Version",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */
@@ -522,6 +524,7 @@ function whatOf(r: RecordRow, names: Names): string {
 		const what = kind.success ? WORK_KIND_LABELS[kind.data].toLowerCase() : "work";
 		return `${verb} ${what}`;
 	}
+	if (action === "dpa.accepted") return "Accepted the data processing agreement";
 	if ((prefix === "membership" || prefix === "user") && r.ownerId) {
 		return `${verb} ${names.people.get(r.ownerId) ?? "a former member"}`;
 	}

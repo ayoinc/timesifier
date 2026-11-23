@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureEmail, get, type Mailbox, post, signIn } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
+	ACCEPTED,
 	answer,
 	createOrganisation,
 	row,
@@ -31,7 +32,7 @@ describe("creating an organisation", () => {
 
 		const response = await post(
 			"/organization/create",
-			{ name: "Acme Corp" },
+			{ name: "Acme Corp", ...ACCEPTED },
 			{ cookie: ada.cookie },
 		);
 
@@ -61,7 +62,7 @@ describe("creating an organisation", () => {
 	});
 
 	it("is refused without a session, and creates nothing", async () => {
-		const response = await post("/organization/create", { name: "Acme Corp" });
+		const response = await post("/organization/create", { name: "Acme Corp", ...ACCEPTED });
 
 		expect(response.status).toBe(401);
 		expect(await organisations()).toBe(0);
@@ -76,7 +77,7 @@ describe("creating an organisation", () => {
 
 		const response = await post(
 			"/organization/create",
-			{ name: "Acme Corp" },
+			{ name: "Acme Corp", ...ACCEPTED },
 			{ cookie: ada.cookie },
 		);
 
@@ -138,7 +139,7 @@ describe("creating an organisation", () => {
 
 describe("the organisations one person can own", () => {
 	const create = (cookie: string, name: string) =>
-		post("/organization/create", { name }, { cookie });
+		post("/organization/create", { name, ...ACCEPTED }, { cookie });
 
 	it("are five: the sixth is refused in words a page can show, and creates nothing", async () => {
 		const ada = await signIn(mailbox, "ada@example.com");

@@ -16,6 +16,8 @@
  * - answers the same 404 for every invitation that is not there for the
  *   person asking to take, one whose sender may no longer invite included;
  * - lets a person own at most five organisations;
+ * - creates an organisation only for a person who accepts this version of the
+ *   data processing agreement for it (TS-105), which a hook then records;
  * - derives a new organisation's slug from its name.
  *
  * Beside the gate, one hook lets a person send at most twenty invitations in
@@ -36,7 +38,13 @@ import { organisationScope, organisations } from "~/db";
 import { addUsualCategories } from "~/expenses/categories.server";
 import { termsOf } from "~/expenses/expenses.server";
 import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
-import { LOGOS_NOT_DELETED, RECEIPTS_NOT_DELETED } from "~/organisations/problems";
+import { DPA_VERSION } from "~/landing/trust";
+import { acceptDpa } from "~/organisations/dpa.server";
+import {
+	DPA_NOT_ACCEPTED,
+	LOGOS_NOT_DELETED,
+	RECEIPTS_NOT_DELETED,
+} from "~/organisations/problems";
 import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
 import { SEATS_FULL } from "~/plans/plans";
@@ -267,8 +275,21 @@ const ENDPOINTS: Record<string, Endpoint> = {
 	"/organization/create": {
 		from: "body",
 		async admit(raw, { user, adapter }) {
-			// A name and nothing else. The slug is ours to choose.
-			const { name } = await valid(z.strictObject({ name: Name }), raw);
+			// A name, and the version of the data processing agreement the person
+			// accepts for it (TS-105), and nothing else. The slug is ours to choose.
+			const { name, dpaVersion } = await valid(
+				z.strictObject({ name: Name, dpaVersion: z.string().max(20).optional() }),
+				raw,
+			);
+			// The owner accepts the agreement in creating the organisation: the page
+			// names the version it showed, and an older one is not this one.
+			if (dpaVersion !== DPA_VERSION.date) {
+				throw new APIError("BAD_REQUEST", {
+					code: DPA_NOT_ACCEPTED,
+					message:
+						"Accept this version of the data processing agreement to create an organisation.",
+				});
+			}
 			// The plugin's own limit counts every organisation a person belongs
 			// to, so five invitations accepted would stop a person creating their
 			// first. This counts the ones they own, which creating adds to.
@@ -380,8 +401,11 @@ export function organisationPlugins() {
 			organizationHooks: {
 				// A new organisation starts with the usual expense categories (TS-119),
 				// so a person can record an expense on their first visit. The system
-				// adds them, and the Activity log says so.
-				async afterCreateOrganization({ organization }) {
+				// adds them, and the Activity log says so. The person who created it
+				// accepted the data processing agreement for it, as the gate checked
+				// (TS-105): the organisation keeps that, and the Activity log says so too.
+				async afterCreateOrganization({ organization, user }) {
+					await acceptDpa(organization.id, user.id, new Date());
 					const { currency } = await termsOf(organization.id);
 					await addUsualCategories(
 						organisationScope(env.DB, organization.id),

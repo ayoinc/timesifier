@@ -19,6 +19,7 @@ import "./public.css";
 
 export const PRIVACY_PATH = "/privacy";
 export const TERMS_PATH = "/terms";
+export const DPA_PATH = "/dpa";
 export const SECURITY_PATH = "/security";
 export const ACCESSIBILITY_PATH = "/accessibility";
 
@@ -40,6 +41,7 @@ export const PUBLIC_PAGES = [
 	SIGN_IN_PATH,
 	PRIVACY_PATH,
 	TERMS_PATH,
+	DPA_PATH,
 	SECURITY_PATH,
 	ACCESSIBILITY_PATH,
 	FEATURES_PATH,
@@ -296,6 +298,7 @@ export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 const NOTICES: readonly SiteLink[] = [
 	{ href: PRIVACY_PATH, label: "Privacy notice" },
 	{ href: TERMS_PATH, label: "Terms" },
+	{ href: DPA_PATH, label: "Data processing agreement" },
 	{ href: SECURITY_PATH, label: "Security" },
 	{ href: ACCESSIBILITY_PATH, label: "Accessibility" },
 ];

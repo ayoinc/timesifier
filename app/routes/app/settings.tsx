@@ -15,6 +15,7 @@ import { organisationScope } from "~/db";
 import { keepCategory, listCategories } from "~/expenses/categories.server";
 import { ExpenseCategories } from "~/expenses/ExpenseCategories";
 import { termsOf } from "~/expenses/expenses.server";
+import { DPA_PATH } from "~/landing/Site";
 import { LARGEST_ALLOWANCE_DAYS, LEAVE_NAME_MAX_LENGTH } from "~/leave/kinds";
 import { LeaveSettings } from "~/leave/LeaveSettings";
 import {
@@ -52,6 +53,7 @@ import { LOCK_FORMS, lockAction, lockingData } from "~/locks/settings.server";
 import { CurrencyCode } from "~/money/money";
 import { isAdministrator } from "~/organisations/access";
 import { deleteOrganisation, renameOrganisation } from "~/organisations/api.server";
+import { acceptDpa, dpaToAccept } from "~/organisations/dpa.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { NAME_MAX_LENGTH, Name, nameProblem } from "~/organisations/name";
 import { declined, done, refused } from "~/organisations/outcome.server";
@@ -107,7 +109,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const now = new Date();
 	const today = dayOf(now.getTime(), organisation.timeZone);
 	const isOwner = role === "owner";
-	const [book, kinds, holidays, rules, next, categories, terms, locking, standing, grant] =
+	const [book, kinds, holidays, rules, next, categories, terms, locking, standing, grant, dpaToSign] =
 		await Promise.all([
 			scheduleBookOf(scope),
 			leaveKindsOf(scope),
@@ -120,6 +122,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 			planStanding(organisation.id, now),
 			// Support access is the owners' alone, so nobody else is told whether it is granted.
 			isOwner ? activeGrant(scope, now) : null,
+			// So is accepting the data processing agreement (TS-105).
+			isOwner ? dpaToAccept(organisation.id) : false,
 		]);
 	return {
 		organisation: {
@@ -182,6 +186,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 						: null,
 				}
 			: null,
+		/** Whether an owner is asked to accept this version of the data processing agreement (TS-105). */
+		dpaToAccept: dpaToSign,
 	};
 }
 
@@ -289,6 +295,7 @@ const form = z.discriminatedUnion("intent", [
 		categoryId: z.string().min(1).max(64),
 	}),
 	z.object({ intent: z.literal("add-usual-categories") }),
+	z.object({ intent: z.literal("accept-dpa") }),
 	...LOCK_FORMS,
 	...BRAND_FORMS,
 ]);
@@ -445,6 +452,12 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "remove-logo":
 		case "brand-colour":
 			return brandAction(input, membership, Date.now());
+		case "accept-dpa": {
+			// Only an owner accepts the agreement for the organisation (TS-105).
+			if (role !== "owner") return declined(NOT_ALLOWED, 403);
+			await acceptDpa(organisation.id, user.id, new Date());
+			return done(`The data processing agreement is accepted for ${organisation.name}.`);
+		}
 		case "delete": {
 			if (input.confirmation.trim() !== organisation.name) {
 				return declined("That is not the organisation's name. Type it exactly as it is shown.");
@@ -479,6 +492,10 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
 			</p>
+
+			{loaderData.dpaToAccept && (
+				<DpaToAccept organisationName={organisation.name} onDone={setSaid} />
+			)}
 
 			<Section
 				id="general"
@@ -949,5 +966,55 @@ function ClientsRow({
 				</>
 			}
 		/>
+	);
+}
+
+/**
+ * The owners' one ask of an organisation that holds an older version of the
+ * data processing agreement, or none (TS-105): read it and accept it. Nothing
+ * waits on it, and once one owner has accepted, nobody is asked again.
+ */
+function DpaToAccept({
+	organisationName,
+	onDone,
+}: {
+	organisationName: string;
+	onDone: (said: string) => void;
+}) {
+	const fetcher = useFetcher<Outcome>();
+	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
+	useEffect(() => {
+		if (answer?.ok) onDone(answer.said);
+	}, [answer, onDone]);
+
+	return (
+		<section
+			aria-labelledby="dpa-to-accept"
+			className="mt-6 flex max-w-200 flex-col gap-3 rounded-medium bg-secondary-container px-5 py-4 text-on-secondary-container"
+		>
+			<h2 id="dpa-to-accept" className="text-title-medium">
+				Accept the data processing agreement
+			</h2>
+			<p className="text-body-large">
+				The{" "}
+				<a href={DPA_PATH} className={TEXT_LINK}>
+					data processing agreement
+				</a>{" "}
+				sets out how Timesifier processes the personal data in{" "}
+				<span className="wrap-anywhere">{organisationName}</span> for it. As an owner, read it and
+				accept it for the organisation. Nothing waits on it.
+			</p>
+			{answer && !answer.ok && (
+				<p role="alert" className="text-body-medium text-error">
+					{answer.problem}
+				</p>
+			)}
+			<fetcher.Form method="post">
+				<input type="hidden" name="intent" value="accept-dpa" />
+				<Button type="submit" isPending={fetcher.state !== "idle"} pendingLabel="Accepting…">
+					Accept the agreement
+				</Button>
+			</fetcher.Form>
+		</section>
 	);
 }

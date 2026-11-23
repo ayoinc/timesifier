@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { deploymentOperator, icoReference } from "~/landing/operator";
 import {
 	ACCESSIBILITY_PATH,
+	DPA_PATH,
 	OUTSIDE_LINKS,
 	PRICING_PATH,
 	PRIVACY_EMAIL,
@@ -74,11 +75,15 @@ it("the terms say which company they are with", async () => {
 	expect(terms).toContain("These terms are between you and that company.");
 });
 
-it("the privacy notice says which company answers for what is stored", async () => {
+it("the privacy notice names each organisation the controller of its work, and the company its processor and the controller of the rest", async () => {
 	const notice = wordsOf(await page(PRIVACY_PATH), "main");
 
 	expect(notice).toContain(operatorSentences());
-	expect(notice).toContain("Data protection law calls it the controller.");
+	expect(notice).toContain("Each organisation is the controller of its people");
+	expect(notice).toContain("the company processes it for the organisation, as its processor");
+	expect(notice).toContain(
+		"The company remains the controller of your account, your sessions and sign-ins",
+	);
 });
 
 it("the home page links to both", async () => {

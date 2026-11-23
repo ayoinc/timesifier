@@ -73,9 +73,13 @@ export function listOrganisations(request: Request) {
 	return ask(request, "list", z.array(Organisation), { query: {} });
 }
 
-/** Creates an organisation called `name`, with the person as its owner. The server chooses the slug. */
-export function createOrganisation(request: Request, name: string) {
-	return ask(request, "create", Organisation, { body: { name } });
+/**
+ * Creates an organisation called `name`, with the person as its owner, who
+ * accepts version `dpaVersion` of the data processing agreement for it (TS-105).
+ * The server chooses the slug.
+ */
+export function createOrganisation(request: Request, name: string, dpaVersion: string) {
+	return ask(request, "create", Organisation, { body: { name, dpaVersion } });
 }
 
 export function renameOrganisation(request: Request, organizationId: string, name: string) {

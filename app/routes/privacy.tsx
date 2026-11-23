@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
 import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
-import { STORED, type StoredTerm } from "~/db/personal-data";
+import { PROCESSED_FOR_ORGANISATIONS, STORED, type StoredTerm } from "~/db/personal-data";
 import { ENTRY_DAYS_BACK, LEAVE_DAYS_BACK } from "~/integrations/feeds.server";
 import { EVENT_LABELS } from "~/integrations/scopes";
 import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
@@ -12,6 +12,7 @@ import { DOCUMENT_EMAILS } from "~/invoices/mail.server";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import { deploymentOperator, icoReference, OperatorDetails } from "~/landing/operator";
 import {
+	DPA_PATH,
 	LINK,
 	PRIVACY_EMAIL,
 	PRIVACY_PATH,
@@ -130,7 +131,8 @@ export default function Privacy({
 			<>
 				The organisation's name, the name in its address on {host}, its settings, its plan with its
 				seats and when a trial of it ends, and the logo and colour its invoices and estimates carry,
-				the logo kept in Cloudflare R2. Who belongs to it, each person's role, and whether they work
+				the logo kept in Cloudflare R2. Which version of the data processing agreement an owner
+				accepted for it, who and when. Who belongs to it, each person's role, and whether they work
 				as a contractor. Its teams, who is in each and who manages it. Each invitation: the email
 				address invited, the role offered, who sent it, when it expires and what became of it.
 			</>
@@ -266,8 +268,21 @@ export default function Privacy({
 					<OperatorDetails operator={operator} />
 				</p>
 				<p>
-					That company decides what Timesifier stores and answers for it. Data protection law calls
-					it the controller.
+					Each organisation is the controller of its people's work data: everything under{" "}
+					{PROCESSED_FOR_ORGANISATIONS.map((heading) => `"${heading}"`)
+						.join(", ")
+						.replace(/, ([^,]*)$/, " and $1")}{" "}
+					below. It decides what is done with it, and the company processes it for the organisation,
+					as its processor, under{" "}
+					<a href={DPA_PATH} className={LINK}>
+						the data processing agreement
+					</a>
+					. Ask your organisation how it uses your work data; the company helps it answer.
+				</p>
+				<p>
+					The company remains the controller of your account, your sessions and sign-ins, the mail
+					Timesifier sends you, and Timesifier's own records: it decides what of them is stored, and
+					answers for it.
 				</p>
 				{ico && (
 					<p>

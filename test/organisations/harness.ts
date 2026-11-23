@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { expect } from "vitest";
 import * as z from "zod";
 import { uuidv7 } from "~/db";
+import { DPA_VERSION } from "~/landing/trust";
 import { type Mailbox, post, signIn } from "../auth/harness";
 
 export type Role = "owner" | "admin" | "finance" | "member";
@@ -42,14 +43,17 @@ export async function value<T = number>(sql: string, ...values: unknown[]): Prom
 
 const Created = z.object({ id: z.string(), name: z.string(), slug: z.string() });
 
+/** What creating an organisation sends beside its name: the version of the data processing agreement accepted for it (TS-105). */
+export const ACCEPTED = { dpaVersion: DPA_VERSION.date };
+
 /**
- * Creates an organisation the way a page will: a name, and nothing else. It
- * then gets seats for everyone the test invites: these tests are about other
- * rules, and the plan's seats (TS-099) have tests of their own, which call
- * `setSeats` with the number they need.
+ * Creates an organisation the way a page will: a name, and the agreement
+ * accepted. It then gets seats for everyone the test invites: these tests are
+ * about other rules, and the plan's seats (TS-099) have tests of their own,
+ * which call `setSeats` with the number they need.
  */
 export async function createOrganisation(cookie: string, name: string) {
-	const response = await post("/organization/create", { name }, { cookie });
+	const response = await post("/organization/create", { name, ...ACCEPTED }, { cookie });
 	expect(response.status).toBe(200);
 	const created = Created.parse(await response.json());
 	await setSeats(created.id, ROOM_FOR_EVERYONE);

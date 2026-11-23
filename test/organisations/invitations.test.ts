@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureEmail, get, type Mailbox, post, setBinding, signIn } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
+	ACCEPTED,
 	accept,
 	answer,
 	createOrganisation,
@@ -458,7 +459,7 @@ describe("inviting a person", () => {
 			const ada = await signIn(mailbox, "ada@example.com", { origin });
 			const created = await post(
 				"/organization/create",
-				{ name: "Acme" },
+				{ name: "Acme", ...ACCEPTED },
 				{ origin, cookie: ada.cookie },
 			);
 			const { id: organizationId } = (await created.json()) as { id: string };
