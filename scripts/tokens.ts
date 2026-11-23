@@ -59,6 +59,67 @@ const PLACED_ROLES = [
 const ONE_ACCENT = { from: "tertiary", to: "secondary" };
 
 /**
+ * Other companies' colours: Google's and Microsoft's sign-in buttons and marks
+ * (TS-104, decision 62). Their branding guidelines fix them, so they are copied
+ * from the published files and never derived from the seed, and each is used by
+ * its own provider's button alone.
+ * https://developers.google.com/identity/branding-guidelines
+ * https://learn.microsoft.com/en-us/entra/identity-platform/howto-add-branding-in-apps
+ *
+ * The buttons: [token, in the light scheme, in the dark scheme].
+ * Google: "Fill: #FFFFFF Stroke: #747775 … Font: #1F1F1F", and in the dark theme
+ * "Fill: #131314 Stroke: #8E918F … Font: #E3E3E3".
+ * Microsoft: "Font color: #5E5E5E Background: #FFFFFF Border: 1px #8C8C8C", and in
+ * the dark theme "Font color: #FFFFFF Background: #2F2F2F" with no border, which
+ * is drawn here in the background's own colour so both buttons keep one size.
+ */
+const BRAND_BUTTONS = [
+	["google", "#ffffff", "#131314"],
+	["google-outline", "#747775", "#8e918f"],
+	["on-google", "#1f1f1f", "#e3e3e3"],
+	["microsoft", "#ffffff", "#2f2f2f"],
+	["microsoft-outline", "#8c8c8c", "#2f2f2f"],
+	["on-microsoft", "#5e5e5e", "#ffffff"],
+] as const;
+
+/**
+ * The marks' own colours, the same in both schemes: [token, colour]. Microsoft's
+ * four squares (ms-symbollockup_mssymbol_19.svg), and the soft shapes Google's
+ * "G" lays over its sweep (signin-assets.zip, 2025).
+ */
+const BRAND_MARKS = [
+	["microsoft-red", "#f25022"],
+	["microsoft-green", "#7fba00"],
+	["microsoft-blue", "#00a4ef"],
+	["microsoft-yellow", "#ffb900"],
+	["google-blue", "#3186ff"],
+	["google-red", "#ff4641"],
+	["google-pink", "#ff5b8b"],
+] as const;
+
+/**
+ * The sweep Google's "G" is cut from, as signin-assets.zip draws it: a conic
+ * gradient from 90deg, each stop [colour, angle in degrees].
+ */
+const GOOGLE_SWEEP = [
+	["#ff4641", 0],
+	["#ff4641", 4.14555],
+	["#3186ff", 39.154],
+	["#3186ff", 72.0044],
+	["#00a5b7", 96.7463],
+	["#0ebc5f", 120.897],
+	["#0ebc5f", 154.722],
+	["#6cc400", 179.136],
+	["#ffcc00", 203.588],
+	["#ffd314", 226.915],
+	["#ffcc00", 251.688],
+	["#ff6a2b", 273.129],
+	["#fd4641", 289.305],
+	["#ff4641", 359.593],
+	["#ff4641", 360],
+] as const;
+
+/**
  * The typefaces: one family in two widths, as a timetable is set. The condensed
  * width is for display text and columns of times, the normal width for reading.
  * The font files are in app/fonts/ and app/styles/fonts.css declares them.
@@ -241,6 +302,17 @@ function colourRoles(): string[] {
 	);
 }
 
+function brandMarks(): string[] {
+	const sweep = GOOGLE_SWEEP.map(([colour, angle]) => `${colour} ${angle}deg`).join(", ");
+	return [
+		...BRAND_BUTTONS.map(
+			([name, light, dark]) => `--brand-mark-${name}: light-dark(${light}, ${dark});`,
+		),
+		...BRAND_MARKS.map(([name, colour]) => `--brand-mark-${name}: ${colour};`),
+		`--brand-mark-google-sweep: conic-gradient(from 90deg, ${sweep});`,
+	];
+}
+
 // ---------------------------------------------------------------------------------
 // Type, shape, spacing, elevation
 // ---------------------------------------------------------------------------------
@@ -397,6 +469,8 @@ function render(): string {
 :root,
 [data-color-scheme] {
 ${block(`Colour roles, light and dark, from the seed ${SEED_COLOUR}`, colourRoles())}
+
+${block("Brand marks: Google's and Microsoft's own colours, for their sign-in buttons", brandMarks())}
 }
 
 :root {

@@ -13,6 +13,11 @@ import { WaitingLabel } from "./WaitingLabel";
 // The large size is the action of a page nobody is signed in on, as the home
 // page draws its own: 48px tall, 24px either side, title-medium, and the `small`
 // corner throughout (docs/design-direction.md, "Buttons").
+//
+// `google` and `microsoft` are "Sign in with Google" and "Sign in with
+// Microsoft" (TS-104, decision 62): each provider's own colours for its button,
+// from the brand-mark tokens, and its mark (ProviderMark) as the icon, with the
+// 12px either side both providers' guidelines draw, at either size.
 
 const BASE =
 	"relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 " +
@@ -23,17 +28,31 @@ const BASE =
 
 const SIZES = {
 	small: "h-11 min-w-11 rounded-large-increased text-label-large data-pressed:rounded-small",
-	large: "h-12 rounded-small px-6 text-title-medium",
+	large: "h-12 rounded-small text-title-medium",
 } as const;
 
-/** The padding at each side of a small button. A large one has its own. */
-const SMALL_PADDING = {
-	filled: "px-4",
-	tonal: "px-4",
-	outlined: "px-4",
-	text: "px-3",
-	danger: "px-4",
-	"outlined-danger": "px-4",
+/** The padding at each side, for each size. */
+const PADDING = {
+	small: {
+		filled: "px-4",
+		tonal: "px-4",
+		outlined: "px-4",
+		text: "px-3",
+		danger: "px-4",
+		"outlined-danger": "px-4",
+		google: "px-3",
+		microsoft: "px-3",
+	},
+	large: {
+		filled: "px-6",
+		tonal: "px-6",
+		outlined: "px-6",
+		text: "px-6",
+		danger: "px-6",
+		"outlined-danger": "px-6",
+		google: "px-3",
+		microsoft: "px-3",
+	},
 } as const;
 
 const VARIANTS = {
@@ -50,6 +69,10 @@ const VARIANTS = {
 	// The error colour, outlined: the action that opens a destructive confirmation
 	// ("Delete organisation"). The confirmation itself is `danger`.
 	"outlined-danger": "border border-error text-error data-disabled:border-outline-variant",
+	// The providers' own buttons: Google's fill, stroke and words, light and dark,
+	// and Microsoft's background, border and words.
+	google: "over-google border border-google-outline text-on-google",
+	microsoft: "over-microsoft border border-microsoft-outline text-on-microsoft",
 } as const;
 
 export type ButtonVariant = keyof typeof VARIANTS;
@@ -72,7 +95,9 @@ export interface ButtonProps
 	/**
 	 * How much the button stands out. `filled` is the one primary action of a view;
 	 * `tonal`, `outlined` and `text` step down from it. `danger` takes the place of
-	 * `filled` when the action cannot be undone. Defaults to `filled`.
+	 * `filled` when the action cannot be undone. `google` and `microsoft` are the
+	 * providers' sign-in buttons alone, with a `ProviderMark` as the icon.
+	 * Defaults to `filled`.
 	 */
 	variant?: ButtonVariant;
 	/**
@@ -104,6 +129,8 @@ const CLOCK_TONE = {
 	text: "two",
 	danger: "one",
 	"outlined-danger": "two",
+	google: "two",
+	microsoft: "two",
 } as const;
 
 /**
@@ -131,12 +158,7 @@ export function Button({
 			onPress={pending ? undefined : props.onPress}
 			aria-disabled={pending || undefined}
 			data-waiting={pending || undefined}
-			className={cx(
-				BASE,
-				SIZES[size],
-				size === "small" && SMALL_PADDING[variant],
-				VARIANTS[variant],
-			)}
+			className={cx(BASE, SIZES[size], PADDING[size][variant], VARIANTS[variant])}
 		>
 			{isPending === undefined ? (
 				<>

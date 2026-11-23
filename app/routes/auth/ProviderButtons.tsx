@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { PROVIDER_NAMES, type Provider } from "~/auth/providers";
 import { Button } from "~/components/Button";
+import { ProviderMark } from "~/components/ProviderMark";
 
 import { type Notice, NoticeLine, problem, useOneAtATime, waiting } from "./AuthPage";
 import { leaveFor, providerAddress } from "./client";
@@ -18,15 +19,23 @@ export interface ProviderButtonsProps {
 }
 
 /**
- * "Continue with Google" and "Continue with Microsoft" (TS-104): each asks
+ * "Sign in with Google" and "Sign in with Microsoft" (TS-104): each asks
  * `POST /api/auth/sign-in/social` for the provider's address, so the rate
- * limit applies, and goes there with a whole page load.
+ * limit applies, and goes there with a whole page load. Each is drawn as its
+ * provider's branding guidelines ask: its words, its colours and its mark
+ * (decision 62). Microsoft's guidance gives only "Sign in with Microsoft" and
+ * "Sign in"; Google's allows "Sign in with Google", so both read alike.
+ *
+ * Microsoft's button is described by "Work or school account", as its guidance
+ * asks, so a person with a personal Microsoft account knows before pressing
+ * that it will be refused (decision 62: work and school accounts only).
  */
 export function ProviderButtons({ providers, next, errorPath, refusal }: ProviderButtonsProps) {
 	const [notice, setNotice] = useState<Notice | null>(
 		refusal ? { tone: "problem", text: refusal } : null,
 	);
 	const { once, running } = useOneAtATime();
+	const accountKind = useId();
 	if (providers.length === 0) return null;
 
 	function go(provider: Provider) {
@@ -41,17 +50,30 @@ export function ProviderButtons({ providers, next, errorPath, refusal }: Provide
 	return (
 		<div className="mt-8 flex flex-col gap-3">
 			<NoticeLine notice={notice} />
-			{providers.map((provider) => (
-				<Button
-					key={provider}
-					variant="outlined"
-					size="large"
-					onPress={() => go(provider)}
-					isPending={running !== null}
-				>
-					{`Continue with ${PROVIDER_NAMES[provider]}`}
-				</Button>
-			))}
+			{providers.map((provider) => {
+				const button = (
+					<Button
+						key={provider}
+						variant={provider}
+						size="large"
+						icon={<ProviderMark provider={provider} />}
+						onPress={() => go(provider)}
+						isPending={running !== null}
+						aria-describedby={provider === "microsoft" ? accountKind : undefined}
+					>
+						{`Sign in with ${PROVIDER_NAMES[provider]}`}
+					</Button>
+				);
+				if (provider !== "microsoft") return button;
+				return (
+					<div key={provider} className="flex flex-col gap-1">
+						{button}
+						<p id={accountKind} className="text-body-medium text-on-surface-variant">
+							Work or school account
+						</p>
+					</div>
+				);
+			})}
 		</div>
 	);
 }

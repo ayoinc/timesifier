@@ -79,6 +79,22 @@
 	--md-sys-color-sheet: light-dark(#fead05, #130d05);
 	--md-sys-color-on-sheet: light-dark(#252a2f, #fead05);
 	--md-sys-color-on-sheet-variant: light-dark(#624000, #d7c4ac);
+
+	/* Brand marks: Google's and Microsoft's own colours, for their sign-in buttons */
+	--brand-mark-google: light-dark(#ffffff, #131314);
+	--brand-mark-google-outline: light-dark(#747775, #8e918f);
+	--brand-mark-on-google: light-dark(#1f1f1f, #e3e3e3);
+	--brand-mark-microsoft: light-dark(#ffffff, #2f2f2f);
+	--brand-mark-microsoft-outline: light-dark(#8c8c8c, #2f2f2f);
+	--brand-mark-on-microsoft: light-dark(#5e5e5e, #ffffff);
+	--brand-mark-microsoft-red: #f25022;
+	--brand-mark-microsoft-green: #7fba00;
+	--brand-mark-microsoft-blue: #00a4ef;
+	--brand-mark-microsoft-yellow: #ffb900;
+	--brand-mark-google-blue: #3186ff;
+	--brand-mark-google-red: #ff4641;
+	--brand-mark-google-pink: #ff5b8b;
+	--brand-mark-google-sweep: conic-gradient(from 90deg, #ff4641 0deg, #ff4641 4.14555deg, #3186ff 39.154deg, #3186ff 72.0044deg, #00a5b7 96.7463deg, #0ebc5f 120.897deg, #0ebc5f 154.722deg, #6cc400 179.136deg, #ffcc00 203.588deg, #ffd314 226.915deg, #ffcc00 251.688deg, #ff6a2b 273.129deg, #fd4641 289.305deg, #ff4641 359.593deg, #ff4641 360deg);
 }
 
 :root {

@@ -75,26 +75,36 @@ describe("the sign-in page's buttons", () => {
 		return response.text();
 	}
 
-	it("appear only where the client is configured", async () => {
+	// Each mark (components/ProviderMark.tsx) by a colour only it is drawn in.
+	const GOOGLE_MARK = "fill-google-blue";
+	const MICROSOFT_MARK = "fill-microsoft-red";
+
+	it("appear only where the client is configured, each with its provider's mark", async () => {
 		const none = await signInPage();
-		expect(none).not.toContain("Continue with Google");
-		expect(none).not.toContain("Continue with Microsoft");
+		expect(none).not.toContain("Sign in with Google");
+		expect(none).not.toContain("Sign in with Microsoft");
+		expect(none).not.toContain(GOOGLE_MARK);
+		expect(none).not.toContain(MICROSOFT_MARK);
 
 		configureProviders("microsoft");
 		const microsoftOnly = await signInPage();
-		expect(microsoftOnly).toContain("Continue with Microsoft");
-		expect(microsoftOnly).not.toContain("Continue with Google");
+		expect(microsoftOnly).toContain("Sign in with Microsoft");
+		expect(microsoftOnly).toContain(MICROSOFT_MARK);
+		expect(microsoftOnly).not.toContain("Sign in with Google");
+		expect(microsoftOnly).not.toContain(GOOGLE_MARK);
 
 		configureProviders("google");
 		const both = await signInPage();
-		expect(both).toContain("Continue with Google");
-		expect(both).toContain("Continue with Microsoft");
+		expect(both).toContain("Sign in with Google");
+		expect(both).toContain("Sign in with Microsoft");
+		expect(both).toContain(GOOGLE_MARK);
+		expect(both).toContain(MICROSOFT_MARK);
 	});
 
 	it("a provider whose ID is set without its secret, or its secret without its ID, is not offered", async () => {
 		configureProviders("google");
 		setBinding("GOOGLE_CLIENT_SECRET", "");
-		expect(await signInPage()).not.toContain("Continue with Google");
+		expect(await signInPage()).not.toContain("Sign in with Google");
 		expect((await askProvider("google")).status).toBe(404);
 	});
 });
