@@ -347,7 +347,7 @@ Every response from the Worker carries:
 | `Strict-Transport-Security` | `max-age=63072000` |
 | `X-Content-Type-Options`    | `nosniff`          |
 
-A response that is not HTML (a redirect, a refusal, data) also carries `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, so a response opened on its own can load and run nothing.
+A response that is not HTML (a redirect, a refusal, data) also carries `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; report-to csp`, so a response opened on its own can load and run nothing. Every response, and every file `public/_headers` covers, carries `Reporting-Endpoints: csp="/browser-errors"`: a violation of either policy is reported to the application's own address, which keeps only the directive, the blocked origin, the script's path and the line (decision 61).
 
 A response whose content type is HTML, including error pages, also carries:
 
@@ -375,7 +375,8 @@ connect-src 'self';
 base-uri 'none';
 form-action 'self';
 frame-ancestors 'none';
-object-src 'none'
+object-src 'none';
+report-to csp
 ```
 
 - The nonce is 128 random bits from Web Crypto, new for every request. The Worker creates it, passes it to `app/entry.server.tsx` through the router context, and writes the header. `ServerRouter` and React put it on every inline script they emit.

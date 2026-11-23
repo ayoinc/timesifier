@@ -44,7 +44,7 @@ export const TIME_TRAVEL_DAYS = 30;
 export const WORKERS_LOGS_DAYS = 7;
 
 /** The parts of wrangler.jsonc that send data to a provider. Each is one sub-processor's. */
-export type Binding = "d1_databases" | "r2_buckets" | "send_email" | "observability";
+export type Binding = "d1_databases" | "r2_buckets" | "send_email" | "observability" | "ratelimits";
 
 export interface SubProcessor {
 	/** The anchor of its row on /security. */
@@ -82,7 +82,8 @@ export const SUB_PROCESSORS: readonly SubProcessor[] = [
 			"what Cloudflare Web Analytics measures of each page",
 			`a log line of every request, and a trace of one in ten, kept ${WORKERS_LOGS_DAYS} days`,
 		],
-		bindings: ["d1_databases", "r2_buckets", "send_email", "observability"],
+		// ratelimits: Cloudflare counts browser error reports by client address (TS-107d).
+		bindings: ["d1_databases", "r2_buckets", "send_email", "observability", "ratelimits"],
 		dpa: OUTSIDE_LINKS.cloudflareDpa,
 		list: OUTSIDE_LINKS.cloudflareSubprocessors,
 	},

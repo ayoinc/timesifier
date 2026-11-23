@@ -44,6 +44,8 @@ async function expectBrowserPolicy(response: Response, { turnstile = false } = {
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 		"object-src 'none'",
+		// Violations are reported to the application's own address (TS-107d).
+		"report-to csp",
 	]);
 	expect(policy).not.toContain("unsafe-inline");
 	expect(policy).not.toContain("unsafe-eval");
@@ -51,6 +53,7 @@ async function expectBrowserPolicy(response: Response, { turnstile = false } = {
 	expect(atob(nonce).length).toBeGreaterThanOrEqual(16);
 
 	expect(headers.get("Strict-Transport-Security")).toBe("max-age=63072000");
+	expect(headers.get("Reporting-Endpoints")).toBe('csp="/browser-errors"');
 	expect(headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
 	expect(headers.get("X-Content-Type-Options")).toBe("nosniff");
 	expect(headers.get("X-Frame-Options")).toBe("DENY");
@@ -110,8 +113,9 @@ describe("browser policy headers", () => {
 		expect(response.headers.get("Content-Type")).toContain("text/plain");
 		expect(response.headers.get("Strict-Transport-Security")).toBe("max-age=63072000");
 		expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+		expect(response.headers.get("Reporting-Endpoints")).toBe('csp="/browser-errors"');
 		expect(response.headers.get("Content-Security-Policy")).toBe(
-			"default-src 'none'; frame-ancestors 'none'",
+			"default-src 'none'; frame-ancestors 'none'; report-to csp",
 		);
 	});
 
@@ -190,7 +194,7 @@ describe("the Turnstile addition to the policy", () => {
 		expect(response.status).toBe(302);
 		expect(response.headers.has(POLICY_ADDITION_HEADER)).toBe(false);
 		expect(response.headers.get("Content-Security-Policy")).toBe(
-			"default-src 'none'; frame-ancestors 'none'",
+			"default-src 'none'; frame-ancestors 'none'; report-to csp",
 		);
 	});
 
@@ -232,7 +236,7 @@ describe("the Turnstile addition to the policy", () => {
 
 		expect(headers.has(POLICY_ADDITION_HEADER)).toBe(false);
 		expect(headers.get("Content-Security-Policy")).toBe(
-			"default-src 'none'; frame-ancestors 'none'",
+			"default-src 'none'; frame-ancestors 'none'; report-to csp",
 		);
 	});
 });

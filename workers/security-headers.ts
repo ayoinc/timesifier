@@ -1,3 +1,5 @@
+import { BROWSER_ERRORS_PATH, REPORTING_ENDPOINT } from "../app/browser-errors/report";
+
 // The policy as shipped is described in docs/security.md, "Browser policy".
 
 // Two years. No `includeSubDomains` and no `preload`: the other subdomains of
@@ -68,6 +70,12 @@ export const POLICY_ADDITION_HEADER = "Timesifier-Policy-Addition";
 export const TURNSTILE_ADDITION = "turnstile";
 const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 
+// Where the browser reports a violation of either policy (TS-107d): the same
+// address as the page's own error reports, under the same rules
+// (app/routes/browser-errors.ts). `report-uri`, the older way, is left out.
+const REPORT_TO = `report-to ${REPORTING_ENDPOINT}`;
+const REPORTING_ENDPOINTS = `${REPORTING_ENDPOINT}="${BROWSER_ERRORS_PATH}"`;
+
 function contentSecurityPolicy(nonce: string, addition: string | null): string {
 	const hashes = REACT_ARIA_STYLE_HASHES.map((hash) => `'${hash}'`).join(" ");
 	// The one relaxation, and only under the dev server: Vite injects stylesheets
@@ -90,12 +98,13 @@ function contentSecurityPolicy(nonce: string, addition: string | null): string {
 		"form-action 'self'",
 		"frame-ancestors 'none'",
 		"object-src 'none'",
+		REPORT_TO,
 	].join("; ");
 }
 
 // For a response that is not a page: nothing may load from it or frame it, so a
 // file opened on its own (an SVG, a JSON document) cannot run script.
-const NOTHING_LOADS = "default-src 'none'; frame-ancestors 'none'";
+const NOTHING_LOADS = `default-src 'none'; frame-ancestors 'none'; ${REPORT_TO}`;
 
 /**
  * Returns the response with the browser policy attached: every response gets
@@ -114,6 +123,7 @@ export function withSecurityHeaders(response: Response, nonce: string): Response
 
 	headers.set("Strict-Transport-Security", STRICT_TRANSPORT_SECURITY);
 	headers.set("X-Content-Type-Options", "nosniff");
+	headers.set("Reporting-Endpoints", REPORTING_ENDPOINTS);
 
 	if (headers.get("Content-Type")?.toLowerCase().startsWith("text/html")) {
 		headers.set("Content-Security-Policy", contentSecurityPolicy(nonce, addition));

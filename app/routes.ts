@@ -171,6 +171,10 @@ export default [
 	route("sitemap.xml", "routes/sitemap.ts"),
 	// For whoever finds a vulnerability: RFC 9116 (TS-105).
 	route(".well-known/security.txt", "routes/security-txt.ts"),
+	// For the monitors outside the application (TS-107): whether it can reach its
+	// database and its files, and what went wrong in a browser.
+	route("health", "routes/health.ts"),
+	route("browser-errors", "routes/browser-errors.ts"),
 	app,
 	platform,
 	// A mailing's unsubscribe link (TS-099): its signature, not a session, says whose it is.

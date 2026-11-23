@@ -12,6 +12,14 @@ import { ActivitySource } from "~/activity/actions";
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
 import { signInCodeEmail } from "~/auth/sign-in-code-email";
 import { builtInPlatformBrand } from "~/brand/platform-brand.server";
+import {
+	BROWSER_ERROR_FIELD_WORDS,
+	BROWSER_ERROR_FIELDS,
+	browserErrorNotice,
+	CSP_REPORT_FIELD_WORDS,
+	CSP_REPORT_FIELDS,
+} from "~/browser-errors/report";
+import { BrowserErrorReportSchema } from "~/browser-errors/report.server";
 import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
@@ -964,7 +972,13 @@ it("the sub-processors on /security and /dpa are the ones the notice names, and 
 	]);
 	const keys = [...(wrangler ?? "").matchAll(/^\t"([$\w]+)":/gm)].map(([, key]) => key);
 	const bindings = keys.filter((key) => !NOT_DATA.has(key));
-	expect(bindings.sort()).toEqual(["d1_databases", "observability", "r2_buckets", "send_email"]);
+	expect(bindings.sort()).toEqual([
+		"d1_databases",
+		"observability",
+		"r2_buckets",
+		"ratelimits",
+		"send_email",
+	]);
 	const covered = new Set(SUB_PROCESSORS.flatMap(({ bindings }) => bindings));
 	for (const binding of bindings) expect(covered, binding).toContain(binding);
 
@@ -1074,4 +1088,21 @@ it("the accessibility statement names the browsers and the standard the tests us
 	expect(text).toContain("No audit by an independent auditor, and no testing by disabled people");
 	expect(await page(ACCESSIBILITY_PATH)).toContain(`href="mailto:${SECURITY_EMAIL}"`);
 	expect(text).toMatch(/It was last reviewed on \d{1,2} \w+ \d{4} ?\./);
+});
+
+// What a browser reports of an error in a page (TS-107d). The notice's
+// sentence is drawn from the same lists of fields the endpoint reads with.
+it("the notice names exactly the fields a browser error report carries", async () => {
+	// The endpoint accepts exactly these fields (test/browser-errors.test.ts holds
+	// what it keeps of a CSP report to CSP_REPORT_FIELDS).
+	expect(Object.keys(BrowserErrorReportSchema.shape)).toEqual([...BROWSER_ERROR_FIELDS]);
+	// The notice names each of them, and nothing else.
+	expect(Object.keys(BROWSER_ERROR_FIELD_WORDS)).toEqual([...BROWSER_ERROR_FIELDS]);
+	expect(Object.keys(CSP_REPORT_FIELD_WORDS)).toEqual([...CSP_REPORT_FIELDS]);
+	const text = words(await page(PRIVACY_PATH));
+	const sentence = browserErrorNotice(new URL(ORIGIN).host).replace(/’/g, "'");
+	expect(text).toContain(sentence);
+	for (const field of BROWSER_ERROR_FIELDS)
+		expect(sentence).toContain(BROWSER_ERROR_FIELD_WORDS[field]);
+	for (const field of CSP_REPORT_FIELDS) expect(sentence).toContain(CSP_REPORT_FIELD_WORDS[field]);
 });

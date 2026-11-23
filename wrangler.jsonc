@@ -101,6 +101,14 @@
 		"r2_buckets": [
 			{ "binding": "RECEIPTS", "bucket_name": "timesifier-receipts-preview", "jurisdiction": "eu" },
 			{ "binding": "BRAND", "bucket_name": "timesifier-brand-preview", "jurisdiction": "eu" }
+		],
+		// The previews' own count of browser error reports, apart from production's.
+		"ratelimits": [
+			{
+				"name": "BROWSER_ERRORS_LIMIT",
+				"namespace_id": "1072",
+				"simple": { "limit": 20, "period": 60 }
+			}
 		]
 	},
 	"observability": {
@@ -140,6 +148,16 @@
 	// may send from the deployment's one address and no other. Locally Wrangler
 	// writes each message to a file and sends nothing.
 	"send_email": [{ "name": "EMAIL" }],
+	// Browser error reports (TS-107d, app/routes/browser-errors.ts): at most 20 a
+	// minute from one client address, counted in each Cloudflare location apart.
+	// https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/
+	"ratelimits": [
+		{
+			"name": "BROWSER_ERRORS_LIMIT",
+			"namespace_id": "1071",
+			"simple": { "limit": 20, "period": 60 }
+		}
+	],
 	// The scheduled handler, workers/scheduled.ts. Every minute: the webhooks'
 	// deliveries that are due are sent (TS-087, app/integrations/webhooks.server.ts).
 	// Hourly: auto-lock moves each organisation's lock date within the hour its

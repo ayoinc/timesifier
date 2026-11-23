@@ -168,6 +168,7 @@ for (const viewport of [COMPACT, WIDE]) {
 				"Integrations",
 				"API docs",
 				"Contact",
+				"Status",
 			]);
 			const column = await foot.boundingBox();
 			expect(column?.x).toBe(home.column?.x);

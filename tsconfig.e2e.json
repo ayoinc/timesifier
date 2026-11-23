@@ -13,7 +13,8 @@
 		"app/auth/code.ts",
 		"app/auth/person-name.ts",
 		"app/shell/color-scheme.server.ts",
-		"app/platform/paths.ts"
+		"app/platform/paths.ts",
+		"app/browser-errors/report.ts"
 	],
 	"compilerOptions": {
 		"composite": true,

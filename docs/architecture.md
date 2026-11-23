@@ -20,16 +20,16 @@ The figure shows what is bound today; the parts that are not built are in "Not b
 
 ## Parts
 
-| Part            | Cloudflare product                                                                                  | Used for                                                                   | Status                                      |
-| --------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------- |
-| Application     | Workers, React Router v8, Cloudflare Vite plugin                                                    | Pages, loaders, actions                                                    | Built (TS-001)                              |
-| Static files    | Workers Static Assets                                                                               | Scripts, styles, images                                                    | Built (TS-001)                              |
-| Database        | D1 (binding `DB`), Drizzle ORM, SQL migrations                                                      | Users, organisations, time entries, everything durable                     | Built (TS-007)                              |
-| Authentication  | Better Auth in the Worker, data in D1                                                               | Email-code sign-in, sessions; organisations, roles, invitations            | Built (TS-008, TS-009)                      |
-| Bot protection  | Turnstile, checked by the Worker                                                                    | The request that sends a sign-in code, which is also how an account starts | Built (TS-008)                              |
-| Email           | Cloudflare Email Service (binding `EMAIL`)                                                          | Codes and invitations, from `no-reply@mail.timesifier.com`                 | Built (TS-008)                              |
-| Observability   | Workers Logs and Traces                                                                             | Logs and traces                                                            | Built (TS-001). Planned: an alert (TS-022a) |
-| Background work | Cron Trigger, every minute (`triggers.crons` in `wrangler.jsonc`), the Worker's `scheduled` handler | Webhook deliveries that are due (TS-087); other background work joins it   | Built (TS-087)                              |
+| Part            | Cloudflare product                                                                                  | Used for                                                                   | Status                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Application     | Workers, React Router v8, Cloudflare Vite plugin                                                    | Pages, loaders, actions                                                    | Built (TS-001)                                                                                     |
+| Static files    | Workers Static Assets                                                                               | Scripts, styles, images                                                    | Built (TS-001)                                                                                     |
+| Database        | D1 (binding `DB`), Drizzle ORM, SQL migrations                                                      | Users, organisations, time entries, everything durable                     | Built (TS-007)                                                                                     |
+| Authentication  | Better Auth in the Worker, data in D1                                                               | Email-code sign-in, sessions; organisations, roles, invitations            | Built (TS-008, TS-009)                                                                             |
+| Bot protection  | Turnstile, checked by the Worker                                                                    | The request that sends a sign-in code, which is also how an account starts | Built (TS-008)                                                                                     |
+| Email           | Cloudflare Email Service (binding `EMAIL`)                                                          | Codes and invitations, from `no-reply@mail.timesifier.com`                 | Built (TS-008)                                                                                     |
+| Observability   | Workers Logs and Traces                                                                             | Logs and traces                                                            | Built (TS-001); `/health`, browser error reports and the monitors of `docs/operations.md` (TS-107) |
+| Background work | Cron Trigger, every minute (`triggers.crons` in `wrangler.jsonc`), the Worker's `scheduled` handler | Webhook deliveries that are due (TS-087); other background work joins it   | Built (TS-087)                                                                                     |
 
 The production Turnstile widget is in Cloudflare's non-interactive mode: it never shows a tick box.
 
@@ -253,7 +253,11 @@ The expected use is an estimate, not a measurement. It assumes a person makes 2,
 
 At 10,000 people the bill would be about $25 a month: the plan, 10 million extra requests and 47,000 extra messages. The limit that matters is not money but the size of one database; see `docs/decisions.md` entry 7.
 
-No alert is set yet. The owner turns on a billing notification in the Cloudflare dashboard. TS-022a adds the alert on errors and sets `limits.cpu_ms` in `wrangler.jsonc`, which has none today.
+The owner turns on a billing notification in the Cloudflare dashboard. TS-022a sets `limits.cpu_ms` in `wrangler.jsonc`, which has none today.
+
+## Monitoring
+
+`/health` checks D1 and R2. Upptime (`ayoinc/timesifier-status`, status page `status.timesifier.com`) and UptimeRobot check it and the public pages every 5 minutes from outside Cloudflare. Cloudflare Monitors count the Worker's `error:`, `browser-error:` and `email: send failed` lines and the 5xx rate. Browser errors and CSP violations reach the log through `POST /browser-errors`. Each monitor, its interval, where its alert goes and the owner's setup steps are in `docs/operations.md`; decision 61.
 
 ## Where data lives
 

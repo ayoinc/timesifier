@@ -17,6 +17,9 @@ declare global {
  */
 export type Refusals = Record<string, number[]>;
 
+/** Messages of the errors a test throws in its page on purpose. Any other uncaught error still fails it. */
+export type Thrown = readonly string[];
+
 /**
  * Every browser test imports `test` from here. A test fails when its page raises a
  * `securitypolicyviolation` event, logs a console error or throws: a page that
@@ -35,10 +38,12 @@ export type Refusals = Record<string, number[]>;
 export const test = base.extend<{
 	pageHealth: undefined;
 	refusals: Refusals;
+	thrown: Thrown;
 	chosenScheme: ColorSchemeChoice | undefined;
 	schemeCookie: undefined;
 }>({
 	refusals: [{}, { option: true }],
+	thrown: [[], { option: true }],
 	chosenScheme: [undefined, { option: true }],
 	schemeCookie: [
 		async ({ context, baseURL, chosenScheme, browserName }, use, testInfo) => {
@@ -69,7 +74,7 @@ export const test = base.extend<{
 		{ auto: true },
 	],
 	pageHealth: [
-		async ({ page, refusals }, use) => {
+		async ({ page, refusals, thrown }, use) => {
 			const violations: PolicyViolation[] = [];
 			const errors: string[] = [];
 			const meant = (text: string, url: string) =>
@@ -96,7 +101,9 @@ export const test = base.extend<{
 				if (message.type() !== "error") return;
 				if (!meant(message.text(), message.location().url)) errors.push(message.text());
 			});
-			page.on("pageerror", (error) => errors.push(`uncaught: ${error.message}`));
+			page.on("pageerror", (error) => {
+				if (!thrown.includes(error.message)) errors.push(`uncaught: ${error.message}`);
+			});
 
 			await use(undefined);
 
