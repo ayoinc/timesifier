@@ -39,9 +39,17 @@ export interface TimeItem {
 	description: string | null;
 	day: Day;
 	minutes: number;
-	/** The hourly rate that priced it, in minor units. */
+	/** Whether it is overtime (TS-095). */
+	overtime: boolean;
+	/**
+	 * Whether it is billed on a line of its own, "(overtime)": overtime of a
+	 * project whose multiplier is not ×1 (decision 55). At ×1 it is billed as
+	 * regular time is, on its group's line, unmarked.
+	 */
+	overtimeApart: boolean;
+	/** The hourly price that priced it, in minor units: the rate, times the multiplier for overtime (`hourlyPrice`). */
 	rateMinor: number;
-	/** Minutes × rate: 60 times its amount, exact (`billableAmount`). */
+	/** Minutes × that price: 60 times its amount, exact (`billableAmount`). */
 	minuteMinor: number;
 }
 
@@ -79,10 +87,16 @@ function keyOf(item: TimeItem, grouping: Grouping): string {
 	}
 }
 
-/** What a line of `items` under `grouping` says. */
+/** What a line of `items` under `grouping` says; a line of overtime says so (D9). */
 function lineDescription(items: readonly TimeItem[], grouping: Grouping): string {
 	const [first] = items;
 	if (!first) return "";
+	const said = groupDescription(first, grouping);
+	return first.overtimeApart ? `${said} (overtime)` : said;
+}
+
+/** What a line of `first`'s group under `grouping` says, overtime aside. */
+function groupDescription(first: TimeItem, grouping: Grouping): string {
 	switch (grouping) {
 		case "project":
 			return first.projectName;
@@ -99,7 +113,10 @@ function lineDescription(items: readonly TimeItem[], grouping: Grouping): string
 
 /**
  * Tracked time as lines, grouped by `grouping`, in the order the groups are
- * first met.
+ * first met. A group's overtime billed at a multiplier other than ×1 is a
+ * line of its own, after its regular time's (decision 55); at ×1 it is on
+ * its group's line, as before, so a client is not told which hours were
+ * overtime by a setting nobody changed.
  *
  * The lines add up to exactly what the entries are worth together: their
  * exact amounts are summed, rounded once (`sumBillable`), and that total is
@@ -109,14 +126,19 @@ function lineDescription(items: readonly TimeItem[], grouping: Grouping): string
  * share one, and otherwise the amount over the hours.
  */
 export function timeLines(items: readonly TimeItem[], grouping: Grouping): DraftLine[] {
-	const groups = new Map<string, TimeItem[]>();
+	const groups = new Map<string, { regular: TimeItem[]; overtime: TimeItem[] }>();
 	for (const item of items) {
 		const key = keyOf(item, grouping);
-		const group = groups.get(key);
-		if (group) group.push(item);
-		else groups.set(key, [item]);
+		let group = groups.get(key);
+		if (!group) {
+			group = { regular: [], overtime: [] };
+			groups.set(key, group);
+		}
+		(item.overtimeApart ? group.overtime : group.regular).push(item);
 	}
-	const lists = [...groups.values()];
+	const lists = [...groups.values()]
+		.flatMap(({ regular, overtime }) => [regular, overtime])
+		.filter((list) => list.length > 0);
 	const exact = lists.map((list) => list.reduce((sum, item) => sum + item.minuteMinor, 0));
 	const total = roundHalfUp(
 		exact.reduce((sum, value) => sum + value, 0),

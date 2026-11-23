@@ -43,6 +43,7 @@ An error is `{ "error": { "code", "message" } }`, and for `422` also `"fields"`,
 | 404    | `not_found`              | Nothing at that address, or nothing the maker may see there                 |
 | 405    | `method_not_allowed`     | `Allow` says which methods are                                              |
 | 409    | `locked`, `running`      | The day is locked (submitted, approved, lock date), or the entry is running |
+| 409    | `invoiced`               | The entry is on an invoice; `message` names it and who can let it go        |
 | 413    | `too_large`              | A body over 16 KB                                                           |
 | 415    | `unsupported_media_type` | A body that is not `application/json`                                       |
 | 422    | `invalid`                | Values that cannot be used                                                  |
@@ -128,11 +129,11 @@ One entry, or 404.
 }
 ```
 
-`started_at` (ISO 8601 with offset) may replace or go with `spent_date`; without it the entry is placed on the day as the Timesheet's week grid places one. `hours` is above 0 and at most 24. `user_id`, if sent, must be the maker's. `overtime` (default `false`) records the hours as overtime. The Timesheet's rules hold: regular time past the day's expected hours, or overtime the organisation does not allow, past its caps or past approved hours, answers `422` `invalid` with what the day has left in its `message`. Answers `201` with the entry and `Location`.
+`started_at` (ISO 8601 with offset) may replace or go with `spent_date`; without it the entry is placed on the day as the Timesheet's week grid places one. `hours` is above 0 and at most 24, and hours that round to no minutes answer `422`. `user_id`, if sent, must be the maker's. `overtime` (default `false`) records the hours as overtime. The Timesheet's rules hold: regular time past the day's expected hours, or overtime the organisation does not allow, past its caps or past approved hours, answers `422` `invalid` with what the day has left in its `message`. Answers `201` with the entry and `Location`.
 
 ### `PATCH /time_entries/{id}` — `time:write`
 
-Any of `project_id`, `task_id`, `started_at`, `ended_at` or `hours` (not both), `description` (null clears it), `overtime`. The maker's own entries that have ended.
+Any of `project_id`, `task_id`, `started_at`, `ended_at` or `hours` (not both), `description` (null clears it), `overtime`. The maker's own entries that have ended. An end after now ("That is ahead of now.") or an entry longer than 24 hours answers `422` `invalid`, and an entry on an invoice `409` `invoiced`. Each refusal's `message` is the Timesheet's sentence.
 
 ### `DELETE /time_entries/{id}` — `time:write`
 

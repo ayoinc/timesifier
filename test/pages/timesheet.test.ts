@@ -604,10 +604,11 @@ describe("entries by hand (TS-012b)", () => {
 		expect(await countEntries()).toBe(0);
 	});
 
-	it("refuses an end before its start, and a time the clocks skip", async () => {
+	it("reads an end at or before its start as the next day's (TR-14), and refuses a time the clocks skip", async () => {
 		const id = await anEntry();
-		expect(await post(fields(id, { start: "10:00", end: "09:00" }))).toBe(400);
-		expect(await post(fields(id, { start: "10:00", end: "10:00" }))).toBe(400);
+		// 23:00 and 24:00 of Tuesday's time: past its 7:30.
+		expect(await post(fields(id, { start: "10:00", end: "09:00" }))).toBe(409);
+		expect(await post(fields(id, { start: "10:00", end: "10:00" }))).toBe(409);
 		expect(await post(fields(id, { date: "2026-03-29", start: "01:30", end: "03:00" }))).toBe(400);
 		expect((await entries()).results[0]?.startedAt).toBe(instantAt("2026-11-10", 13 * 60, LONDON));
 	});

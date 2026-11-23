@@ -118,7 +118,7 @@ describe("the timer", () => {
 		await start(acme, T0);
 		await start(acme, T0 + MINUTE, projectId, bola);
 
-		expect((await stopTimer(acme, bola, T0 + 2 * MINUTE))?.userId).toBe(bola);
+		expect((await stopTimer(acme, bola, T0 + 2 * MINUTE))?.ended.userId).toBe(bola);
 		expect(await runningEntry(acme, ada)).not.toBeNull();
 	});
 
@@ -153,8 +153,48 @@ describe("the timer", () => {
 
 		const stopped = await stopTimer(acme, ada, T0 + 5 * MINUTE);
 
-		expect(stopped?.endedAt?.getTime()).toBe(T0 + 5 * MINUTE);
+		expect(stopped?.ended.endedAt?.getTime()).toBe(T0 + 5 * MINUTE);
 		expect(await runningEntry(acme, ada)).toBeNull();
+	});
+});
+
+describe("the stop and its cut (TR-09)", () => {
+	it("two stops at once write one end and one remainder, both read before either writes", async () => {
+		await env.DB.prepare("update organisations set overtime_policy = 'allowed' where id = ?")
+			.bind(acme.organisationId)
+			.run();
+		await start(acme, T0);
+		const stops = await Promise.all([
+			stopTimer(acme, ada, T0 + 9 * 60 * MINUTE),
+			stopTimer(acme, ada, T0 + 9 * 60 * MINUTE),
+		]);
+
+		expect(stops.filter((stopped) => stopped !== null)).toHaveLength(1);
+		const entries = (await acme.timeEntries.select()).sort(
+			(a, b) => a.startedAt.getTime() - b.startedAt.getTime(),
+		);
+		expect(
+			entries.map((e) => [e.startedAt.getTime(), e.endedAt?.getTime(), e.overtime, e.spentOn]),
+		).toEqual([
+			[T0, T0 + 450 * MINUTE, false, "2026-11-11"],
+			[T0 + 450 * MINUTE, T0 + 540 * MINUTE, true, "2026-11-11"],
+		]);
+		const records = await acme.activityRecords.select();
+		expect(records.map((r) => r.action).sort()).toEqual([
+			"time_entry.created",
+			"time_entry.split",
+			"time_entry.started",
+			"time_entry.stopped",
+		]);
+	});
+
+	it("a stop the system makes is recorded by nobody, through the door it names", async () => {
+		await start(acme, T0);
+		await stopTimer(acme, ada, T0 + MINUTE, { actorId: null, source: "system" });
+		const [stopped] = (await acme.activityRecords.select()).filter(
+			(r) => r.action === "time_entry.stopped",
+		);
+		expect(stopped).toMatchObject({ actorId: null, source: "system" });
 	});
 });
 

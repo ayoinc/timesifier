@@ -10,7 +10,8 @@ import { billableProjectsOf, uninvoicedExpenses, uninvoicedTime } from "./source
  * and expenses in a range that are on no invoice yet, and what they come to.
  * It reads the same rows and prices as the invoice preview
  * (`sources.server.ts`), so what it says is waiting is what an invoice would
- * take. A project's time is summed exactly and rounded once.
+ * take: time on a day over its limit is left out until the day is corrected
+ * (TR-09). A project's time is summed exactly and rounded once.
  */
 
 /** One project's uninvoiced work. */
@@ -53,7 +54,7 @@ export async function uninvoicedOf(
 	]);
 	const today = dayOf(now, organisation.timeZone);
 	const hourly = projects.filter((p) => p.billingType === "hourly").map((p) => p.id);
-	const [entries, expenses] = await Promise.all([
+	const [{ entries }, expenses] = await Promise.all([
 		uninvoicedTime(scope, organisation, hourly, days, now),
 		uninvoicedExpenses(
 			scope,

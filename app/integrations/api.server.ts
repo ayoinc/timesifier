@@ -18,7 +18,7 @@ import {
 import { clockTime } from "~/schedules/schedules";
 import { canSee } from "~/shell/destinations";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
-import { addHours, deleteEntry, editEntry } from "~/time/manual.server";
+import { addHours, deleteEntry, editEntry, REFUSAL_SENTENCES } from "~/time/manual.server";
 
 import { authenticate, type TokenCaller } from "./api-tokens.server";
 import { viewerOfCaller, zoneOfCaller } from "./caller.server";
@@ -541,8 +541,9 @@ async function bodyOf<S extends z.ZodType>(
 }
 
 /**
- * What a refused write answers, by why the Timesheet functions refused it;
- * a refusal that says why itself (a day's limit, TS-090; a full day) says so here too.
+ * What a refused write answers, by why the Timesheet functions refused it, in
+ * the Timesheet's words (TR-18c); a refusal that says why itself (a day's
+ * limit, TS-090; a full day; an invoice, TR-09) says so here too.
  */
 function refused(refusal: { reason: string; message?: string }): Response {
 	const { reason, message } = refusal;
@@ -550,7 +551,13 @@ function refused(refusal: { reason: string; message?: string }): Response {
 		case "not-found":
 			return notFound();
 		case "locked":
-			return problem(409, "locked", "That day is locked: its period is submitted or approved.");
+			return problem(409, "locked", REFUSAL_SENTENCES.locked);
+		case "invoiced":
+			return problem(409, "invoiced", message ?? "That entry is on an invoice.");
+		case "ahead":
+			return problem(422, "invalid", REFUSAL_SENTENCES.ahead);
+		case "too-long":
+			return problem(422, "invalid", REFUSAL_SENTENCES["too-long"]);
 		case "running":
 			return problem(409, "running", "A running entry is changed by stopping its timer.");
 		case "ends-before-start":
@@ -568,6 +575,9 @@ async function tellWebhooks(caller: TokenCaller, now: number) {
 	if (active) waitUntil(dispatchWebhooks({ organisations: [caller.organisation.id], now }));
 }
 
+/** Hours that round to no minutes write nothing (TR-13). */
+const NO_MINUTES = "`hours` is less than a minute.";
+
 async function createEntry({ caller, request, now }: Call) {
 	const body = await bodyOf(request, NewEntry);
 	if (!body.ok) return body.response;
@@ -583,13 +593,15 @@ async function createEntry({ caller, request, now }: Call) {
 	if (spent_date !== undefined && spent_date !== day) {
 		return problem(422, "invalid", "`started_at` is not on `spent_date`.");
 	}
+	const minutes = Math.round((hours ?? 0) * 60);
+	if (minutes === 0) return problem(422, "invalid", NO_MINUTES);
 	// The task travels to the Timesheet's own rules where they take one (TS-067).
 	const dayHours = {
 		projectId: project_id,
 		taskId: task_id,
 		description: description?.length ? description : null,
 		day,
-		minutes: Math.round((hours ?? 0) * 60),
+		minutes,
 		startedAt,
 		zone,
 		now,
@@ -616,6 +628,9 @@ async function changeEntry({ caller, request, id, now }: Call) {
 	const { project_id, task_id, started_at, ended_at, hours, description, overtime } = body.data;
 	const startedAt = started_at === undefined ? entry.startedAt.getTime() : Date.parse(started_at);
 	const length = entry.endedAt.getTime() - entry.startedAt.getTime();
+	if (hours !== undefined && Math.round(hours * 60) === 0) {
+		return problem(422, "invalid", NO_MINUTES);
+	}
 	const endedAt =
 		ended_at !== undefined
 			? Date.parse(ended_at)

@@ -146,6 +146,7 @@ export async function projectPage(
 			userId: entry.userId,
 			taskId: entry.taskId,
 			billable: entry.billable,
+			overtime: entry.overtime,
 			day,
 			minutes: wholeMinutes(length),
 		});
@@ -211,6 +212,8 @@ export async function projectPage(
 			budgetAlertPercent: project.budgetAlertPercent,
 			budgetWarnMembers: project.budgetWarnMembers,
 			budgetIncludesExpenses: project.budgetIncludesExpenses,
+			/** What overtime is billed at, in thousandths of the rate (D9); for those who see rates. */
+			overtimeRateMilli: seesRates ? project.overtimeRateMilli : null,
 		},
 		organisationCurrency: money.currency,
 		clientCurrency: client?.currency ?? null,

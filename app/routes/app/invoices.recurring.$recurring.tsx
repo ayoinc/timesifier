@@ -22,6 +22,7 @@ import {
 	stopRecurring,
 } from "~/invoices/recurring.server";
 import { FREQUENCY_OPTIONS, RecurringFields } from "~/invoices/recurring-form";
+import { sourcesFor } from "~/invoices/sources.server";
 import { formatMoney, lineAmount } from "~/money/money";
 import { moneyText } from "~/money/typed";
 import { notFound } from "~/organisations/membership.server";
@@ -48,18 +49,37 @@ const Form = z.discriminatedUnion("intent", [
 ]);
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
-	const { scope, organisation, locale } = await billingOf(context, request);
+	const { scope, organisation, locale, now } = await billingOf(context, request);
 	const [found, taxes] = await Promise.all([
 		findRecurring(scope, params.recurring),
 		taxesOf(scope),
 	]);
 	if (!found) throw notFound();
 	const { recurring, lines, clientName } = found;
+	// What the next invoice's uninvoiced time leaves out, as it would be made now.
+	const leftOut =
+		recurring.includeUninvoicedTime && recurring.stoppedAt === null
+			? (
+					await sourcesFor(
+						scope,
+						organisation,
+						{
+							clientId: recurring.clientId,
+							days: null,
+							projectIds: [],
+							grouping: "project",
+							fixedMinor: new Map(),
+						},
+						now,
+					)
+				).leftOut
+			: [];
 	const frequency = Frequency.parse(recurring.frequency);
 	const currency = recurring.currency;
 	return {
 		slug: organisation.slug,
 		clientName,
+		leftOut,
 		recurring: {
 			currency,
 			frequency,
@@ -130,7 +150,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 }
 
 export default function RecurringInvoice({ loaderData }: Route.ComponentProps) {
-	const { slug, recurring, lines, taxes } = loaderData;
+	const { slug, recurring, lines, taxes, leftOut } = loaderData;
 	const running = recurring.stopped === null;
 	return (
 		<>
@@ -182,6 +202,16 @@ export default function RecurringInvoice({ loaderData }: Route.ComponentProps) {
 						)}
 					</Ledger>
 				</div>
+				{leftOut.length > 0 && (
+					<ul
+						aria-label="Time left out"
+						className="mt-4 flex max-w-160 flex-col gap-1 text-body-large text-error"
+					>
+						{leftOut.map((said) => (
+							<li key={said}>{said}</li>
+						))}
+					</ul>
+				)}
 				{running && (
 					<ActionForm intent="add-line" submitLabel="Add line" className="mt-6 max-w-120">
 						{(field) => <LineFields field={field} taxes={taxes} currency={recurring.currency} />}

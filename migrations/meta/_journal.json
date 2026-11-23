@@ -169,6 +169,13 @@
 			"when": 1794659532888,
 			"tag": "0024_platform_brand_dark_logo",
 			"breakpoints": true
+		},
+		{
+			"idx": 24,
+			"version": "6",
+			"when": 1795387301640,
+			"tag": "0025_overtime_rate",
+			"breakpoints": true
 		}
 	]
 }

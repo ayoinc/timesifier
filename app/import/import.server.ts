@@ -17,12 +17,20 @@ import {
 	users,
 	uuidv7,
 } from "~/db";
-import { type KindsMs, kindOfNewTime, type RulesCalendar, weekOf } from "~/leave/rules";
+import {
+	closedReason,
+	dayLimit,
+	type KindsMs,
+	kindOfNewTime,
+	type RulesCalendar,
+	splitAtLimit,
+	weekOf,
+} from "~/leave/rules";
 import { rulesCalendarOf } from "~/leave/rules.server";
 import { nameKey, recordName } from "~/lib/names";
 import { lockOf, lockReachOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
-import { addDays, type Day, instantAt } from "~/time/calendar";
+import { addDays, type Day, dayOf, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
 import { ENTRY_FIELDS } from "~/time/manual.server";
 
@@ -340,6 +348,7 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 	const unmatched = new Map<string, number[]>();
 	const memberOf = new Map<string, Member>();
 	const candidates: TimeRow[] = [];
+	const now = Date.now();
 
 	for (const row of body) {
 		const email = cell(row, "email").toLowerCase();
@@ -368,6 +377,11 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 		const day = readDate(cell(row, "date"));
 		if (day === null) {
 			preview.skipped.push({ line: row.line, reason: "The date is not YYYY-MM-DD or M/D/YYYY." });
+			continue;
+		}
+		// Time is tracked for days that have come, where the person is (TR-13).
+		if (day > dayOf(now, member.zone)) {
+			preview.skipped.push({ line: row.line, reason: "That day has not come yet." });
 			continue;
 		}
 		const minutes = readMinutes(cell(row, "hours"));
@@ -418,7 +432,6 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 	const tracked = new Map<string, KindsMs>();
 	const trackedOf = (userId: string) => (day: Day) =>
 		tracked.get(`${userId}|${day}`) ?? { regularMs: 0, overtimeMs: 0 };
-	const now = Date.now();
 	for (const userId of memberOf.keys()) {
 		const days = candidates
 			.filter((c) => c.userId === userId)
@@ -452,6 +465,30 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 				entry.taskId ? (taskKey.get(entry.taskId) ?? "") : "",
 				Math.round((entry.endedAt.getTime() - entry.startedAt.getTime()) / 60_000),
 				entry.description ?? "",
+			);
+			present.set(key, (present.get(key) ?? 0) + 1);
+		}
+		// A row imported before and cut at its day's limit (decision 54) is
+		// its regular entry and the overtime that follows it: already here.
+		for (const overtime of entries) {
+			if (!overtime.overtime || overtime.endedAt === null) continue;
+			const regular = entries.find(
+				(e) =>
+					!e.overtime &&
+					e.endedAt?.getTime() === overtime.startedAt.getTime() &&
+					e.spentOn === overtime.spentOn &&
+					e.projectId === overtime.projectId &&
+					e.taskId === overtime.taskId &&
+					e.description === overtime.description,
+			);
+			if (!regular) continue;
+			const key = duplicateKey(
+				userId,
+				overtime.spentOn,
+				projectKey.get(overtime.projectId) ?? "",
+				overtime.taskId ? (taskKey.get(overtime.taskId) ?? "") : "",
+				Math.round((overtime.endedAt.getTime() - regular.startedAt.getTime()) / 60_000),
+				overtime.description ?? "",
 			);
 			present.set(key, (present.get(key) ?? 0) + 1);
 		}
@@ -504,23 +541,23 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			continue;
 		}
 		const calendar = calendars.get(row.userId);
-		const ms = row.minutes * 60_000;
-		const kind = calendar
-			? kindOfNewTime(calendar, row.day, ms, trackedOf(row.userId))
-			: { ok: true as const, overtime: false };
-		if (!kind.ok) {
-			preview.skipped.push({ line: row.line, reason: kind.message });
+		const taken = calendar ? rowsOfLimit(calendar, row, trackedOf(row.userId)) : [row];
+		if (!Array.isArray(taken)) {
+			preview.skipped.push({ line: row.line, reason: taken.reason });
 			continue;
 		}
-		const slot = `${row.userId}|${row.day}`;
-		const sum = trackedOf(row.userId)(row.day);
-		tracked.set(
-			slot,
-			kind.overtime
-				? { ...sum, overtimeMs: sum.overtimeMs + ms }
-				: { ...sum, regularMs: sum.regularMs + ms },
-		);
-		preview.rows.push({ ...row, overtime: kind.overtime });
+		for (const part of taken) {
+			const ms = part.minutes * 60_000;
+			const slot = `${row.userId}|${row.day}`;
+			const sum = trackedOf(row.userId)(row.day);
+			tracked.set(
+				slot,
+				part.overtime
+					? { ...sum, overtimeMs: sum.overtimeMs + ms }
+					: { ...sum, regularMs: sum.regularMs + ms },
+			);
+			preview.rows.push(part);
+		}
 		if (!knownProjects.has(nameKey(row.project))) {
 			newProjects.set(nameKey(row.project), row.project);
 			if (row.client && !knownClients.has(nameKey(row.client))) {
@@ -535,6 +572,46 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 		projects: [...newProjects.values()],
 		tasks: [...newTasks.values()],
 	};
+}
+
+/**
+ * A row as its day's limits take it (TS-095): regular while it fits in the
+ * day's expected hours, and past them cut as a timer is cut (`splitAtLimit`,
+ * decision 54): regular up to the limit, the rest overtime, where the day
+ * takes overtime and its caps take the rest. Else the reason it is skipped;
+ * whole-day leave names the person (TR-18d).
+ */
+function rowsOfLimit(
+	calendar: RulesCalendar,
+	row: TimeRow,
+	tracked: (day: Day) => KindsMs,
+): TimeRow[] | { reason: string } {
+	const limit = dayLimit(calendar, row.day);
+	if (limit.closed) {
+		const name = row.person.split(" ")[0] || row.person;
+		return { reason: closedReason(limit.closed, row.day, name) };
+	}
+	const ms = row.minutes * 60_000;
+	const ofDay = tracked(row.day);
+	const cut = splitAtLimit(
+		{ startedAt: 0, endedAt: ms },
+		limit.regularMinutes * 60_000 - ofDay.regularMs,
+		!limit.noOvertime,
+	);
+	const regular = cut.overtimeFrom === null ? 0 : Math.floor(cut.overtimeFrom / 60_000);
+	if (regular === 0) {
+		const kind = kindOfNewTime(calendar, row.day, ms, tracked);
+		return kind.ok ? [{ ...row, overtime: kind.overtime }] : { reason: kind.message };
+	}
+	const rest = row.minutes - regular;
+	const afterRegular = (day: Day) =>
+		day === row.day ? { ...ofDay, regularMs: ofDay.regularMs + regular * 60_000 } : tracked(day);
+	const kind = kindOfNewTime(calendar, row.day, rest * 60_000, afterRegular);
+	if (!kind.ok) return { reason: kind.message };
+	return [
+		{ ...row, minutes: regular, overtime: false },
+		{ ...row, minutes: rest, overtime: kind.overtime },
+	];
 }
 
 function duplicateKey(

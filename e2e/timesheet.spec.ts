@@ -343,7 +343,11 @@ test.describe("the Day view", () => {
 		await editing.getByLabel("Start").fill("08:00");
 		await editing.getByLabel("Start").press("Tab");
 		await expect(editing.getByLabel("End")).toBeFocused();
+		// An end at or before the start is the next day's, and the sheet says so (TR-14).
+		await editing.getByLabel("End").fill("07:00");
+		await expect(editing.getByText("+1 day")).toBeVisible();
 		await editing.getByLabel("End").fill("09:15");
+		await expect(editing.getByText("+1 day")).toHaveCount(0);
 		await editing.getByLabel("End").press("Enter");
 		await expect(editing).toBeHidden();
 		await expect(main).toContainText("08:00–09:15");

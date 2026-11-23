@@ -10,25 +10,25 @@ import {
 	retainersPath,
 	uninvoicedPath,
 } from "../app/invoices/paths";
-import { destinationPath } from "../app/shell/destinations";
+import { destinationPath, organisationPath } from "../app/shell/destinations";
 import { foundInMessageSentBy, newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
+import { workEveryDay } from "./timesheet";
 
 // Bill in a browser (TS-073, TS-074, TS-077): the owner invoices a client and
-// takes the payment with the keyboard alone; an estimate is sent to a client's
-// contact, accepted on its public link by somebody signed out, and made an
-// invoice. Then every page of Invoices and Estimates at both window sizes and
-// in both schemes, with no WCAG 2.2 A or AA violation. Each test is a new
-// person with an organisation of their own, and nothing is seeded.
+// takes the payment with the keyboard alone; a project bills its overtime at
+// its own rate (D9), which New invoice puts on a line of its own; an estimate
+// is sent to a client's contact, accepted on its public link by somebody
+// signed out, and made an invoice. Then every page of Invoices and Estimates
+// at both window sizes and in both schemes, with no WCAG 2.2 A or AA
+// violation. Each test is a new person with an organisation of their own, and
+// nothing is seeded.
 //
-// This branch has no page that gives a project a billable rate or a fixed fee
-// (the Rates page is Money's), so New invoice has no priced time to make a
-// draft from here. The draft below comes from a retainer's funds and an
-// accepted estimate instead; drafts made from tracked time are covered by the
-// worker tests (test/billing/sources.test.ts) until the rates page lands.
+// The first draft below comes from a retainer's funds; the overtime test's
+// from tracked time priced on the project's own page.
 
 test.use({ storageState: SIGNED_OUT });
 test.describe.configure({ timeout: TIME_WITH_TURNS * 2 });
@@ -213,6 +213,88 @@ test("the owner invoices a client, issues it, and records its payment with the k
 		`${number} · ${CLIENT}`,
 	);
 	await expect(page.getByRole("list", { name: "Paid invoices" })).toContainText("Paid");
+});
+
+test("a project bills overtime at its own rate, and New invoice puts it on a line of its own", async ({
+	page,
+}) => {
+	await signIn(page, newPerson().email);
+	const { slug } = await createOrganisation(page);
+	await createClient(page, slug);
+
+	// Site, for the client.
+	await openShell(page, destinationPath(slug, "projects"));
+	await page.getByRole("button", { name: "Create project" }).click();
+	const creating = page.getByRole("dialog", { name: "Create a project" });
+	await creating.getByLabel("Project name").fill("Site");
+	await choose(page, creating, "Client", CLIENT);
+	await creating.getByRole("button", { name: "Create the project" }).click();
+	await expect(creating).toBeHidden();
+
+	// Overtime allowed, through Settings › Timesheet rules.
+	await openShell(page, destinationPath(slug, "settings"));
+	await page.getByRole("button", { name: "Change timesheet rules" }).click();
+	const rules = page.getByRole("dialog", { name: "Change the timesheet rules" });
+	await rules
+		.getByRole("radiogroup", { name: "Overtime" })
+		.getByText("Allowed", { exact: true })
+		.click();
+	await rules.getByRole("button", { name: "Save" }).click();
+	await expect(rules).toBeHidden();
+
+	// Site's settings: £60 an hour, its overtime at ×1.5.
+	await openShell(page, destinationPath(slug, "projects"));
+	await page.getByRole("main").getByRole("link", { name: "Site", exact: true }).click();
+	await page
+		.getByRole("group", { name: "Project pages" })
+		.getByRole("link", { name: "Settings" })
+		.click();
+	const settings = page.getByRole("list", { name: "The project's settings" });
+	await expect(settings).toContainText("×1 the day's rate");
+	await page.getByRole("button", { name: "Change billing" }).click();
+	const billing = page.getByRole("dialog", { name: "Billing" });
+	await billing.getByRole("textbox", { name: "Project rate an hour" }).fill("60");
+	await billing.getByRole("button", { name: "Save billing" }).click();
+	await expect(billing).toBeHidden();
+
+	await page.getByRole("button", { name: "Change what overtime is billed at" }).click();
+	const overtime = page.getByRole("dialog", { name: "Overtime billed at" });
+	const choices = overtime.getByRole("radiogroup", { name: "Overtime billed at" });
+	await expect(choices.getByRole("radio", { name: "×1, the day's rate" })).toBeChecked();
+	await choices.getByText("×1.5", { exact: true }).click();
+	await overtime.getByRole("button", { name: "Save" }).click();
+	await expect(overtime).toBeHidden();
+	await expect(page.getByRole("status")).toHaveText("Overtime is billed at ×1.5 the day's rate.");
+	await expect(settings).toContainText("×1.5 the day's rate");
+
+	// Today, a working day of 7:30 (the rate is in force from today): its 7:30, then an hour of overtime.
+	await workEveryDay(page, slug);
+	for (const [field, hours] of [
+		["Hours", "7:30"],
+		["Overtime", "1"],
+	] as const) {
+		await openShell(page, organisationPath(slug));
+		await page.getByRole("main").getByRole("button", { name: "Track time", exact: true }).click();
+		const sheet = page.getByRole("dialog", { name: "Track time" });
+		await sheet.getByRole("textbox", { name: field, exact: true }).fill(hours);
+		await sheet.getByRole("button", { name: "Save entry" }).click();
+		await expect(sheet).toBeHidden();
+	}
+
+	// New invoice: the overtime on a line of its own, at £90.00 an hour.
+	await openShell(page, newInvoicePath(slug));
+	const what = page.getByRole("form", { name: "What to invoice" });
+	await choose(page, what, "Client", CLIENT);
+	await what.getByRole("button", { name: "Show what can be invoiced" }).click();
+	const lines = page.getByRole("list", { name: "Lines" });
+	await expect(lines.getByRole("listitem")).toHaveCount(2);
+	await expect(lines.getByRole("listitem").nth(0)).toContainText("Site");
+	await expect(lines.getByRole("listitem").nth(0)).toContainText("£450.00");
+	await expect(lines.getByRole("listitem").nth(1)).toContainText("Site (overtime)");
+	await expect(lines.getByRole("listitem").nth(1)).toContainText("£90.00");
+	await expect(page.getByRole("list", { name: "Entries" })).toContainText("Overtime");
+	await page.getByRole("button", { name: "Create draft invoice" }).click();
+	await expect(page.getByRole("region", { name: "Draft" })).toContainText("Site (overtime)");
 });
 
 test("an estimate is sent to the client's contact, accepted on its link signed out, and made an invoice", async ({

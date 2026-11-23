@@ -460,6 +460,104 @@ describe("the same role rules as the pages", () => {
 		}
 	});
 
+	it("a change cannot put time ahead of now, or make an entry longer than a day", async () => {
+		const { max, entries } = await people();
+		const token = await tokenFor(max);
+		const id = entries.get(max.user.id);
+		const said = async (response: Response) =>
+			(await json<{ error: { message: string } }>(response)).error.message;
+
+		const ahead = await api(`/time_entries/${id}`, token, {
+			method: "PATCH",
+			body: { ended_at: new Date(Date.now() + 2 * 3_600_000).toISOString() },
+		});
+		expect(ahead.status).toBe(422);
+		expect(await said(ahead)).toBe("That is ahead of now.");
+
+		const long = await api(`/time_entries/${id}`, token, {
+			method: "PATCH",
+			body: { started_at: "2026-11-02T13:00:00Z", ended_at: "2026-11-05T13:00:00Z" },
+		});
+		expect(long.status).toBe(422);
+		expect(await said(long)).toBe("An entry cannot be longer than 24 hours.");
+		expect(
+			await value<number>(
+				"select (ended_at - started_at) / 60000 from time_entries where id = ?",
+				id,
+			),
+		).toBe(30);
+	});
+
+	it("hours that round to nothing are refused", async () => {
+		const { max, apollo } = await people();
+		const token = await tokenFor(max);
+		const before = await value<number>("select count(*) from time_entries");
+		const made = await api("/time_entries", token, {
+			method: "POST",
+			body: { project_id: apollo, spent_date: "2026-11-03", hours: 0.004 },
+		});
+		expect(made.status).toBe(422);
+		expect((await json<{ error: { message: string } }>(made)).error.message).toBe(
+			"`hours` is less than a minute.",
+		);
+		expect(await value<number>("select count(*) from time_entries")).toBe(before);
+		const entry = await json(
+			await api("/time_entries", token, {
+				method: "POST",
+				body: { project_id: apollo, spent_date: "2026-11-03", hours: 1 },
+			}),
+		);
+		const changed = await api(`/time_entries/${entry.id}`, token, {
+			method: "PATCH",
+			body: { hours: 0.004 },
+		});
+		expect(changed.status).toBe(422);
+	});
+
+	it("says what the Timesheet says of a locked day and of an entry on an invoice (TR-18c)", async () => {
+		const { max, entries } = await people();
+		const token = await tokenFor(max);
+		const id = entries.get(max.user.id) ?? "";
+		await seedPeriod(acme.id, max.user.id, "2026-11-02");
+		const locked = await api(`/time_entries/${id}`, token, { method: "DELETE" });
+		expect(locked.status).toBe(409);
+		expect((await json<{ error: { message: string } }>(locked)).error.message).toBe(
+			"That day is locked: its week is submitted or approved, or it is on or before the lock date. Withdraw the week, or ask an owner or admin to move the lock date back.",
+		);
+		await env.DB.prepare("delete from periods").run();
+
+		const client = crypto.randomUUID();
+		const invoice = crypto.randomUUID();
+		const line = crypto.randomUUID();
+		await env.DB.batch([
+			env.DB.prepare(
+				"insert into clients (id, organisation_id, name, name_key, created_at, updated_at) values (?, ?, 'Globex', 'globex', 0, 0)",
+			).bind(client, acme.id),
+			env.DB.prepare(
+				"insert into invoices (id, organisation_id, number, client_id, currency, status, issued_on, due_on, created_at, updated_at) values (?, ?, 'INV-0042', ?, 'GBP', 'draft', '2026-11-05', '2026-12-05', 0, 0)",
+			).bind(invoice, acme.id, client),
+			env.DB.prepare(
+				"insert into invoice_lines (id, organisation_id, invoice_id, position, kind, description, quantity_milli, unit_price_minor, amount_minor, created_at, updated_at) values (?, ?, ?, 0, 'time', 'Apollo', 500, 6000, 3000, 0, 0)",
+			).bind(line, acme.id, invoice),
+			env.DB.prepare(
+				"insert into invoice_line_sources (id, organisation_id, line_id, time_entry_id, created_at) values (?, ?, ?, ?, 0)",
+			).bind(crypto.randomUUID(), acme.id, line, id),
+			env.DB.prepare("update invoices set status = 'sent' where id = ?").bind(invoice),
+		]);
+		const invoiced = await api(`/time_entries/${id}`, token, {
+			method: "PATCH",
+			body: { description: "Changed" },
+		});
+		expect(invoiced.status).toBe(409);
+		expect(await json(invoiced)).toEqual({
+			error: {
+				code: "invoiced",
+				message:
+					"That entry is on invoice INV-0042, so it cannot be changed. An owner, admin or Finance can void the invoice to let it go.",
+			},
+		});
+	});
+
 	it("checks what it is sent", async () => {
 		const { max, apollo } = await people();
 		const token = await tokenFor(max);

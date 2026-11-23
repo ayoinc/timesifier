@@ -331,6 +331,72 @@ describe("copying forward (HT-F)", () => {
 		expect(textOf(await mainOf(`${PAGE}?day=2026-11-09`))).not.toContain("Copy");
 	});
 
+	/** Monday 9's 7:30 of regular time, 09:00 to 16:30, and its 1:00 of overtime after. */
+	async function mondayWithOvertime() {
+		await seedEntry(ada, at("2026-11-09T09:00:00Z"), at("2026-11-09T16:30:00Z"), "Build");
+		const late = await seedEntry(
+			ada,
+			at("2026-11-09T16:30:00Z"),
+			at("2026-11-09T17:30:00Z"),
+			"Late",
+		);
+		await env.DB.prepare("update time_entries set overtime = 1 where id = ?").bind(late).run();
+	}
+
+	const kinds = async (day: string) => {
+		const { results } = await env.DB.prepare(
+			"select description, (ended_at - started_at) / 60000 as minutes, overtime from time_entries where spent_on = ? order by started_at",
+		)
+			.bind(day)
+			.all();
+		return results;
+	};
+
+	it("copying a day keeps each entry regular or overtime (decision 56)", async () => {
+		await env.DB.prepare("update organisations set overtime_policy = 'allowed' where id = ?")
+			.bind(acme.id)
+			.run();
+		clockAt(T0);
+		await mondayWithOvertime();
+
+		const copied = await answerTo({ intent: "copy-day", day: "2026-11-10" });
+		expect(copied.status).toBe(200);
+		expect(copied.body).toContain("Copied 2 entries from Mon 9.");
+		expect(await kinds("2026-11-10")).toEqual([
+			{ description: "Build", minutes: 450, overtime: 0 },
+			{ description: "Late", minutes: 60, overtime: 1 },
+		]);
+	});
+
+	it("copies a day holding overtime the day copied onto does not take, leaving the overtime out, and says so (TR-18e)", async () => {
+		clockAt(T0);
+		await mondayWithOvertime();
+
+		const copied = await answerTo({ intent: "copy-day", day: "2026-11-10" });
+		expect(copied.status).toBe(200);
+		expect(copied.body).toContain(
+			"Copied 1 entry from Mon 9. Its 1:00 of overtime was left out. This organisation does not allow overtime.",
+		);
+		expect(await kinds("2026-11-10")).toEqual([
+			{ description: "Build", minutes: 450, overtime: 0 },
+		]);
+	});
+
+	it("Copy week names the days it left out, and why (TR-18e)", async () => {
+		clockAt(T0);
+		await seedEntry(ada, at("2026-11-02T09:00:00Z"), at("2026-11-02T10:00:00Z"), "Mon");
+		await seedEntry(ada, at("2026-11-03T09:00:00Z"), at("2026-11-03T10:00:00Z"), "Tue");
+		await seedEntry(ada, at("2026-11-04T08:00:00Z"), at("2026-11-04T09:00:00Z"), "Wed");
+		await seedLeave(acme.id, ada.user.id, "annual", "2026-11-10", "2026-11-10");
+		await seedHoliday(acme.id, "2026-11-11", "Company Day");
+
+		const copied = await answerTo({ intent: "copy-week", startsOn: "2026-11-09" });
+		expect(copied.status).toBe(200);
+		expect(copied.body).toContain(
+			"Copied 1 entry onto 1 day. Tue 10 was left out. You are on annual leave that day: no time can be tracked on it. Wed 11 was left out.",
+		);
+	});
+
 	it("copies last week with its hours, day by day, leaving a day with time as it is", async () => {
 		clockAt(T0);
 		await seedEntry(ada, at("2026-11-02T09:00:00Z"), at("2026-11-02T11:00:00Z"), "Mon");

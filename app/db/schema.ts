@@ -295,9 +295,11 @@ export const clients = sqliteTable(
  * of the same organisation, which the pair of columns makes the database hold.
  *
  * The columns from `billingType` on are TS-064's: how the project bills (B5)
- * and its budget (B7). Each is nullable or has a default and carries no CHECK,
- * so SQLite adds it in place rather than rebuilding the table, which every
- * entry refers to. The Worker checks their values.
+ * and its budget (B7). Each is nullable or has a default and carries no CHECK
+ * drizzle-kit knows of, so SQLite adds it in place rather than rebuilding the
+ * table, which every entry refers to. The Worker checks their values;
+ * `overtime_rate_milli`'s bounds are also a CHECK on the column itself,
+ * written by hand in 0025 (drizzle-kit has no notation for a column's CHECK).
  */
 export const projects = sqliteTable(
 	"projects",
@@ -345,6 +347,11 @@ export const projects = sqliteTable(
 		budgetIncludesExpenses: integer("budget_includes_expenses", { mode: "boolean" })
 			.notNull()
 			.default(false),
+		/**
+		 * What overtime is billed at (D9, OQ4): the day's rate times this
+		 * multiplier, in thousandths. 1000 (×1, the rate itself) to 10000 (×10).
+		 */
+		overtimeRateMilli: integer("overtime_rate_milli").notNull().default(1000),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},

@@ -1,9 +1,11 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { billableAmount, sumBillable } from "~/billing/billable";
 import { type OrganisationScope, organisationScope } from "~/db";
 import { addLine, createDraft, deleteDraft, deleteLine, linesOf } from "~/invoices/invoices.server";
 import { type DraftLine, expenseLines, type Grouping, timeLines } from "~/invoices/lines";
+import { issueRecurring } from "~/invoices/recurring.server";
 import {
 	mixedCurrencies,
 	type SourceRequest,
@@ -15,17 +17,23 @@ import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMember, value } from "../organisations/harness";
-import { type Person, person, submit } from "../pages/harness";
+import { open, type Person, person, submit, textOf } from "../pages/harness";
+import { seedDefaultWeek } from "../pages/schedule-seed";
 
 // What can be put on an invoice (TS-073): the preview of a client's
 // uninvoiced time, expenses and fixed fees (`sourcesFor`), the lines each
 // grouping makes of it, free lines, the Uninvoiced view, and the one currency.
+// Time on a day over its limit is left out until the day is corrected (TR-09).
 
 const NOW = Date.parse("2026-11-02T12:00:00Z");
 const TODAY = "2026-11-02";
 const ORGANISATION = { timeZone: "UTC", currency: "GBP" };
 /** Site's hourly rate: £60.00, so a minute is worth exactly 100 pence. */
 const SITE_RATE = 6000;
+/** Every day of the week worked, 23 hours each. */
+const LONG_WEEK = [1380, 1380, 1380, 1380, 1380, 1380, 1380];
+/** Monday to Friday, 09:00 to 17:30 with an hour's break: 7:30 a day. */
+const STANDARD_WEEK = [450, 450, 450, 450, 450, 0, 0];
 
 let mailbox: Mailbox;
 let scope: OrganisationScope;
@@ -64,6 +72,9 @@ beforeEach(async () => {
 	clientId = client.id;
 	siteId = site.id;
 	await rate({ projectId: siteId, amountMinor: SITE_RATE });
+	// Every day a long working day, so that no time is over its day's limit
+	// unless a test means it to be: the random cases put hours on any day.
+	await seedDefaultWeek(acme.id, LONG_WEEK);
 });
 
 afterEach(() => {
@@ -378,7 +389,7 @@ describe("free lines", () => {
 		expect((await invoiceRow(id)).totalMinor).toBe(12_000);
 		const sources = () => value("select count(*) from invoice_line_sources");
 		const waiting = async () =>
-			(await uninvoicedTime(scope, ORGANISATION, [siteId], null, NOW)).map((e) => e.id);
+			(await uninvoicedTime(scope, ORGANISATION, [siteId], null, NOW)).entries.map((e) => e.id);
 		expect(await sources()).toBe(2);
 		expect(await waiting()).toEqual([c]);
 
@@ -508,5 +519,118 @@ describe("one currency", () => {
 		await expense(siteId, 1234, "EUR");
 		const euros = await sourcesFor(scope, ORGANISATION, request({ projectIds: [siteId] }), NOW);
 		expect(euros.problem).toBe(mixedCurrencies(["EUR", "GBP"]));
+	});
+});
+
+describe("time on a day over its limit", () => {
+	/** A member called `name`, their address the first word of it. */
+	async function member(name: string) {
+		const email = `${name.split(" ")[0]?.toLowerCase()}@example.com`;
+		const { userId } = await seedMember(organisationId, "member", email);
+		await env.DB.prepare("update users set name = ? where id = ?").bind(name, userId).run();
+		return userId;
+	}
+
+	beforeEach(async () => {
+		// Overtime is not allowed (the default), and a day takes 7:30.
+		await seedDefaultWeek(organisationId, STANDARD_WEEK);
+	});
+
+	it("time on a day over its limit is not offered", async () => {
+		const grace = await member("Grace Hopper");
+		// Tuesday 10 February: a timer kept whole at 9:00 on a 7:30 day.
+		const long = await entry({ start: "2026-02-10T09:00:00Z", seconds: 9 * 3600, userId: grace });
+		const fine = await entry({ start: "2026-02-09T09:00:00Z", seconds: 3600, userId: grace });
+		const said =
+			"1 entry of Grace's is on a day over its limit (Tue 10). It is left out until the day is corrected.";
+
+		const sources = await sourcesFor(scope, ORGANISATION, request({ grouping: "entry" }), NOW);
+		expect(sources.entries.map((e) => e.id)).toEqual([fine]);
+		expect(sources.lines.flatMap((l) => l.timeEntryIds)).toEqual([fine]);
+		expect(sources.leftOut).toEqual([said]);
+		// The Uninvoiced view counts what an invoice would take.
+		expect(sum(await uninvoicedOf(scope, ORGANISATION, null, NOW))).toBe(100 * 60);
+		// The preview page says so, and the draft it saves leaves it out.
+		const page = await open(`/app/acme/invoices/new?client=${clientId}`, owner);
+		expect(textOf(await page.text())).toContain(said);
+		const saved = await submit("/app/acme/invoices/new", { client: clientId }, owner);
+		expect(saved.status).toBe(302);
+		expect(
+			await value("select count(*) from invoice_line_sources where time_entry_id = ?", long),
+		).toBe(0);
+		expect(
+			await value("select count(*) from invoice_line_sources where time_entry_id = ?", fine),
+		).toBe(1);
+
+		// Trimmed to 7:30, the day is within its limit and its time is offered.
+		await scope.timeEntries.update({ endedAt: new Date("2026-02-10T16:30:00Z") }, (t) =>
+			eq(t.id, long),
+		);
+		const corrected = await sourcesFor(scope, ORGANISATION, request(), NOW);
+		expect(corrected.entries.map((e) => e.id)).toEqual([long]);
+		expect(corrected.leftOut).toEqual([]);
+		expect(sum(corrected.lines)).toBe(100 * 450);
+	});
+
+	it("says how many entries of whose are left out, and on which days", async () => {
+		const grace = await member("Grace Hopper");
+		const linus = await member("Linus Torvalds");
+		await entry({ start: "2026-02-10T09:00:00Z", seconds: 9 * 3600, userId: grace });
+		await entry({ start: "2026-02-11T08:00:00Z", seconds: 4 * 3600, userId: grace });
+		await entry({ start: "2026-02-11T13:00:00Z", seconds: 4 * 3600, userId: grace });
+		await entry({ start: "2026-02-09T08:00:00Z", seconds: 4 * 3600, userId: linus });
+		await entry({ start: "2026-02-09T13:00:00Z", seconds: 4 * 3600, userId: linus });
+		// Saturday is no working day here, and overtime is not allowed.
+		await entry({ start: "2026-02-14T09:00:00Z", seconds: 3600 });
+
+		const sources = await sourcesFor(scope, ORGANISATION, request(), NOW);
+		expect(sources.entries).toEqual([]);
+		expect(sources.lines).toEqual([]);
+		expect(sources.leftOut).toEqual([
+			"1 entry of ada's is on a day over its limit (Sat 14). It is left out until the day is corrected.",
+			"3 entries of Grace's are on days over their limit (Tue 10, Wed 11). They are left out until the days are corrected.",
+			"2 entries of Linus's are on a day over its limit (Mon 9). They are left out until the day is corrected.",
+		]);
+	});
+
+	it("a recurring invoice of uninvoiced time leaves it out, and its page says so", async () => {
+		const grace = await member("Grace Hopper");
+		const long = await entry({ start: "2026-02-10T09:00:00Z", seconds: 9 * 3600, userId: grace });
+		const fine = await entry({ start: "2026-02-09T09:00:00Z", seconds: 3600, userId: grace });
+		const [template] = await scope.recurringInvoices.insert({
+			clientId,
+			frequency: "monthly",
+			startsOn: TODAY,
+			nextIssueOn: TODAY,
+			currency: "GBP",
+			paymentTermsDays: 30,
+			includeUninvoicedTime: true,
+		});
+		if (!template) throw new Error("seed failed");
+		const said =
+			"1 entry of Grace's is on a day over its limit (Tue 10). It is left out until the day is corrected.";
+
+		const page = await open(`/app/acme/invoices/recurring/${template.id}`, owner);
+		expect(textOf(await page.text())).toContain(said);
+
+		const made = await issueRecurring(
+			scope,
+			{ name: "Acme", ...ORGANISATION },
+			template.id,
+			TODAY,
+			NOW,
+			"en-GB",
+		);
+		if (!made) throw new Error("no invoice made");
+		const lines = await linesOf(scope, made);
+		expect(lines.map((l) => [l.description, l.quantityMilli, l.amountMinor])).toEqual([
+			["Site", 1000, 6000],
+		]);
+		expect(
+			await value("select count(*) from invoice_line_sources where time_entry_id = ?", long),
+		).toBe(0);
+		expect(
+			await value("select count(*) from invoice_line_sources where time_entry_id = ?", fine),
+		).toBe(1);
 	});
 });

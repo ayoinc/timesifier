@@ -234,6 +234,8 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 				start: "09:00",
 				end: "10:00",
 			});
+			// Thursday has come: time is never moved ahead of now (TR-13).
+			clockAt(at(FRIDAY, "12:00"));
 			const refused = await ask(me, edit(THURSDAY));
 			expect(refused.status).toBe(409);
 			expect(refused.said).toContain(ON_LEAVE);
@@ -777,5 +779,180 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 			{ from: at(WEDNESDAY, "10:30"), to: T0 + HOUR, overtime: true },
 			{ from: T0 + HOUR, to: null, overtime: true },
 		]);
+	});
+
+	/** An invoice of Acme in draft, with one line of time on Site: where an entry is put on it. */
+	async function draftLine(status: "draft" | "open" = "draft") {
+		const client = uuidv7();
+		const invoice = uuidv7();
+		const line = uuidv7();
+		await env.DB.batch([
+			env.DB.prepare(
+				"insert into clients (id, organisation_id, name, name_key, created_at, updated_at) values (?, ?, 'Globex', 'globex', 0, 0)",
+			).bind(client, acme.id),
+			env.DB.prepare(
+				"insert into invoices (id, organisation_id, number, client_id, currency, status, issued_on, due_on, created_at, updated_at) values (?, ?, 'INV-0042', ?, 'GBP', ?, '2026-11-01', '2026-12-01', 0, 0)",
+			).bind(invoice, acme.id, client, status),
+			env.DB.prepare(
+				"insert into invoice_lines (id, organisation_id, invoice_id, position, kind, description, project_id, quantity_milli, unit_price_minor, amount_minor, created_at, updated_at) values (?, ?, ?, 0, 'time', 'Site', ?, 1000, 6000, 6000, 0, 0)",
+			).bind(line, acme.id, invoice, site),
+		]);
+		return line;
+	}
+
+	const putOn = (line: string, entry: string) =>
+		env.DB.prepare(
+			"insert into invoice_line_sources (id, organisation_id, line_id, time_entry_id, created_at) values (?, ?, ?, ?, 0)",
+		)
+			.bind(uuidv7(), acme.id, line, entry)
+			.run();
+
+	const edit = (id: string, date: string, start: string, end: string, description = "") => ({
+		intent: "edit",
+		entryId: id,
+		projectId: site,
+		date,
+		start,
+		end,
+		description,
+	});
+
+	describe("TR-09: the stop and its cut, and an entry on an invoice", () => {
+		it("the stop and the cut are one write", async () => {
+			await setRules({ overtime: "allowed" });
+			const line = await draftLine();
+			clockAt(at(TUESDAY, "09:00"));
+			await ask(me, { intent: "track", projectId: site, day: TUESDAY });
+			// Test-only: the instant the timer is given its end, the entry is put on
+			// the draft's line, as an invoice drafted at that moment would (R2).
+			await env.DB.prepare(
+				`CREATE TRIGGER scratch_invoiced_at_stop AFTER UPDATE OF ended_at ON time_entries
+				WHEN OLD.ended_at IS NULL AND NEW.ended_at IS NOT NULL
+				BEGIN
+					INSERT INTO invoice_line_sources (id, organisation_id, line_id, time_entry_id, created_at)
+					VALUES ('scratch-' || NEW.id, NEW.organisation_id, '${line}', NEW.id, 0);
+				END`,
+			).run();
+			clockAt(at(TUESDAY, "18:00"));
+			const stopped = await ask(me, { intent: "stop" });
+			await env.DB.prepare("DROP TRIGGER scratch_invoiced_at_stop").run();
+			expect(stopped.status).toBe(200);
+			expect(stopped.said).toContain(
+				"Timer stopped. 1:30 past the day's expected hours is recorded as overtime.",
+			);
+			expect(await entriesOf(me)).toEqual([
+				{ from: at(TUESDAY, "09:00"), to: at(TUESDAY, "16:30"), overtime: false },
+				{ from: at(TUESDAY, "16:30"), to: at(TUESDAY, "18:00"), overtime: true },
+			]);
+		});
+
+		it("two Stops at once leave exactly one end and one remainder", async () => {
+			await setRules({ overtime: "allowed" });
+			clockAt(at(TUESDAY, "09:00"));
+			await ask(me, { intent: "track", projectId: site, day: TUESDAY });
+			clockAt(at(TUESDAY, "18:00"));
+			const both = await Promise.all([ask(me, { intent: "stop" }), ask(me, { intent: "stop" })]);
+			expect(both.map((answer) => answer.status)).toEqual([200, 200]);
+			expect(await entriesOf(me)).toEqual([
+				{ from: at(TUESDAY, "09:00"), to: at(TUESDAY, "16:30"), overtime: false },
+				{ from: at(TUESDAY, "16:30"), to: at(TUESDAY, "18:00"), overtime: true },
+			]);
+			const recorded = (action: string) =>
+				value<number>(
+					"select count(*) from activity_records where action = ? and actor_id = ?",
+					action,
+					me.user.id,
+				);
+			expect(await recorded("time_entry.stopped")).toBe(1);
+			expect(await recorded("time_entry.split")).toBe(1);
+			expect(await recorded("time_entry.created")).toBe(1);
+		});
+
+		it("refuses a change to an entry on an invoice, naming it and who can let it go", async () => {
+			const entry = await seedEntry(
+				acme.id,
+				me.user.id,
+				site,
+				at(TUESDAY, "09:00"),
+				at(TUESDAY, "12:00"),
+			);
+			await putOn(await draftLine(), entry);
+			const refused = await ask(me, edit(entry, TUESDAY, "09:00", "11:00"));
+			expect(refused.status).toBe(409);
+			expect(refused.said).toContain(
+				"That entry is on the draft invoice INV-0042, so it cannot be changed. An owner, admin or Finance can take it off the draft, or delete the draft.",
+			);
+			const deleted = await ask(me, { intent: "delete", entryId: entry });
+			expect(deleted.said).toContain("draft invoice INV-0042");
+		});
+	});
+
+	describe("TR-13: an edit cannot put time ahead of now, or make an entry longer than a day", () => {
+		it("an edit cannot put time ahead of now", async () => {
+			const entry = await seedEntry(
+				acme.id,
+				me.user.id,
+				site,
+				at(MONDAY, "09:00"),
+				at(MONDAY, "12:00"),
+			);
+			clockAt(at(FRIDAY, "20:00"));
+			const tonight = await ask(me, edit(entry, FRIDAY, "21:00", "23:00"));
+			expect(tonight.status).toBe(400);
+			expect(tonight.said).toContain("That is ahead of now.");
+			const nextWeek = await ask(me, edit(entry, "2026-11-18", "09:00", "16:30"));
+			expect(nextWeek.status).toBe(400);
+			expect(nextWeek.said).toContain("That is ahead of now.");
+			expect(await entriesOf(me)).toEqual([
+				{ from: at(MONDAY, "09:00"), to: at(MONDAY, "12:00"), overtime: false },
+			]);
+			expect((await ask(me, edit(entry, FRIDAY, "17:00", "20:00"))).status).toBe(200);
+		});
+	});
+
+	describe("TR-14: an entry that crosses midnight", () => {
+		it("an entry that ends after midnight is saved with its end", async () => {
+			clockAt(at(FRIDAY, "12:00"));
+			const entry = await seedEntry(
+				acme.id,
+				me.user.id,
+				site,
+				at(WEDNESDAY, "20:00"),
+				at(THURSDAY, "05:00"),
+			);
+			const described = await ask(me, edit(entry, WEDNESDAY, "20:00", "05:00", "Release night"));
+			expect(described.status).toBe(200);
+			expect(await value<string>("select description from time_entries where id = ?", entry)).toBe(
+				"Release night",
+			);
+			expect(await entriesOf(me)).toEqual([
+				{ from: at(WEDNESDAY, "20:00"), to: at(THURSDAY, "05:00"), overtime: false },
+			]);
+			const trimmed = await ask(me, edit(entry, WEDNESDAY, "20:00", "03:30"));
+			expect(trimmed.status).toBe(200);
+			expect(await value<string>("select spent_on from time_entries where id = ?", entry)).toBe(
+				WEDNESDAY,
+			);
+			// Wednesday holds its 7:30, and is no longer over.
+			const submitted = await ask(me, { intent: "submit", startsOn: MONDAY });
+			expect(submitted.said).not.toContain("Wed 11 over");
+		});
+	});
+
+	describe("TR-18b: Stop names every day it leaves over", () => {
+		it("names the day the timer started, and the remainder's day, when they are over", async () => {
+			// Overtime not allowed: a timer from Tuesday 20:00 to Wednesday 05:00 is kept whole.
+			clockAt(at(TUESDAY, "20:00"));
+			await ask(me, { intent: "track", projectId: site, day: TUESDAY });
+			// Wednesday already holds more than its 7:30, tracked before leave was approved.
+			await seedEntry(acme.id, me.user.id, site, at(WEDNESDAY, "06:00"), at(WEDNESDAY, "07:00"));
+			await seedLeave(acme.id, me.user.id, "annual", WEDNESDAY, WEDNESDAY);
+			clockAt(at(WEDNESDAY, "08:00"));
+			const stopped = await ask(me, { intent: "stop" });
+			expect(stopped.status).toBe(200);
+			expect(stopped.said).toContain(
+				"Timer stopped. Tue 10 is over by 4:30 and Wed 11 is over by 1:00: trim or move an entry before you submit the week.",
+			);
+		});
 	});
 });
