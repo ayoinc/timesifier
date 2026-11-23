@@ -57,7 +57,7 @@ async function inEveryLook(
 	page: Page,
 	baseURL: string | undefined,
 	open: () => Promise<void>,
-	check: () => Promise<void>,
+	check: (scheme: "light" | "dark") => Promise<void>,
 	shots: Record<string, Locator | null>,
 ) {
 	for (const { viewport, scheme } of LOOKS) {
@@ -67,7 +67,7 @@ async function inEveryLook(
 		expect(await page.evaluate(() => getComputedStyle(document.body).colorScheme)).toContain(
 			scheme,
 		);
-		await check();
+		await check(scheme);
 		if (!SHOT_DIR) continue;
 		mkdirSync(SHOT_DIR, { recursive: true });
 		// The scan may have scrolled; the page is photographed from its top.
@@ -100,6 +100,56 @@ async function expectNoProblems(page: Page, what: string, unmeasurable: string[]
 	expect(await problems(page, unmeasurable), `problems in ${what}`).toEqual([]);
 }
 
+/**
+ * Each provider's button in the colours its guidelines fix for the scheme
+ * (decision 62), with its mark: one picture, hidden from assistive technology,
+ * so the button's name is its words alone.
+ */
+const PROVIDER_LOOKS = {
+	Google: {
+		light: { fill: "#ffffff", text: "#1f1f1f", stroke: "#747775" },
+		dark: { fill: "#131314", text: "#e3e3e3", stroke: "#8e918f" },
+	},
+	Microsoft: {
+		light: { fill: "#ffffff", text: "#5e5e5e", stroke: "#8c8c8c" },
+		dark: { fill: "#2f2f2f", text: "#ffffff", stroke: "#2f2f2f" },
+	},
+} as const;
+
+/**
+ * A computed colour as #rrggbb: `rgb(…)`, or `color(srgb …)` where the state
+ * layer's color-mix() made it.
+ */
+function hexOf(computed: string): string {
+	const srgb = /^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)\)$/.exec(computed);
+	const rgb = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(computed);
+	const channels = srgb
+		? srgb.slice(1).map((channel) => Math.round(Number(channel) * 255))
+		: rgb?.slice(1).map(Number);
+	if (!channels) throw new Error(`not an opaque sRGB colour: ${computed}`);
+	return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function expectProviderButton(
+	page: Page,
+	provider: keyof typeof PROVIDER_LOOKS,
+	scheme: "light" | "dark",
+) {
+	const button = page.getByRole("button", { name: `Sign in with ${provider}`, exact: true });
+	await expect(button.locator("svg")).toHaveCount(1);
+	await expect(button.locator("svg")).toHaveAttribute("aria-hidden", "true");
+	await expect(button.locator("svg")).toBeVisible();
+	const shown = await button.evaluate((element) => {
+		const style = getComputedStyle(element);
+		return { fill: style.backgroundColor, text: style.color, stroke: style.borderTopColor };
+	});
+	expect({
+		fill: hexOf(shown.fill),
+		text: hexOf(shown.text),
+		stroke: hexOf(shown.stroke),
+	}).toEqual(PROVIDER_LOOKS[provider][scheme]);
+}
+
 /** The policy sheet of Settings › Sign-in, saved with `choice` and no tenant. */
 async function requireOnly(page: Page, provider: "Google" | "Microsoft") {
 	await page.getByRole("button", { name: "Change company sign-in" }).click();
@@ -120,15 +170,17 @@ test("the sign-in page offers Google and Microsoft beside the emailed code", asy
 		page,
 		baseURL,
 		() => openAuthPage(page),
-		async () => {
+		async (scheme) => {
 			await expect(page.getByRole("heading", { level: 1, name: "Enter your email" })).toBeVisible();
-			await expect(page.getByRole("button", { name: /^Continue with / })).toHaveText([
-				"Continue with Google",
-				"Continue with Microsoft",
+			await expect(page.getByRole("button", { name: /^Sign in with / })).toHaveText([
+				"Sign in with Google",
+				"Sign in with Microsoft",
 			]);
+			await expectProviderButton(page, "Google", scheme);
+			await expectProviderButton(page, "Microsoft", scheme);
 			await expectNoProblems(page, "the sign-in page", [EMPTY_INPUT]);
 		},
-		{ "sign-in": null },
+		{ "sign-in": null, "sign-in-logos": page.getByRole("main") },
 	);
 });
 
@@ -215,13 +267,14 @@ test("a member signed in by code is told their organisation asks for Microsoft, 
 			const response = await page.goto(timesheet);
 			expect(response?.status()).toBe(403);
 		},
-		async () => {
+		async (scheme) => {
 			await expect(
 				page.getByRole("heading", { level: 1, name: `${name} asks you to sign in with Microsoft` }),
 			).toBeVisible();
-			await expect(page.getByRole("button", { name: /^Continue with / })).toHaveText([
-				"Continue with Microsoft",
+			await expect(page.getByRole("button", { name: /^Sign in with / })).toHaveText([
+				"Sign in with Microsoft",
 			]);
+			await expectProviderButton(page, "Microsoft", scheme);
 			await expect(page.getByRole("link", { name: "Go to your organisations" })).toBeVisible();
 			await expectNoProblems(page, "the page that asks for Microsoft");
 		},

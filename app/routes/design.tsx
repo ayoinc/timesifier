@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { UNSAFE_PortalProvider } from "react-aria";
 import { useSearchParams } from "react-router";
 
+import { PROVIDER_NAMES, PROVIDERS } from "~/auth/providers";
 import { Button, type ButtonVariant } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
 import { Dialog, DialogTrigger } from "~/components/Dialog";
@@ -14,6 +15,7 @@ import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger"
 import { LinkTabs } from "~/components/LinkTabs";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { PeriodStepper } from "~/components/PeriodStepper";
+import { ProviderMark } from "~/components/ProviderMark";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { Sheet } from "~/components/Sheet";
@@ -225,6 +227,24 @@ function Gallery({ scheme, open }: { scheme: Scheme; open: string | null }) {
 							</Button>
 						</Row>
 					))}
+					{PROVIDERS.map((provider) => {
+						const words = `Sign in with ${PROVIDER_NAMES[provider]}`;
+						const mark = <ProviderMark provider={provider} />;
+						return (
+							<Row key={provider} label={`${provider}: default, hover, focus, pressed`}>
+								<Button variant={provider} size="large" icon={mark}>
+									{words}
+								</Button>
+								{(["hovered", "focused", "pressed"] as const).map((state) => (
+									<Forced key={state} state={state}>
+										<Button variant={provider} size="large" icon={mark}>
+											{words}
+										</Button>
+									</Forced>
+								))}
+							</Row>
+						);
+					})}
 					<Row label="with an icon; each press is counted">
 						<Button icon={<AddIcon size="medium" />} onPress={() => setPresses(presses + 1)}>
 							Add entry

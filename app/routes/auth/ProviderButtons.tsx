@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { PROVIDER_NAMES, type Provider } from "~/auth/providers";
 import { Button } from "~/components/Button";
+import { ProviderMark } from "~/components/ProviderMark";
 
 import { type Notice, NoticeLine, problem, useOneAtATime, waiting } from "./AuthPage";
 import { leaveFor, providerAddress } from "./client";
@@ -18,9 +19,12 @@ export interface ProviderButtonsProps {
 }
 
 /**
- * "Continue with Google" and "Continue with Microsoft" (TS-104): each asks
+ * "Sign in with Google" and "Sign in with Microsoft" (TS-104): each asks
  * `POST /api/auth/sign-in/social` for the provider's address, so the rate
- * limit applies, and goes there with a whole page load.
+ * limit applies, and goes there with a whole page load. Each is drawn as its
+ * provider's branding guidelines ask: its words, its colours and its mark
+ * (decision 62). Microsoft's guidance gives only "Sign in with Microsoft" and
+ * "Sign in"; Google's allows "Sign in with Google", so both read alike.
  */
 export function ProviderButtons({ providers, next, errorPath, refusal }: ProviderButtonsProps) {
 	const [notice, setNotice] = useState<Notice | null>(
@@ -44,12 +48,13 @@ export function ProviderButtons({ providers, next, errorPath, refusal }: Provide
 			{providers.map((provider) => (
 				<Button
 					key={provider}
-					variant="outlined"
+					variant={provider}
 					size="large"
+					icon={<ProviderMark provider={provider} />}
 					onPress={() => go(provider)}
 					isPending={running !== null}
 				>
-					{`Continue with ${PROVIDER_NAMES[provider]}`}
+					{`Sign in with ${PROVIDER_NAMES[provider]}`}
 				</Button>
 			))}
 		</div>

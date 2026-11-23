@@ -313,8 +313,8 @@ describe("the gate, when Acme requires Microsoft", () => {
 		expect(text).toContain(
 			`Acme opens only for people who sign in with your Microsoft account at ${ACME_TENANT}. Sign in with it and you'll come back here.`,
 		);
-		expect(text).toContain("Continue with Microsoft");
-		expect(text).not.toContain("Continue with Google");
+		expect(text).toContain("Sign in with Microsoft");
+		expect(text).not.toContain("Sign in with Google");
 		expect(text).toContain("Go to your organisations");
 	});
 
@@ -336,7 +336,7 @@ describe("the gate, when Acme requires Microsoft", () => {
 			expect(text).toContain(
 				"Acme's sign-in setting names a provider this site doesn't know, so nobody but its owners can open it. Ask an owner of Acme.",
 			);
-			expect(text).not.toContain("Continue with");
+			expect(text).not.toMatch(/Sign in with (Google|Microsoft)/);
 			const api = await get(`/organization/list-invitations?organizationId=${acme.id}`, {
 				cookie: who.cookie,
 				client: who.client,
@@ -359,7 +359,7 @@ describe("the gate, when Acme requires Microsoft", () => {
 		const text = textOf(await response.text());
 		expect(response.status).toBe(403);
 		expect(text).toContain("Google sign-in isn't available here. Ask an owner of Acme.");
-		expect(text).not.toContain("Continue with Google");
+		expect(text).not.toContain("Sign in with Google");
 	});
 
 	it("each role but owner is held to it: admin, Finance, a manager, a member and a contractor", async () => {

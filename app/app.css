@@ -76,6 +76,22 @@
 	--color-on-sheet: var(--md-sys-color-on-sheet);
 	--color-on-sheet-variant: var(--md-sys-color-on-sheet-variant);
 
+	/* Brand marks: Google's and Microsoft's sign-in buttons and marks, theirs alone
+	   (over-google text-on-google border-google-outline, fill-microsoft-red) */
+	--color-google: var(--brand-mark-google);
+	--color-google-outline: var(--brand-mark-google-outline);
+	--color-on-google: var(--brand-mark-on-google);
+	--color-microsoft: var(--brand-mark-microsoft);
+	--color-microsoft-outline: var(--brand-mark-microsoft-outline);
+	--color-on-microsoft: var(--brand-mark-on-microsoft);
+	--color-microsoft-red: var(--brand-mark-microsoft-red);
+	--color-microsoft-green: var(--brand-mark-microsoft-green);
+	--color-microsoft-blue: var(--brand-mark-microsoft-blue);
+	--color-microsoft-yellow: var(--brand-mark-microsoft-yellow);
+	--color-google-blue: var(--brand-mark-google-blue);
+	--color-google-red: var(--brand-mark-google-red);
+	--color-google-pink: var(--brand-mark-google-pink);
+
 	/* Typeface: font-sans is the default for the page, font-brand is for display text */
 	--font-sans: var(--md-ref-typeface-plain);
 	--font-brand: var(--md-ref-typeface-brand);
@@ -343,6 +359,11 @@ html {
 
 @utility state-pressed {
 	--state-layer-pressed: var(--md-sys-state-pressed-state-layer-opacity);
+}
+
+/* The sweep Google's "G" is cut from (components/ProviderMark.tsx). */
+@utility google-sweep {
+	background-image: var(--brand-mark-google-sweep);
 }
 
 /* What a control animates when its state changes; a pressed shape settles on the spring. */

@@ -189,14 +189,14 @@ it("the notice names Google and Microsoft under who else handles it only where t
 	configureProviders("microsoft");
 	const microsoft = words(await page(PRIVACY_PATH));
 	expect(microsoft).toContain(
-		"If you choose Continue with Microsoft, with a work or school account, Microsoft learns that you are signing in to Timesifier",
+		"If you choose Sign in with Microsoft, with a work or school account, Microsoft learns that you are signing in to Timesifier",
 	);
 	expect(microsoft).not.toContain("Signing in with Google");
 
 	configureProviders("google");
 	const both = words(await page(PRIVACY_PATH));
 	expect(both).toContain(
-		"If you choose Continue with Google, Google learns that you are signing in to Timesifier",
+		"If you choose Sign in with Google, Google learns that you are signing in to Timesifier",
 	);
 	expect(both).toContain("Timesifier asks for nothing else and keeps no token from Google.");
 });

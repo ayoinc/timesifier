@@ -138,3 +138,28 @@ describe("colour roles", () => {
 		});
 	}
 });
+
+describe("brand marks", () => {
+	const marks = new Map<string, { light: string; dark: string }>();
+	const declaration = /--brand-mark-([a-z-]+): light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\);/g;
+	for (const [, name, light, dark] of committed.matchAll(declaration)) {
+		if (name && light && dark) marks.set(name, { light, dark });
+	}
+
+	// The words of each provider's sign-in button on its fill, as its guidelines set them.
+	for (const scheme of ["light", "dark"] as const) {
+		it.each([
+			["on-google", "google"],
+			["on-microsoft", "microsoft"],
+		])(`${scheme}: %s on %s is at least 4.5:1`, (text, background) => {
+			const textColour = marks.get(text)?.[scheme];
+			const backgroundColour = marks.get(background)?.[scheme];
+			expect(textColour, `--brand-mark-${text}`).toBeDefined();
+			expect(backgroundColour, `--brand-mark-${background}`).toBeDefined();
+
+			expect(contrast(textColour as string, backgroundColour as string)).toBeGreaterThanOrEqual(
+				4.5,
+			);
+		});
+	}
+});

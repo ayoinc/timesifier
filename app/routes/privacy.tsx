@@ -87,9 +87,9 @@ const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
  */
 const SIGN_IN_PROVIDER_WORDS: Record<Provider, string> = {
 	google:
-		"If you choose Continue with Google, Google learns that you are signing in to Timesifier, and tells Timesifier your name, your email address, whether Google has verified it, and the Google Workspace domain of the account, if it has one. Google LLC is a company in the United States.",
+		"If you choose Sign in with Google, Google learns that you are signing in to Timesifier, and tells Timesifier your name, your email address, whether Google has verified it, and the Google Workspace domain of the account, if it has one. Google LLC is a company in the United States.",
 	microsoft:
-		"If you choose Continue with Microsoft, with a work or school account, Microsoft learns that you are signing in to Timesifier, and tells Timesifier your name, your email address, whether Microsoft has verified its domain, and your organisation's Microsoft tenant ID. Microsoft Corporation is a company in the United States.",
+		"If you choose Sign in with Microsoft, with a work or school account, Microsoft learns that you are signing in to Timesifier, and tells Timesifier your name, your email address, whether Microsoft has verified its domain, and your organisation's Microsoft tenant ID. Microsoft Corporation is a company in the United States.",
 };
 
 /** The kinds of event a webhook can be sent, as Integrations names them, in a sentence. */
@@ -515,7 +515,7 @@ export default function Privacy({
 						email address and is kept for one hour.
 					</Row>
 					<Row term="__Host-timesifier.state">
-						Set only when you choose Continue with Google or Continue with Microsoft. It shows that
+						Set only when you choose Sign in with Google or Sign in with Microsoft. It shows that
 						the answer coming back from Google or Microsoft is for this browser. It holds a random
 						value, signed, and nothing about you, and is kept for five minutes or until you come
 						back. Script on the page cannot read it.

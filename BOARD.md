@@ -135,7 +135,7 @@ Builder: AI sessions on branch `ts-104-company-sign-in`. From `research/corporat
 
 **104a · Sign in with Google or Microsoft**
 
-- [x] "Continue with Google" and "Continue with Microsoft" stand under the email field, each only where its client ID and secret are both set, so never on a preview (`test/auth/social.test.ts`, "appear only where the client is configured", "a provider whose ID is set without its secret, or its secret without its ID, is not offered").
+- [x] "Sign in with Google" and "Sign in with Microsoft" stand under the email field, each only where its client ID and secret are both set, so never on a preview (`test/auth/social.test.ts`, "appear only where the client is configured, each with its provider's mark", "a provider whose ID is set without its secret, or its secret without its ID, is not offered").
 - [x] A button asks `POST /api/auth/sign-in/social` for the provider's address, carrying the state in a `__Host-` cookie; another provider, an ID token from the browser, extra scopes, a login hint or a return to another site are refused (same file, "answers with the provider's address, carrying the state, and sets the state cookie", "refuses …"); without the state cookie of the browser that asked, nobody is signed in ("without the state cookie of the browser that asked, signs nobody in").
 - [x] Google signs a new person in, verified, and a returning one into the same account by Google's account id (same file, "signs a new person in, verified, with the Workspace domain on the session", "returns to the same account next time, by the account's id at Google"); any Google account may, a personal one with no domain on its session ("a personal Google account signs in, with no domain on the session").
 - [x] A person made by code who signs in with Google at the same address lands in the same account (same file, "a person made by code who signs in with Google at the same address lands in the same account").
@@ -173,6 +173,7 @@ Builder: AI sessions on branch `ts-104-company-sign-in`. From `research/corporat
 **In the browser**
 
 - [x] The sign-in page with both buttons, Settings › Sign-in, its domains section, and the "asks you to sign in" page pass axe at 390px and 1280px in both schemes (`e2e/company-sign-in.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-104/`.
+- [x] Follow-up, stacked on #89: the buttons read "Sign in with Google" and "Sign in with Microsoft" and carry each provider's own mark, inline, in the colours its branding guidelines fix for light and dark, as brand-mark tokens (decision 62, note of 2026-11-23). Each mark is hidden from assistive technology; the marks appear only where the provider is configured (`test/auth/social.test.ts`, "appear only where the client is configured, each with its provider's mark"); each button's colours, light and dark, are checked in the browser (`e2e/company-sign-in.spec.ts`) and its words' contrast in `scripts/tokens.test.ts` ("brand marks"); screenshots `sign-in-logos-{390,1280}-{light,dark}.png`.
 - [ ] typecheck, lint and tests pass in the pipeline.
 
 **The owner's**
