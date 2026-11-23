@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { uuidv7 } from "~/db";
+import { addDays, dayOf, isoWeekday } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -264,13 +265,18 @@ describe("the pages record", () => {
 
 	it("leave asked for, approved, refused, withdrawn and cancelled, by who took each step", async () => {
 		const timeOff = `/app/${acme.slug}/time-off`;
-		const a = await seedLeave(acme.id, grace.user.id, "annual", "2026-11-23", "2026-11-23", {
+		// Counted from the real today: leave is cancelled only before it begins.
+		let monday = addDays(dayOf(Date.now(), "UTC"), 14);
+		while (isoWeekday(monday) !== 1) monday = addDays(monday, 1);
+		const a = await seedLeave(acme.id, grace.user.id, "annual", monday, monday, {
 			status: "pending",
 		});
-		const b = await seedLeave(acme.id, grace.user.id, "annual", "2026-11-24", "2026-11-24", {
+		const tuesday = addDays(monday, 1);
+		const b = await seedLeave(acme.id, grace.user.id, "annual", tuesday, tuesday, {
 			status: "pending",
 		});
-		const c = await seedLeave(acme.id, grace.user.id, "annual", "2026-11-25", "2026-11-25", {
+		const wednesday = addDays(monday, 2);
+		const c = await seedLeave(acme.id, grace.user.id, "annual", wednesday, wednesday, {
 			status: "pending",
 		});
 		expect(await post(timeOff, { intent: "approve", requestId: a }, ada)).toBe(200);
