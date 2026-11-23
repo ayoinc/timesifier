@@ -319,7 +319,15 @@ const FOOTER_GROUPS: readonly { id: string; heading: string; links: readonly Sit
 			{ href: API_DOCS_PATH, label: "API docs" },
 		],
 	},
-	{ id: "site-company", heading: "Company", links: [{ href: CONTACT_PATH, label: "Contact" }] },
+	{
+		id: "site-company",
+		heading: "Company",
+		// The status page is on another site, outside Cloudflare (TS-107).
+		links: [
+			{ href: CONTACT_PATH, label: "Contact" },
+			{ href: OUTSIDE_LINKS.status.href, label: "Status" },
+		],
+	},
 ];
 
 export interface SiteFooterProps {

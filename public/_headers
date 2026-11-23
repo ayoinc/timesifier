@@ -1,10 +1,12 @@
 # Headers for files served by Workers Static Assets, which answer before the
 # Worker runs. Responses the Worker produces get theirs in workers/security-headers.ts.
 # The policy applies when a file is opened on its own, not when a page loads it.
+# A violation is reported where the Worker's are (TS-107d, app/routes/browser-errors.ts).
 /*
   X-Content-Type-Options: nosniff
   Strict-Transport-Security: max-age=63072000
-  Content-Security-Policy: default-src 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; frame-ancestors 'none'; report-to csp
+  Reporting-Endpoints: csp="/browser-errors"
 
 # Every file under /assets/ is written by Vite with a hash of its content in its
 # name, so a file at one address never changes: the browser keeps it for a year

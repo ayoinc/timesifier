@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
 import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
+import { browserErrorNotice } from "~/browser-errors/report";
 import { PROCESSED_FOR_ORGANISATIONS, STORED, type StoredTerm } from "~/db/personal-data";
 import { ENTRY_DAYS_BACK, LEAVE_DAYS_BACK } from "~/integrations/feeds.server";
 import { EVENT_LABELS } from "~/integrations/scopes";
@@ -439,7 +440,8 @@ export default function Privacy({
 						one request in ten Cloudflare also keeps a trace for seven days: how long each step
 						took, the addresses the request was for and posted to, and the text of each database
 						statement, whose values are sent apart from it. The lines Timesifier itself writes never
-						hold an email address, a sign-in code, a cookie or a session token.
+						hold an email address, a sign-in code, a cookie or a session token.{" "}
+						{browserErrorNotice(host)}
 					</Row>
 					<Row term="Reports of failed connections">
 						Cloudflare asks your browser to tell it when the browser cannot reach {host}. Such a

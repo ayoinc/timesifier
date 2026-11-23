@@ -213,6 +213,7 @@ describe("scripts/deploy-config.ts --write", () => {
 					},
 				],
 				r2_buckets: committed.previews.r2_buckets,
+				ratelimits: committed.previews.ratelimits,
 			},
 		});
 		// Still what stops a deploy whose Worker has no secrets; production also needs its platform owners (TS-099).
