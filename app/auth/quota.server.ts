@@ -42,3 +42,12 @@ export async function takeOne(
 	`);
 	return meta.changes === 1;
 }
+
+/** The uses of `key` that still count: how much of its cap is taken. */
+export async function usesOf(db: D1Database, key: string): Promise<number> {
+	const counted = await db
+		.prepare("select count(*) as uses from verifications where identifier = ?1 and expires_at > ?2")
+		.bind(`quota:${key}`, Date.now())
+		.first<number>("uses");
+	return counted ?? 0;
+}

@@ -227,6 +227,8 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 			"/platform/mail",
 			"intent=preview&kind=flyer&subject=Hi&body=Hello",
 		]),
+	"routes/platform/brand": () =>
+		formFromThePlatformOwner(() => ["/platform/brand", "intent=save&senderName=Timesifier"]),
 };
 
 /** A form as a browser posts it from our own page, with the session of the person posting. */

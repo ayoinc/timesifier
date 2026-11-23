@@ -1,0 +1,1 @@
+ALTER TABLE `platform_brand` ADD `logo_dark` text;

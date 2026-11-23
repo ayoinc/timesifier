@@ -49,6 +49,8 @@ export const PLATFORM_ACTION_LABELS: Record<string, string> = {
 	"account.export_link_sent": "Sent the link to their data",
 	"account.deleted": "Deleted the account",
 	"mailing.queued": "Queued a mailing",
+	"brand.changed": "Changed the brand",
+	"brand.test_sent": "Sent a test email of the brand",
 };
 
 export function actionWords(action: string): string {
