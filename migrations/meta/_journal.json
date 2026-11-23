@@ -148,6 +148,13 @@
 			"when": 1794570805339,
 			"tag": "0021_platform_console",
 			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "6",
+			"when": 1794585056391,
+			"tag": "0022_entry_day_column",
+			"breakpoints": true
 		}
 	]
 }
