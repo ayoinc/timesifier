@@ -14,6 +14,43 @@ export const PLAN_DETAILS: Record<Plan, { label: string; seats: number }> = {
 	business: { label: "Business", seats: 100 },
 };
 
+/**
+ * What each plan will cost (the owner's answer 9, 23 November 2026; decision 64):
+ * pence a person a month, billed monthly or billed yearly, in `PRICE_CURRENCY`
+ * and excluding VAT, which the company is registered for. Nothing is charged
+ * until payment opens, and then only after `NOTICE_DAYS` days' notice. The
+ * pricing page and the terms' Price section both read these.
+ */
+export const PRICES: Record<Plan, { monthly: number; billedYearly: number }> = {
+	free: { monthly: 0, billedYearly: 0 },
+	team: { monthly: 600, billedYearly: 500 },
+	business: { monthly: 1000, billedYearly: 800 },
+};
+
+export const PRICE_CURRENCY = "GBP";
+
+/** The days' notice an organisation is given before its first charge. */
+export const NOTICE_DAYS = 30;
+
+/** An amount in pence as the pages write it: £6, or £6.50 where there are pence. */
+export function pounds(pence: number): string {
+	return new Intl.NumberFormat("en-GB", {
+		style: "currency",
+		currency: PRICE_CURRENCY,
+		minimumFractionDigits: pence % 100 === 0 ? 0 : 2,
+	}).format(pence / 100);
+}
+
+/**
+ * A plan's price in the words the pricing page and the terms both use: "£0",
+ * or "£6 a person a month, or £5 billed yearly".
+ */
+export function priceInWords(plan: Plan): string {
+	const { monthly, billedYearly } = PRICES[plan];
+	if (monthly === 0) return pounds(0);
+	return `${pounds(monthly)} a person a month, or ${pounds(billedYearly)} billed yearly`;
+}
+
 /** The most seats the console may give an organisation. */
 export const MAX_SEATS = 10_000;
 
