@@ -155,9 +155,17 @@ for (const viewport of [COMPACT, WIDE]) {
 			).toBe(home.heading);
 			expect((await page.getByRole("button", CONTINUE).boundingBox())?.height).toBe(48);
 
-			// The foot: the lockup and the two notices, in the public pages' column.
+			// The foot: the lockup and its groups of links, in the public pages' column.
 			const foot = page.getByRole("contentinfo");
-			await expect(foot.getByRole("link")).toHaveText(["Privacy notice", "Terms"]);
+			await expect(foot.getByRole("link")).toHaveText([
+				"Privacy notice",
+				"Terms",
+				"Features",
+				"Pricing",
+				"Integrations",
+				"API docs",
+				"Contact",
+			]);
 			const column = await foot.boundingBox();
 			expect(column?.x).toBe(home.column?.x);
 			expect(column?.width).toBe(home.column?.width);
