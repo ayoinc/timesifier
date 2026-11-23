@@ -905,6 +905,7 @@ From TS-113 (`research/corporate/scale-test.md`, D8 and D9, and its "After TS-11
   - Approvals: the schedule book and places twice (`leave.server.ts:163` `leaveContext`, `:639`); `leave_kinds` twice (`:162`, `:638`); `public_holidays` twice (`:164`, `:655`); `memberships` of the same people (`app/approvals/approvals.server.ts:81`, `schedules.server.ts:105` twice); names by id twice (`approvals.server.ts:92`, `leave.server.ts:659`); the viewer's time zone twice (`app/routes/app/approvals.tsx:129`, `people.server.ts:67`).
   - Work schedules: every membership twice (`schedules.server.ts:105` `placesOf`, `people.server.ts:62`); every team twice (`schedules.server.ts:107`, `app/routes/app/schedules.tsx:136`); the viewer's time zone twice (`schedules.tsx:137`, `people.server.ts:67`).
   - Reports: every project and client twice (`app/reports/sums.server.ts:114`, `app/projects/money.server.ts:75`).
+- [ ] **The reads TS-111d, TS-111e and TS-111f added.** For a manager of 120 of 150 people, Timesheet day reads 55 statements (50 before them) and Team 35 (33): the dated rules, leave and weeks for the day's limits, the people's zones, and the lock date as it reaches the person, twice (`test/organisations/request-memo.test.ts`). None reads memberships or teams again; read each once a request and bring the counts back down.
 
 ### TS-056 · Timesheet as Harvest has it: Track time, the week's days, submit from the day, getting started
 
