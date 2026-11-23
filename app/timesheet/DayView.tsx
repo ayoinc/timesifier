@@ -25,6 +25,7 @@ import { EntryChoices } from "~/tasks/EntryChoices";
 import { TrackChoicesContext } from "~/tasks/track";
 import type { Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
+import { nearWord } from "~/time/format";
 
 import { type Aim, stepsAround } from "./aim";
 import { DayPicker } from "./DayPicker";
@@ -87,6 +88,9 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 	const leaving = aim !== null && aim.view !== "day";
 	const aimedDay = aim?.view === "day" ? aim.day : day;
 	const awaitingDay = leaving || aimedDay !== day;
+	// "Yesterday", "Today", "Tomorrow" before the date, where it is one of them (S2-14).
+	const aimedNear = nearWord(aimedDay, aimedDay, today);
+	const dayNear = nearWord(day, day, today);
 	const awaitingWeek =
 		leaving || aimedDay < submission.period.startsOn || aimedDay > submission.period.endsOn;
 	const steps = stepsAround(slug, { view: "day", day: aimedDay }, data.weekStartsOn);
@@ -152,7 +156,7 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 							day={aimedDay}
 							today={today}
 							weekStartsOn={data.weekStartsOn}
-							label={aimedDay === today ? `Today, ${formatShort(aimedDay)}` : formatDay(aimedDay)}
+							label={aimedNear ? `${aimedNear}, ${formatShort(aimedDay)}` : formatDay(aimedDay)}
 						/>
 					}
 					previous={{ to: steps.previous, label: "Previous day" }}
@@ -208,7 +212,7 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 
 					<div className={cx("mt-6 max-w-200", awaitingDay && "awaiting")}>
 						<Ledger
-							heading={day === today ? `Today, ${formatDay(day)}` : formatDay(day)}
+							heading={dayNear ? `${dayNear}, ${formatDay(day)}` : formatDay(day)}
 							note={
 								lockReason
 									? LOCK_LABELS[lockReason]
@@ -239,6 +243,7 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 									isToday={day === today}
 									onTrack={track}
 									copyFrom={data.copyFrom}
+									copyRefusal={data.copyRefusal}
 									onCopy={() => send({ intent: "copy-day", day })}
 								/>
 							) : (
@@ -358,23 +363,28 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 /**
  * An empty day (taste HT-F): one sentence of what will be here, and its
  * action, Track time, with the copy of the last working day's entries beside
- * it where there is one to copy.
+ * it. Where there is nothing to copy, or the day has not come, the copy is
+ * drawn disabled, kept in the focus order, and says why (sweep S2-13).
  */
 function EmptyDay({
 	day,
 	isToday,
 	onTrack,
 	copyFrom,
+	copyRefusal,
 	onCopy,
 }: {
 	day: Day;
 	isToday: boolean;
 	onTrack: (() => void) | null;
 	copyFrom: Day | null;
+	/** Why there is nothing to copy (sweep S2-13): the copy is then drawn disabled, saying so. */
+	copyRefusal: string | null;
 	onCopy: () => void;
 }) {
 	const formatDay = useDayFormat();
 	const formatShort = useDayFormat("short");
+	const whyId = useId();
 	// "today", or "on Tuesday 10 November": never "on today".
 	const when = isToday ? "today" : `on ${formatDay(day)}`;
 	return (
@@ -385,7 +395,7 @@ function EmptyDay({
 					: `Nothing tracked ${when}.`}
 			</p>
 			{onTrack && (
-				<div className="mt-2 flex flex-wrap gap-2">
+				<div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
 					<Button
 						variant="text"
 						icon={<AddIcon size="medium" />}
@@ -394,10 +404,21 @@ function EmptyDay({
 					>
 						Track time
 					</Button>
-					{copyFrom && (
+					{copyFrom ? (
 						<Button variant="text" onPress={onCopy}>
 							{`Copy ${formatShort(copyFrom)}'s entries`}
 						</Button>
+					) : (
+						copyRefusal && (
+							<>
+								<Button variant="text" isUnavailable aria-describedby={whyId}>
+									Copy last working day's entries
+								</Button>
+								<p id={whyId} className="basis-full ps-3 text-body-medium text-on-surface-variant">
+									{copyRefusal}
+								</p>
+							</>
+						)
 					)}
 				</div>
 			)}

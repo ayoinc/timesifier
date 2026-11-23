@@ -43,14 +43,21 @@ import { accountPath } from "./destinations";
  *
  * It also gives a person who has no zone of their own the one their browser
  * reports, once, the first time they open a page of an organisation (TS-012a).
+ *
+ * In the strip the column folds to from 600px (sweep S2-10, decision 66) a
+ * running timer stays, as its time and Stop, its project read out but not
+ * drawn; Track time is not there, as the strip holds what runs and nothing else.
  */
 export function NavigationTimer({
 	organisation,
 	onTimesheet,
+	inStrip,
 }: {
 	organisation: string;
 	/** Whether the page on screen is the Timesheet, which has its own control under 600px. */
 	onTimesheet: boolean;
+	/** Whether, from 600px, it stands in the strip the hidden column folds to. */
+	inStrip: boolean;
 }) {
 	const timer = useRouteLoaderData<typeof organisationLoader>("routes/app/organisation")?.timer;
 	useRefreshEvery30Seconds();
@@ -73,21 +80,42 @@ export function NavigationTimer({
 
 	if (onTimesheet && !running) return null;
 	return (
-		<div className={cx("medium:mb-6 medium:ps-4", onTimesheet && "max-medium:hidden")}>
+		<div
+			// Clipped across, as the navigation's list is, while the column grows back
+			// from the strip; the column itself scrolls only up and down.
+			className={cx(
+				"medium:overflow-x-clip",
+				inStrip ? "medium:mb-3" : "medium:mb-6 medium:ps-4",
+				onTimesheet && "max-medium:hidden",
+				inStrip && !running && "medium:hidden",
+			)}
+		>
 			{running ? (
 				<section
 					aria-label="Timer"
-					className={
-						"flex min-w-0 flex-1 items-center gap-3 bg-primary-container text-on-primary-fixed " +
-						"max-medium:fixed max-medium:inset-x-0 max-medium:bottom-16 max-medium:h-14 max-medium:px-4 " +
-						"medium:flex-col medium:items-start medium:gap-1 medium:rounded-large medium:p-3"
-					}
+					className={cx(
+						"flex min-w-0 flex-1 items-center gap-3 bg-primary-container text-on-primary-fixed",
+						"max-medium:fixed max-medium:inset-x-0 max-medium:bottom-16 max-medium:h-14 max-medium:px-4",
+						"medium:flex-col medium:gap-1 medium:rounded-large",
+						inStrip
+							? "medium:items-center medium:p-1 medium:pt-2"
+							: "medium:items-start medium:p-3",
+					)}
 				>
-					<p className="min-w-0 flex-1 truncate text-label-medium medium:w-full">
+					<p
+						className={cx(
+							"min-w-0 flex-1 truncate text-label-medium",
+							inStrip ? "medium:sr-only" : "medium:w-full",
+						)}
+					>
 						<span className="sr-only">Running: </span>
 						{running.projectName}
 					</p>
-					<p role="timer" aria-label="Elapsed" className="text-title-medium">
+					<p
+						role="timer"
+						aria-label="Elapsed"
+						className={inStrip ? "text-title-medium medium:text-label-large" : "text-title-medium"}
+					>
 						<Digits value={formatElapsed(elapsedSeconds(running.startedAt, now))} />
 					</p>
 					<stop.Form method="post" action={timerAction(organisation)}>

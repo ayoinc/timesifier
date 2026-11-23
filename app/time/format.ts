@@ -1,4 +1,4 @@
-import { type Day, dayOf } from "./calendar";
+import { addDays, type Day, dayOf } from "./calendar";
 
 /**
  * How every page writes a day, a period, a time and a length of time: one form
@@ -93,6 +93,37 @@ export function formatRange(first: Day, last: Day): string {
 export function formatMonth(day: Day): string {
 	const parts = dayParts(day);
 	return `${parts.month} ${parts.year}`;
+}
+
+/** The word for a step back from today: 1 is the day, week or month before; -1 the one after. */
+const NEAR_DAY: Record<number, string> = { 1: "Yesterday", 0: "Today", [-1]: "Tomorrow" };
+const NEAR_PERIOD: Record<number, string> = { 1: "Last", 0: "This", [-1]: "Next" };
+
+/**
+ * Where the days from `first` to `last` stand from `today` (sweep S2-14), the
+ * word a period's label leads with: "Yesterday", "Today" or "Tomorrow" for one
+ * day; "Last week", "This week" or "Next week" for seven; "Last month", "This
+ * month" or "Next month" for a whole month. Any other day or period has no
+ * word, and is written by its dates alone. `today` is the day it is where the
+ * person is (`dayOf(now, zone)`), so the words change at their midnight, not
+ * the server's; the label still writes the dates after the word.
+ */
+export function nearWord(first: Day, last: Day, today: Day): string | null {
+	const since = (midnightOf(today) - midnightOf(first)) / 86_400_000;
+	const length = (midnightOf(last) - midnightOf(first)) / 86_400_000;
+	if (length === 0) return NEAR_DAY[since] ?? null;
+	if (length === 6) {
+		const word = NEAR_PERIOD[Math.floor(since / 7)];
+		return word ? `${word} week` : null;
+	}
+	const wholeMonth =
+		first.endsWith("-01") &&
+		addDays(last, 1).endsWith("-01") &&
+		first.slice(0, 7) === last.slice(0, 7);
+	if (!wholeMonth) return null;
+	const months = (day: Day) => Number(day.slice(0, 4)) * 12 + Number(day.slice(5, 7));
+	const word = NEAR_PERIOD[months(today) - months(first)];
+	return word ? `${word} month` : null;
 }
 
 const weekdays = new Map<string, Intl.DateTimeFormat>();

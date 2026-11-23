@@ -45,6 +45,7 @@ import {
 	SCHEDULES_SEGMENT,
 	SIGN_IN_SETTINGS_SEGMENT,
 } from "./shell/destinations";
+import { MENU_SEGMENT } from "./shell/menu";
 import { PICKER_MONTH_SEGMENT, TRACK_DAY_SEGMENT } from "./timesheet/views";
 
 // This file runs in Node when the routes are built, but is type-checked with the
@@ -109,6 +110,7 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(SUPPORT_ACCESS_SEGMENT, "routes/app/support-access.tsx"),
 	route(WELLBEING_SEGMENT, "routes/app/wellbeing.tsx"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
+	route(MENU_SEGMENT, "routes/app/menu.ts"),
 	...Object.keys(MOVED).map((segment) =>
 		route(segment, "routes/app/moved.tsx", { id: `routes/app/moved/${segment}` }),
 	),

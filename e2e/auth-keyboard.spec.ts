@@ -138,8 +138,14 @@ test("signing out from the profile menu, with the keyboard alone", async ({ page
 	await expect(page).toHaveURL(ARRIVAL);
 	await openAccount(page);
 
-	// The band, from the top of the page: the skip link, the product's name, the profile menu.
+	// The band, from the top of the page: the skip link, the product's name, the
+	// menu's toggle (S2-10), the profile menu. The toggle draws its focus on its
+	// label, as the navigation's links do.
 	await tabThroughTheBand(page);
+	const toggle = page.getByRole("banner").getByRole("button", { name: "Hide menu" });
+	await page.keyboard.press("Tab");
+	await expect(toggle).toBeFocused();
+	await expect(toggle.locator("span")).toHaveCSS("outline-style", "solid");
 	const profile = page.getByRole("banner").getByRole("button", { name: /^Account menu for / });
 	await tabTo(page, profile);
 	await page.keyboard.press("Space");

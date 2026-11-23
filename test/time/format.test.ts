@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { dayOf } from "../../app/time/calendar";
 import {
 	formatDay,
 	formatDayAndTime,
@@ -10,6 +11,7 @@ import {
 	formatTime,
 	formatTimeRange,
 	LOCALE,
+	nearWord,
 } from "../../app/time/format";
 
 // The one way each kind of date is written (audit W06, W12). These run in the
@@ -141,4 +143,66 @@ describe("a length of time", () => {
 
 it("takes its names from one fixed locale", () => {
 	expect(LOCALE).toBe("en-GB");
+});
+
+describe("the word a period leads with (S2-14)", () => {
+	// Wednesday 11 November 2026; the weeks start on Monday.
+	const today = "2026-11-11";
+
+	it("names yesterday, today and tomorrow, and no other day", () => {
+		expect(nearWord("2026-11-10", "2026-11-10", today)).toBe("Yesterday");
+		expect(nearWord("2026-11-11", "2026-11-11", today)).toBe("Today");
+		expect(nearWord("2026-11-12", "2026-11-12", today)).toBe("Tomorrow");
+		expect(nearWord("2026-11-09", "2026-11-09", today)).toBeNull();
+		expect(nearWord("2026-11-13", "2026-11-13", today)).toBeNull();
+	});
+
+	it("names last, this and next week, and no other", () => {
+		expect(nearWord("2026-11-02", "2026-11-08", today)).toBe("Last week");
+		expect(nearWord("2026-11-09", "2026-11-15", today)).toBe("This week");
+		expect(nearWord("2026-11-16", "2026-11-22", today)).toBe("Next week");
+		expect(nearWord("2026-10-26", "2026-11-01", today)).toBeNull();
+		expect(nearWord("2026-11-23", "2026-11-29", today)).toBeNull();
+		// A week starting on another day is still the seven days that hold today.
+		expect(nearWord("2026-11-08", "2026-11-14", today)).toBe("This week");
+		expect(nearWord("2026-11-01", "2026-11-07", today)).toBe("Last week");
+	});
+
+	it("names last, this and next month across a year, and no other", () => {
+		expect(nearWord("2026-11-01", "2026-11-30", today)).toBe("This month");
+		expect(nearWord("2026-10-01", "2026-10-31", today)).toBe("Last month");
+		expect(nearWord("2026-12-01", "2026-12-31", today)).toBe("Next month");
+		expect(nearWord("2026-09-01", "2026-09-30", today)).toBeNull();
+		expect(nearWord("2026-12-01", "2026-12-31", "2027-01-04")).toBe("Last month");
+		expect(nearWord("2027-01-01", "2027-01-31", "2026-12-31")).toBe("Next month");
+		expect(nearWord("2028-02-01", "2028-02-29", "2028-02-29")).toBe("This month");
+	});
+
+	it("gives a span that is neither a day, a week nor a whole month no word", () => {
+		expect(nearWord("2026-11-09", "2026-11-22", today)).toBeNull();
+		expect(nearWord("2026-11-01", "2026-11-29", today)).toBeNull();
+		expect(nearWord("2026-11-02", "2026-12-01", today)).toBeNull();
+	});
+
+	it("changes at midnight where the person is, across a week's end", () => {
+		// Sunday 15 November, 23:30 in London; already Monday the 16th in Tokyo.
+		const at = Date.parse("2026-11-15T23:30:00Z");
+		const week = ["2026-11-09", "2026-11-15"] as const;
+		expect(nearWord(...week, dayOf(at, LONDON))).toBe("This week");
+		expect(nearWord(...week, dayOf(at, "Asia/Tokyo"))).toBe("Last week");
+		expect(nearWord(...week, dayOf(at, "America/Los_Angeles"))).toBe("This week");
+		expect(nearWord("2026-11-15", "2026-11-15", dayOf(at, "Asia/Tokyo"))).toBe("Yesterday");
+	});
+
+	it("holds across a change of the clocks", () => {
+		// London's clocks go back at 02:00 on Sunday 25 October 2026; Berlin's an hour earlier.
+		const late = Date.parse("2026-10-25T23:30:00Z");
+		const week = ["2026-10-19", "2026-10-25"] as const;
+		expect(nearWord(...week, dayOf(late, LONDON))).toBe("This week");
+		expect(nearWord(...week, dayOf(late, "Europe/Berlin"))).toBe("Last week");
+		// The day the clocks go forward is a day like any other: 23 hours, one word.
+		const spring = Date.parse("2026-03-30T00:30:00Z");
+		expect(nearWord("2026-03-29", "2026-03-29", dayOf(spring, LONDON))).toBe("Yesterday");
+		expect(nearWord("2026-03-23", "2026-03-29", dayOf(spring, LONDON))).toBe("Last week");
+	});
 });

@@ -393,7 +393,11 @@ describe("the Day view (TS-013)", () => {
 				/class="[^"]*\btext-primary\b[^"]*"[^>]*>(<svg[\s\S]*?<\/svg>)?Track time<\/button>/g,
 			),
 		).toHaveLength(1);
-		expect(main).not.toContain("Copy");
+		// Nothing to copy: the copy is there, disabled, saying why (sweep S2-13).
+		expect(main).toMatch(
+			/aria-disabled="true"[^>]*>Copy last working day&#x27;s entries<\/button>/,
+		);
+		expect(textOf(main)).toContain("No working day in the last three weeks has time to copy.");
 	});
 
 	it("answers a day that is not a date with 400", async () => {

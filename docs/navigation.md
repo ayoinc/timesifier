@@ -61,6 +61,8 @@ Roles are those of `docs/security.md`, "Organisations and roles": owner, admin, 
 
 Every destination is in `app/shell/destinations.ts` from TS-064; the ones whose card is not Done show their heading and an empty state until it is. A heading shows only when the person sees at least one link under it, so a member sees Track (Timesheet, Time off and Expenses), Organize and Review, and no Bill. Integrations and Workspace settings sit below the groups under no heading, as Harvest's Integrations and Settings do ([nav]).
 
+From 600px, "Hide menu" in the band tucks the column away for wide work (TS-123, decision 66), as Harvest's "Collapse sidebar" does: it folds to a 72px strip holding a running timer, its time and Stop, and the same button, now "Menu", brings it back; Ctrl+\ (⌘\ on a Mac) does the same on any page. The choice is kept per browser, in a cookie the server reads.
+
 ## The navigation under 600px
 
 Below 600px the rail becomes a bar at the foot of the screen, 64px tall (TS-064; audit findings W03 and W11).

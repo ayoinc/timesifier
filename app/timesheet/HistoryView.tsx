@@ -2,6 +2,7 @@ import { Link } from "react-router";
 
 import { cx } from "~/components/cx";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { nearWord } from "~/time/format";
 
 import type { Aim } from "./aim";
 import { formatDuration } from "./durations";
@@ -32,7 +33,9 @@ export function HistoryView({
 			<Ledger heading="Your periods" note={data.rows.length}>
 				<LedgerRows label="Periods">
 					{data.rows.map((row) => {
-						const label = formatPeriod(row.startsOn, row.endsOn);
+						const near = nearWord(row.startsOn, row.endsOn, data.today);
+						const dates = formatPeriod(row.startsOn, row.endsOn);
+						const label = near ? `${near}, ${dates}` : dates;
 						const isCurrent = row.startsOn <= data.today && data.today <= row.endsOn;
 						return (
 							<LedgerRow

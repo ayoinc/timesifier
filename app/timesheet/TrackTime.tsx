@@ -23,6 +23,7 @@ import { EntryChoices } from "~/tasks/EntryChoices";
 import { TrackChoicesContext } from "~/tasks/track";
 import type { Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
+import { nearWord } from "~/time/format";
 import { refusalOfDay, takesOvertimeOnly } from "./DayRules";
 import { formatDuration } from "./durations";
 import { useReport } from "./feedback";
@@ -303,7 +304,7 @@ function TrackTimeSheet({
 					</div>
 					<DayNote
 						day={current?.day}
-						isToday={isToday}
+						near={current ? nearWord(current.day, current.day, current.today) : null}
 						formatDay={formatDay}
 						lock={lockReason ? lockSentence(lockReason, null, formatDay) : null}
 						lockLabel={lockReason ? LOCK_LABELS[lockReason] : null}
@@ -356,7 +357,7 @@ function FieldsSkeleton() {
 /** What the sheet says of the date chosen: which day it is, and why it takes nothing or how much. */
 function DayNote({
 	day,
-	isToday,
+	near,
 	formatDay,
 	lock,
 	lockLabel,
@@ -364,7 +365,8 @@ function DayNote({
 	left,
 }: {
 	day: Day | undefined;
-	isToday: boolean;
+	/** "Today", "Yesterday" or "Tomorrow", from `nearWord`; null for any other day. */
+	near: string | null;
 	formatDay: (day: Day) => string;
 	lock: string | null;
 	lockLabel: string | null;
@@ -375,7 +377,7 @@ function DayNote({
 	const said = lock ?? closed ?? left;
 	return (
 		<p className="text-body-medium text-on-surface-variant">
-			{isToday ? `Today, ${formatDay(day)}` : formatDay(day)}
+			{near ? `${near}, ${formatDay(day)}` : formatDay(day)}
 			{lockLabel ? `. ${lockLabel}` : ""}
 			{said ? <span className={lock || closed ? "block text-error" : "block"}>{said}</span> : null}
 		</p>

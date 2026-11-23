@@ -21,6 +21,11 @@ export interface PeriodStepperProps {
 	label: string;
 	/** The period shown, already written by app/time/format.ts: "9–15 November 2026". */
 	period: ReactNode;
+	/**
+	 * Where the period stands from today, from `nearWord`: "This week", "Last
+	 * month". It leads, above the dates, which stay, so nobody counts (S2-14).
+	 */
+	near?: string | null;
 	previous: Step;
 	/** null when there is nothing after (drawn disabled). */
 	next: Step | null;
@@ -38,7 +43,14 @@ const ICON_LINK =
  * the arrows are named by their step ("Previous week"), and the period between
  * them is plain visible text, not a tooltip.
  */
-export function PeriodStepper({ label, period, previous, next, current }: PeriodStepperProps) {
+export function PeriodStepper({
+	label,
+	period,
+	near,
+	previous,
+	next,
+	current,
+}: PeriodStepperProps) {
 	return (
 		// biome-ignore lint/a11y/useSemanticElements: a fieldset is for form controls; these are links named as one group.
 		<div role="group" aria-label={label} className="flex min-w-0 items-center gap-1">
@@ -54,7 +66,20 @@ export function PeriodStepper({ label, period, previous, next, current }: Period
 			>
 				<ChevronLeftIcon />
 			</Link>
-			<span className="min-w-0 text-center text-on-surface text-title-small">{period}</span>
+			<span className="min-w-0 text-center text-on-surface text-title-small">
+				{near ? (
+					<>
+						{/* The word, then the dates on their own line: read as "This week, 16–22 November 2026". */}
+						<span className="block">
+							{near}
+							<span className="sr-only">, </span>
+						</span>
+						<span className="block text-body-small text-on-surface-variant">{period}</span>
+					</>
+				) : (
+					period
+				)}
+			</span>
 			{next ? (
 				<Link
 					to={next.to}

@@ -20,11 +20,15 @@ import { WaitingLabel } from "./WaitingLabel";
 // 12px either side both providers' guidelines draw, at either size.
 
 const BASE =
-	"relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 " +
+	"relative inline-flex shrink-0 select-none items-center justify-center gap-2 " +
 	"outline-none state-layer transition-control " +
-	"data-hovered:state-hover data-focus-visible:state-focus data-focus-visible:focus-indicator " +
-	"data-pressed:state-pressed data-waiting:cursor-progress " +
-	"data-disabled:cursor-not-allowed data-disabled:text-disabled data-disabled:shadow-none";
+	"data-focus-visible:state-focus data-focus-visible:focus-indicator " +
+	"data-waiting:cursor-progress " +
+	"data-disabled:cursor-not-allowed data-disabled:text-disabled data-disabled:shadow-none " +
+	"data-unavailable:cursor-not-allowed data-unavailable:text-disabled data-unavailable:shadow-none";
+
+/** What a button that can be pressed adds: an unavailable one shows no hover and no press. */
+const PRESSABLE = "cursor-pointer data-hovered:state-hover data-pressed:state-pressed";
 
 const SIZES = {
 	small: "h-11 min-w-11 rounded-large-increased text-label-large data-pressed:rounded-small",
@@ -55,20 +59,21 @@ const PADDING = {
 	},
 } as const;
 
+// A raised button rises on hover unless it is unavailable, which is drawn as a disabled one.
+const RISES = "data-hovered:not-data-pressed:not-data-unavailable:shadow-level1";
+
 const VARIANTS = {
-	filled:
-		"over-primary text-on-primary data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
-	tonal:
-		"over-secondary-container text-on-secondary-container data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
+	filled: `over-primary text-on-primary ${RISES} data-disabled:bg-disabled data-unavailable:bg-disabled`,
+	tonal: `over-secondary-container text-on-secondary-container ${RISES} data-disabled:bg-disabled data-unavailable:bg-disabled`,
 	outlined: "border border-outline-variant text-on-surface-variant",
 	text: "text-primary",
 	// The error colour, for the one action that cannot be undone: the confirmation
 	// of a deletion. Disabled, it is drawn like any disabled filled button.
-	danger:
-		"over-error text-on-error data-hovered:not-data-pressed:shadow-level1 data-disabled:bg-disabled",
+	danger: `over-error text-on-error ${RISES} data-disabled:bg-disabled data-unavailable:bg-disabled`,
 	// The error colour, outlined: the action that opens a destructive confirmation
 	// ("Delete organisation"). The confirmation itself is `danger`.
-	"outlined-danger": "border border-error text-error data-disabled:border-outline-variant",
+	"outlined-danger":
+		"border border-error text-error data-disabled:border-outline-variant data-unavailable:border-outline-variant",
 	// The providers' own buttons: Google's fill, stroke and words, light and dark,
 	// and Microsoft's background, border and words.
 	google: "over-google border border-google-outline text-on-google",
@@ -119,6 +124,13 @@ export interface ButtonProps
 	isPending?: boolean;
 	/** What it says while pending. Defaults to the verb of a text label: "Save" says "Saving…". */
 	pendingLabel?: string;
+	/**
+	 * An action that cannot be taken now, drawn disabled (sweep S2-13). Unlike
+	 * `isDisabled` it stays in the focus order, `aria-disabled`, so the reason
+	 * the caller names with `aria-describedby` is reached by keyboard and read
+	 * with the button. Pressing it does nothing.
+	 */
+	isUnavailable?: boolean;
 }
 
 /** A filled button is ink or amber: the clock on it is drawn in its text colour alone. */
@@ -144,21 +156,30 @@ export function Button({
 	children,
 	isPending,
 	pendingLabel,
+	isUnavailable,
 	...props
 }: ButtonProps) {
 	// Pending is drawn here, not with React Aria's `isPending`: that announces the
 	// button by reference from its live region, and the reference outlives a
 	// button the answer removes, which leaves the region naming nothing.
 	const pending = isPending === true;
+	const unavailable = isUnavailable === true;
 	return (
 		<AriaButton
 			{...props}
 			// A pending submit button submits nothing, by the press or by Enter in a field.
-			type={pending && props.type === "submit" ? "button" : props.type}
-			onPress={pending ? undefined : props.onPress}
-			aria-disabled={pending || undefined}
+			type={(pending || unavailable) && props.type === "submit" ? "button" : props.type}
+			onPress={pending || unavailable ? undefined : props.onPress}
+			aria-disabled={pending || unavailable || undefined}
 			data-waiting={pending || undefined}
-			className={cx(BASE, SIZES[size], PADDING[size][variant], VARIANTS[variant])}
+			data-unavailable={unavailable || undefined}
+			className={cx(
+				BASE,
+				!unavailable && PRESSABLE,
+				SIZES[size],
+				PADDING[size][variant],
+				VARIANTS[variant],
+			)}
 		>
 			{isPending === undefined ? (
 				<>

@@ -4,6 +4,7 @@ import {
 	useEffect,
 	useLayoutEffect,
 	useRef,
+	useState,
 	ViewTransition,
 } from "react";
 import {
@@ -27,6 +28,8 @@ import {
 	NEW_ORGANISATION_PATH,
 	ORGANISATION_PARAM,
 } from "~/shell/destinations";
+import { MenuToggle } from "~/shell/MenuToggle";
+import { menuCookie, readMenuHidden } from "~/shell/menu";
 import { Navigation } from "~/shell/Navigation";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { ProfileMenu } from "~/shell/ProfileMenu";
@@ -55,22 +58,32 @@ import type { loader as organisationLoader } from "./organisation";
 export const middleware: Route.MiddlewareFunction[] = [requireSession];
 
 /**
- * Whose session it is, for the profile menu. Having a loader here also means that every move between
+ * Whose session it is, for the profile menu, and whether the navigation's
+ * column is hidden in this browser (sweep S2-10), read from its cookie so the
+ * page arrives in that shape. Having a loader here also means that every move between
  * pages asks the server, and so passes the guard: without a loader on the way,
  * React Router moves between pages that have none without a request, and a
  * person whose session has ended would go on seeing the shell.
  */
-export function loader({ context }: Route.LoaderArgs) {
+export function loader({ context, request }: Route.LoaderArgs) {
 	const { user } = context.get(signedInContext);
-	return { name: user.name?.trim() || null, email: user.email };
+	return {
+		name: user.name?.trim() || null,
+		email: user.email,
+		menuHidden: readMenuHidden(request.headers.get("Cookie")),
+	};
 }
 
 /** A move of the query alone reads nothing here again (`app/shell/revalidation.ts`). */
 export const shouldRevalidate = layoutShouldRevalidate;
 
 const MAIN_ID = "main";
-/** The column every page of an organisation is drawn in (docs/design-system.md, "Shell"). */
-const INSIDE_COLUMN = "min-w-0 max-w-200";
+/**
+ * The column every page of an organisation is drawn in (docs/design-system.md,
+ * "Shell"): 800px at most, or, with the navigation's column hidden for wide
+ * work, the page's whole width beside the strip (decision 66).
+ */
+const INSIDE_COLUMN = { shown: "min-w-0 max-w-200", hidden: "min-w-0" };
 
 export default function Shell({ loaderData }: Route.ComponentProps) {
 	const { pathname } = useLocation();
@@ -83,6 +96,14 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 	const { index } = arrival;
 	const travel = useTravel(index);
 	const main = useRef<HTMLElement>(null);
+	// Kept here, not refetched: the toggle writes the cookie and changes the
+	// page at once; the loader reads the same cookie on the next move.
+	const [menuHidden, setMenuHidden] = useState(loaderData.menuHidden);
+	const toggleMenu = () => {
+		// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API is not in every browser served; `menuCookie` builds the one value, with nothing to escape.
+		document.cookie = menuCookie(!menuHidden);
+		setMenuHidden(!menuHidden);
+	};
 
 	// After a move to another page the keyboard focus goes to that page's heading.
 	// A layout effect, so it happens as the page changes and not after the
@@ -134,6 +155,10 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 					current={pathname}
 					end={
 						<div className="flex min-w-0 items-center gap-3 medium:gap-6">
+							{/* From 600px, the way to tuck the navigation's column away for wide work (decision 66). */}
+							{organisation && (
+								<MenuToggle organisation={organisation} hidden={menuHidden} onToggle={toggleMenu} />
+							)}
 							{organisationData && (
 								<div className="flex min-w-0 items-center gap-2 medium:gap-3">
 									{/* The organisation's logo (TS-100) on a tile of paper, so any logo reads
@@ -188,6 +213,7 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 								visible={organisationData?.destinations ?? []}
 								activeIndex={index}
 								counts={{ approvals: organisationData?.pendingApprovals ?? 0 }}
+								menuHidden={menuHidden}
 							/>
 						</ViewTransition>
 					)}
@@ -209,13 +235,20 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 								data-reveal={arrival.revealing === null ? undefined : ""}
 								className={cx(
 									"outline-none focus-visible:focus-indicator-inner",
-									organisation ? "min-w-0 flex-1 pt-10 pb-24 medium:ms-32" : OUTSIDE_MAIN,
+									organisation
+										? cx("min-w-0 flex-1 pt-10 pb-24", menuHidden ? "medium:ms-26" : "medium:ms-32")
+										: OUTSIDE_MAIN,
 								)}
 							>
 								{/* One column for every page of the organisation: 800px at most, so
-								    headings, tabs, rules, sheets and grids share one right edge (audit W22).
+								    headings, tabs, rules, sheets and grids share one right edge (audit W22),
+								    and the page's width while the menu is hidden (decision 66).
 								    The page left stays mounted, hidden, under a destination's shape. */}
-								<div className={organisation ? INSIDE_COLUMN : OUTSIDE_COLUMN}>
+								<div
+									className={
+										organisation ? INSIDE_COLUMN[menuHidden ? "hidden" : "shown"] : OUTSIDE_COLUMN
+									}
+								>
 									<Activity mode={arrival.waitingFor === null ? "visible" : "hidden"}>
 										<Outlet />
 									</Activity>
