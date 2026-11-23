@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
 import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
+import { configuredProviders, PROVIDER_NAMES, type Provider } from "~/auth/providers";
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
 import { browserErrorNotice } from "~/browser-errors/report";
 import { PROCESSED_FOR_ORGANISATIONS, STORED, type StoredTerm } from "~/db/personal-data";
@@ -26,6 +27,7 @@ import { IcoRegistration, TIME_TRAVEL_DAYS } from "~/landing/trust";
 import { WhoSeesWhat } from "~/landing/WhoSees";
 
 import { setting } from "~/lib/deployment";
+import { UNVERIFY_AFTER_DAYS, WARN_AFTER_DAYS } from "~/organisations/domains.server";
 import { SIGN_IN_DAYS } from "~/platform/limits";
 
 import type { Route } from "./+types/privacy";
@@ -60,12 +62,16 @@ export function loader({ request }: Route.LoaderArgs) {
 		operator: deploymentOperator(env),
 		ico: icoReference(env),
 		sender: setting(env, "EMAIL_FROM") ?? null,
+		/** The providers this deployment offers to sign in with; none on a preview. */
+		providers: configuredProviders(env),
 		facts: {
 			activityDays: ACTIVITY_RETENTION_DAYS,
 			webhookSwitchOff: SWITCH_OFF_AFTER,
 			documentEmails: DOCUMENT_EMAILS.max,
 			feedLeaveDays: LEAVE_DAYS_BACK,
 			feedEntryDays: ENTRY_DAYS_BACK,
+			domainWarnDays: WARN_AFTER_DAYS,
+			domainUnverifyDays: UNVERIFY_AFTER_DAYS,
 		},
 	};
 }
@@ -74,6 +80,17 @@ export function loader({ request }: Route.LoaderArgs) {
 const VERSION = { date: "2026-11-23", inWords: "23 November 2026" };
 
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
+
+/**
+ * What each provider learns, and tells Timesifier, when a person chooses it on
+ * the sign-in page (TS-104): the claims `app/auth/social.server.ts` reads.
+ */
+const SIGN_IN_PROVIDER_WORDS: Record<Provider, string> = {
+	google:
+		"If you choose Continue with Google, Google learns that you are signing in to Timesifier, and tells Timesifier your name, your email address, whether Google has verified it, and the Google Workspace domain of the account, if it has one. Google LLC is a company in the United States.",
+	microsoft:
+		"If you choose Continue with Microsoft, with a work or school account, Microsoft learns that you are signing in to Timesifier, and tells Timesifier your name, your email address, whether Microsoft has verified its domain, and your organisation's Microsoft tenant ID. Microsoft Corporation is a company in the United States.",
+};
 
 /** The kinds of event a webhook can be sent, as Integrations names them, in a sentence. */
 const EVENTS = Object.values(EVENT_LABELS)
@@ -85,21 +102,23 @@ const EVENTS = Object.values(EVENT_LABELS)
 	.join("");
 
 export default function Privacy({
-	loaderData: { host, operator, ico, sender, facts },
+	loaderData: { host, operator, ico, sender, providers, facts },
 }: Route.ComponentProps) {
 	/** What each row of "What is stored" says. Every row of `STORED` has its words here. */
 	const stored: Record<StoredTerm, ReactNode> = {
 		"Your account": (
 			<>
-				Your name, your email address, whether a sign-in code has proved the address is yours, your
-				time zone once it is set, whether you take Timesifier's product announcements and its
-				newsletter, and when your account was closed, if it was.
+				Your name, your email address, whether a sign-in code, Google or Microsoft has proved the
+				address is yours, your time zone once it is set, whether you take Timesifier's product
+				announcements and its newsletter, and when your account was closed, if it was. If you sign
+				in with Google or Microsoft: which, and your account's identifier there. No token from
+				either is kept, so Timesifier cannot act for you at Google or Microsoft.
 			</>
 		),
 		"Your sign-ins": (
 			<>
-				When you signed in, and the kind of browser in a few words, such as "Chrome on macOS": never
-				the internet address it came from.
+				When you signed in, whether it was with a code, Google or Microsoft, and the kind of browser
+				in a few words, such as "Chrome on macOS": never the internet address it came from.
 			</>
 		),
 		"Mail from Timesifier": (
@@ -111,15 +130,19 @@ export default function Privacy({
 		),
 		"Your sessions": (
 			<>
-				For each browser you are signed in on: a session token, when it expires, and the internet
-				address and the browser description the session was started from.
+				For each browser you are signed in on: a session token, when it expires, the internet
+				address and the browser description the session was started from, and how it was signed in:
+				with a code, with Google and the Google Workspace domain of the account, if it has one, or
+				with Microsoft and the Microsoft tenant ID of the work or school account.
 			</>
 		),
 		"Sign-in codes": (
 			<>
 				A keyed hash of each code sent to you, never the code itself, with a count of the attempts
 				made on it. A count of the codes sent to your address in the last hour, kept under a keyed
-				hash of the address.
+				hash of the address. While you sign in with Google or Microsoft, the random values that tie
+				their answer to your browser and the page to come back to: they stop working after ten
+				minutes, and are removed when you come back.
 			</>
 		),
 		"Limits on requests": (
@@ -130,12 +153,13 @@ export default function Privacy({
 		),
 		"The organisation and its people": (
 			<>
-				The organisation's name, the name in its address on {host}, its settings, its plan with its
-				seats and when a trial of it ends, and the logo and colour its invoices and estimates carry,
-				the logo kept in Cloudflare R2. Which version of the data processing agreement an owner
-				accepted for it, who and when. Who belongs to it, each person's role, and whether they work
-				as a contractor. Its teams, who is in each and who manages it. Each invitation: the email
-				address invited, the role offered, who sent it, when it expires and what became of it.
+				The organisation's name, the name in its address on {host}, its settings, among them whether
+				it requires company sign-in, its plan with its seats and when a trial of it ends, and the
+				logo and colour its invoices and estimates carry, the logo kept in Cloudflare R2. Which
+				version of the data processing agreement an owner accepted for it, who and when. Who belongs
+				to it, each person's role, and whether they work as a contractor. Its teams, who is in each
+				and who manages it. Each invitation: the email address invited, the role offered, who sent
+				it, when it expires and what became of it.
 			</>
 		),
 		"Time and approvals": (
@@ -252,6 +276,14 @@ export default function Privacy({
 			<>
 				Each time an owner of the organisation grants Timesifier support access: who granted it,
 				until when, and who ended it early, if anyone did.
+			</>
+		),
+		"Verified domains": (
+			<>
+				Each domain an owner adds, such as acme.com: the random value its TXT record must hold, when
+				it was verified, when the record was last found, and whether people with a verified address
+				at it may join the organisation on their own. And who removed whom from the organisation,
+				and when, so that a person removed cannot join again by the domain until they are invited.
 			</>
 		),
 	};
@@ -375,6 +407,11 @@ export default function Privacy({
 							</li>
 							<li>a notice that a webhook was switched off, to the person who added it;</li>
 							<li>
+								a notice that a verified domain's DNS record is missing, to the organisation's
+								owners, once each time it has been missing for {facts.domainWarnDays} days; after{" "}
+								{facts.domainUnverifyDays} days the domain stops being verified;
+							</li>
+							<li>
 								a product announcement, to every account that has not turned them off, and the
 								newsletter, to those who asked for it, each with a link that stops it;
 							</li>
@@ -429,6 +466,18 @@ export default function Privacy({
 						your internet address and details of your browser, and Cloudflare also uses them to
 						improve Turnstile.
 					</Row>
+					{providers.map((provider) => (
+						<Row key={provider} term={`Signing in with ${PROVIDER_NAMES[provider]}`}>
+							{SIGN_IN_PROVIDER_WORDS[provider]} Timesifier asks for nothing else and keeps no token
+							from {PROVIDER_NAMES[provider]}. You or your organisation choose to use it, so it is
+							not one of Timesifier's processors.
+						</Row>
+					))}
+					<Row term="Checking a domain">
+						When an owner checks a domain, and once a day for every domain added, Timesifier asks
+						Cloudflare's DNS resolver at cloudflare-dns.com for the domain's TXT record. Only the
+						name looked up is sent.
+					</Row>
 					<Row term="Analytics">
 						Cloudflare adds its Web Analytics script to each page. It loads from
 						static.cloudflareinsights.com and sends what it measures of the page to Cloudflare.
@@ -453,7 +502,7 @@ export default function Privacy({
 
 			<DocumentSection id="cookies" title="Cookies">
 				<p>
-					Timesifier sets five cookies and no others. Each is sent only to {host}, and only over
+					Timesifier sets six cookies and no others. Each is sent only to {host}, and only over
 					HTTPS. None is for advertising or for following you from site to site.
 				</p>
 				<Rows>
@@ -464,6 +513,12 @@ export default function Privacy({
 					<Row term="__Host-timesifier.sign_in_code">
 						Shows that this browser asked for the sign-in code you are about to type. It holds no
 						email address and is kept for one hour.
+					</Row>
+					<Row term="__Host-timesifier.state">
+						Set only when you choose Continue with Google or Continue with Microsoft. It shows that
+						the answer coming back from Google or Microsoft is for this browser. It holds a random
+						value, signed, and nothing about you, and is kept for five minutes or until you come
+						back. Script on the page cannot read it.
 					</Row>
 					<Row term="__Host-timesifier.known_browser">
 						Shows that this browser has signed in as your address before, so that somebody else

@@ -4,7 +4,6 @@ import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectBudget } from "~/budgets/budget.server";
 import { type OrganisationScope, organisationScope, users } from "~/db";
-import { membershipOf } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { projectPath } from "~/projects/projects";
 import { destinationPath } from "~/shell/destinations";
@@ -14,7 +13,7 @@ import { trackChoices } from "~/tasks/track.server";
 import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { value } from "../organisations/harness";
+import { membershipIn, value } from "../organisations/harness";
 import { parseCsv } from "../reports/csv";
 import { open, type Person, pageBody, submit, textOf } from "./harness";
 import { type Kind, seedRoles } from "./roles-seed";
@@ -526,8 +525,7 @@ describe("the over-budget warning", () => {
 			.from(users)
 			.where(eq(users.id, people.member.user.id));
 		if (!user) throw new Error("No user.");
-		const membership = await membershipOf(user, ACME);
-		if (!membership) throw new Error("No membership.");
+		const membership = await membershipIn(user, ACME);
 		return (await trackChoices(scope, membership, [], now)).overBudget;
 	}
 

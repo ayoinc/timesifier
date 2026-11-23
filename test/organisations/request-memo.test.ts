@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
 import { accessOf } from "~/organisations/access.server";
-import { membershipOf } from "~/organisations/membership.server";
 import { withRequestMemo } from "~/organisations/request-memo.server";
 import { peopleOf, teamPeopleOf } from "~/teams/people.server";
 import { addToTeam, managedPeople, managedTeams } from "~/teams/teams.server";
@@ -11,7 +10,7 @@ import { captureEmail } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { type Crowd, seedCrowd, seedWork, WEEK } from "../lists/crowd";
 import { open, type Person } from "../pages/harness";
-import { seedMember, seedOrganisation, seedTeam } from "./harness";
+import { membershipIn, seedMember, seedOrganisation, seedTeam } from "./harness";
 
 // What one request reads of the members and the teams, it reads once (TS-113,
 // D6 of research/corporate/scale-test.md). Before, the layout's membership,
@@ -127,13 +126,8 @@ describe("a request's memo", () => {
 	});
 
 	/** Hedy's membership of Acme, as the layout reads it. */
-	async function hedysMembership() {
-		const membership = await membershipOf(
-			{ id: hedy.userId } as Parameters<typeof membershipOf>[0],
-			acme.slug,
-		);
-		if (!membership) throw new Error("Hedy is a member of Acme");
-		return membership;
+	function hedysMembership() {
+		return membershipIn({ id: hedy.userId } as Parameters<typeof membershipIn>[0], acme.slug);
 	}
 
 	it("in a GET, reads a manager's teams and the people once, however often they are asked for", async () => {

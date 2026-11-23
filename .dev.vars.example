@@ -22,3 +22,12 @@ TURNSTILE_SECRET_KEY=
 # The platform console's owners (TS-099): addresses separated by commas. Each
 # opens /platform after a code emailed to it. Empty closes the console.
 PLATFORM_OWNERS=
+
+# Sign-in with Google and Microsoft (TS-104): a provider is offered where its
+# ID and its secret are both set. Leave them empty to offer neither. A client
+# of your own needs http://localhost:5173/api/auth/callback/<provider> among
+# its redirect URIs. See docs/security.md, "Every secret and variable".
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=

@@ -1,6 +1,12 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureEmail, type Mailbox } from "../auth/harness";
+import {
+	ACME_TENANT,
+	configureProviders,
+	microsoftClaims,
+	signInWith,
+} from "../auth/social-harness";
 import { freshDatabase } from "../db/database";
 import {
 	createOrganisation,
@@ -97,6 +103,18 @@ describe("one account", () => {
 		expect(text).toContain("Owner");
 		expect(text).toContain("Signed in on 1 browser or device");
 		expect(text).toContain("kept for 90 days");
+	});
+
+	it("says beside each sign-in how it was made: with a code, or with Microsoft (TS-104)", async () => {
+		configureProviders("microsoft");
+		const { cookie } = await signInWith("microsoft", microsoftClaims("ada@example.com"));
+		expect(cookie).not.toBeNull();
+
+		const text = textOf(await pageBody(await open(pageOf(ada.user.id), root)));
+		expect(text).toContain("with a code");
+		expect(text).toContain("with Microsoft");
+		// The tenant is the session's; the console's list names the provider alone.
+		expect(text).not.toContain(ACME_TENANT);
 	});
 
 	it("is a 404 for an account that does not exist", async () => {

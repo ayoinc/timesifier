@@ -172,6 +172,16 @@ export const organisations = sqliteTable("organisations", {
 	dpaAcceptedAt: integer("dpa_accepted_at", { mode: "timestamp_ms" }),
 	/** Who accepted it; null once their account is deleted. */
 	dpaAcceptedBy: text("dpa_accepted_by").references(() => users.id, { onDelete: "set null" }),
+	/**
+	 * Who may open the organisation's pages (TS-104): `any`, anyone signed in;
+	 * `company`, a session made by `signInProvider` at `signInTenant`, except
+	 * for its owners (`app/organisations/sign-in-policy.ts`).
+	 */
+	signInPolicy: text("sign_in_policy").notNull().default("any"),
+	/** The provider `company` requires: `google` or `microsoft`; null under `any`. */
+	signInProvider: text("sign_in_provider"),
+	/** The Google Workspace domain (`hd`) or the Microsoft tenant id (`tid`) `company` requires; null under `any`. */
+	signInTenant: text("sign_in_tenant"),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
 });
@@ -261,6 +271,78 @@ export const invitations = sqliteTable(
 	(table) => [
 		index("invitations_organisation_id_idx").on(table.organisationId),
 		index("invitations_email_idx").on(table.email),
+	],
+);
+
+/**
+ * A domain an organisation says is its own (TS-104): `acme.com`, in lower
+ * case. It is verified when the TXT record `_timesifier.<domain>` holds
+ * `timesifier-verification=<token>`, and the daily job looks again; after 7
+ * days without the record it is unverified (`app/organisations/domains.server.ts`).
+ * The token is no secret: the record is public, and it proves only that whoever
+ * added it controls the domain's DNS for this row's organisation.
+ *
+ * An organisation names a domain once. Among organisations a domain is
+ * verified for one at most: an unverified claim blocks nobody, so nobody can
+ * hold a domain they cannot prove (decision 63). With `selfJoin`, a person
+ * whose verified address is at the domain may join as a member on their own.
+ */
+export const organisationDomains = sqliteTable(
+	"organisation_domains",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		domain: text("domain").notNull(),
+		token: text("token").notNull(),
+		/** When the record was first found; null until then, and again after 7 days without it. */
+		verifiedAt: integer("verified_at", { mode: "timestamp_ms" }),
+		/** When a check last found the record. */
+		lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
+		selfJoin: integer("self_join", { mode: "boolean" }).notNull().default(false),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("organisation_domains_organisation_id_id_unique").on(
+			table.organisationId,
+			table.id,
+		),
+		uniqueIndex("organisation_domains_organisation_id_domain_unique").on(
+			table.organisationId,
+			table.domain,
+		),
+		uniqueIndex("organisation_domains_verified_domain_unique")
+			.on(table.domain)
+			.where(sql`${table.verifiedAt} is not null`),
+		check("organisation_domains_domain_lower_case", sql`${table.domain} = lower(${table.domain})`),
+	],
+);
+
+/**
+ * Who removed whom from an organisation, and when (TS-104, the security review
+ * of #89). A person removed is never offered "Join" by the organisation's
+ * verified domain again, and is refused if they ask, until the organisation
+ * invites them after the removal (`joinableOrganisations`). Kept with the
+ * organisation; it goes with the person removed, and forgets the remover when
+ * that account is deleted.
+ */
+export const membershipRemovals = sqliteTable(
+	"membership_removals",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		removedBy: text("removed_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("membership_removals_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("membership_removals_organisation_id_user_id_idx").on(table.organisationId, table.userId),
 	],
 );
 
@@ -2732,6 +2814,8 @@ export const signIns = sqliteTable(
 			.references(() => users.id, { onDelete: "cascade" }),
 		/** Such as "Chrome on macOS"; never the address it came from. */
 		device: text("device").notNull(),
+		/** How the session was made (TS-104): `code`, `google` or `microsoft`; null before 0030. */
+		method: text("method"),
 		createdAt: createdAt(),
 	},
 	(table) => [
@@ -2808,6 +2892,10 @@ export const sessions = sqliteTable(
 		ipAddress: text("ip_address"),
 		userAgent: text("user_agent"),
 		activeOrganisationId: text("active_organisation_id"),
+		/** How the session was made (TS-104): `code`, `google` or `microsoft`; null before 0030. */
+		signInMethod: text("sign_in_method"),
+		/** For `google`, the Workspace domain (`hd`), null for a personal account; for `microsoft`, the tenant id (`tid`). */
+		signInTenant: text("sign_in_tenant"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},

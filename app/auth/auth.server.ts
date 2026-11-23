@@ -54,6 +54,15 @@ import {
 import { redirectRules } from "./redirects.server";
 import { signInCodeRules } from "./sign-in-code.server";
 import { CODE_LIFETIME_SECONDS, signInCodeEmail } from "./sign-in-code-email";
+import {
+	NO_TOKENS,
+	refuseJudged,
+	signInRecord,
+	socialProviders,
+	socialSignInRules,
+	unvouchedUnverified,
+	withSignInRecord,
+} from "./social.server";
 import { turnstile } from "./turnstile.server";
 
 /** Attempts one client may make on one sign-in path in `window` seconds; the next is answered 429. */
@@ -89,7 +98,11 @@ type Bindings = Pick<Env, "DB"> & {
 		| "ENVIRONMENT"
 		| "APP_HOST"
 		| "PREVIEW_HOST_SUFFIX"
-		| "EMAIL_FROM"]: string | undefined;
+		| "EMAIL_FROM"
+		| "GOOGLE_CLIENT_ID"
+		| "GOOGLE_CLIENT_SECRET"
+		| "MICROSOFT_CLIENT_ID"
+		| "MICROSOFT_CLIENT_SECRET"]: string | undefined;
 };
 
 function createAuth(bindings: Bindings) {
@@ -133,34 +146,88 @@ function createAuth(bindings: Bindings) {
 		}),
 
 		// Read from the database on every request, never from a copy in a cookie:
-		// an ended session stops working on the very next request.
-		session: { cookieCache: { enabled: false } },
+		// an ended session stops working on the very next request. Each session
+		// says how it was made (TS-104); nothing a client sends can set either.
+		session: {
+			cookieCache: { enabled: false },
+			additionalFields: {
+				signInMethod: { type: "string", required: false, input: false },
+				signInTenant: { type: "string", required: false, input: false },
+			},
+		},
+
+		// Google and Microsoft, where the deployment has a client at each
+		// (TS-104, decision 62; social.server.ts holds the rules).
+		socialProviders: socialProviders(bindings),
+		account: {
+			// A provider links to an existing person only when it vouches for the
+			// address, and the person's own address is verified. No provider is
+			// trusted by name, so neither is ever linked on an unverified claim.
+			accountLinking: { enabled: true, requireLocalEmailVerified: true, trustedProviders: [] },
+			// No provider token is kept, in the database or in a cookie.
+			updateAccountOnSignIn: false,
+			storeAccountCookie: false,
+		},
 
 		// The platform console's three needs of a sign-in (TS-099): a closed
 		// account starts no session; every sign-in is kept for the account's
-		// history, as the browser's kind and nothing finer; and a new account that
-		// asked for the newsletter on the sign-in page gets it.
+		// history, as the browser's kind and how it was made and nothing finer;
+		// and a new account that asked for the newsletter on the sign-in page
+		// gets it. And TS-104's: a provider's profile that was refused writes
+		// nothing, and no provider token is written.
 		databaseHooks: {
 			user: {
 				create: {
+					// A refused profile is stopped here; and apart from that, its address is
+					// never written as verified (social.server.ts).
+					async before(user) {
+						refuseJudged();
+						return { data: unvouchedUnverified(user) };
+					},
 					async after(user, context) {
 						if (context?.request?.headers.get(NEWSLETTER_HEADER) !== "yes") return;
 						await platformData.setMailChoice(DB, user.id, "newsletter", true);
 					},
 				},
+				update: {
+					async before(user) {
+						return { data: unvouchedUnverified(user) };
+					},
+				},
+			},
+			account: {
+				create: {
+					async before(account) {
+						refuseJudged();
+						return { data: { ...account, ...NO_TOKENS } };
+					},
+				},
+				update: {
+					async before(account) {
+						return { data: { ...account, ...NO_TOKENS } };
+					},
+				},
 			},
 			session: {
 				create: {
-					async before(session) {
+					async before(session, context) {
+						refuseJudged();
 						if (await platformData.isAccountClosed(DB, session.userId)) {
 							throw new APIError("FORBIDDEN", {
 								code: "ACCOUNT_CLOSED",
 								message: "This account is closed.",
 							});
 						}
+						return { data: { ...session, ...signInRecord(context?.path) } };
 					},
 					async after(session) {
-						await platformData.recordSignIn(DB, session.userId, deviceOf(session.userAgent));
+						const { signInMethod } = session as { signInMethod?: string | null };
+						await platformData.recordSignIn(
+							DB,
+							session.userId,
+							deviceOf(session.userAgent),
+							signInMethod ?? null,
+						);
 					},
 				},
 			},
@@ -174,6 +241,9 @@ function createAuth(bindings: Bindings) {
 			customRules: {
 				"/email-otp/send-verification-otp": ASKING_LIMIT,
 				"/sign-in/email-otp": SIGN_IN_LIMIT,
+				"/sign-in/social": SIGN_IN_LIMIT,
+				"/callback/google": SIGN_IN_LIMIT,
+				"/callback/microsoft": SIGN_IN_LIMIT,
 				...ORGANISATION_RATE_LIMITS,
 			},
 		},
@@ -226,6 +296,7 @@ function createAuth(bindings: Bindings) {
 			...organisationPlugins(),
 			redirectRules,
 			signInCodeRules({ DB, secret: BETTER_AUTH_SECRET }),
+			socialSignInRules(bindings),
 		],
 	});
 }
@@ -262,6 +333,10 @@ const auth = builtFrom(
 		APP_HOST: setting(env, "APP_HOST"),
 		PREVIEW_HOST_SUFFIX: setting(env, "PREVIEW_HOST_SUFFIX"),
 		EMAIL_FROM: setting(env, "EMAIL_FROM"),
+		GOOGLE_CLIENT_ID: setting(env, "GOOGLE_CLIENT_ID"),
+		GOOGLE_CLIENT_SECRET: setting(env, "GOOGLE_CLIENT_SECRET"),
+		MICROSOFT_CLIENT_ID: setting(env, "MICROSOFT_CLIENT_ID"),
+		MICROSOFT_CLIENT_SECRET: setting(env, "MICROSOFT_CLIENT_SECRET"),
 	}),
 	createAuth,
 );
@@ -298,7 +373,8 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
 	// message, which names the setting and holds no value, belongs in the log.
 	const { handler } = auth();
 	try {
-		return await handler(request);
+		// Each request keeps what it learns of a provider's profile to itself (social.server.ts).
+		return await withSignInRecord(() => handler(request));
 	} catch (error) {
 		console.error(`auth: ${errorName(error)} at ${endpointPath(request)}`);
 		return Response.json(
@@ -308,8 +384,15 @@ export async function handleAuthRequest(request: Request): Promise<Response> {
 	}
 }
 
-/** A signed-in person and the session their request carried. */
-export type SignedIn = { user: User; session: Session };
+/**
+ * A signed-in person and the session their request carried, with how that
+ * session was made (TS-104): `code`, `google` or `microsoft`, and the Workspace
+ * domain or Entra tenant. Null on a session made before migration 0030.
+ */
+export type SignedIn = {
+	user: User;
+	session: Session & { signInMethod?: string | null; signInTenant?: string | null };
+};
 
 /**
  * The signed-in person behind a request, or `null` when the request carries no

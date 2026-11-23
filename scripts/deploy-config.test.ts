@@ -238,6 +238,40 @@ describe("scripts/deploy-config.ts --write", () => {
 		expect(set.previews.vars.OPERATOR_ICO_REFERENCE).toBe("ZA123456");
 	});
 
+	it("gives production a provider's client ID where one is set, and a preview neither (TS-104)", () => {
+		const directory = checkout();
+		const GOOGLE_CLIENT_ID = "123456789012-abcdefghijklmnop.apps.googleusercontent.com";
+		const MICROSOFT_CLIENT_ID = "33333333-3333-4333-8333-333333333333";
+
+		const { status } = deployConfig(
+			{ ...SETTINGS, GOOGLE_CLIENT_ID, MICROSOFT_CLIENT_ID },
+			"--write",
+			directory,
+		);
+		const written = readJsonc(join(directory, "wrangler.jsonc"));
+
+		expect(status).toBe(0);
+		expect(written.vars.GOOGLE_CLIENT_ID).toBe(GOOGLE_CLIENT_ID);
+		expect(written.vars.MICROSOFT_CLIENT_ID).toBe(MICROSOFT_CLIENT_ID);
+		// A secret is never a variable of a deployment.
+		expect(written.vars).not.toHaveProperty("GOOGLE_CLIENT_SECRET");
+		expect(written.vars).not.toHaveProperty("MICROSOFT_CLIENT_SECRET");
+		expect(written.previews.vars).not.toHaveProperty("GOOGLE_CLIENT_ID");
+		expect(written.previews.vars).not.toHaveProperty("MICROSOFT_CLIENT_ID");
+	});
+
+	it.each([
+		["GOOGLE_CLIENT_ID", "my-client", "not a Google client ID"],
+		["MICROSOFT_CLIENT_ID", "timesifier", "not an application ID"],
+	])("refuses %s = %j (%s)", (name, value) => {
+		const directory = checkout();
+
+		const { status, problems } = deployConfig({ ...SETTINGS, [name]: value }, "--write", directory);
+
+		expect(status).toBe(1);
+		expect(problems[2]).toMatch(new RegExp(`^  ${name}: the variable is not valid\\.`));
+	});
+
 	it("writes the file that migrates the previews' database, and it names that database alone", () => {
 		const directory = checkout();
 
@@ -283,6 +317,11 @@ describe("the committed wrangler.jsonc belongs to no deployment", () => {
 			OPERATOR_COMPANY_NUMBER: "00000000",
 			OPERATOR_REGISTERED_IN: "England and Wales",
 			OPERATOR_REGISTERED_OFFICE: "1 Example Street, Example Town, EX0 0EX",
+			// No client at Google or Microsoft, so neither is offered (TS-104).
+			GOOGLE_CLIENT_ID: "",
+			GOOGLE_CLIENT_SECRET: "",
+			MICROSOFT_CLIENT_ID: "",
+			MICROSOFT_CLIENT_SECRET: "",
 		});
 		expect(config.previews.vars.PREVIEW_HOST_SUFFIX).toBeUndefined();
 		expect(config.send_email).toEqual([{ name: "EMAIL" }]);

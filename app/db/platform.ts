@@ -320,7 +320,7 @@ export interface PlatformAccount extends PlatformAccountRow {
 	newsletter: boolean;
 	announcements: boolean;
 	organisations: { id: string; name: string; slug: string; role: string }[];
-	signIns: { id: string; device: string; createdAt: Date }[];
+	signIns: { id: string; device: string; method: string | null; createdAt: Date }[];
 	sessions: number;
 	invitations: {
 		id: string;
@@ -361,7 +361,12 @@ export async function platformAccount(
 			.where(eq(memberships.userId, id))
 			.orderBy(asc(organisations.name)),
 		db
-			.select({ id: signIns.id, device: signIns.device, createdAt: signIns.createdAt })
+			.select({
+				id: signIns.id,
+				device: signIns.device,
+				method: signIns.method,
+				createdAt: signIns.createdAt,
+			})
 			.from(signIns)
 			.where(eq(signIns.userId, id))
 			.orderBy(desc(signIns.createdAt))
@@ -547,9 +552,14 @@ export function isDeletedEmail(email: string): boolean {
 // ---------------------------------------------------------------------------
 // Sign-in history
 
-/** Records a sign-in, and the browser's kind. */
-export async function recordSignIn(database: D1Database, userId: string, device: string) {
-	await drizzle(database).insert(signIns).values({ userId, device });
+/** Records a sign-in, the browser's kind, and how it was made: `code`, `google` or `microsoft` (TS-104). */
+export async function recordSignIn(
+	database: D1Database,
+	userId: string,
+	device: string,
+	method: string | null,
+) {
+	await drizzle(database).insert(signIns).values({ userId, device, method });
 }
 
 /** Deletes sign-ins older than the `SIGN_IN_DAYS` they are kept. */

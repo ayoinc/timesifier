@@ -32,7 +32,7 @@ export function wrongCode(code: string): string {
 	return code === zeros ? `${zeros.slice(1)}1` : zeros;
 }
 
-type RequestOptions = {
+export type RequestOptions = {
 	/** The address the request is made to. Defaults to production's. */
 	origin?: string;
 	/** The value of the `Cookie` header. */
@@ -52,11 +52,14 @@ function headersFor({ origin = ORIGIN, cookie, client = CLIENT, headers }: Reque
 	};
 }
 
-/** A GET to Better Auth through the Worker's real fetch handler (workers/app.ts). */
+/**
+ * A GET to Better Auth through the Worker's real fetch handler (workers/app.ts).
+ * A redirect is the answer, not followed: a provider's callback answers with one.
+ */
 export function get(path: string, options: RequestOptions = {}): Promise<Response> {
 	const { origin = ORIGIN } = options;
 	return exports.default.fetch(
-		new Request(`${origin}/api/auth${path}`, { headers: headersFor(options) }),
+		new Request(`${origin}/api/auth${path}`, { headers: headersFor(options), redirect: "manual" }),
 	);
 }
 

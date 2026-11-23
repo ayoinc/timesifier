@@ -43,6 +43,7 @@ import {
 	NEW_ORGANISATION_SEGMENT,
 	ORGANISATION_PARAM,
 	SCHEDULES_SEGMENT,
+	SIGN_IN_SETTINGS_SEGMENT,
 } from "./shell/destinations";
 import { PICKER_MONTH_SEGMENT, TRACK_DAY_SEGMENT } from "./timesheet/views";
 
@@ -70,6 +71,7 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(MEMBERS_SEGMENT, "routes/app/members.tsx"),
 	route(INVITATIONS_SEGMENT, "routes/app/invitations.tsx"),
 	route(SCHEDULES_SEGMENT, "routes/app/schedules.tsx"),
+	route(SIGN_IN_SETTINGS_SEGMENT, "routes/app/sign-in-settings.tsx"),
 	route(REPORT_EXPORT_SEGMENT, "routes/app/reports.export.ts"),
 	route(REPORT_PEOPLE_SEGMENT, "routes/app/reports.people.ts"),
 	route(IMPORT_SEGMENT, "routes/app/integrations.import.tsx"),

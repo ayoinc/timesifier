@@ -266,6 +266,14 @@ export function schedulesPath(slug: string): string {
 	return `${organisationPath(slug)}/${SCHEDULES_SEGMENT}`;
 }
 
+/** What follows the organisation in the address of Settings › Sign-in (TS-104): a page of Workspace settings, for owners and admins. */
+export const SIGN_IN_SETTINGS_SEGMENT = `${destination("settings").segment}/sign-in`;
+
+/** The address of Settings › Sign-in of the organisation with this slug. */
+export function signInSettingsPath(slug: string): string {
+	return `${organisationPath(slug)}/${SIGN_IN_SETTINGS_SEGMENT}`;
+}
+
 /** The address of the members page of the organisation with this slug. */
 export function membersPath(slug: string): string {
 	return `${organisationPath(slug)}/${MEMBERS_SEGMENT}`;

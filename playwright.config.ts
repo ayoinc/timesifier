@@ -12,6 +12,10 @@ import { PLATFORM_OWNERS } from "./e2e/platform-owners";
 // ports: `E2E_PORT=5386 pnpm test:e2e`.
 const PORT = Number(process.env.E2E_PORT) || 5385;
 const ORIGIN = `http://localhost:${PORT}`;
+// The second server, which offers Google and Microsoft (see PROVIDERS below),
+// on a port of its own a thousand above the first.
+const PROVIDERS_PORT = PORT + 1000;
+const PROVIDERS_ORIGIN = `http://localhost:${PROVIDERS_PORT}`;
 
 // React Aria locks page scrolling differently on iOS; these tests run in WebKit
 // only. So does the test that WebKit applies React Aria's own <style> (W19).
@@ -31,6 +35,11 @@ const SETUP = /auth\.setup\.ts/;
 // other Chromium test, one at a time.
 const SEEDS_THE_DATABASE =
 	/[\\/](?:dpa-acceptance|people|projects-search|reports|usual-and-owed|zz-fixes-shots)\.spec\.ts$/;
+// The tests of company sign-in (TS-104): the pages as they are where the
+// deployment has a client at Google and at Microsoft. They run against a server
+// of their own that has both, so "Continue with Google" and "Continue with
+// Microsoft" stand on its sign-in page and on no other server's.
+const NEEDS_PROVIDERS = /[\\/]company-sign-in\.spec\.ts$/;
 // What the server under test is given. None of it is a secret: the first signs
 // cookies for this run only, the second is Cloudflare's published Turnstile
 // test secret, which passes every check, and the third makes the addresses of
@@ -85,6 +94,33 @@ function inThisPass(project: string): boolean {
 	return (project === SEEDED_PROJECT) === (PASS === "seeded");
 }
 
+// Clients at Google and Microsoft that exist nowhere (TS-104). No test follows
+// a button to the provider; a press would leave for a sign-in that cannot work.
+const PROVIDER_CLIENTS = {
+	GOOGLE_CLIENT_ID: "000000000000-browsertestsonly.apps.googleusercontent.com",
+	GOOGLE_CLIENT_SECRET: "browser-tests-only-google",
+	MICROSOFT_CLIENT_ID: "00000000-0000-4000-8000-000000000000",
+	MICROSOFT_CLIENT_SECRET: "browser-tests-only-microsoft",
+};
+// Its database, apart from the first server's: two servers writing one local
+// D1 would hold each other's lock.
+const PROVIDERS_STATE = ".wrangler/state-providers";
+
+// The second server serves the first's build once the first is up (Playwright
+// starts the servers in order, each when the one before answers), with
+// Wrangler rather than `vite preview`, which reads its variables from the one
+// build/server/.dev.vars both would share. `--var` sets the clients for this
+// server alone; the .dev.vars it also reads holds none of them.
+const START_PROVIDERS_SERVER = [
+	`pnpm exec wrangler d1 migrations apply DB --local --persist-to ${PROVIDERS_STATE}`,
+	[
+		"pnpm exec wrangler dev --config build/server/wrangler.json",
+		`--ip localhost --port ${PROVIDERS_PORT} --persist-to ${PROVIDERS_STATE}`,
+		"--show-interactive-dev-session=false --log-level warn",
+		...Object.entries(PROVIDER_CLIENTS).map(([name, value]) => `--var ${name}:${value}`),
+	].join(" "),
+].join(" && ");
+
 export default defineConfig({
 	testDir: "./e2e",
 	...(PASS === "first" ? {} : { globalTeardown: "./e2e/remove-build.ts" }),
@@ -109,7 +145,7 @@ export default defineConfig({
 			// A test of signing in starts without one: `SIGNED_OUT` in e2e/auth.ts.
 			// The session cookie is `Secure`; Chromium keeps one on http://localhost.
 			name: "chromium",
-			testIgnore: [IOS_ONLY, SEEDS_THE_DATABASE],
+			testIgnore: [IOS_ONLY, SEEDS_THE_DATABASE, NEEDS_PROVIDERS],
 			dependencies: ["setup"],
 			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
 		},
@@ -120,6 +156,13 @@ export default defineConfig({
 			dependencies: [PASS === "seeded" ? "setup" : "chromium"],
 			workers: 1,
 			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
+		},
+		{
+			// Company sign-in (TS-104), against the server that offers Google and
+			// Microsoft. Each test signs its own people in.
+			name: "providers",
+			testMatch: NEEDS_PROVIDERS,
+			use: { ...devices["Desktop Chrome"], baseURL: PROVIDERS_ORIGIN },
 		},
 		{
 			// React Aria locks page scrolling differently on iOS. Only the tests that
@@ -140,15 +183,30 @@ export default defineConfig({
 			use: { ...devices["Desktop Safari"] },
 		},
 	].filter((project) => inThisPass(project.name)),
-	webServer: {
-		command: [...(PASS === "seeded" ? [] : BUILD), ...SERVE].join(" && "),
-		url: ORIGIN,
-		env: SERVER_ENV,
-		reuseExistingServer: false,
-		timeout: 180_000,
-		// In the pipeline the server's own lines go to the job's log, so a 500 seen
-		// by a test can be read beside it; locally they would drown the results.
-		stdout: process.env.CI ? "pipe" : "ignore",
-		stderr: "pipe",
-	},
+	webServer: [
+		{
+			command: [...(PASS === "seeded" ? [] : BUILD), ...SERVE].join(" && "),
+			url: ORIGIN,
+			env: SERVER_ENV,
+			reuseExistingServer: false,
+			timeout: 180_000,
+			// In the pipeline the server's own lines go to the job's log, so a 500 seen
+			// by a test can be read beside it; locally they would drown the results.
+			stdout: process.env.CI ? "pipe" : "ignore",
+			stderr: "pipe",
+		},
+		// The seeding pass has no test of company sign-in, so it starts no second server.
+		...(PASS === "seeded"
+			? []
+			: [
+					{
+						command: START_PROVIDERS_SERVER,
+						url: PROVIDERS_ORIGIN,
+						reuseExistingServer: false,
+						timeout: 120_000,
+						stdout: process.env.CI ? ("pipe" as const) : ("ignore" as const),
+						stderr: "pipe" as const,
+					},
+				]),
+	],
 });

@@ -204,6 +204,20 @@
 			"when": 1795419380461,
 			"tag": "0029_dpa_acceptance",
 			"breakpoints": true
+		},
+		{
+			"idx": 29,
+			"version": "6",
+			"when": 1795419440461,
+			"tag": "0030_company_sign_in",
+			"breakpoints": true
+		},
+		{
+			"idx": 30,
+			"version": "6",
+			"when": 1795436657976,
+			"tag": "0031_membership_removals",
+			"breakpoints": true
 		}
 	]
 }

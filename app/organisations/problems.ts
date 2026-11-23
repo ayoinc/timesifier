@@ -36,6 +36,12 @@ export const LOGOS_NOT_DELETED = "LOGOS_NOT_DELETED";
 /** The code of an organisation not created because it did not name this version of the data processing agreement (TS-105). */
 export const DPA_NOT_ACCEPTED = "DPA_NOT_ACCEPTED";
 
+/**
+ * The code the organisations gate answers a member with when the organisation
+ * requires company sign-in and their session is not one it takes (TS-104).
+ */
+export const COMPANY_SIGN_IN_REQUIRED = "COMPANY_SIGN_IN_REQUIRED";
+
 /** The sentence for each code a person can reach from the pages. */
 const BY_CODE = new Map([
 	// The two caps of card TS-027. The first arrives with status 429, so the code
@@ -81,6 +87,10 @@ const BY_CODE = new Map([
 	["MEMBER_NOT_FOUND", "That person is no longer a member of this organisation."],
 	["INVITATION_NOT_FOUND", "That invitation is no longer waiting."],
 
+	[
+		COMPANY_SIGN_IN_REQUIRED,
+		"This organisation asks you to sign in with its company account first.",
+	],
 	[
 		RECEIPTS_NOT_DELETED,
 		"The organisation was not deleted, because not all of its receipts could be deleted. Try again to finish deleting it.",

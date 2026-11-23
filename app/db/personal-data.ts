@@ -89,6 +89,7 @@ export const STORED = [
 			},
 			{ term: "Saved reports", tables: ["saved_reports", "saved_report_shares"] },
 			{ term: "Support access", tables: ["support_grants"] },
+			{ term: "Verified domains", tables: ["organisation_domains", "membership_removals"] },
 		],
 	},
 	{

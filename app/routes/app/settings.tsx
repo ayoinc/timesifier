@@ -60,6 +60,7 @@ import { declined, done, refused } from "~/organisations/outcome.server";
 import { AS_ROLE } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows } from "~/organisations/roles";
+import { policyWords } from "~/organisations/sign-in-policy";
 import { WeekStart } from "~/periods/periods";
 import { weekStartRefusal } from "~/periods/submission.server";
 import { planStanding } from "~/plans/plans.server";
@@ -69,7 +70,13 @@ import { MoneySettings } from "~/projects/MoneySettings";
 import { organisationMoney } from "~/projects/money.server";
 import { CapHours, defaultScheduleSummary } from "~/schedules/forms";
 import { scheduleBookOf } from "~/schedules/schedules.server";
-import { APP_PATH, destination, organisationPath, schedulesPath } from "~/shell/destinations";
+import {
+	APP_PATH,
+	destination,
+	organisationPath,
+	schedulesPath,
+	signInSettingsPath,
+} from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, Section } from "~/shell/PageHeading";
 import { Day, dayOf } from "~/time/calendar";
@@ -189,6 +196,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 			trialEnded: standing.trialEnded,
 			warning: standing.warning,
 		},
+		/** How people sign in (TS-104), in a sentence; Settings › Sign-in changes it. */
+		signIn: policyWords(organisation.signIn),
 		/** Support access and wellbeing, which only owners open (TS-099). */
 		owners: isOwner
 			? {
@@ -544,6 +553,26 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 							enabled={organisation.clientsEnabled}
 							canChange={organisation.canChange}
 							onDone={setSaid}
+						/>
+					</LedgerRows>
+				</Ledger>
+			</Section>
+
+			{/* Company sign-in and the verified domains (TS-104), on a page of their own. */}
+			<Section id="sign-in" heading="Sign-in" lead={loaderData.signIn} className="max-w-200">
+				<Ledger heading="Sign-in">
+					<LedgerRows>
+						<LedgerRow
+							title={
+								<Link to={signInSettingsPath(params.organisation)} className={TEXT_LINK}>
+									Company sign-in and domains
+								</Link>
+							}
+							detail={
+								organisation.role === "owner"
+									? "Require Google or Microsoft sign-in, and verify the domains your people's addresses are at."
+									: "Require Google or Microsoft sign-in. Owners verify the organisation's domains."
+							}
 						/>
 					</LedgerRows>
 				</Ledger>

@@ -1,5 +1,11 @@
 import { isRouteErrorResponse } from "react-router";
 
+import {
+	companySignInDetails,
+	companySignInHeading,
+	companySignInOf,
+} from "~/organisations/sign-in-policy";
+
 // What an error page says (audit W14), by the status of what went wrong. The
 // root's error page and the organisation's, which is drawn inside the shell,
 // say the same: docs/design-system.md, "Shell", "When a page cannot be shown".
@@ -62,6 +68,14 @@ export function errorWords(error: unknown, where: "organisation" | "outside"): E
 		return {
 			heading: "Something went wrong on our side",
 			details: "An unexpected error occurred. Nothing you did caused it; try again in a moment.",
+		};
+	}
+	// An organisation that requires company sign-in, to a member whose session it does not take (TS-104).
+	const companySignIn = companySignInOf(error);
+	if (companySignIn) {
+		return {
+			heading: companySignInHeading(companySignIn),
+			details: companySignInDetails(companySignIn),
 		};
 	}
 	const message = messageOf(error.data);

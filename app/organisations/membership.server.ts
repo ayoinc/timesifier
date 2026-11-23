@@ -9,11 +9,13 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { createContext, data } from "react-router";
-import { getSession, type SignedIn } from "~/auth/auth.server";
+import type { SignedIn } from "~/auth/auth.server";
+import { configuredProviders } from "~/auth/providers";
 import { organisationScope, organisations } from "~/db";
 import type { Viewer } from "~/shell/destinations";
 import { managedPlaces } from "~/teams/teams.server";
 import { Role } from "./roles";
+import { admits, type CompanySignInNeeded, policyOf, type SignInPolicy } from "./sign-in-policy";
 
 /** A signed-in person, an organisation they belong to, and their role in it. */
 export type Membership = {
@@ -28,6 +30,8 @@ export type Membership = {
 		clientsEnabled: boolean;
 		/** When its logo was uploaded, for the logo's address in the band; null for no logo (TS-100). */
 		logoVersion: number | null;
+		/** Who may open its pages (TS-104): anyone signed in, or company sign-in. */
+		signIn: SignInPolicy;
 	};
 	role: Role;
 	/** Whether the person manages at least one of the organisation's teams (TS-038). */
@@ -36,31 +40,21 @@ export type Membership = {
 };
 
 /**
- * The membership of the person behind `request` in the organisation at `slug`,
- * or `null`.
+ * The membership of `user` in the organisation at `slug`, or `null`.
  *
- * `null` means only "not for you". It is the answer when nobody is signed in,
- * when no organisation has that slug, and when one has and the person is not a
- * member of it. For a signed-in person the last two also run the same three
- * queries, so neither the answer nor the work done says whether the
- * organisation exists.
+ * `null` means only "not for you": no organisation has that slug, or one has
+ * and the person is not a member of it. The same three queries run either way,
+ * so neither the answer nor the work done says whether the organisation
+ * exists: the organisation, the person's membership of it, and the places in
+ * the teams they manage, which the request keeps for `accessOf`
+ * (`managedPlaces`).
+ *
+ * It is not exported. It reads membership and nothing else: the organisation's
+ * sign-in policy is applied by `requireMembershipOf`, the only way in, so no
+ * caller can be handed a membership the policy would refuse (security review,
+ * LOW c).
  */
-export async function findMembership(request: Request, slug: string): Promise<Membership | null> {
-	const signedIn = await getSession(request);
-	return signedIn ? membershipOf(signedIn.user, slug) : null;
-}
-
-/**
- * The same, for a person a guard has already read from the request: the
- * membership of `user` in the organisation at `slug`, or `null`. The same three
- * queries run whether or not the organisation exists: the organisation, the
- * person's membership of it, and the places in the teams they manage, which
- * the request keeps for `accessOf` (`managedPlaces`).
- */
-export async function membershipOf(
-	user: SignedIn["user"],
-	slug: string,
-): Promise<Membership | null> {
+async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membership | null> {
 	const [organisation] = await drizzle(env.DB)
 		.select({
 			id: organisations.id,
@@ -70,6 +64,9 @@ export async function membershipOf(
 			weekStartsOn: organisations.weekStartsOn,
 			clientsEnabled: organisations.clientsEnabled,
 			logoVersion: organisations.brandLogoVersion,
+			signInPolicy: organisations.signInPolicy,
+			signInProvider: organisations.signInProvider,
+			signInTenant: organisations.signInTenant,
 		})
 		.from(organisations)
 		.where(eq(organisations.slug, slug))
@@ -85,23 +82,18 @@ export async function membershipOf(
 	// A role this application does not know grants nothing.
 	const role = Role.safeParse(membership?.role);
 	if (!organisation || !role.success) return null;
-	return { organisation, role: role.data, managesTeams: managed.length > 0, user };
+	const { signInPolicy, signInProvider, signInTenant, ...rest } = organisation;
+	return {
+		organisation: { ...rest, signIn: policyOf({ signInPolicy, signInProvider, signInTenant }) },
+		role: role.data,
+		managesTeams: managed.length > 0,
+		user,
+	};
 }
 
 /** What decides the destinations a member is shown (`app/shell/destinations.ts`). */
 export function viewerOf({ role, managesTeams, organisation }: Membership): Viewer {
 	return { role, managesTeams, clientsEnabled: organisation.clientsEnabled };
-}
-
-/**
- * The same as `findMembership`, for a loader, an action or a middleware: where
- * that returns `null`, this throws React Router's 404, which is identical for
- * an organisation that does not exist and for one the person does not belong to.
- */
-export async function requireMembership(request: Request, slug: string): Promise<Membership> {
-	const membership = await findMembership(request, slug);
-	if (!membership) throw notFound();
-	return membership;
 }
 
 /**
@@ -113,16 +105,49 @@ export async function requireMembership(request: Request, slug: string): Promise
 export const membershipContext = createContext<Membership>();
 
 /**
- * `requireMembership` for the organisation layout, which stands behind the
- * session guard and is handed the person the guard read. It throws the same 404.
+ * The membership of the person and session a guard read from the request, for
+ * the organisation layout, which stands behind the session guard. Where there
+ * is none it throws React Router's 404, which is identical for an organisation
+ * that does not exist and for one the person does not belong to. Then the
+ * organisation's sign-in policy (TS-104 slice 104b): a member whose session it
+ * does not take, owners apart, gets `companySignInNeeded`. Membership is
+ * decided first, so the policy, and the organisation's name with it, is told
+ * to its members alone.
  */
 export async function requireMembershipOf(
-	user: SignedIn["user"],
+	{ user, session }: SignedIn,
 	slug: string,
 ): Promise<Membership> {
 	const membership = await membershipOf(user, slug);
 	if (!membership) throw notFound();
+	if (!admits(membership.organisation.signIn, membership.role, session)) {
+		throw companySignInNeeded(membership.organisation.name, membership.organisation.signIn);
+	}
 	return membership;
+}
+
+/**
+ * The answer to a member whose session the organisation's policy does not
+ * take: 403, with what the organisation layout's error page needs to say
+ * "Acme asks you to sign in with Microsoft" and show the one button.
+ */
+export function companySignInNeeded(organisation: string, policy: SignInPolicy) {
+	if (policy.kind === "any")
+		throw new Error("An organisation that requires nothing turned a member away");
+	return data<CompanySignInNeeded>(
+		{
+			companySignIn:
+				policy.kind === "locked"
+					? { organisation, provider: null, tenant: null, offered: false }
+					: {
+							organisation,
+							provider: policy.provider,
+							tenant: policy.tenant,
+							offered: configuredProviders(env).includes(policy.provider),
+						},
+		},
+		{ status: 403 },
+	);
 }
 
 /**

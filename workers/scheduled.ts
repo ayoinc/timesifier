@@ -3,6 +3,7 @@ import { platformData } from "~/db";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
 import { runBillingSchedule } from "~/invoices/schedule.server";
 import { runAutoLock, runLockReach } from "~/locks/locks.server";
+import { recheckDomains } from "~/organisations/domains.server";
 import { sendWaitingMail } from "~/platform/mail.server";
 
 /**
@@ -16,7 +17,9 @@ import { sendWaitingMail } from "~/platform/mail.server";
  *   and overdue invoices are reminded (TS-074, TS-078).
  * - Every day at 03:17 UTC: rows past their retention are deleted: activity
  *   records after 730 days (TS-072), sign-ins after 90 (TS-099). TS-033 adds
- *   the other tables here.
+ *   the other tables here. Every organisation's domains are looked up again
+ *   (TS-104): the owners are told once after 7 days without the record, and
+ *   the domain is unverified after 14.
  */
 
 /** The triggers, as wrangler.jsonc names them. */
@@ -38,5 +41,6 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 	if (controller.cron === DAILY) {
 		await deleteExpiredActivity(env.DB, new Date(now));
 		await platformData.deleteOldSignIns(env.DB, new Date(now));
+		await recheckDomains(new Date(now));
 	}
 }
