@@ -1,7 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { destinationPath, organisationPath } from "../app/shell/destinations";
-import { formatDayWithYear } from "../app/time/format";
 import { newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
@@ -79,9 +78,20 @@ async function allowOvertime(page: Page, slug: string, from: string) {
 	await expect(status(page)).toHaveText(savedFrom(from));
 }
 
-/** What saving the rules says when they change from `from` and put no day over. */
-const savedFrom = (from: string) =>
-	`The timesheet rules are saved. They apply from ${formatDayWithYear(from)}.`;
+/** What saving the rules says when they change from `from` and put no day over: "… They apply from Monday 30 November 2026." */
+function savedFrom(from: string) {
+	const parts = new Intl.DateTimeFormat("en-GB", {
+		timeZone: "UTC",
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	}).formatToParts(new Date(`${from}T00:00:00Z`));
+	const part = (type: Intl.DateTimeFormatPartTypes) =>
+		parts.find((p) => p.type === type)?.value ?? "";
+	const day = `${part("weekday")} ${part("day")} ${part("month")} ${part("year")}`;
+	return `The timesheet rules are saved. They apply from ${day}.`;
+}
 
 /** Tracks `hours` on `day` through Track time on its Day view, in the field named `field`. */
 async function track(page: Page, slug: string, day: string, field: string, hours: string) {
