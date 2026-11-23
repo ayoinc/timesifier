@@ -1,8 +1,14 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { deploymentOperator } from "~/landing/operator";
-import { PRIVACY_EMAIL, PRIVACY_PATH, TERMS_PATH } from "~/landing/Site";
-import { SIGN_IN_PATH } from "~/routes/auth/paths";
+import {
+	PRICING_PATH,
+	PRIVACY_EMAIL,
+	PRIVACY_PATH,
+	PUBLIC_PAGES,
+	TERMS_PATH,
+} from "~/landing/Site";
+import { NOTICE_DAYS, PLAN_DETAILS, PLANS, priceInWords } from "~/plans/plans";
 
 import { ORIGIN } from "./auth/harness";
 
@@ -51,7 +57,7 @@ function operatorSentences(): string {
 	return `Timesifier is operated by ${name}, a company registered in ${registeredIn} with company number ${companyNumber}. Its registered office is ${registeredOffice}.`;
 }
 
-it.each(["/", SIGN_IN_PATH, PRIVACY_PATH, TERMS_PATH])(
+it.each(PUBLIC_PAGES)(
 	"the foot of %s names the company that runs this deployment, its number, where it is registered and its registered office",
 	async (path) => {
 		expect(wordsOf(await page(path), "footer")).toContain(operatorSentences());
@@ -76,4 +82,22 @@ it("the home page links to both", async () => {
 	const html = await page("/");
 	expect(html).toContain(`href="${PRIVACY_PATH}"`);
 	expect(html).toContain(`href="${TERMS_PATH}"`);
+});
+
+it("the terms' Price section says what the pricing page says, from the same prices", async () => {
+	const terms = wordsOf(await page(TERMS_PATH), "main");
+	const pricing = wordsOf(await page(PRICING_PATH), "main");
+
+	expect(terms).toContain("Timesifier is free until payment opens.");
+	expect(pricing).toContain("Free until payment opens.");
+	for (const plan of PLANS) {
+		const { label, seats } = PLAN_DETAILS[plan];
+		expect(terms, plan).toContain(`${label}, up to ${seats} people ${priceInWords(plan)}.`);
+		expect(pricing, plan).toContain(`${label} Up to ${seats} people`);
+	}
+	expect(terms).toContain("excluding VAT");
+	expect(pricing).toContain("exclude VAT");
+	for (const text of [terms, pricing]) {
+		expect(text).toContain(`told at least ${NOTICE_DAYS} days before its first charge`);
+	}
 });

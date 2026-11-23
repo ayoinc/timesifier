@@ -149,6 +149,18 @@ const ROUTES: Record<string, ApiRoute> = {
 	invoices: { scope: { read: "invoices:read" }, collection: { GET: listInvoices } },
 };
 
+/**
+ * Every operation the API answers, as `docs/openapi.yaml` writes it: `GET /me`,
+ * `PATCH /time_entries/{id}`. test/integrations/api.test.ts holds the
+ * description to this list, both ways.
+ */
+export function apiOperations(): string[] {
+	return Object.entries(ROUTES).flatMap(([resource, { collection = {}, item = {} }]) => [
+		...Object.keys(collection).map((method) => `${method} /${resource}`),
+		...Object.keys(item).map((method) => `${method} /${resource}/{id}`),
+	]);
+}
+
 // ── Reading the query ────────────────────────────────────────────────────────
 
 const PageQuery = z.object({

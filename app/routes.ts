@@ -10,6 +10,7 @@ import {
 	FEED_PATH,
 	IMPORT_SEGMENT,
 	INVOICES_EXPORT_SEGMENT,
+	OPENAPI_PATH,
 } from "./integrations/paths";
 import { BILLING_SEGMENTS, ESTIMATE_LINK_SEGMENT } from "./invoices/paths";
 import {
@@ -155,6 +156,12 @@ export default [
 	route("sign-in", "routes/sign-in.tsx"),
 	route("privacy", "routes/privacy.tsx"),
 	route("terms", "routes/terms.tsx"),
+	// What a buyer reads before signing in (TS-106).
+	route("features", "routes/features.tsx"),
+	route("pricing", "routes/pricing.tsx"),
+	route("integrations", "routes/integrations.tsx"),
+	route("developers/api", "routes/developers.api.tsx"),
+	route("contact", "routes/contact.tsx"),
 	// For search engines: robots.txt names the sitemap, which lists the pages above.
 	route("robots.txt", "routes/robots.ts"),
 	route("sitemap.xml", "routes/sitemap.ts"),
@@ -168,7 +175,9 @@ export default [
 	route("invitations/:id", "routes/invitations.$id.tsx"),
 	route("api/auth/*", "routes/api.auth.$.ts"),
 	// The public API (TS-081) and calendar feeds (TS-089): a token, not a
-	// session, says whose they are, so they sit outside `/app`.
+	// session, says whose they are, so they sit outside `/app`. The API's
+	// description is the one address under it anyone may read (TS-106).
+	route(OPENAPI_PATH.slice(1), "routes/api.v1.openapi.ts"),
 	route(`${API_PATH.slice(1)}/*`, "routes/api.v1.$.ts"),
 	route(`${FEED_PATH.slice(1)}/:token`, "routes/calendar.$token.ts"),
 	...(designRoute ? [route("design", "routes/design.tsx")] : []),

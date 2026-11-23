@@ -10,6 +10,7 @@ import {
 	rootOrigin,
 	TERMS_PATH,
 } from "~/landing/Site";
+import { NOTICE_DAYS, PLAN_DETAILS, PLANS, priceInWords } from "~/plans/plans";
 
 import type { Route } from "./+types/terms";
 
@@ -34,7 +35,7 @@ export function loader() {
 }
 
 /** This version of the terms. */
-const VERSION = { date: "2026-11-14", inWords: "14 November 2026" };
+const VERSION = { date: "2026-11-23", inWords: "23 November 2026" };
 
 export default function Terms({ loaderData: { operator } }: Route.ComponentProps) {
 	return (
@@ -139,8 +140,24 @@ export default function Terms({ loaderData: { operator } }: Route.ComponentProps
 
 			<DocumentSection id="price" title="Price">
 				<p>
-					Timesifier costs nothing today. If that changes, these terms will say so first, with a new
-					date.
+					Timesifier is free until payment opens. When it opens, an organisation pays by the number
+					of people it holds, members and pending invitations together, at these prices in pounds
+					sterling, excluding VAT:
+				</p>
+				<Rows>
+					{PLANS.map((plan) => (
+						<Row
+							key={plan}
+							term={`${PLAN_DETAILS[plan].label}, up to ${PLAN_DETAILS[plan].seats} people`}
+						>
+							{priceInWords(plan)}.
+						</Row>
+					))}
+				</Rows>
+				<p>
+					Every plan has every part of Timesifier. VAT is added at the rate in force. Nothing is
+					charged before payment opens, and an organisation is told at least {NOTICE_DAYS} days
+					before its first charge. If the prices change, these terms say so first, with a new date.
 				</p>
 			</DocumentSection>
 

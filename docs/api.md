@@ -1,6 +1,8 @@
 # The Timesifier API
 
-Cards TS-081 (the API), TS-087 (webhooks) and TS-089 (calendar feeds). The same API is described for tools in [`openapi.yaml`](openapi.yaml). The code is `app/integrations/api.server.ts`.
+<!-- Cards TS-081 (the API), TS-087 (webhooks) and TS-089 (calendar feeds). The code is `app/integrations/api.server.ts`. This file is published as it is at /developers/api (TS-106, app/routes/developers.api.tsx), so it is written for the people who use the API; a comment like this one is left off the page. -->
+
+The same API is described for tools in [`openapi.yaml`](openapi.yaml), which anyone may download without a token.
 
 ## Tokens
 

@@ -49,6 +49,9 @@ export function calendarFeedsPath(slug: string): string {
 /** Where the public API answers: `/api/v1/<resource>`. */
 export const API_PATH = "/api/v1";
 
+/** The API's description for tools, served to anyone: `docs/openapi.yaml` (TS-106). */
+export const OPENAPI_PATH = `${API_PATH}/openapi.yaml`;
+
 /** Where a calendar feed answers, without the secret that follows. */
 export const FEED_PATH = "/calendar";
 
