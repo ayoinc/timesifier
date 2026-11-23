@@ -1,10 +1,17 @@
 import { env } from "cloudflare:workers";
-import { and, asc, gt, gte, lte, type SQL, sql } from "drizzle-orm";
+import { and, asc, gte, lte, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
-import { among, type OrganisationScope, organisationScope, users } from "~/db";
+import {
+	among,
+	type Filter,
+	type OrganisationScope,
+	organisationScope,
+	type ScopedAccessor,
+	users,
+} from "~/db";
 import { expectedMinutes, leaveHalfDays, leaveMinutes } from "~/leave/days";
 import { calendarOf, leaveContext, shortNoticeCounts } from "~/leave/leave.server";
 import { type Access, type TimeScope, timeScopeOf } from "~/organisations/access";
@@ -22,7 +29,7 @@ import {
 	type ReportQuery,
 	rangeDays,
 } from "./query";
-import { type ReportEntry, type Row, rowOf } from "./report";
+import { type Piece, type ReportEntry, type Row, rowOf } from "./report";
 
 /**
  * A report read from the database (TS-014a, TS-014b). Whose time it holds is
@@ -32,8 +39,11 @@ import { type ReportEntry, type Row, rowOf } from "./report";
  * through the organisation's scope.
  */
 
-/** How many entries one query reads. An export streams page after page, keyed on `id`. */
-export const ENTRY_PAGE_SIZE = 200;
+/**
+ * How many entries one page of an export reads (TS-113): a year of a company
+ * of 300 is about a hundred pages, each one query through the index.
+ */
+export const EXPORT_PAGE_SIZE = 2_000;
 
 /** A person a report can be narrowed to, by the name lists show them by (`shownName`). */
 export interface Person {
@@ -186,16 +196,49 @@ async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {
 	return new Map([...accounts].map(([id, account]) => [id, nameOrEmail(account)]));
 }
 
+/** The table of time entries, as the organisation's scope reaches it. */
+type EntryTable = OrganisationScope["timeEntries"] extends ScopedAccessor<infer T> ? T : never;
+
 /**
- * The entries of `request` whose stored day is in its days, page by page in
- * the order of their ids (docs/decisions.md entries 26 and 39). Each page is one query of at most
- * `pageSize` entries after the last id of the one before.
+ * The entries a report holds: those whose stored day is in its days
+ * (docs/decisions.md entries 26 and 39), of the people it reads, with its tag
+ * when it has one. The pages of its list and export and its sums all read
+ * through this one filter, so they hold the same entries.
+ */
+export function entriesIn(
+	request: Pick<ReportRequest, "scope" | "days" | "people" | "tag">,
+): Filter<EntryTable> {
+	const { scope, days, people, tag } = request;
+	return (e) =>
+		and(
+			gte(e.spentOn, days.first),
+			lte(e.spentOn, days.last),
+			people.everyone ? undefined : among(e.userId, people.people),
+			tag === undefined ? undefined : taggedWith(scope.organisationId, e.id, e.projectId, tag),
+		);
+}
+
+/** Where a page of entries ends: the next page starts after it. */
+interface PageEnd {
+	day: Day;
+	startedAt: Date;
+	id: string;
+}
+
+/**
+ * The entries of `request`, page by page in the order of their day, their
+ * start and their id. Each page is one query of at most `pageSize` entries
+ * that starts after the last of the page before (keyset paging, TS-113): it
+ * reads its entries through the index on `(organisation_id, spent_on,
+ * started_at, id)` from where the last page ended, never skipping rows by
+ * offset, and nothing is kept from one page to the next but names.
  */
 export async function* entryPages(
 	request: Pick<ReportRequest, "scope" | "days" | "people" | "tag">,
-	pageSize = ENTRY_PAGE_SIZE,
+	pageSize = EXPORT_PAGE_SIZE,
 ): AsyncGenerator<ReportEntry[]> {
-	const { scope, people, tag } = request;
+	const { scope } = request;
+	const within = entriesIn(request);
 	const [projects, clients, tasks] = await Promise.all([
 		scope.projects.select(),
 		scope.clients.select(),
@@ -206,21 +249,21 @@ export async function* entryPages(
 	const taskNames = new Map(tasks.map((t) => [t.id, t.name]));
 	const names = new Map<string, string>();
 
-	let after: string | undefined;
+	let after: PageEnd | undefined;
 	for (;;) {
+		const last = after;
 		const rows = await scope.timeEntries.select(
 			(e) =>
 				and(
-					after === undefined ? undefined : gt(e.id, after),
-					gte(e.spentOn, request.days.first),
-					lte(e.spentOn, request.days.last),
-					people.everyone ? undefined : among(e.userId, people.people),
-					tag === undefined ? undefined : taggedWith(scope.organisationId, e.id, e.projectId, tag),
+					last === undefined
+						? undefined
+						: sql`(${e.spentOn}, ${e.startedAt}, ${e.id}) > (${last.day}, ${last.startedAt.getTime()}, ${last.id})`,
+					within(e),
 				),
-			{ orderBy: (e) => [asc(e.id)], limit: pageSize },
+			{ orderBy: (e) => [asc(e.spentOn), asc(e.startedAt), asc(e.id)], limit: pageSize },
 		);
 		const unnamed = [...new Set(rows.map((r) => r.userId))].filter((id) => !names.has(id));
-		for (const [id, name] of await namesOf(unnamed)) names.set(id, name);
+		if (unnamed.length > 0) for (const [id, name] of await namesOf(unnamed)) names.set(id, name);
 
 		yield rows.map((row) => {
 			const project = projectsById.get(row.projectId);
@@ -243,22 +286,21 @@ export async function* entryPages(
 				overtime: row.overtime,
 			};
 		});
-		const last = rows.at(-1);
-		if (rows.length < pageSize || !last) return;
-		after = last.id;
+		const end = rows.at(-1);
+		if (rows.length < pageSize || !end) return;
+		after = { day: end.spentOn, startedAt: end.startedAt, id: end.id };
 	}
 }
 
-/** Every row of the report, in the order of the entries' ids. */
-export async function rowsOfReport(request: ReportRequest): Promise<Row[]> {
-	const rows: Row[] = [];
-	for await (const page of entryPages(request)) {
-		for (const entry of page) {
-			const row = rowOf(entry, request.days, request.now);
-			if (row) rows.push(row);
-		}
-	}
-	return rows;
+/** The first `limit` rows of the report, in the order of their day, start and id: what its page lists. */
+export async function firstRowsOf(request: ReportRequest, limit: number): Promise<Row[]> {
+	const pages = entryPages(request, limit);
+	const first = await pages.next();
+	await pages.return(undefined);
+	return (first.done ? [] : first.value).flatMap((entry) => {
+		const row = rowOf(entry, request.days, request.now);
+		return row ? [row] : [];
+	});
 }
 
 /** One person's line in a report: the time they worked, the time expected of them, and their leave (TS-061). */
@@ -282,13 +324,13 @@ export interface PersonLine {
 
 /**
  * Each person the report holds, with what they worked, what was expected of
- * them and their leave over its days. Worked time comes from `rows`, each its
- * whole minutes, so it adds up as the report's totals do; leave is read beside
- * it and never added to it.
+ * them and their leave over its days. Worked time comes from `pieces`, the
+ * report's sums (`sumsOf`), each its entries' whole minutes, so it adds up as
+ * the report's totals do; leave is read beside it and never added to it.
  */
 export async function peopleOfReport(
 	request: ReportRequest,
-	rows: readonly Row[],
+	pieces: readonly Piece[],
 ): Promise<PersonLine[]> {
 	const { people, choices, days, scope } = request;
 	const listed = people.everyone ? choices : choices.filter((c) => people.people.includes(c.id));
@@ -301,7 +343,7 @@ export async function peopleOfReport(
 	const range = daysFrom(days.first, days.last);
 	const worked = new Map<string, number>();
 	const overtime = new Map<string, number>();
-	for (const row of rows) {
+	for (const row of pieces) {
 		const { userId } = row.entry;
 		worked.set(userId, (worked.get(userId) ?? 0) + row.minutes * 60);
 		if (row.entry.overtime) overtime.set(userId, (overtime.get(userId) ?? 0) + row.minutes * 60);

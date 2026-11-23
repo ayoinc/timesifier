@@ -8,6 +8,7 @@ import { Checkbox } from "~/components/Checkbox";
 import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
+import { Pager } from "~/components/Pager";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
@@ -15,6 +16,16 @@ import { type OrganisationScope, organisationScope } from "~/db";
 import { dayLabel as leaveDayLabel, personStatusLabel } from "~/leave/days";
 import { leaveOfPeople } from "~/leave/leave.server";
 import { RECORD_NAME_MAX_LENGTH, RecordName } from "~/lib/names";
+import {
+	FILTER_PARAM,
+	filterOf,
+	matchingPeople,
+	PAGE_PARAM,
+	PAGE_SIZE,
+	pageNumberOf,
+	pageOf,
+	queryOf,
+} from "~/lib/paging";
 import { parseRequest } from "~/lib/validate";
 import { isAdministrator } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
@@ -41,7 +52,7 @@ import {
 	teamsWithMembers,
 } from "~/teams/teams.server";
 import { viewedPeriod } from "~/teams/viewed-period.server";
-import { personWeek, teamWeek } from "~/teams/week.server";
+import { personWeek, teamWeek, weekTotal } from "~/teams/week.server";
 import {
 	dayLabel,
 	hours,
@@ -65,7 +76,8 @@ import { useOrganisation } from "./useOrganisation";
 // arrows to earlier ones, the period's total above them and a filter by name in
 // `?q=` (TS-058), and `?person=` opens one person's week to read. Overtime is
 // shown apart from regular time, "7:30 + 1:00 overtime", and each entry of it
-// is marked Overtime (TS-095).
+// is marked Overtime (TS-095). It lists 50 people a page, `?page=` past the
+// first (TS-113).
 // `?show=teams` shows the teams, which owners and admins create, rename and
 // delete, fill and give managers. Members and Invitations are pages of their own.
 
@@ -73,8 +85,6 @@ const { label } = destination("team");
 
 /** The query that opens one person's week. */
 const PERSON_PARAM = "person";
-/** The query that narrows This week to the people whose name or address holds it. */
-const FILTER_PARAM = "q";
 
 export function meta({ loaderData }: Route.MetaArgs) {
 	const title =
@@ -163,16 +173,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		};
 	}
 
-	// The filter narrows the people before anybody's time is read.
-	const filter = (url.searchParams.get(FILTER_PARAM) ?? "").trim().slice(0, RECORD_NAME_MAX_LENGTH);
-	const key = filter.toLocaleLowerCase("en");
-	const shown = people.filter(
-		(p) =>
-			p.name.toLocaleLowerCase("en").includes(key) || p.email.toLocaleLowerCase("en").includes(key),
-	);
-	const [listed, schedules] = await Promise.all([
+	// The filter narrows the people, and the page takes 50 of them, before
+	// anybody's time is read (TS-113): only theirs is, and past one page the
+	// total of all of them is one sum.
+	const filter = filterOf(url.searchParams);
+	const matching = matchingPeople(people, filter);
+	const page = pageOf(matching, pageNumberOf(url.searchParams));
+	const shown = page.items;
+	const [listed, schedules, sum] = await Promise.all([
 		teamWeek(scope, shown, viewed.period, now),
 		schedulesOfPeople(scope, shown, viewed.period.startsOn, now),
+		page.pages === 1 ? null : weekTotal(scope, matching, viewed.period, now),
 	]);
 	const leave = await leaveOfPeople(
 		scope,
@@ -183,6 +194,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		now,
 		new Set(listed.filter((p) => p.running).map((p) => p.id)),
 	);
+	const total = sum ?? {
+		seconds: listed.reduce((all, p) => all + p.seconds, 0),
+		overtimeSeconds: listed.reduce((all, p) => all + p.overtimeSeconds, 0),
+	};
 	const isCurrent = viewed.period.startsOn === viewed.current.startsOn;
 	const addresses = new Map(shown.map((p) => [p.id, p.address]));
 	return {
@@ -190,6 +205,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		week,
 		filter,
 		everyone: people.length,
+		page: { number: page.number, pages: page.pages, total: page.total, first: page.first },
+		total: {
+			seconds: total.seconds,
+			split: regularAndOvertime(total.seconds, total.overtimeSeconds),
+		},
 		people: listed.map((p) => {
 			const theirs = leave.get(p.id);
 			const address = addresses.get(p.id) ?? null;
@@ -358,13 +378,16 @@ function WeekStepper({ week, extra = "" }: { week: WeekData["week"]; extra?: str
 
 function ThisWeek({ data }: { data: WeekData }) {
 	const organisation = useOrganisation();
-	const { week, people, filter, everyone } = data;
-	const total = people.reduce((sum, p) => sum + p.seconds, 0);
-	const totalSplit = regularAndOvertime(
-		total,
-		people.reduce((sum, p) => sum + p.overtimeSeconds, 0),
-	);
+	const { week, people, filter, everyone, page, total } = data;
 	const thisWeek = `?${WEEK_PARAM}=${week.period.startsOn}`;
+	/** The address of page `number` of this week, the filter kept. */
+	const pageAt = (number: number) =>
+		queryOf({
+			[WEEK_PARAM]: week.period.startsOn,
+			[FILTER_PARAM]: filter,
+			[PAGE_PARAM]: number > 1 ? number : null,
+		});
+	const totalLabel = filter === "" ? "Week's total" : `Total for “${filter}”`;
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
@@ -372,7 +395,9 @@ function ThisWeek({ data }: { data: WeekData }) {
 			<TeamTabs slug={organisation.slug} current="week" />
 			<WeekStepper
 				week={week}
-				extra={filter === "" ? "" : `&${FILTER_PARAM}=${encodeURIComponent(filter)}`}
+				extra={`${filter === "" ? "" : `&${FILTER_PARAM}=${encodeURIComponent(filter)}`}${
+					page.number > 1 ? `&${PAGE_PARAM}=${page.number}` : ""
+				}`}
 			/>
 			{everyone === 0 ? (
 				<EmptySheet heading={week.label}>
@@ -400,7 +425,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 								note={
 									filter === ""
 										? `${everyone} ${everyone === 1 ? "person" : "people"}`
-										: `${people.length} of ${everyone}`
+										: `${page.total} of ${everyone}`
 								}
 							>
 								<LedgerRows label="People">
@@ -449,21 +474,34 @@ function ThisWeek({ data }: { data: WeekData }) {
 										/>
 									))}
 								</LedgerRows>
-								{/* The week's total, of the people listed above it. */}
+								{/* The week's total, of everyone the filter keeps: past one page, more than are listed. */}
 								<LedgerTotal
-									label={filter === "" ? "Week's total" : `Total for “${filter}”`}
+									label={page.pages > 1 ? `${totalLabel}, all ${page.total}` : totalLabel}
 									value={
 										<>
-											{hours(total)}
-											{totalSplit && (
+											{hours(total.seconds)}
+											{total.split && (
 												<span className="block text-body-medium text-on-surface-variant">
-													{totalSplit}
+													{total.split}
 												</span>
 											)}
 										</>
 									}
 								/>
 							</Ledger>
+							{page.pages > 1 && (
+								<div className="mt-4">
+									<Pager
+										label="Pages of people"
+										first={page.first}
+										shown={people.length}
+										total={page.total}
+										size={PAGE_SIZE}
+										previous={page.number > 1 ? pageAt(page.number - 1) : null}
+										next={page.number < page.pages ? pageAt(page.number + 1) : null}
+									/>
+								</div>
+							)}
 						</div>
 					)}
 				</>

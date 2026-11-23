@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, eq, gt, or } from "drizzle-orm";
+import { asc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { among, type OrganisationScope, organisationScope, users } from "~/db";
@@ -32,7 +32,13 @@ export const EXPORT_COLUMNS = [
 	"Overtime",
 ] as const;
 
-const PAGE = 500;
+/**
+ * Entries a page. Each page is one statement that starts after the last row
+ * of the one before, through the index on `(organisation_id, started_at, id)`
+ * (TS-113, decision 58), so a year of a 300-person organisation is about a
+ * hundred statements and nothing is held but the page being written.
+ */
+export const EXPORT_PAGE = 2_000;
 
 /** What the rows name, by id. */
 interface Names {
@@ -81,10 +87,8 @@ async function* chunks(
 		const last = after;
 		const entries = await scope.timeEntries.select(
 			(e) =>
-				last
-					? or(gt(e.startedAt, last.at), and(eq(e.startedAt, last.at), gt(e.id, last.id)))
-					: undefined,
-			{ orderBy: (e) => [asc(e.startedAt), asc(e.id)], limit: PAGE },
+				last ? sql`(${e.startedAt}, ${e.id}) > (${last.at.getTime()}, ${last.id})` : undefined,
+			{ orderBy: (e) => [asc(e.startedAt), asc(e.id)], limit: EXPORT_PAGE },
 		);
 		if (entries.length === 0) return;
 		let chunk = "";
@@ -109,7 +113,7 @@ async function* chunks(
 		yield chunk;
 		const end = entries.at(-1);
 		if (end) after = { at: end.startedAt, id: end.id };
-		if (entries.length < PAGE) return;
+		if (entries.length < EXPORT_PAGE) return;
 	}
 }
 

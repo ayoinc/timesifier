@@ -9,7 +9,9 @@ import type { Membership } from "./membership.server";
 /**
  * What the rules in `access.ts` take, for the person behind `membership`,
  * read from the database on this request. A person who manages no team costs
- * no query beyond the membership's own.
+ * no query beyond the membership's own, and nor does a manager after the
+ * first: the places in their teams are read once a request (`managedPlaces`),
+ * with the membership.
  */
 export async function accessOf({
 	user,

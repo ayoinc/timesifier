@@ -11,3 +11,11 @@ export const REPORT_EXPORT_SEGMENT = `${destination("reports").segment}/export`;
 export function reportExportPath(slug: string, search: string): string {
 	return `${destinationPath(slug, "reports")}/export${search}`;
 }
+
+/** What follows the organisation in the address of a Time report's people, read when a group or the People section is opened. */
+export const REPORT_PEOPLE_SEGMENT = `${destination("reports").segment}/people`;
+
+/** The people of the report a page shows, at the same query; `in` names a group. */
+export function reportPeoplePath(slug: string, search: string): string {
+	return `${destinationPath(slug, "reports")}/people${search}`;
+}

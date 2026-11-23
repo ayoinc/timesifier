@@ -69,10 +69,20 @@ export interface LedgerRowProps {
 	aside?: ReactNode;
 	/** What can be done to the row, at its end: one text button, or a menu. */
 	action?: ReactNode;
+	/** What opens under the row, across its width: a group's people. */
+	children?: ReactNode;
 	className?: string;
 }
 
-export function LedgerRow({ title, detail, value, aside, action, className }: LedgerRowProps) {
+export function LedgerRow({
+	title,
+	detail,
+	value,
+	aside,
+	action,
+	children,
+	className,
+}: LedgerRowProps) {
 	return (
 		<li className={cx("flex flex-wrap items-baseline gap-x-4 py-3", className)}>
 			<span className="min-w-0 flex-1">
@@ -86,6 +96,7 @@ export function LedgerRow({ title, detail, value, aside, action, className }: Le
 				</span>
 			)}
 			{action && <span className="flex shrink-0 items-center gap-2 self-center">{action}</span>}
+			{children && <div className="basis-full">{children}</div>}
 		</li>
 	);
 }

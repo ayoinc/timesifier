@@ -1,0 +1,789 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`a budget's spend > over a month false, counting non-billable time false, is what it was 1`] = `
+{
+  "fees": {
+    "Build": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 1981,
+        "remaining": -232259,
+        "spent": 244604,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 2383,
+        "remaining": -281905,
+        "spent": 294250,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 0,
+        "remaining": 12345,
+        "spent": 0,
+      },
+    },
+    "Site": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 5994,
+        "remaining": -727698,
+        "spent": 740043,
+      },
+    },
+  },
+  "hours": {
+    "Build": {
+      "amount": 1500,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "task_hours",
+      "lines": [
+        {
+          "amount": 600,
+          "group": "task Design",
+          "status": {
+            "over": true,
+            "percent": 178,
+            "remaining": -472,
+            "spent": 1072,
+          },
+        },
+        {
+          "amount": 900,
+          "group": "task Code",
+          "status": {
+            "over": true,
+            "percent": 109,
+            "remaining": -84,
+            "spent": 984,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 137,
+        "remaining": -556,
+        "spent": 2056,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 28,
+        "remaining": 8829,
+        "spent": 3516,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 0,
+        "remaining": 12345,
+        "spent": 0,
+      },
+    },
+    "Site": {
+      "amount": 2350,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "person_hours",
+      "lines": [
+        {
+          "amount": 2000,
+          "group": "person Linus Torvalds",
+          "status": {
+            "over": true,
+            "percent": 117,
+            "remaining": -344,
+            "spent": 2344,
+          },
+        },
+        {
+          "amount": 300,
+          "group": "person Mallory Mallard",
+          "status": {
+            "over": true,
+            "percent": 254,
+            "remaining": -464,
+            "spent": 764,
+          },
+        },
+        {
+          "amount": 50,
+          "group": "person Hedy Lamarr",
+          "status": {
+            "over": true,
+            "percent": 3148,
+            "remaining": -1524,
+            "spent": 1574,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 199,
+        "remaining": -2334,
+        "spent": 4684,
+      },
+    },
+  },
+}
+`;
+
+exports[`a budget's spend > over a month false, counting non-billable time true, is what it was 1`] = `
+{
+  "fees": {
+    "Build": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 1981,
+        "remaining": -232259,
+        "spent": 244604,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 2383,
+        "remaining": -281905,
+        "spent": 294250,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 0,
+        "remaining": 12345,
+        "spent": 0,
+      },
+    },
+    "Site": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 5994,
+        "remaining": -727698,
+        "spent": 740043,
+      },
+    },
+  },
+  "hours": {
+    "Build": {
+      "amount": 1500,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "task_hours",
+      "lines": [
+        {
+          "amount": 600,
+          "group": "task Design",
+          "status": {
+            "over": true,
+            "percent": 178,
+            "remaining": -472,
+            "spent": 1072,
+          },
+        },
+        {
+          "amount": 900,
+          "group": "task Code",
+          "status": {
+            "over": true,
+            "percent": 109,
+            "remaining": -84,
+            "spent": 984,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 137,
+        "remaining": -556,
+        "spent": 2056,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 28,
+        "remaining": 8829,
+        "spent": 3516,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 11,
+        "remaining": 10962,
+        "spent": 1383,
+      },
+    },
+    "Site": {
+      "amount": 2350,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "person_hours",
+      "lines": [
+        {
+          "amount": 2000,
+          "group": "person Linus Torvalds",
+          "status": {
+            "over": true,
+            "percent": 117,
+            "remaining": -344,
+            "spent": 2344,
+          },
+        },
+        {
+          "amount": 300,
+          "group": "person Mallory Mallard",
+          "status": {
+            "over": true,
+            "percent": 254,
+            "remaining": -464,
+            "spent": 764,
+          },
+        },
+        {
+          "amount": 50,
+          "group": "person Hedy Lamarr",
+          "status": {
+            "over": true,
+            "percent": 3628,
+            "remaining": -1764,
+            "spent": 1814,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": null,
+        "startsOn": "1970-01-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 209,
+        "remaining": -2574,
+        "spent": 4924,
+      },
+    },
+  },
+}
+`;
+
+exports[`a budget's spend > over a month true, counting non-billable time false, is what it was 1`] = `
+{
+  "fees": {
+    "Build": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 1950,
+        "remaining": -228484,
+        "spent": 240829,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 2367,
+        "remaining": -279905,
+        "spent": 292250,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 0,
+        "remaining": 12345,
+        "spent": 0,
+      },
+    },
+    "Site": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 5638,
+        "remaining": -683698,
+        "spent": 696043,
+      },
+    },
+  },
+  "hours": {
+    "Build": {
+      "amount": 1500,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "task_hours",
+      "lines": [
+        {
+          "amount": 600,
+          "group": "task Design",
+          "status": {
+            "over": true,
+            "percent": 173,
+            "remaining": -441,
+            "spent": 1041,
+          },
+        },
+        {
+          "amount": 900,
+          "group": "task Code",
+          "status": {
+            "over": true,
+            "percent": 109,
+            "remaining": -84,
+            "spent": 984,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 135,
+        "remaining": -526,
+        "spent": 2026,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 28,
+        "remaining": 8829,
+        "spent": 3516,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 0,
+        "remaining": 12345,
+        "spent": 0,
+      },
+    },
+    "Site": {
+      "amount": 2350,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "person_hours",
+      "lines": [
+        {
+          "amount": 2000,
+          "group": "person Linus Torvalds",
+          "status": {
+            "over": true,
+            "percent": 117,
+            "remaining": -344,
+            "spent": 2344,
+          },
+        },
+        {
+          "amount": 300,
+          "group": "person Mallory Mallard",
+          "status": {
+            "over": true,
+            "percent": 234,
+            "remaining": -404,
+            "spent": 704,
+          },
+        },
+        {
+          "amount": 50,
+          "group": "person Hedy Lamarr",
+          "status": {
+            "over": true,
+            "percent": 3148,
+            "remaining": -1524,
+            "spent": 1574,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 196,
+        "remaining": -2273,
+        "spent": 4623,
+      },
+    },
+  },
+}
+`;
+
+exports[`a budget's spend > over a month true, counting non-billable time true, is what it was 1`] = `
+{
+  "fees": {
+    "Build": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 1950,
+        "remaining": -228484,
+        "spent": 240829,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 2367,
+        "remaining": -279905,
+        "spent": 292250,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 0,
+        "remaining": 12345,
+        "spent": 0,
+      },
+    },
+    "Site": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": false,
+      "kind": "total_fees",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 5638,
+        "remaining": -683698,
+        "spent": 696043,
+      },
+    },
+  },
+  "hours": {
+    "Build": {
+      "amount": 1500,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "task_hours",
+      "lines": [
+        {
+          "amount": 600,
+          "group": "task Design",
+          "status": {
+            "over": true,
+            "percent": 173,
+            "remaining": -441,
+            "spent": 1041,
+          },
+        },
+        {
+          "amount": 900,
+          "group": "task Code",
+          "status": {
+            "over": true,
+            "percent": 109,
+            "remaining": -84,
+            "spent": 984,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 135,
+        "remaining": -526,
+        "spent": 2026,
+      },
+    },
+    "Fixed": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 28,
+        "remaining": 8829,
+        "spent": 3516,
+      },
+    },
+    "Internal": {
+      "amount": 12345,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "total_hours",
+      "lines": [],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": false,
+        "percent": 11,
+        "remaining": 10962,
+        "spent": 1383,
+      },
+    },
+    "Site": {
+      "amount": 2350,
+      "currency": "GBP",
+      "hours": true,
+      "kind": "person_hours",
+      "lines": [
+        {
+          "amount": 2000,
+          "group": "person Linus Torvalds",
+          "status": {
+            "over": true,
+            "percent": 117,
+            "remaining": -344,
+            "spent": 2344,
+          },
+        },
+        {
+          "amount": 300,
+          "group": "person Mallory Mallard",
+          "status": {
+            "over": true,
+            "percent": 234,
+            "remaining": -404,
+            "spent": 704,
+          },
+        },
+        {
+          "amount": 50,
+          "group": "person Hedy Lamarr",
+          "status": {
+            "over": true,
+            "percent": 3628,
+            "remaining": -1764,
+            "spent": 1814,
+          },
+        },
+      ],
+      "period": {
+        "endsOn": "2026-10-31",
+        "startsOn": "2026-10-01",
+      },
+      "total": {
+        "over": true,
+        "percent": 206,
+        "remaining": -2514,
+        "spent": 4864,
+      },
+    },
+  },
+}
+`;

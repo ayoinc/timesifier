@@ -1,20 +1,21 @@
 import { billableMinuteMinor } from "~/billing/billable";
 import { formatMoney, roundHalfUp } from "~/money/money";
-import { maySeeRates } from "~/organisations/access";
-import type { Membership } from "~/organisations/membership.server";
-import { organisationMoney, pricingOf } from "~/projects/money.server";
+import type { Pricing } from "~/projects/money.server";
 import { priceTime } from "~/rates/price";
 
 import { hoursAndMinutes } from "./format";
-import type { Row } from "./report";
-import type { ReportRequest } from "./reports.server";
+import type { Sum } from "./report";
 
 /**
  * A report's billable and non-billable time (TS-066) and, for those who see
  * rates, what the billable time is worth (TS-067): one total for each
- * currency, never added across them, each the exact sum of its rows
- * rounded once. A row is priced for its whole minutes at the rate in force on
- * the local day it starts. Billable time with no rate is counted, and worth 0.
+ * currency, never added across them, each the exact sum of its entries
+ * rounded once. Time is priced as the report's sums (`sumsOf` with
+ * `pricedBy`), each the whole minutes of entries that all have the rate in
+ * force on the first day of its span, so pricing a sum once is pricing each
+ * of its entries and adding them up (docs/decisions.md entry 57). Regular and
+ * overtime minutes are sums apart. Billable time with no rate is counted, and
+ * worth 0.
  */
 export interface BillableSplit {
 	billable: string;
@@ -26,30 +27,31 @@ export interface BillableSplit {
 	missingRates: number | null;
 }
 
-export async function billableSplitOf(
-	request: Pick<ReportRequest, "scope">,
-	rows: readonly Row[],
-	membership: Membership,
+/**
+ * The split of `sums`. `pricing` is null for a viewer who does not see rates;
+ * given, the sums must have been read by its rates (`pricedBy(pricing)`).
+ */
+export function billableSplitOf(
+	sums: readonly Sum[],
+	pricing: Pricing | null,
 	locale = "en-GB",
-): Promise<BillableSplit> {
+): BillableSplit {
 	let billable = 0;
 	let total = 0;
-	for (const row of rows) {
-		total += row.minutes * 60;
-		if (row.entry.billable) billable += row.minutes * 60;
+	for (const sum of sums) {
+		total += sum.minutes * 60;
+		if (sum.entry.billable) billable += sum.minutes * 60;
 	}
 	const split = {
 		billable: hoursAndMinutes(billable),
 		nonBillable: hoursAndMinutes(total - billable),
 		total: hoursAndMinutes(total),
 	};
-	if (!maySeeRates(membership.role)) return { ...split, amounts: null, missingRates: null };
+	if (!pricing) return { ...split, amounts: null, missingRates: null };
 
-	const money = await organisationMoney(membership.organisation.id);
-	const pricing = await pricingOf(request.scope, money.currency);
 	const exact = new Map<string, number>();
-	const missing = new Set<string>();
-	for (const { entry, day, minutes } of rows) {
+	let missing = 0;
+	for (const { entry, day, minutes, entries } of sums) {
 		const project = pricing.projects.get(entry.projectId);
 		if (!project) continue;
 		const amount = priceTime(project, pricing.rates, {
@@ -60,7 +62,7 @@ export async function billableSplitOf(
 			day,
 			minutes,
 		});
-		if (amount.kind === "missing-rate") missing.add(entry.id);
+		if (amount.kind === "missing-rate") missing += entries;
 		if (amount.kind !== "billable") continue;
 		exact.set(project.currency, (exact.get(project.currency) ?? 0) + billableMinuteMinor([amount]));
 	}
@@ -70,5 +72,5 @@ export async function billableSplitOf(
 			currency,
 			amount: formatMoney(roundHalfUp(minuteMinor, 60), currency, locale),
 		}));
-	return { ...split, amounts, missingRates: missing.size };
+	return { ...split, amounts, missingRates: missing };
 }

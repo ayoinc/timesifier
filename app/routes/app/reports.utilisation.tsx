@@ -6,8 +6,9 @@ import { hoursAndMinutes } from "~/reports/format";
 import { Headline, RangeSteps } from "~/reports/RangeSteps";
 import { ReportChoice } from "~/reports/ReportChoice";
 import { ReportTabs } from "~/reports/ReportTabs";
-import { reportRequest, rowsOfReport } from "~/reports/reports.server";
+import { reportRequest } from "~/reports/reports.server";
 import { SaveReport } from "~/reports/SaveReport";
+import { sumsOf } from "~/reports/sums.server";
 import { percentLabel, shareOfCapacity, type UtilisationFigures } from "~/reports/utilisation";
 import { utilisationReport } from "~/reports/utilisation.server";
 import { openedFrom, viewAction, viewFrame, viewsFor } from "~/reports/view.server";
@@ -70,9 +71,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	};
 	// A custom range that makes no report: the fields again, with the reason (TS-091, W05).
 	if ("problem" in report) return data({ ...around, opened: null, view: null }, { status: 400 });
-	const rows = await rowsOfReport(report);
 	const [utilisation, opened] = await Promise.all([
-		utilisationReport(report, rows),
+		sumsOf(report).then(({ sums }) => utilisationReport(report, sums)),
 		openedFrom(membership, url),
 	]);
 	const view = {

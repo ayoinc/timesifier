@@ -7,7 +7,7 @@
  */
 
 // A list of any length as one bound parameter (decision 40).
-export { among, notAmong } from "./among";
+export { among, latestAmong, notAmong } from "./among";
 export {
 	activityAfter,
 	apiTokenByHash,

@@ -434,8 +434,25 @@ export const timeEntries = sqliteTable(
 			table.userId,
 			table.startedAt,
 		),
-		// Every reader bounds and groups entries by their day (TS-111).
+		// Every reader bounds and groups entries by their day (TS-111). The wider
+		// index below serves the same ranges; this one goes in TS-113b, a migration
+		// that ships alone (decision 58).
 		index("time_entries_organisation_id_spent_on_idx").on(table.organisationId, table.spentOn),
+		// The report's export and list page through the day in the order of day,
+		// start and id (TS-113).
+		index("time_entries_organisation_id_spent_on_started_at_id_idx").on(
+			table.organisationId,
+			table.spentOn,
+			table.startedAt,
+			table.id,
+		),
+		// The API's list and the all-time export page through everyone's entries by
+		// their start (TS-113, D7).
+		index("time_entries_organisation_id_started_at_id_idx").on(
+			table.organisationId,
+			table.startedAt,
+			table.id,
+		),
 		index("time_entries_organisation_id_user_id_spent_on_idx").on(
 			table.organisationId,
 			table.userId,
@@ -1422,6 +1439,13 @@ export const expenses = sqliteTable(
 			table.organisationId,
 			table.projectId,
 			table.spentOn,
+		),
+		// Everyone's expenses over a range of days: Profitability and the Expenses
+		// report, and its export a page at a time (TS-113, D7).
+		index("expenses_organisation_id_spent_on_id_idx").on(
+			table.organisationId,
+			table.spentOn,
+			table.id,
 		),
 		index("expenses_organisation_id_category_id_idx").on(table.organisationId, table.categoryId),
 		foreignKey({

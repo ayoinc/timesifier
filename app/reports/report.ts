@@ -41,8 +41,24 @@ export interface ReportEntry {
 	overtime: boolean;
 }
 
+/** What a report counts an entry by: whose it is, where it went, and how it bills. */
+export type PieceEntry = Pick<
+	ReportEntry,
+	"userId" | "projectId" | "project" | "clientId" | "client" | "taskId" | "billable" | "overtime"
+>;
+
+/**
+ * Time as a report counts it: on a day, for whole minutes. An entry's `Row` is
+ * one; so is a `Sum` of many entries alike.
+ */
+export interface Piece {
+	entry: PieceEntry;
+	day: Day;
+	minutes: number;
+}
+
 /** An entry as a report counts it: on its stored day, for its whole length in minutes. */
-export interface Row {
+export interface Row extends Piece {
 	entry: ReportEntry;
 	/** The day it belongs to: its person's, stored when it was tracked (TR-05). */
 	day: Day;
@@ -53,6 +69,16 @@ export interface Row {
 	running: boolean;
 	/** Its length, floored to whole minutes. */
 	minutes: number;
+}
+
+/**
+ * Entries alike in everything a report counts them by, added up in SQL
+ * (TS-113, decision 57): the sum of their whole minutes, and how many they are.
+ * `day` is a day the time is counted on: the entries' own, or the first of a
+ * span in which no rate changes (`app/reports/sums.server.ts`).
+ */
+export interface Sum extends Piece {
+	entries: number;
 }
 
 const MINUTE = 60_000;
@@ -105,7 +131,7 @@ export interface Totals {
  * clients are in the order of their names, the time with no client last; days
  * in their order. A group is listed only when it has a row.
  */
-export function totalsOf(rows: readonly Row[], grouping: Grouping): Totals {
+export function totalsOf(rows: readonly Piece[], grouping: Grouping): Totals {
 	const groups = new Map<string, GroupTotal>();
 	let minutes = 0;
 	let overtimeMinutes = 0;

@@ -5,9 +5,12 @@ import { Link } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
+import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Pager } from "~/components/Pager";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { FILTER_PARAM, filterOf, PAGE_PARAM, PAGE_SIZE, pageOfPeople, queryOf } from "~/lib/paging";
 import { parseRequest } from "~/lib/validate";
 import { formatMoney } from "~/money/money";
 import { parseMoney } from "~/money/typed";
@@ -16,7 +19,6 @@ import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { organisationMoney } from "~/projects/money.server";
-import { namesOf } from "~/projects/project.server";
 import { defaultRates, setRate } from "~/rates/rates.server";
 import { dayLabel } from "~/reports/format";
 import { destinationPath } from "~/shell/destinations";
@@ -24,6 +26,7 @@ import { TEXT_LINK } from "~/shell/links";
 import { negotiateLocale } from "~/shell/locale";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { activeTasks } from "~/tasks/tasks.server";
+import { peopleOf } from "~/teams/people.server";
 import { Day, dayOf } from "~/time/calendar";
 
 import type { Route } from "./+types/rates";
@@ -35,6 +38,8 @@ import { useOrganisation } from "./useOrganisation";
 // sets none of its own. They are in the organisation's currency and price
 // only projects billed in it. Owners, admins and Finance see and set them
 // (`maySeeRates`, `mayManageRates`); for anybody else the page is not here.
+// The people are listed 50 at a time, `?page=` past the first, with a filter
+// by name or address in `?q=` once there are more than 50 (TS-113).
 
 export function meta() {
 	return [{ title: "Default rates · Timesifier" }];
@@ -52,13 +57,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const scope = organisationScope(env.DB, membership.organisation.id);
 	const locale = negotiateLocale(request.headers.get("Accept-Language"));
 	const today = dayOf(Date.now(), membership.organisation.timeZone);
-	const [money, rates, members, tasks] = await Promise.all([
+	const params = new URL(request.url).searchParams;
+	const [money, everyone, tasks] = await Promise.all([
 		organisationMoney(membership.organisation.id),
-		defaultRates(scope),
-		scope.memberships.select(),
+		peopleOf(scope, membership.organisation),
 		activeTasks(scope),
 	]);
-	const names = await namesOf(members.map((m) => m.userId));
+	// The people are listed 50 at a time (TS-113): only the page's rates are read.
+	const filter = filterOf(params);
+	const page = pageOfPeople(everyone, params);
+	const rates = await defaultRates(
+		scope,
+		page.items.map((p) => p.id),
+	);
 	const shown = new Map<string, Shown>();
 	for (const rate of rates) {
 		const key = `${rate.level}:${rate.userId ?? rate.taskId}`;
@@ -77,13 +88,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		currency: money.currency,
 		today,
 		managesRates: mayManageRates(membership.role),
-		people: members
-			.map((m) => ({
-				id: m.userId,
-				name: names.get(m.userId) ?? "",
-				rate: words(`person:${m.userId}`),
-			}))
-			.sort((a, b) => a.name.localeCompare(b.name, "en")),
+		filter,
+		everyone: everyone.length,
+		page: { number: page.number, pages: page.pages, total: page.total, first: page.first },
+		people: page.items.map((p) => ({ id: p.id, name: p.name, rate: words(`person:${p.id}`) })),
 		tasks: tasks.map((t) => ({ id: t.id, name: t.name, rate: words(`task:${t.id}`) })),
 	};
 }
@@ -137,7 +145,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function Rates({ loaderData }: Route.ComponentProps) {
-	const { people, tasks, currency, today, managesRates } = loaderData;
+	const { people, tasks, currency, today, managesRates, filter, everyone, page } = loaderData;
+	/** The address of page `number` of the people, the filter kept. */
+	const pageAt = (number: number) =>
+		queryOf({ [FILTER_PARAM]: filter, [PAGE_PARAM]: number > 1 ? number : null });
 	const organisation = useOrganisation();
 	const [target, setTarget] = useState<{
 		level: "person" | "task";
@@ -187,9 +198,43 @@ export default function Rates({ loaderData }: Route.ComponentProps) {
 				{said}
 			</p>
 			<div className="mt-10 flex max-w-200 flex-col gap-8">
-				<Ledger heading="People" note={people.length}>
-					{rows("person", people)}
-				</Ledger>
+				{/* Past 50 people, or with a filter in the address, they page and search (TS-113). */}
+				<div className="flex flex-col gap-4">
+					{(page.pages > 1 || filter !== "") && (
+						<FilterBar name="Filter people">
+							<FilterField label="Search people" param={FILTER_PARAM} />
+						</FilterBar>
+					)}
+					<Ledger heading="People" note={filter === "" ? everyone : `${page.total} of ${everyone}`}>
+						{people.length === 0 ? (
+							<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
+								{filter === "" ? (
+									"No people."
+								) : (
+									<>
+										Nobody's name or address holds “{filter}”.{" "}
+										<Link to="?" className={TEXT_LINK}>
+											Show everyone
+										</Link>
+									</>
+								)}
+							</p>
+						) : (
+							rows("person", people)
+						)}
+					</Ledger>
+					{page.pages > 1 && (
+						<Pager
+							label="Pages of people"
+							first={page.first}
+							shown={people.length}
+							total={page.total}
+							size={PAGE_SIZE}
+							previous={page.number > 1 ? pageAt(page.number - 1) : null}
+							next={page.number < page.pages ? pageAt(page.number + 1) : null}
+						/>
+					)}
+				</div>
 				<Ledger heading="Tasks" note={tasks.length}>
 					{tasks.length === 0 ? (
 						<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">

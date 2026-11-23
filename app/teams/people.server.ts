@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { among, type OrganisationScope, users } from "~/db";
 import { type Access, timeScopeOf } from "~/organisations/access";
 import { addressLine, nameOrEmail } from "~/organisations/people";
+import { recalled, remembered } from "~/organisations/request-memo.server";
 import { Role } from "~/organisations/roles";
 import { zoneOf } from "~/time/zones";
 
@@ -29,14 +30,35 @@ export interface Person {
 /**
  * The members of the organisation, or those of them among `only`, sorted by
  * the name they are shown by. A person in `only` who is not a member is left out.
+ * Read once a request for the same people: a list of some of them is taken
+ * from the whole list when the request has read that already.
  */
 export async function peopleOf(
 	scope: OrganisationScope,
 	organisation: { timeZone: string },
 	only?: Iterable<string>,
 ): Promise<Person[]> {
-	const wanted = only === undefined ? undefined : [...new Set(only)];
+	const wanted = only === undefined ? undefined : [...new Set(only)].sort();
 	if (wanted?.length === 0) return [];
+	const everyone = `people in ${organisation.timeZone}`;
+	const whole = recalled<Person[]>(scope.organisationId, everyone);
+	if (wanted && whole) {
+		const them = new Set(wanted);
+		return (await whole).filter((p) => them.has(p.id));
+	}
+	const key = wanted ? `${everyone}: ${wanted.join(" ")}` : everyone;
+	const people = await remembered(scope.organisationId, key, () =>
+		readPeople(scope, organisation, wanted),
+	);
+	return [...people];
+}
+
+/** The members of the organisation, or those among `wanted`, as `peopleOf` gives them. */
+async function readPeople(
+	scope: OrganisationScope,
+	organisation: { timeZone: string },
+	wanted: string[] | undefined,
+): Promise<Person[]> {
 	const memberships = await scope.memberships.select((m) =>
 		wanted ? among(m.userId, wanted) : undefined,
 	);

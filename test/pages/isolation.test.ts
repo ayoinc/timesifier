@@ -92,7 +92,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access and Wellbeing, My account and its data, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports and a report's people, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access and Wellbeing, My account and its data, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -136,6 +136,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/approvals",
 				"/app/acme/reports",
 				"/app/acme/reports/export",
+				// A Time report's people, read when a group is opened (TS-113).
+				"/app/acme/reports/people",
 				"/app/acme/reports/expenses",
 				"/app/acme/reports/expenses/export",
 				"/app/acme/expenses/x/receipt",

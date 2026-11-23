@@ -16,6 +16,16 @@ export function hoursAndMinutes(seconds: number): string {
 	return formatDuration(seconds);
 }
 
+/**
+ * Time split into regular and overtime (TS-095), "6:00 regular · 1:30
+ * overtime", or null when none of it is overtime: a line with no overtime says
+ * nothing more.
+ */
+export function overtimeLabel(minutes: number, overtimeMinutes: number): string | null {
+	if (overtimeMinutes <= 0) return null;
+	return `${hoursAndMinutes((minutes - overtimeMinutes) * 60)} regular · ${hoursAndMinutes(overtimeMinutes * 60)} overtime`;
+}
+
 /** A day as a row names it: "Monday 2 November". */
 export function dayLabel(day: Day): string {
 	return formatDay(day);

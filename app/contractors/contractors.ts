@@ -14,7 +14,8 @@ import type { Day } from "~/time/calendar";
  * different currencies are never added together. Time with no cost rate costs
  * nothing and is counted apart, so the page can say which rate is missing.
  *
- * Nothing here reads the database: `contractors.server.ts` does.
+ * Nothing here reads the database: `contractors.server.ts` does, and adds the
+ * entries up there (`ContractorTime`).
  */
 
 /**
@@ -28,15 +29,25 @@ export function mayMarkContractor(actor: Role, target: Role, isSelf: boolean): b
 	return actor === "admin" && !isSelf && target !== "owner";
 }
 
-/** An entry as the report reads it. Instants are milliseconds. */
-export interface ContractorEntry {
+/**
+ * Time as the report reads it: the entries of one person on one project, task
+ * and stored day, regular or overtime, added up in whole seconds. Every entry
+ * of it is priced at the same rate, so pricing it once is pricing each entry.
+ */
+export interface ContractorTime {
 	userId: string;
 	projectId: string;
 	taskId: string | null;
-	startedAt: number;
-	endedAt: number | null;
-	/** The day it belongs to, stored when it was tracked (TS-111). */
+	/** The day its entries belong to, stored when they were tracked (TS-111). */
 	day: Day;
+	/** Whether it is overtime, kept apart from regular time so a rate for overtime is one factor. */
+	overtime: boolean;
+	/**
+	 * Each entry's length in whole seconds, from the second its start is in to
+	 * the second its end is in, as Reports counts it, a running entry to the
+	 * time of the request; added up.
+	 */
+	seconds: number;
 }
 
 /** A person the report lists: a contractor now, or one who left the organisation as one. */
@@ -67,30 +78,18 @@ export interface ContractorLine {
 	costs: CostLine[];
 }
 
-const SECOND = 1000;
-
-/**
- * An entry's length in whole seconds, from the second its start is in to the
- * second its end is in, as Reports counts it. A running entry runs to `now`.
- */
-export function entrySeconds(entry: Pick<ContractorEntry, "startedAt" | "endedAt">, now: number) {
-	const end = Math.floor((entry.endedAt ?? now) / SECOND);
-	return Math.max(0, end - Math.floor(entry.startedAt / SECOND));
-}
-
 const SECONDS_AN_HOUR = 3600;
 
 /**
- * Each contractor who has an entry on one of `days`, with that time and its
- * cost, ordered by name. An entry belongs whole to its stored day, the day it
+ * Each contractor who has time on one of `days`, with that time and its cost,
+ * ordered by name. An entry belongs whole to its stored day, the day it
  * started on in the person's zone when it was tracked.
  */
 export function contractorLines(
 	contractors: readonly Contractor[],
-	entries: readonly ContractorEntry[],
+	time: readonly ContractorTime[],
 	rates: readonly RateRow[],
 	days: ReportDays,
-	now: number,
 ): ContractorLine[] {
 	const people = new Map(contractors.map((person) => [person.id, person]));
 	type Tally = {
@@ -101,21 +100,20 @@ export function contractorLines(
 	};
 	const tallies = new Map<string, Tally>();
 
-	for (const entry of entries) {
-		const person = people.get(entry.userId);
+	for (const part of time) {
+		const person = people.get(part.userId);
 		if (!person) continue;
-		const { day } = entry;
+		const { day, seconds } = part;
 		if (day < days.first || day > days.last) continue;
 
 		const tally = tallies.get(person.id) ?? { seconds: 0, missingSeconds: 0, priced: new Map() };
 		tallies.set(person.id, tally);
-		const seconds = entrySeconds(entry, now);
 		tally.seconds += seconds;
 		const rate = resolveRate(rates, {
 			kind: "cost",
-			userId: entry.userId,
-			projectId: entry.projectId,
-			taskId: entry.taskId,
+			userId: part.userId,
+			projectId: part.projectId,
+			taskId: part.taskId,
 			on: day,
 		});
 		if (!rate) {

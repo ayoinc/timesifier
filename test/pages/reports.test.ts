@@ -357,10 +357,11 @@ describe("a report", () => {
 	});
 
 	it("groups by project and by client, the time with no client last", async () => {
+		// Each group has its People link, read when opened (TS-113).
 		const byProject = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=project`, ada)));
-		expect(byProject).toMatch(/Billing 5:00 Site 3:00 Total 8:00/);
+		expect(byProject).toMatch(/Billing 5:00 People Site 3:00 People Total 8:00/);
 		const byClient = textOf(await pageBody(await open(`${REPORTS}?${WEEK}&group=client`, ada)));
-		expect(byClient).toMatch(/Initech 3:00 No client 5:00 Total 8:00/);
+		expect(byClient).toMatch(/Initech 3:00 People No client 5:00 People Total 8:00/);
 	});
 
 	it("counts a running entry up to now, with no end in the export", async () => {
@@ -390,7 +391,7 @@ describe("a report", () => {
 			.bind(acme.id)
 			.run();
 		const html = await pageBody(await open(`${REPORTS}?${WEEK}&group=client`, ada));
-		expect(textOf(html)).toMatch(/By project .* Billing 5:00 Site 3:00 Total 8:00/);
+		expect(textOf(html)).toMatch(/By project .* Billing 5:00 People Site 3:00 People Total 8:00/);
 		expect(textOf(html)).not.toContain("Initech");
 		const { rows } = await exported(ada, `${WEEK}&group=client`);
 		expect(rows.map((row) => row.client)).toEqual(rows.map(() => ""));

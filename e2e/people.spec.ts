@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Page } from "@playwright/test";
 
+import { defaultRatesPath } from "../app/projects/projects";
 import { destinationPath } from "../app/shell/destinations";
 import { newPerson, ownAddress, signIn } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
@@ -290,3 +291,89 @@ for (const viewport of [
 		});
 	});
 }
+
+/** `count` new people join `slug` as members, "Paged 01" onwards, written straight to the database. */
+function manyJoin(slug: string, count: number) {
+	const now = Date.now();
+	const organisation = `(select id from organisations where slug = '${slug}')`;
+	const statements = Array.from({ length: count }, (_, i) => {
+		const userId = randomUUID();
+		const name = `Paged ${String(i + 1).padStart(2, "0")}`;
+		return [
+			`insert into users (id, name, email, email_verified, created_at, updated_at) values ('${userId}', '${name}', 'paged-${String(i + 1).padStart(2, "0")}-${userId}@example.com', 1, ${now}, ${now})`,
+			`insert into memberships (id, organisation_id, user_id, role, created_at, updated_at) values ('${randomUUID()}', ${organisation}, '${userId}', 'member', ${now}, ${now})`,
+		];
+	});
+	sql(statements.flat().join("; "));
+}
+
+// Team and Default rates list people 50 at a time, with a filter by name or
+// address; the page and the filter are in the address (TS-113).
+test.describe("in an organisation of more than 50 people", () => {
+	test.use({ viewport: { width: 1280, height: 800 }, storageState: SIGNED_OUT });
+	test.beforeEach(async ({ context, baseURL }) => {
+		await ownAddress(context, baseURL);
+	});
+	test.setTimeout(120_000);
+
+	test("Team and Default rates page through the people and find them, with the keyboard", async ({
+		page,
+	}) => {
+		await signIn(page, newPerson().email);
+		const { slug } = await createOrganisation(page);
+		manyJoin(slug, 60);
+		const team = destinationPath(slug, "team");
+		const rates = defaultRatesPath(slug);
+
+		for (const [heading, address, kept] of [
+			["Team", `${team}?week=${WEEK}`, `week=${WEEK}&`],
+			["Default rates", rates, ""],
+		] as const) {
+			const filtered = (query: string) => `${heading === "Team" ? team : rates}?${kept}${query}`;
+			await openShell(page, address);
+			const pages = page.getByRole("navigation", { name: "Pages of people" });
+			await expect(pages).toContainText("1–50 of 61");
+			await expect(pages.getByRole("link", { name: "Previous 50" })).toHaveCount(0);
+			// The filter field is empty: its text's contrast is measured once it has some.
+			await expectNoProblems(page, heading, [EMPTY_INPUT]);
+			await focusOn(page, "link", "Next 11");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(filtered("page=2"));
+			await expect(pages).toContainText("51–61 of 61");
+			await expect(page.getByText("Paged 60", { exact: true })).toBeVisible();
+			await expectNoProblems(page, heading, [EMPTY_INPUT]);
+
+			// A filter starts again from the first page, and the pages keep it.
+			const filter = page.getByRole("searchbox", { name: "Search people" });
+			await filter.focus();
+			await page.keyboard.type("paged");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(filtered("q=paged"));
+			await expect(pages).toContainText("1–50 of 60");
+			await focusOn(page, "link", "Next 10");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(filtered("q=paged&page=2"));
+			await expect(pages).toContainText("51–60 of 60");
+			await expect(page.getByText("Paged 51", { exact: true })).toBeVisible();
+			await focusOn(page, "link", "Previous 50");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(filtered("q=paged"));
+
+			// By part of an address, and on one page no pager.
+			await filter.fill("");
+			await filter.focus();
+			await page.keyboard.type("PAGED-07-");
+			await page.keyboard.press("Enter");
+			await expect(page).toHaveURL(filtered("q=PAGED-07-"));
+			await expect(page.getByText("Paged 07", { exact: true })).toBeVisible();
+			await expect(page.getByText("Paged 08", { exact: true })).toHaveCount(0);
+			await expect(pages).toHaveCount(0);
+			await expectNoProblems(page, heading);
+
+			// A filter that finds nobody says so.
+			await openShell(page, filtered("q=nobody"));
+			await expect(page.getByText("Nobody's name or address holds “nobody”.")).toBeVisible();
+			await expectNoProblems(page, heading);
+		}
+	});
+});

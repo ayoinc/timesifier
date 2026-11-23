@@ -1,0 +1,3581 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Utilisation, Profitability and Dashboards > Dashboards as ada over range=custom&from=2026-10-01&to=2026-10-31 is what it was 1`] = `
+{
+  "billable": "191:57",
+  "billableShare": "88%",
+  "billableUtilisation": "21%",
+  "budgets": [],
+  "expected": "of 930:00 expected",
+  "links": {
+    "leave": "/app/acme/reports/leave",
+    "newInvoice": "/app/acme/invoices/new",
+    "profitability": "/app/acme/reports/profitability?range=custom&from=2026-10-01&to=2026-10-31&group=project",
+    "projects": "/app/acme/projects",
+    "receivables": "/app/acme/invoices/reports?report=receivables",
+    "time": "/app/acme/reports?range=custom&from=2026-10-01&to=2026-10-31&group=project",
+    "uninvoiced": "/app/acme/invoices/uninvoiced",
+    "utilisation": "/app/acme/reports/utilisation?range=custom&from=2026-10-01&to=2026-10-31&group=project",
+  },
+  "money": {
+    "cost": "£6,871.90",
+    "margin": "34%",
+    "profit": "£3,540.86",
+    "revenue": "£10,412.76",
+  },
+  "onLeave": [
+    {
+      "id": "person Hedy Lamarr",
+      "leave": "3:45 (half a day)",
+      "name": "Hedy Lamarr",
+    },
+    {
+      "id": "person Mallory Mallard",
+      "leave": "11:15 (1.5 days)",
+      "name": "Mallory Mallard",
+    },
+  ],
+  "receivables": {
+    "outstanding": [],
+    "overdue": [],
+  },
+  "split": "209:26 + 9:30 overtime",
+  "topProjects": [
+    {
+      "id": "project Site",
+      "name": "Site",
+      "overtimeSeconds": 7800,
+      "seconds": 355260,
+      "split": "96:31 + 2:10 overtime",
+      "time": "98:41",
+    },
+    {
+      "id": "project Fixed",
+      "name": "Fixed",
+      "overtimeSeconds": 8400,
+      "seconds": 210420,
+      "split": "56:07 + 2:20 overtime",
+      "time": "58:27",
+    },
+    {
+      "id": "project Build",
+      "name": "Build",
+      "overtimeSeconds": 18000,
+      "seconds": 139740,
+      "split": "33:49 + 5:00 overtime",
+      "time": "38:49",
+    },
+    {
+      "id": "project Internal",
+      "name": "Internal",
+      "overtimeSeconds": 0,
+      "seconds": 82740,
+      "split": null,
+      "time": "22:59",
+    },
+  ],
+  "total": "218:56",
+  "uninvoiced": [
+    "£8,769.53",
+  ],
+  "utilisation": "24%",
+}
+`;
+
+exports[`Utilisation, Profitability and Dashboards > Dashboards as hedy over range=week&from=2026-10-05 is what it was 1`] = `
+{
+  "billable": "65:15",
+  "billableShare": "94%",
+  "billableUtilisation": "67%",
+  "budgets": [],
+  "expected": "of 97:30 expected",
+  "links": {
+    "leave": "/app/acme/reports/leave",
+    "newInvoice": "/app/acme/invoices/new",
+    "profitability": "/app/acme/reports/profitability?range=week&from=2026-10-05&group=project",
+    "projects": "/app/acme/projects",
+    "receivables": "/app/acme/invoices/reports?report=receivables",
+    "time": "/app/acme/reports?range=week&from=2026-10-05&group=project",
+    "uninvoiced": "/app/acme/invoices/uninvoiced",
+    "utilisation": "/app/acme/reports/utilisation?range=week&from=2026-10-05&group=project",
+  },
+  "money": null,
+  "onLeave": [
+    {
+      "id": "person Hedy Lamarr",
+      "leave": "3:45 (half a day)",
+      "name": "Hedy Lamarr",
+    },
+    {
+      "id": "person Mallory Mallard",
+      "leave": "11:15 (1.5 days)",
+      "name": "Mallory Mallard",
+    },
+  ],
+  "receivables": null,
+  "split": "67:05 + 2:10 overtime",
+  "topProjects": [
+    {
+      "id": "project Site",
+      "name": "Site",
+      "overtimeSeconds": 7800,
+      "seconds": 199800,
+      "split": "53:20 + 2:10 overtime",
+      "time": "55:30",
+    },
+    {
+      "id": "project Build",
+      "name": "Build",
+      "overtimeSeconds": 0,
+      "seconds": 49500,
+      "split": null,
+      "time": "13:45",
+    },
+  ],
+  "total": "69:15",
+  "uninvoiced": undefined,
+  "utilisation": "71%",
+}
+`;
+
+exports[`Utilisation, Profitability and Dashboards > profitability as ada over range=custom&from=2026-10-01&to=2026-10-31 is what it was 1`] = `
+{
+  "missingCost": [
+    {
+      "id": "person Linus Torvalds",
+      "name": "Linus Torvalds",
+      "time": "54:30",
+    },
+    {
+      "id": "person Mallory Mallard",
+      "name": "Mallory Mallard",
+      "time": "11:40",
+    },
+  ],
+  "projects": [
+    {
+      "client": "Initech",
+      "cost": "Cost £1,060.49",
+      "id": "project Build",
+      "margin": "56%",
+      "missingRate": "5:15",
+      "name": "Build",
+      "otherCurrency": null,
+      "profit": "£1,347.80",
+      "revenue": "Revenue £2,408.29",
+      "type": "Hourly",
+    },
+    {
+      "client": null,
+      "cost": "Cost £3,055.71",
+      "id": "project Fixed",
+      "margin": "-189%",
+      "missingRate": null,
+      "name": "Fixed",
+      "otherCurrency": null,
+      "profit": "-£1,999.67",
+      "revenue": "Revenue £1,056.04",
+      "type": "Fixed fee",
+    },
+    {
+      "client": null,
+      "cost": "Cost £877.27",
+      "id": "project Internal",
+      "margin": "—",
+      "missingRate": null,
+      "name": "Internal",
+      "otherCurrency": null,
+      "profit": "-£877.27",
+      "revenue": "Revenue £0.00",
+      "type": "Non-billable",
+    },
+    {
+      "client": "Initech",
+      "cost": "Cost £1,878.43",
+      "id": "project Site",
+      "margin": "73%",
+      "missingRate": "19:40",
+      "name": "Site",
+      "otherCurrency": null,
+      "profit": "£5,070.00",
+      "revenue": "Revenue £6,948.43",
+      "type": "Hourly",
+    },
+  ],
+  "totals": {
+    "cost": "£6,871.90",
+    "margin": "34%",
+    "profit": "£3,540.86",
+    "revenue": "£10,412.76",
+  },
+}
+`;
+
+exports[`Utilisation, Profitability and Dashboards > profitability as grace over range=week&from=2026-10-05 is what it was 1`] = `
+{
+  "missingCost": [
+    {
+      "id": "person Linus Torvalds",
+      "name": "Linus Torvalds",
+      "time": "35:00",
+    },
+    {
+      "id": "person Mallory Mallard",
+      "name": "Mallory Mallard",
+      "time": "8:20",
+    },
+  ],
+  "projects": [
+    {
+      "client": "Initech",
+      "cost": "Cost £831.32",
+      "id": "project Build",
+      "margin": "52%",
+      "missingRate": "3:45",
+      "name": "Build",
+      "otherCurrency": null,
+      "profit": "£891.29",
+      "revenue": "Revenue £1,722.61",
+      "type": "Hourly",
+    },
+    {
+      "client": null,
+      "cost": "Cost £2,119.03",
+      "id": "project Fixed",
+      "margin": "-789%",
+      "missingRate": null,
+      "name": "Fixed",
+      "otherCurrency": null,
+      "profit": "-£1,880.57",
+      "revenue": "Revenue £238.46",
+      "type": "Fixed fee",
+    },
+    {
+      "client": null,
+      "cost": "Cost £623.44",
+      "id": "project Internal",
+      "margin": "—",
+      "missingRate": null,
+      "name": "Internal",
+      "otherCurrency": null,
+      "profit": "-£623.44",
+      "revenue": "Revenue £0.00",
+      "type": "Non-billable",
+    },
+    {
+      "client": "Initech",
+      "cost": "Cost £1,352.67",
+      "id": "project Site",
+      "margin": "74%",
+      "missingRate": "8:20",
+      "name": "Site",
+      "otherCurrency": null,
+      "profit": "£3,789.00",
+      "revenue": "Revenue £5,141.67",
+      "type": "Hourly",
+    },
+  ],
+  "totals": {
+    "cost": "£4,926.46",
+    "margin": "31%",
+    "profit": "£2,176.28",
+    "revenue": "£7,102.74",
+  },
+}
+`;
+
+exports[`Utilisation, Profitability and Dashboards > utilisation as ada over range=custom&from=2026-10-01&to=2026-10-31 is what it was 1`] = `
+{
+  "people": [
+    {
+      "address": null,
+      "billable": "35:55",
+      "billableUtilisation": "23%",
+      "capacity": "157:30",
+      "id": "person Ada Lovelace",
+      "leave": null,
+      "logged": "35:55",
+      "name": "Ada Lovelace",
+      "overtime": "5:00",
+      "utilisation": "23%",
+    },
+    {
+      "address": null,
+      "billable": "49:00",
+      "billableUtilisation": "31%",
+      "capacity": "157:30",
+      "id": "person Con Tractor",
+      "leave": null,
+      "logged": "49:00",
+      "name": "Con Tractor",
+      "overtime": null,
+      "utilisation": "31%",
+    },
+    {
+      "address": null,
+      "billable": "9:27",
+      "billableUtilisation": "6%",
+      "capacity": "157:30",
+      "id": "person Grace Hopper",
+      "leave": null,
+      "logged": "32:26",
+      "name": "Grace Hopper",
+      "overtime": "2:20",
+      "utilisation": "21%",
+    },
+    {
+      "address": null,
+      "billable": "31:25",
+      "billableUtilisation": "20%",
+      "capacity": "153:45",
+      "id": "person Hedy Lamarr",
+      "leave": "3:45 leave",
+      "logged": "35:25",
+      "name": "Hedy Lamarr",
+      "overtime": "2:10",
+      "utilisation": "23%",
+    },
+    {
+      "address": null,
+      "billable": "54:30",
+      "billableUtilisation": "35%",
+      "capacity": "157:30",
+      "id": "person Linus Torvalds",
+      "leave": null,
+      "logged": "54:30",
+      "name": "Linus Torvalds",
+      "overtime": null,
+      "utilisation": "35%",
+    },
+    {
+      "address": null,
+      "billable": "11:40",
+      "billableUtilisation": "8%",
+      "capacity": "146:15",
+      "id": "person Mallory Mallard",
+      "leave": "11:15 leave",
+      "logged": "11:40",
+      "name": "Mallory Mallard",
+      "overtime": null,
+      "utilisation": "8%",
+    },
+  ],
+  "teams": [
+    {
+      "billable": "97:35",
+      "billableUtilisation": "21%",
+      "capacity": "457:30",
+      "id": "team Design",
+      "logged": "101:35",
+      "name": "Design",
+      "overtime": "2:10",
+      "people": 3,
+      "utilisation": "22%",
+    },
+  ],
+  "total": {
+    "billable": "191:57",
+    "billableUtilisation": "21%",
+    "capacity": "930:00",
+    "logged": "218:56",
+    "overtime": "9:30",
+    "utilisation": "24%",
+  },
+}
+`;
+
+exports[`Utilisation, Profitability and Dashboards > utilisation as ada over range=week&from=2026-10-05 is what it was 1`] = `
+{
+  "people": [
+    {
+      "address": null,
+      "billable": "26:29",
+      "billableUtilisation": "71%",
+      "capacity": "37:30",
+      "id": "person Ada Lovelace",
+      "leave": null,
+      "logged": "26:29",
+      "name": "Ada Lovelace",
+      "overtime": "3:45",
+      "utilisation": "71%",
+    },
+    {
+      "address": null,
+      "billable": "35:00",
+      "billableUtilisation": "93%",
+      "capacity": "37:30",
+      "id": "person Con Tractor",
+      "leave": null,
+      "logged": "35:00",
+      "name": "Con Tractor",
+      "overtime": null,
+      "utilisation": "93%",
+    },
+    {
+      "address": null,
+      "billable": "5:05",
+      "billableUtilisation": "14%",
+      "capacity": "37:30",
+      "id": "person Grace Hopper",
+      "leave": null,
+      "logged": "21:25",
+      "name": "Grace Hopper",
+      "overtime": null,
+      "utilisation": "57%",
+    },
+    {
+      "address": null,
+      "billable": "21:55",
+      "billableUtilisation": "65%",
+      "capacity": "33:45",
+      "id": "person Hedy Lamarr",
+      "leave": "3:45 leave",
+      "logged": "25:55",
+      "name": "Hedy Lamarr",
+      "overtime": "2:10",
+      "utilisation": "77%",
+    },
+    {
+      "address": null,
+      "billable": "35:00",
+      "billableUtilisation": "93%",
+      "capacity": "37:30",
+      "id": "person Linus Torvalds",
+      "leave": null,
+      "logged": "35:00",
+      "name": "Linus Torvalds",
+      "overtime": null,
+      "utilisation": "93%",
+    },
+    {
+      "address": null,
+      "billable": "8:20",
+      "billableUtilisation": "32%",
+      "capacity": "26:15",
+      "id": "person Mallory Mallard",
+      "leave": "11:15 leave",
+      "logged": "8:20",
+      "name": "Mallory Mallard",
+      "overtime": null,
+      "utilisation": "32%",
+    },
+  ],
+  "teams": [
+    {
+      "billable": "65:15",
+      "billableUtilisation": "67%",
+      "capacity": "97:30",
+      "id": "team Design",
+      "logged": "69:15",
+      "name": "Design",
+      "overtime": "2:10",
+      "people": 3,
+      "utilisation": "71%",
+    },
+  ],
+  "total": {
+    "billable": "131:49",
+    "billableUtilisation": "63%",
+    "capacity": "210:00",
+    "logged": "152:09",
+    "overtime": "5:55",
+    "utilisation": "72%",
+  },
+}
+`;
+
+exports[`Utilisation, Profitability and Dashboards > utilisation as hedy over range=custom&from=2026-10-01&to=2026-10-31 is what it was 1`] = `
+{
+  "people": [
+    {
+      "address": null,
+      "billable": "31:25",
+      "billableUtilisation": "20%",
+      "capacity": "153:45",
+      "id": "person Hedy Lamarr",
+      "leave": "3:45 leave",
+      "logged": "35:25",
+      "name": "Hedy Lamarr",
+      "overtime": "2:10",
+      "utilisation": "23%",
+    },
+    {
+      "address": null,
+      "billable": "54:30",
+      "billableUtilisation": "35%",
+      "capacity": "157:30",
+      "id": "person Linus Torvalds",
+      "leave": null,
+      "logged": "54:30",
+      "name": "Linus Torvalds",
+      "overtime": null,
+      "utilisation": "35%",
+    },
+    {
+      "address": null,
+      "billable": "11:40",
+      "billableUtilisation": "8%",
+      "capacity": "146:15",
+      "id": "person Mallory Mallard",
+      "leave": "11:15 leave",
+      "logged": "11:40",
+      "name": "Mallory Mallard",
+      "overtime": null,
+      "utilisation": "8%",
+    },
+  ],
+  "teams": [
+    {
+      "billable": "97:35",
+      "billableUtilisation": "21%",
+      "capacity": "457:30",
+      "id": "team Design",
+      "logged": "101:35",
+      "name": "Design",
+      "overtime": "2:10",
+      "people": 3,
+      "utilisation": "22%",
+    },
+  ],
+  "total": {
+    "billable": "97:35",
+    "billableUtilisation": "21%",
+    "capacity": "457:30",
+    "logged": "101:35",
+    "overtime": "2:10",
+    "utilisation": "22%",
+  },
+}
+`;
+
+exports[`the Time view > adds up a month for an owner as the entries do, one by one 1`] = `
+{
+  "entries": [
+    [
+      "entry Ada Lovelace Build 2026-10-01T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-01T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-02T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-05T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-05T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-06T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-08T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T13:00:30.000Z",
+      "1:59",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-01T08:00:00.000Z",
+      "2:30",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-02T08:00:00.000Z",
+      "2:31",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-05T08:00:00.000Z",
+      "2:32",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-06T08:00:00.000Z",
+      "2:33",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-07T08:00:00.000Z",
+      "2:34",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-08T08:00:00.000Z",
+      "2:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-09T08:00:00.000Z",
+      "2:36",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-01T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-02T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-05T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-06T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-07T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-08T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-09T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-01T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-02T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-03T22:00:00.000Z",
+      "2:20",
+      true,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-05T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-06T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-07T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-08T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-09T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-01T09:15:00.000Z",
+      "3:20",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-02T09:15:00.000Z",
+      "3:19",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-05T09:15:00.000Z",
+      "3:18",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-06T09:15:00.000Z",
+      "3:17",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-07T09:15:00.000Z",
+      "3:16",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-08T09:15:00.000Z",
+      "3:15",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-09T09:15:00.000Z",
+      "3:14",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-01T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-02T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-05T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-06T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-07T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-08T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-09T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-01T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-02T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-05T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-06T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T19:00:00.000Z",
+      "2:10",
+      true,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-08T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-09T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-01T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-02T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-31T10:30:00.000Z",
+      "1:30",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-09-30T20:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-01T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-02T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-01T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-02T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-05T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-06T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-07T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-08T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-09T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+  ],
+  "entryCount": 79,
+  "expected": "of 930:00 expected · 9:30 of it overtime",
+  "groups": [
+    {
+      "duration": "38:49",
+      "group": "project Build",
+      "label": "Build",
+      "overtime": "33:49 regular · 5:00 overtime",
+    },
+    {
+      "duration": "58:27",
+      "group": "project Fixed",
+      "label": "Fixed",
+      "overtime": "56:07 regular · 2:20 overtime",
+    },
+    {
+      "duration": "22:59",
+      "group": "project Internal",
+      "label": "Internal",
+      "overtime": null,
+    },
+    {
+      "duration": "98:41",
+      "group": "project Site",
+      "label": "Site",
+      "overtime": "96:31 regular · 2:10 overtime",
+    },
+  ],
+  "people": [
+    [
+      "Ada Lovelace",
+      "35:55",
+      "30:55 regular · 5:00 overtime",
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Con Tractor",
+      "49:00",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Grace Hopper",
+      "32:26",
+      "30:06 regular · 2:20 overtime",
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Hedy Lamarr",
+      "35:25",
+      "33:15 regular · 2:10 overtime",
+      "153:45",
+      "3:45 leave (half a day)",
+    ],
+    [
+      "Linus Torvalds",
+      "54:30",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Mallory Mallard",
+      "11:40",
+      null,
+      "146:15",
+      "11:15 leave (1.5 days)",
+    ],
+  ],
+  "split": {
+    "amounts": [
+      {
+        "amount": "£12,134.13",
+        "currency": "GBP",
+      },
+    ],
+    "billable": "214:56",
+    "missingRates": 16,
+    "nonBillable": "4:00",
+    "total": "218:56",
+  },
+  "total": "218:56",
+  "week": null,
+}
+`;
+
+exports[`the Time view > as ada, range=custom&from=2026-10-01&to=2026-10-31&group=client, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Ada Lovelace Build 2026-10-01T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-01T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-02T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-05T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-05T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-06T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-08T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T13:00:30.000Z",
+      "1:59",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-01T08:00:00.000Z",
+      "2:30",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-02T08:00:00.000Z",
+      "2:31",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-05T08:00:00.000Z",
+      "2:32",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-06T08:00:00.000Z",
+      "2:33",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-07T08:00:00.000Z",
+      "2:34",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-08T08:00:00.000Z",
+      "2:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-09T08:00:00.000Z",
+      "2:36",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-01T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-02T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-05T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-06T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-07T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-08T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-09T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-01T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-02T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-03T22:00:00.000Z",
+      "2:20",
+      true,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-05T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-06T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-07T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-08T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-09T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-01T09:15:00.000Z",
+      "3:20",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-02T09:15:00.000Z",
+      "3:19",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-05T09:15:00.000Z",
+      "3:18",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-06T09:15:00.000Z",
+      "3:17",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-07T09:15:00.000Z",
+      "3:16",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-08T09:15:00.000Z",
+      "3:15",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-09T09:15:00.000Z",
+      "3:14",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-01T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-02T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-05T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-06T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-07T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-08T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-09T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-01T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-02T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-05T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-06T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T19:00:00.000Z",
+      "2:10",
+      true,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-08T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-09T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-01T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-02T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-31T10:30:00.000Z",
+      "1:30",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-09-30T20:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-01T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-02T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-01T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-02T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-05T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-06T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-07T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-08T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-09T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+  ],
+  "entryCount": 79,
+  "expected": "of 930:00 expected · 9:30 of it overtime",
+  "groups": [
+    {
+      "duration": "137:30",
+      "group": "client Initech",
+      "label": "Initech",
+      "overtime": "130:20 regular · 7:10 overtime",
+    },
+    {
+      "duration": "81:26",
+      "group": "",
+      "label": "No client",
+      "overtime": "79:06 regular · 2:20 overtime",
+    },
+  ],
+  "people": [
+    [
+      "Ada Lovelace",
+      "35:55",
+      "30:55 regular · 5:00 overtime",
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Con Tractor",
+      "49:00",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Grace Hopper",
+      "32:26",
+      "30:06 regular · 2:20 overtime",
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Hedy Lamarr",
+      "35:25",
+      "33:15 regular · 2:10 overtime",
+      "153:45",
+      "3:45 leave (half a day)",
+    ],
+    [
+      "Linus Torvalds",
+      "54:30",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Mallory Mallard",
+      "11:40",
+      null,
+      "146:15",
+      "11:15 leave (1.5 days)",
+    ],
+  ],
+  "split": {
+    "amounts": [
+      {
+        "amount": "£12,134.13",
+        "currency": "GBP",
+      },
+    ],
+    "billable": "214:56",
+    "missingRates": 16,
+    "nonBillable": "4:00",
+    "total": "218:56",
+  },
+  "total": "218:56",
+  "week": null,
+}
+`;
+
+exports[`the Time view > as ada, range=custom&from=2026-10-01&to=2026-10-31&group=day, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Ada Lovelace Build 2026-10-01T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-01T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-02T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-05T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-05T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-06T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-08T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T13:00:30.000Z",
+      "1:59",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-01T08:00:00.000Z",
+      "2:30",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-02T08:00:00.000Z",
+      "2:31",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-05T08:00:00.000Z",
+      "2:32",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-06T08:00:00.000Z",
+      "2:33",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-07T08:00:00.000Z",
+      "2:34",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-08T08:00:00.000Z",
+      "2:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-09T08:00:00.000Z",
+      "2:36",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-01T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-02T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-05T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-06T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-07T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-08T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-09T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-01T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-02T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-03T22:00:00.000Z",
+      "2:20",
+      true,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-05T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-06T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-07T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-08T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-09T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-01T09:15:00.000Z",
+      "3:20",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-02T09:15:00.000Z",
+      "3:19",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-05T09:15:00.000Z",
+      "3:18",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-06T09:15:00.000Z",
+      "3:17",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-07T09:15:00.000Z",
+      "3:16",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-08T09:15:00.000Z",
+      "3:15",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-09T09:15:00.000Z",
+      "3:14",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-01T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-02T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-05T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-06T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-07T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-08T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-09T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-01T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-02T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-05T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-06T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T19:00:00.000Z",
+      "2:10",
+      true,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-08T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-09T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-01T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-02T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-31T10:30:00.000Z",
+      "1:30",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-09-30T20:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-01T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-02T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-01T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-02T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-05T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-06T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-07T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-08T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-09T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+  ],
+  "entryCount": 79,
+  "expected": "of 930:00 expected · 9:30 of it overtime",
+  "groups": [
+    {
+      "duration": "29:06",
+      "group": "2026-10-01",
+      "label": "Thursday 1 October",
+      "overtime": "27:51 regular · 1:15 overtime",
+    },
+    {
+      "duration": "28:51",
+      "group": "2026-10-02",
+      "label": "Friday 2 October",
+      "overtime": null,
+    },
+    {
+      "duration": "7:20",
+      "group": "2026-10-03",
+      "label": "Saturday 3 October",
+      "overtime": "5:00 regular · 2:20 overtime",
+    },
+    {
+      "duration": "25:06",
+      "group": "2026-10-05",
+      "label": "Monday 5 October",
+      "overtime": "23:51 regular · 1:15 overtime",
+    },
+    {
+      "duration": "28:51",
+      "group": "2026-10-06",
+      "label": "Tuesday 6 October",
+      "overtime": null,
+    },
+    {
+      "duration": "32:16",
+      "group": "2026-10-07",
+      "label": "Wednesday 7 October",
+      "overtime": "28:51 regular · 3:25 overtime",
+    },
+    {
+      "duration": "28:51",
+      "group": "2026-10-08",
+      "label": "Thursday 8 October",
+      "overtime": null,
+    },
+    {
+      "duration": "32:05",
+      "group": "2026-10-09",
+      "label": "Friday 9 October",
+      "overtime": "30:50 regular · 1:15 overtime",
+    },
+    {
+      "duration": "5:00",
+      "group": "2026-10-10",
+      "label": "Saturday 10 October",
+      "overtime": null,
+    },
+    {
+      "duration": "1:30",
+      "group": "2026-10-31",
+      "label": "Saturday 31 October",
+      "overtime": null,
+    },
+  ],
+  "people": [
+    [
+      "Ada Lovelace",
+      "35:55",
+      "30:55 regular · 5:00 overtime",
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Con Tractor",
+      "49:00",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Grace Hopper",
+      "32:26",
+      "30:06 regular · 2:20 overtime",
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Hedy Lamarr",
+      "35:25",
+      "33:15 regular · 2:10 overtime",
+      "153:45",
+      "3:45 leave (half a day)",
+    ],
+    [
+      "Linus Torvalds",
+      "54:30",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Mallory Mallard",
+      "11:40",
+      null,
+      "146:15",
+      "11:15 leave (1.5 days)",
+    ],
+  ],
+  "split": {
+    "amounts": [
+      {
+        "amount": "£12,134.13",
+        "currency": "GBP",
+      },
+    ],
+    "billable": "214:56",
+    "missingRates": 16,
+    "nonBillable": "4:00",
+    "total": "218:56",
+  },
+  "total": "218:56",
+  "week": null,
+}
+`;
+
+exports[`the Time view > as ada, range=custom&from=2026-10-01&to=2026-10-31&group=project&tag=TAG, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Ada Lovelace Build 2026-10-06T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-01T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-02T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-05T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-06T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-07T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-08T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-09T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-01T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-02T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-03T22:00:00.000Z",
+      "2:20",
+      true,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-05T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-06T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-07T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-08T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-09T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+  ],
+  "entryCount": 16,
+  "expected": "of 930:00 expected · 2:20 of it overtime",
+  "groups": [
+    {
+      "duration": "1:35",
+      "group": "project Build",
+      "label": "Build",
+      "overtime": null,
+    },
+    {
+      "duration": "58:27",
+      "group": "project Fixed",
+      "label": "Fixed",
+      "overtime": "56:07 regular · 2:20 overtime",
+    },
+  ],
+  "people": [
+    [
+      "Ada Lovelace",
+      "1:35",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Con Tractor",
+      "49:00",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Grace Hopper",
+      "9:27",
+      "7:07 regular · 2:20 overtime",
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Hedy Lamarr",
+      "0:00",
+      null,
+      "153:45",
+      "3:45 leave (half a day)",
+    ],
+    [
+      "Linus Torvalds",
+      "0:00",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Mallory Mallard",
+      "0:00",
+      null,
+      "146:15",
+      "11:15 leave (1.5 days)",
+    ],
+  ],
+  "split": {
+    "amounts": [
+      {
+        "amount": "£3,033.33",
+        "currency": "GBP",
+      },
+    ],
+    "billable": "60:02",
+    "missingRates": 0,
+    "nonBillable": "0:00",
+    "total": "60:02",
+  },
+  "total": "60:02",
+  "week": null,
+}
+`;
+
+exports[`the Time view > as ada, range=week&from=2026-10-05&group=project, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Ada Lovelace Build 2026-10-05T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-05T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-06T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-07T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-08T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T11:00:00.000Z",
+      "1:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T13:00:30.000Z",
+      "1:59",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Build 2026-10-09T18:00:00.000Z",
+      "1:15",
+      true,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-05T08:00:00.000Z",
+      "2:32",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-06T08:00:00.000Z",
+      "2:33",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-07T08:00:00.000Z",
+      "2:34",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-08T08:00:00.000Z",
+      "2:35",
+      false,
+    ],
+    [
+      "entry Ada Lovelace Site 2026-10-09T08:00:00.000Z",
+      "2:36",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-05T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-06T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-07T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-08T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Con Tractor Fixed 2026-10-09T10:00:00.000Z",
+      "7:00",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-05T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-06T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-07T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-08T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Fixed 2026-10-09T13:00:00.000Z",
+      "1:01",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-05T09:15:00.000Z",
+      "3:18",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-06T09:15:00.000Z",
+      "3:17",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-07T09:15:00.000Z",
+      "3:16",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-08T09:15:00.000Z",
+      "3:15",
+      false,
+    ],
+    [
+      "entry Grace Hopper Internal 2026-10-09T09:15:00.000Z",
+      "3:14",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-05T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-06T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-07T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-08T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-09T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-05T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-06T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T19:00:00.000Z",
+      "2:10",
+      true,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-08T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-09T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-05T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-06T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-07T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-08T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-09T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+  ],
+  "entryCount": 55,
+  "expected": "of 210:00 expected · 5:55 of it overtime",
+  "groups": [
+    {
+      "duration": "27:24",
+      "group": "project Build",
+      "label": "Build",
+      "overtime": "23:39 regular · 3:45 overtime",
+    },
+    {
+      "duration": "40:05",
+      "group": "project Fixed",
+      "label": "Fixed",
+      "overtime": null,
+    },
+    {
+      "duration": "16:20",
+      "group": "project Internal",
+      "label": "Internal",
+      "overtime": null,
+    },
+    {
+      "duration": "68:20",
+      "group": "project Site",
+      "label": "Site",
+      "overtime": "66:10 regular · 2:10 overtime",
+    },
+  ],
+  "people": [
+    [
+      "Ada Lovelace",
+      "26:29",
+      "22:44 regular · 3:45 overtime",
+      "37:30",
+      "No leave",
+    ],
+    [
+      "Con Tractor",
+      "35:00",
+      null,
+      "37:30",
+      "No leave",
+    ],
+    [
+      "Grace Hopper",
+      "21:25",
+      null,
+      "37:30",
+      "No leave",
+    ],
+    [
+      "Hedy Lamarr",
+      "25:55",
+      "23:45 regular · 2:10 overtime",
+      "33:45",
+      "3:45 leave (half a day)",
+    ],
+    [
+      "Linus Torvalds",
+      "35:00",
+      null,
+      "37:30",
+      "No leave",
+    ],
+    [
+      "Mallory Mallard",
+      "8:20",
+      null,
+      "26:15",
+      "11:15 leave (1.5 days)",
+    ],
+  ],
+  "split": {
+    "amounts": [
+      {
+        "amount": "£8,768.45",
+        "currency": "GBP",
+      },
+    ],
+    "billable": "148:09",
+    "missingRates": 10,
+    "nonBillable": "4:00",
+    "total": "152:09",
+  },
+  "total": "152:09",
+  "week": {
+    "dayTotals": [
+      "25:06",
+      "28:51",
+      "32:16",
+      "28:51",
+      "32:05",
+      "5:00",
+      "0:00",
+    ],
+    "days": [
+      {
+        "day": "2026-10-05",
+        "isToday": false,
+        "name": "Monday Monday 5 October",
+        "short": "Mon",
+      },
+      {
+        "day": "2026-10-06",
+        "isToday": false,
+        "name": "Tuesday Tuesday 6 October",
+        "short": "Tue",
+      },
+      {
+        "day": "2026-10-07",
+        "isToday": false,
+        "name": "Wednesday Wednesday 7 October",
+        "short": "Wed",
+      },
+      {
+        "day": "2026-10-08",
+        "isToday": false,
+        "name": "Thursday Thursday 8 October",
+        "short": "Thu",
+      },
+      {
+        "day": "2026-10-09",
+        "isToday": true,
+        "name": "Friday Friday 9 October",
+        "short": "Fri",
+      },
+      {
+        "day": "2026-10-10",
+        "isToday": false,
+        "name": "Saturday Saturday 10 October",
+        "short": "Sat",
+      },
+      {
+        "day": "2026-10-11",
+        "isToday": false,
+        "name": "Sunday Sunday 11 October",
+        "short": "Sun",
+      },
+    ],
+    "rows": [
+      {
+        "cells": [
+          "5:35",
+          "4:20",
+          "5:35",
+          "4:20",
+          "7:34",
+          "0:00",
+          "0:00",
+        ],
+        "empty": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+        ],
+        "group": "project Build",
+        "label": "Build",
+        "total": "27:24",
+      },
+      {
+        "cells": [
+          "8:01",
+          "8:01",
+          "8:01",
+          "8:01",
+          "8:01",
+          "0:00",
+          "0:00",
+        ],
+        "empty": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+        ],
+        "group": "project Fixed",
+        "label": "Fixed",
+        "total": "40:05",
+      },
+      {
+        "cells": [
+          "3:18",
+          "3:17",
+          "3:16",
+          "3:15",
+          "3:14",
+          "0:00",
+          "0:00",
+        ],
+        "empty": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+        ],
+        "group": "project Internal",
+        "label": "Internal",
+        "total": "16:20",
+      },
+      {
+        "cells": [
+          "8:12",
+          "13:13",
+          "15:24",
+          "13:15",
+          "13:16",
+          "5:00",
+          "0:00",
+        ],
+        "empty": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+        ],
+        "group": "project Site",
+        "label": "Site",
+        "total": "68:20",
+      },
+    ],
+    "total": "152:09",
+  },
+}
+`;
+
+exports[`the Time view > as hedy, range=custom&from=2026-10-01&to=2026-10-31&group=project, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Hedy Lamarr Build 2026-10-01T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-02T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-05T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-06T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-07T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-08T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-09T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-01T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-02T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-05T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-06T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T19:00:00.000Z",
+      "2:10",
+      true,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-08T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-09T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-01T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-02T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-31T10:30:00.000Z",
+      "1:30",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-09-30T20:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-01T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-02T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-01T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-02T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-05T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-06T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-07T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-08T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-09T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+  ],
+  "entryCount": 38,
+  "expected": "of 457:30 expected · 2:10 of it overtime",
+  "groups": [
+    {
+      "duration": "20:45",
+      "group": "project Build",
+      "label": "Build",
+      "overtime": null,
+    },
+    {
+      "duration": "80:50",
+      "group": "project Site",
+      "label": "Site",
+      "overtime": "78:40 regular · 2:10 overtime",
+    },
+  ],
+  "people": [
+    [
+      "Hedy Lamarr",
+      "35:25",
+      "33:15 regular · 2:10 overtime",
+      "153:45",
+      "3:45 leave (half a day)",
+    ],
+    [
+      "Linus Torvalds",
+      "54:30",
+      null,
+      "157:30",
+      "No leave",
+    ],
+    [
+      "Mallory Mallard",
+      "11:40",
+      null,
+      "146:15",
+      "11:15 leave (1.5 days)",
+    ],
+  ],
+  "split": {
+    "amounts": null,
+    "billable": "97:35",
+    "missingRates": null,
+    "nonBillable": "4:00",
+    "total": "101:35",
+  },
+  "total": "101:35",
+  "week": null,
+}
+`;
+
+exports[`the Time view > as hedy, range=week&from=2026-10-05&group=day, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Hedy Lamarr Build 2026-10-05T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-06T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-07T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-08T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Build 2026-10-09T14:00:00.000Z",
+      "0:45",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-05T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-06T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-07T19:00:00.000Z",
+      "2:10",
+      true,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-08T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Hedy Lamarr Site 2026-10-09T09:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-05T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-06T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-07T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-08T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+    [
+      "entry Mallory Mallard Site 2026-10-09T23:30:00.000Z",
+      "1:40",
+      false,
+    ],
+  ],
+  "entryCount": 26,
+  "expected": "of 97:30 expected · 2:10 of it overtime",
+  "groups": [
+    {
+      "duration": "8:25",
+      "group": "2026-10-05",
+      "label": "Monday 5 October",
+      "overtime": null,
+    },
+    {
+      "duration": "13:25",
+      "group": "2026-10-06",
+      "label": "Tuesday 6 October",
+      "overtime": null,
+    },
+    {
+      "duration": "15:35",
+      "group": "2026-10-07",
+      "label": "Wednesday 7 October",
+      "overtime": "13:25 regular · 2:10 overtime",
+    },
+    {
+      "duration": "13:25",
+      "group": "2026-10-08",
+      "label": "Thursday 8 October",
+      "overtime": null,
+    },
+    {
+      "duration": "13:25",
+      "group": "2026-10-09",
+      "label": "Friday 9 October",
+      "overtime": null,
+    },
+    {
+      "duration": "5:00",
+      "group": "2026-10-10",
+      "label": "Saturday 10 October",
+      "overtime": null,
+    },
+  ],
+  "people": [
+    [
+      "Hedy Lamarr",
+      "25:55",
+      "23:45 regular · 2:10 overtime",
+      "33:45",
+      "3:45 leave (half a day)",
+    ],
+    [
+      "Linus Torvalds",
+      "35:00",
+      null,
+      "37:30",
+      "No leave",
+    ],
+    [
+      "Mallory Mallard",
+      "8:20",
+      null,
+      "26:15",
+      "11:15 leave (1.5 days)",
+    ],
+  ],
+  "split": {
+    "amounts": null,
+    "billable": "65:15",
+    "missingRates": null,
+    "nonBillable": "4:00",
+    "total": "69:15",
+  },
+  "total": "69:15",
+  "week": {
+    "dayTotals": [
+      "8:25",
+      "13:25",
+      "15:35",
+      "13:25",
+      "13:25",
+      "5:00",
+      "0:00",
+    ],
+    "days": [
+      {
+        "day": "2026-10-05",
+        "isToday": false,
+        "name": "Monday Monday 5 October",
+        "short": "Mon",
+      },
+      {
+        "day": "2026-10-06",
+        "isToday": false,
+        "name": "Tuesday Tuesday 6 October",
+        "short": "Tue",
+      },
+      {
+        "day": "2026-10-07",
+        "isToday": false,
+        "name": "Wednesday Wednesday 7 October",
+        "short": "Wed",
+      },
+      {
+        "day": "2026-10-08",
+        "isToday": false,
+        "name": "Thursday Thursday 8 October",
+        "short": "Thu",
+      },
+      {
+        "day": "2026-10-09",
+        "isToday": true,
+        "name": "Friday Friday 9 October",
+        "short": "Fri",
+      },
+      {
+        "day": "2026-10-10",
+        "isToday": false,
+        "name": "Saturday Saturday 10 October",
+        "short": "Sat",
+      },
+      {
+        "day": "2026-10-11",
+        "isToday": false,
+        "name": "Sunday Sunday 11 October",
+        "short": "Sun",
+      },
+    ],
+    "rows": [
+      {
+        "cells": [
+          "2:45",
+          "2:45",
+          "2:45",
+          "2:45",
+          "2:45",
+          "0:00",
+          "0:00",
+        ],
+        "empty": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+        ],
+        "group": "project Build",
+        "label": "Build",
+        "total": "13:45",
+      },
+      {
+        "cells": [
+          "5:40",
+          "10:40",
+          "12:50",
+          "10:40",
+          "10:40",
+          "5:00",
+          "0:00",
+        ],
+        "empty": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+        ],
+        "group": "project Site",
+        "label": "Site",
+        "total": "55:30",
+      },
+    ],
+    "total": "69:15",
+  },
+}
+`;
+
+exports[`the Time view > as linus, range=custom&from=2026-10-01&to=2026-10-31&group=project, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Linus Torvalds Build 2026-10-01T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-02T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-31T10:30:00.000Z",
+      "1:30",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-09-30T20:00:00.000Z",
+      "4:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-01T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-02T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+  ],
+  "entryCount": 16,
+  "expected": "of 157:30 expected",
+  "groups": [
+    {
+      "duration": "15:30",
+      "group": "project Build",
+      "label": "Build",
+      "overtime": null,
+    },
+    {
+      "duration": "39:00",
+      "group": "project Site",
+      "label": "Site",
+      "overtime": null,
+    },
+  ],
+  "people": [
+    [
+      "Linus Torvalds",
+      "54:30",
+      null,
+      "157:30",
+      "No leave",
+    ],
+  ],
+  "split": {
+    "amounts": null,
+    "billable": "54:30",
+    "missingRates": null,
+    "nonBillable": "0:00",
+    "total": "54:30",
+  },
+  "total": "54:30",
+  "week": null,
+}
+`;
+
+exports[`the Time view > as linus, range=week&from=2026-10-05&group=client, shows what it showed entry by entry 1`] = `
+{
+  "entries": [
+    [
+      "entry Linus Torvalds Build 2026-10-05T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-06T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-07T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-08T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Build 2026-10-09T03:00:00.000Z",
+      "2:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-05T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-06T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-07T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-08T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+    [
+      "entry Linus Torvalds Site 2026-10-09T21:00:00.000Z",
+      "5:00",
+      false,
+    ],
+  ],
+  "entryCount": 10,
+  "expected": "of 37:30 expected",
+  "groups": [
+    {
+      "duration": "35:00",
+      "group": "client Initech",
+      "label": "Initech",
+      "overtime": null,
+    },
+  ],
+  "people": [
+    [
+      "Linus Torvalds",
+      "35:00",
+      null,
+      "37:30",
+      "No leave",
+    ],
+  ],
+  "split": {
+    "amounts": null,
+    "billable": "35:00",
+    "missingRates": null,
+    "nonBillable": "0:00",
+    "total": "35:00",
+  },
+  "total": "35:00",
+  "week": {
+    "dayTotals": [
+      "2:00",
+      "7:00",
+      "7:00",
+      "7:00",
+      "7:00",
+      "5:00",
+      "0:00",
+    ],
+    "days": [
+      {
+        "day": "2026-10-05",
+        "isToday": false,
+        "name": "Monday Monday 5 October",
+        "short": "Mon",
+      },
+      {
+        "day": "2026-10-06",
+        "isToday": false,
+        "name": "Tuesday Tuesday 6 October",
+        "short": "Tue",
+      },
+      {
+        "day": "2026-10-07",
+        "isToday": false,
+        "name": "Wednesday Wednesday 7 October",
+        "short": "Wed",
+      },
+      {
+        "day": "2026-10-08",
+        "isToday": false,
+        "name": "Thursday Thursday 8 October",
+        "short": "Thu",
+      },
+      {
+        "day": "2026-10-09",
+        "isToday": false,
+        "name": "Friday Friday 9 October",
+        "short": "Fri",
+      },
+      {
+        "day": "2026-10-10",
+        "isToday": true,
+        "name": "Saturday Saturday 10 October",
+        "short": "Sat",
+      },
+      {
+        "day": "2026-10-11",
+        "isToday": false,
+        "name": "Sunday Sunday 11 October",
+        "short": "Sun",
+      },
+    ],
+    "rows": [
+      {
+        "cells": [
+          "2:00",
+          "2:00",
+          "2:00",
+          "2:00",
+          "2:00",
+          "0:00",
+          "0:00",
+        ],
+        "empty": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+        ],
+        "group": "project Build",
+        "label": "Build",
+        "total": "10:00",
+      },
+      {
+        "cells": [
+          "0:00",
+          "5:00",
+          "5:00",
+          "5:00",
+          "5:00",
+          "5:00",
+          "0:00",
+        ],
+        "empty": [
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+        ],
+        "group": "project Site",
+        "label": "Site",
+        "total": "25:00",
+      },
+    ],
+    "total": "35:00",
+  },
+}
+`;

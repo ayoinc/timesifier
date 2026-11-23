@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
 import {
@@ -27,8 +26,8 @@ import { dayOf } from "~/time/calendar";
 
 import {
 	type Contractor,
-	type ContractorEntry,
 	type ContractorLine,
+	type ContractorTime,
 	contractorLines,
 } from "./contractors";
 
@@ -84,10 +83,6 @@ export async function contractorReport(
 	const { organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
 	const days = rangeDays(query, dayOf(now, organisation.timeZone), organisation.weekStartsOn);
-	// Each entry's day is stored with it, in its person's zone (TS-111).
-	const inDays = (e: { spentOn: SQLiteColumn }) =>
-		and(gte(e.spentOn, days.first), lte(e.spentOn, days.last));
-
 	const [members, [held]] = await Promise.all([
 		scope.memberships.select(),
 		drizzle(env.DB)
@@ -100,31 +95,17 @@ export async function contractorReport(
 	const memberIds = members.map(({ userId }) => userId);
 	const contractorsNow = members.filter((m) => m.isContractor).map(({ userId }) => userId);
 
-	const [theirs, othersEntries, rates] = await Promise.all([
-		contractorsNow.length === 0
-			? Promise.resolve([])
-			: scope.timeEntries.select((e) => and(inDays(e), among(e.userId, contractorsNow))),
-		// The entries of people who are no longer members.
-		scope.timeEntries.select((e) => and(inDays(e), notAmong(e.userId, memberIds))),
+	const [time, rates] = await Promise.all([
+		timeOn(scope, days, contractorsNow, memberIds, now),
 		scope.rates.select((r) => eq(r.kind, "cost")),
 	]);
 
+	const stillMembers = new Set(memberIds);
 	const departed = await leftAsContractors(scope, [
-		...new Set(othersEntries.map(({ userId }) => userId)),
+		...new Set(time.map(({ userId }) => userId).filter((userId) => !stillMembers.has(userId))),
 	]);
 	const left = new Set(departed);
 	const contractors = await peopleOf([...contractorsNow, ...departed], left);
-	const entries: ContractorEntry[] = [
-		...theirs,
-		...othersEntries.filter((e) => left.has(e.userId)),
-	].map((e) => ({
-		userId: e.userId,
-		projectId: e.projectId,
-		taskId: e.taskId,
-		startedAt: e.startedAt.getTime(),
-		endedAt: e.endedAt?.getTime() ?? null,
-		day: e.spentOn,
-	}));
 	const costRates: RateRow[] = rates.map((r) => ({
 		kind: "cost",
 		userId: r.userId,
@@ -138,10 +119,56 @@ export async function contractorReport(
 	return {
 		query,
 		days,
-		lines: contractorLines(contractors, entries, costRates, days, now),
+		// The time of people who left as employees is read, and listed by nobody.
+		lines: contractorLines(contractors, time, costRates, days),
 		hasContractors: contractors.length > 0,
 		currency: held.currency,
 	};
+}
+
+/**
+ * The time on `days` of `contractors`, and of everybody who is not one of
+ * `members`, added up in SQL in one statement (TS-113, D7): one line for each
+ * person, project, task, stored day and whether overtime, so that each line is
+ * priced at one rate. An entry is read by the day stored with it, in its
+ * person's zone (TS-111), through the index on `(organisation_id, spent_on)`.
+ */
+async function timeOn(
+	scope: OrganisationScope,
+	days: ReportDays,
+	contractors: readonly string[],
+	members: readonly string[],
+	now: number,
+): Promise<ContractorTime[]> {
+	const lines = await scope.timeEntries.sums(
+		(e) => ({
+			userId: e.userId,
+			projectId: e.projectId,
+			taskId: e.taskId,
+			day: e.spentOn,
+			overtime: e.overtime,
+		}),
+		// Whole seconds from the second the start is in to the second the end is
+		// in, a running entry's to now; the stored instants are whole milliseconds.
+		(e) => ({
+			seconds: sql<number>`max(0, coalesce(${e.endedAt}, cast(${now} as integer)) / 1000 - ${e.startedAt} / 1000)`,
+		}),
+		[["userId", "projectId", "taskId", "day", "overtime"]],
+		(e) =>
+			and(
+				gte(e.spentOn, days.first),
+				lte(e.spentOn, days.last),
+				or(among(e.userId, contractors), notAmong(e.userId, members)),
+			),
+	);
+	return lines.map((line) => ({
+		userId: String(line.userId),
+		projectId: String(line.projectId),
+		taskId: line.taskId === null ? null : String(line.taskId),
+		day: String(line.day),
+		overtime: Boolean(line.overtime),
+		seconds: line.seconds,
+	}));
 }
 
 /**

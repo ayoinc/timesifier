@@ -1,6 +1,6 @@
 import type { Day } from "~/time/calendar";
 
-import type { Row } from "./report";
+import type { Piece } from "./report";
 
 /**
  * A week of a report as a timetable (harvest-taste item 10, the weekly report
@@ -29,7 +29,7 @@ export interface Timetable {
 }
 
 /** The pieces of a report laid out by project and day. A piece outside `days` is left out. */
-export function timetableOf(pieces: readonly Row[], days: readonly Day[]): Timetable {
+export function timetableOf(pieces: readonly Piece[], days: readonly Day[]): Timetable {
 	const column = new Map(days.map((day, index) => [day, index]));
 	const rows = new Map<string, TimetableRow>();
 	const dayTotals = days.map(() => 0);

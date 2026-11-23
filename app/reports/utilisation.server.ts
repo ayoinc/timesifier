@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { managedTeams, teamsWithMembers } from "~/teams/teams.server";
 
-import type { Row } from "./report";
+import type { Piece } from "./report";
 import { type PersonLine, peopleOfReport, type ReportRequest } from "./reports.server";
 import {
 	sumFigures,
@@ -44,7 +44,7 @@ export async function nonBillableProjects(
 
 export async function utilisationReport(
 	request: ReportRequest,
-	pieces: readonly Row[],
+	pieces: readonly Piece[],
 	lines?: readonly PersonLine[],
 ): Promise<UtilisationReport> {
 	const { scope, access, seesEveryone } = request;

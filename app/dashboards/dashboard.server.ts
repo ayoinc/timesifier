@@ -5,8 +5,9 @@ import { maySeeRates } from "~/organisations/access";
 import type { Membership } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { type ProfitabilityReport, profitabilityReport } from "~/reports/profitability.server";
-import { type Row, totalsOf } from "~/reports/report";
-import { peopleOfReport, type ReportRequest, rowsOfReport } from "~/reports/reports.server";
+import { type Piece, totalsOf } from "~/reports/report";
+import { peopleOfReport, type ReportRequest } from "~/reports/reports.server";
+import { sumsOf } from "~/reports/sums.server";
 import { bills } from "~/reports/utilisation";
 import {
 	nonBillableProjects,
@@ -72,14 +73,16 @@ export async function dashboardOf(
 	report: ReportRequest,
 ): Promise<Dashboard> {
 	const { scope } = report;
-	const rows = await rowsOfReport(report);
+	// The time added up in SQL (decision 57); Profitability reads its own,
+	// priced by span of rates.
+	const { sums: rows } = await sumsOf(report);
 	const lines = await peopleOfReport(report, rows);
 	const seesMoney = maySeeRates(membership.role);
 	const { organisation } = membership;
 	const [utilisation, nonBillable, money, budgets, receivables, uninvoiced] = await Promise.all([
 		utilisationReport(report, rows, lines),
 		nonBillableProjects(scope),
-		seesMoney ? profitabilityReport(report, rows) : Promise.resolve(null),
+		seesMoney ? profitabilityReport(report) : Promise.resolve(null),
 		budgetsNearLimit(report, rows, seesMoney),
 		// Invoices count days in the organisation's zone, so the panels read them
 		// as Invoices' pages do (`billingOf`): their figures are those pages' totals.
@@ -138,7 +141,7 @@ export async function dashboardOf(
  */
 async function budgetsNearLimit(
 	report: ReportRequest,
-	rows: readonly Row[],
+	rows: readonly Piece[],
 	seesMoney: boolean,
 ): Promise<BudgetNearLimit[]> {
 	const { scope } = report;
