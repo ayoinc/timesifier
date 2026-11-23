@@ -59,6 +59,25 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-106 · Buyer pages
+
+Builder: AI session on branch `ts-106-buyer-pages`. In review: the pull request against `main`. No migration. Spec: `research/corporate/cards.md`, TS-106, built to the owner's answers 8, 9 and 10 of 23 November 2026. Decision 64.
+
+- [x] `/features`: a section per capability (Time and the timer, Timesheets and approvals, Leave, Expenses and receipts, Invoices and estimates, Reports, Roles and the activity log, Integrations), each naming the destinations it is done in (`test/claims.test.ts`, "every capability on the features page is a destination of the application", "the features page counts and lists what the application holds").
+- [x] Its drawings say "Example" (`e2e/buyer-pages.spec.ts`, "every drawing on the features page that shows a time says it is an example").
+- [x] `/integrations`: the API, webhooks, calendar feeds, the CSV import and export, and the Xero CSV, with the code's own limits (`test/claims.test.ts`, "the integrations page states the limits the code enforces").
+- [x] `/developers/api` is `docs/api.md`, drawn at build (`test/claims.test.ts`, "the published API reference is docs/api.md").
+- [x] `/api/v1/openapi.yaml` answers without a token, and documents every API route and no other (`test/integrations/api.test.ts`, "the OpenAPI document is public", "documents every route the API answers"); `/work_days` added.
+- [x] `/contact`: `mailto:hello@`, `privacy@` and `security@`, the company's details from its settings, no form, no promised time (`test/claims.test.ts`, "the contact page gives the company's details…").
+- [x] `/pricing`: the plans and seats from `PLAN_DETAILS`, the prices from `PRICES`, GBP excluding VAT, free until payment opens with 30 days' notice, no badge (`test/claims.test.ts`, "the pricing page's seats are the plans' seats…").
+- [x] Each line on `/pricing` names a built capability; company sign-in is listed as being built (`test/claims.test.ts`, "each line on the pricing page names a built capability…").
+- [x] The terms' Price section says the same, from the same prices, in a new version of 23 November 2026 (`test/documents.test.ts`, "the terms' Price section says what the pricing page says").
+- [x] The band leads to Features and Pricing; the foot groups Notices, Product and Company; every page is in the sitemap with its canonical link and description (`e2e/buyer-pages.spec.ts`; `test/claims.test.ts`, "the sitemap lists exactly the public pages…", "each public page names itself…"; `test/documents.test.ts`, the foot of every public page).
+- [x] No accessibility violations at 390 and 1280px in both schemes, nothing runs off the side, nothing moves with reduced motion, pricing works without script (`e2e/buyer-pages.spec.ts`).
+- [ ] The owner approves the terms' new Price text (quoted in the pull request).
+- [ ] The owner accepts the screenshots (`cmux-assets/browser/timesifier/TS-106/`).
+- [ ] **Owner (106a):** the Search Console Domain property verified by DNS TXT, the sitemap submitted, Bing imported from Search Console (steps in the pull request).
+
 ### TS-103 · The public pages at their best
 
 Builder: AI sessions on branch `ts-103-marketing`. The owner: "marketing on the side we'll beautify it". In review: the pull request against `main`; verifying the site in Google Search Console and Bing Webmaster Tools needs the owner (steps in the pull request). No migration. `docs/design-system.md` ("Pages outside the shell"), decision 43.
