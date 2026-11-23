@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { cx } from "~/components/cx";
 import { Wordmark } from "~/components/Wordmark";
+import { OPENAPI_PATH } from "~/integrations/paths";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 
 import { type Operator, OperatorDetails } from "./operator";
@@ -19,15 +20,45 @@ import "./public.css";
 export const PRIVACY_PATH = "/privacy";
 export const TERMS_PATH = "/terms";
 
+// What a buyer reads before signing in (TS-106): what Timesifier does, what it
+// costs, what it connects to and how to reach the company.
+export const FEATURES_PATH = "/features";
+export const PRICING_PATH = "/pricing";
+export const INTEGRATIONS_PATH = "/integrations";
+export const API_DOCS_PATH = "/developers/api";
+export const CONTACT_PATH = "/contact";
+
 /**
  * Every page anyone may open without an account, in the order the sitemap lists
  * them (routes/sitemap.ts). Each carries `pageMeta`, so its canonical address and
  * description; test/claims.test.ts holds the list to the pages that exist.
  */
-export const PUBLIC_PAGES = ["/", SIGN_IN_PATH, PRIVACY_PATH, TERMS_PATH] as const;
+export const PUBLIC_PAGES = [
+	"/",
+	SIGN_IN_PATH,
+	PRIVACY_PATH,
+	TERMS_PATH,
+	FEATURES_PATH,
+	PRICING_PATH,
+	INTEGRATIONS_PATH,
+	API_DOCS_PATH,
+	CONTACT_PATH,
+] as const;
+
+/**
+ * Files, not pages, that anyone may download and that a public page links to:
+ * the API's description for tools. Not in the sitemap, which lists pages.
+ */
+export const PUBLIC_FILES = [OPENAPI_PATH] as const;
 
 /** Where a person writes about their data until the controls are in the product. */
 export const PRIVACY_EMAIL = "privacy@timesifier.com";
+
+/** Where security reports and accessibility requests go (owner's answer 1, 23 November 2026). */
+export const SECURITY_EMAIL = "security@timesifier.com";
+
+/** Where anyone writes to the company about anything else (owner's answer 10, 23 November 2026). */
+export const HELLO_EMAIL = "hello@timesifier.com";
 
 export const MAIN_ID = "main";
 
@@ -128,7 +159,7 @@ export function SkipLink() {
 export interface SiteHeaderProps {
 	/** The address of the page the header is on. A link to it is marked as the current page. */
 	current: string;
-	/** The places on this page worth jumping to. They show from 600px. */
+	/** The places on this page worth jumping to. They show from 1200px, after the band's pages. */
 	sections?: readonly SiteLink[];
 	/**
 	 * On a signed-in page, what stands at the right in place of the way in: the
@@ -140,18 +171,29 @@ export interface SiteHeaderProps {
 const HEADER_LINK =
 	"inline-block rounded-extra-small py-2 hover-underline transition-link outline-none hover:decoration-current focus-visible:focus-indicator";
 
+/** The pages the band leads to on every public page with the way in, from 600px. */
+const HEADER_PAGES: readonly SiteLink[] = [
+	{ href: FEATURES_PATH, label: "Features" },
+	{ href: PRICING_PATH, label: "Pricing" },
+];
+
 /**
- * The top band of the sheet: the product's name, which leads home, the places on
- * the page where it has any, and the one way in. The sign-in page is that way
- * in, so on it the band holds the name alone. It stays at the top of the window,
- * and settles as the page leaves the top: the name draws in a little and a rule
- * appears under the band (public.css). On the sign-in page it does not settle:
- * that page is short, its views change in place, and the band takes no part.
+ * The top band of the sheet: the product's name, which leads home, the pages a
+ * buyer looks for, the places on the page where it has any, and the one way in.
+ * The sign-in page is that way in, so on it the band holds the name alone. It
+ * stays at the top of the window, and settles as the page leaves the top: the
+ * name draws in a little and a rule appears under the band (public.css). On the
+ * sign-in page it does not settle: that page is short, its views change in
+ * place, and the band takes no part.
  */
 export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 	const signedIn = end !== undefined;
 	const signIn = current !== SIGN_IN_PATH && !signedIn;
 	const settles = current !== SIGN_IN_PATH;
+	const places = [
+		...(signIn ? HEADER_PAGES : []).map((link) => ({ ...link, from: "max-medium:hidden" })),
+		...sections.map((link) => ({ ...link, from: "max-large:hidden" })),
+	];
 
 	return (
 		<header className="site-header sticky top-0 z-10 bg-sheet text-on-sheet">
@@ -165,12 +207,16 @@ export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 					<Wordmark tone="one" compact={signedIn} />
 				</a>
 				{signedIn && end}
-				{!signedIn && (signIn || sections.length > 0) && (
+				{!signedIn && (signIn || places.length > 0) && (
 					<nav aria-label="Site">
 						<ul className="flex items-center gap-8 text-label-large">
-							{sections.map(({ href, label }) => (
-								<li key={href} className="max-medium:hidden">
-									<a href={href} className={HEADER_LINK}>
+							{places.map(({ href, label, from }) => (
+								<li key={href} className={from}>
+									<a
+										href={href}
+										aria-current={href === current ? "page" : undefined}
+										className={cx(HEADER_LINK, href === current && "underline")}
+									>
 										{label}
 									</a>
 								</li>
@@ -197,10 +243,29 @@ export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 	);
 }
 
-/** The notices. Every public page ends with the way to them, and nothing else. */
+/** The notices. Every public page ends with the way to them. */
 const NOTICES: readonly SiteLink[] = [
 	{ href: PRIVACY_PATH, label: "Privacy notice" },
 	{ href: TERMS_PATH, label: "Terms" },
+];
+
+/**
+ * The groups of links at the foot of every public page, in their order: the
+ * notices, what the product is, and the company behind it.
+ */
+const FOOTER_GROUPS: readonly { id: string; heading: string; links: readonly SiteLink[] }[] = [
+	{ id: "site-notices", heading: "Notices", links: NOTICES },
+	{
+		id: "site-product",
+		heading: "Product",
+		links: [
+			{ href: FEATURES_PATH, label: "Features" },
+			{ href: PRICING_PATH, label: "Pricing" },
+			{ href: INTEGRATIONS_PATH, label: "Integrations" },
+			{ href: API_DOCS_PATH, label: "API docs" },
+		],
+	},
+	{ id: "site-company", heading: "Company", links: [{ href: CONTACT_PATH, label: "Contact" }] },
 ];
 
 export interface SiteFooterProps {
@@ -214,10 +279,10 @@ export interface SiteFooterProps {
 
 /**
  * The foot of every public page, on a surface of its own the width of the
- * window: what Timesifier is and which company runs it, the way to its notices,
- * and the credits for the page's photographs, in that order. From 600px they
- * stand in three columns; on a phone, one under another, the two notices side
- * by side.
+ * window: what Timesifier is and which company runs it, the groups of links,
+ * and the credits for the page's photographs, in that order. From 840px the
+ * words stand at the left and the groups at the right, the credits under them;
+ * narrower, one under another, the groups two to a row on a phone.
  */
 export function SiteFooter({ current, operator, photos = [] }: SiteFooterProps) {
 	return (
@@ -225,7 +290,7 @@ export function SiteFooter({ current, operator, photos = [] }: SiteFooterProps) 
 			<div
 				className={`${PAGE} grid gap-x-8 gap-y-10 pt-12 pb-16 medium:grid-cols-12 expanded:pt-16 expanded:pb-20`}
 			>
-				<div className="medium:col-span-5">
+				<div className="medium:col-span-12 expanded:col-span-5">
 					<p>
 						<Wordmark />
 					</p>
@@ -236,26 +301,37 @@ export function SiteFooter({ current, operator, photos = [] }: SiteFooterProps) 
 						<OperatorDetails operator={operator} />
 					</p>
 				</div>
-				<nav aria-labelledby="site-notices" className="medium:col-span-3">
-					<h2 id="site-notices" className="text-label-large">
-						Notices
-					</h2>
-					<ul className="mt-2 flex gap-x-6 medium:flex-col">
-						{NOTICES.map(({ href, label }) => (
-							<li key={href}>
-								<a
-									href={href}
-									aria-current={href === current ? "page" : undefined}
-									className={cx(LINK, "inline-block py-1.5", href === current && "decoration-2")}
-								>
-									{label}
-								</a>
-							</li>
-						))}
-					</ul>
-				</nav>
+				<div className="grid grid-cols-2 gap-x-8 gap-y-8 medium:col-span-12 medium:grid-cols-3 expanded:col-span-7">
+					{FOOTER_GROUPS.map(({ id, heading, links }) => (
+						<nav key={id} aria-labelledby={id}>
+							<h2 id={id} className="text-label-large">
+								{heading}
+							</h2>
+							<ul className="mt-2 flex flex-col">
+								{links.map(({ href, label }) => (
+									<li key={href}>
+										<a
+											href={href}
+											aria-current={href === current ? "page" : undefined}
+											className={cx(
+												LINK,
+												"inline-block py-1.5",
+												href === current && "decoration-2",
+											)}
+										>
+											{label}
+										</a>
+									</li>
+								))}
+							</ul>
+						</nav>
+					))}
+				</div>
 				{photos.length > 0 && (
-					<section aria-labelledby="site-credits" className="medium:col-span-4">
+					<section
+						aria-labelledby="site-credits"
+						className="medium:col-span-12 expanded:col-span-7 expanded:col-start-6"
+					>
 						<h2 id="site-credits" className="text-label-large">
 							Credits
 						</h2>
