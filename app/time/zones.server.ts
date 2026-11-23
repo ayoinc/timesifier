@@ -2,7 +2,8 @@ import { env } from "cloudflare:workers";
 import { and, eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { users } from "~/db";
+import { recordStatement } from "~/activity/activity.server";
+import { organisationIdsOf, organisationScope, users } from "~/db";
 import type { Membership } from "~/organisations/membership.server";
 
 import { zoneOf } from "./zones";
@@ -29,15 +30,36 @@ export async function zoneOfMember(membership: Membership): Promise<string> {
 /**
  * Stores `zone`, already checked against `TimeZone`, as the person's own
  * (TS-012a). `onlyIfUnset` is the zone the browser reported, which is stored
- * only while the person has none, so it never replaces one they chose.
+ * only while the person has none, so it never replaces one they chose. Each
+ * of their organisations records the change, with before and after, in the
+ * batch that makes it (TR-11): it moves the days their time counts in.
  */
 export async function setTimeZone(
 	userId: string,
 	zone: string,
 	{ onlyIfUnset = false }: { onlyIfUnset?: boolean } = {},
 ): Promise<void> {
-	await drizzle(env.DB)
+	const db = drizzle(env.DB);
+	const [person] = await db
+		.select({ timeZone: users.timeZone })
+		.from(users)
+		.where(eq(users.id, userId))
+		.limit(1);
+	const before = person?.timeZone ?? null;
+	if (before === zone || (onlyIfUnset && before !== null)) return;
+	const update = db
 		.update(users)
 		.set({ timeZone: zone })
 		.where(onlyIfUnset ? and(eq(users.id, userId), isNull(users.timeZone)) : eq(users.id, userId));
+	const records = (await organisationIdsOf(env.DB, userId)).map(
+		(organisationId) =>
+			recordStatement(
+				organisationScope(env.DB, organisationId),
+				userId,
+				"user.time_zone_changed",
+				{ type: "user", id: userId, ownerId: userId },
+				{ before: { timeZone: before }, after: { timeZone: zone } },
+			).query,
+	);
+	await db.batch([update, ...records]);
 }

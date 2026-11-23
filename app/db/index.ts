@@ -13,6 +13,7 @@ export {
 	apiTokenByHash,
 	calendarFeedByHash,
 	organisationCountOf,
+	organisationIdsOf,
 	organisationsWithWebhooks,
 } from "./lookups";
 // The platform console's reads and writes across organisations: metadata only (TS-099).

@@ -10,7 +10,15 @@ import {
 	type OrganisationScope,
 	users,
 } from "~/db";
-import { NON_WORKING_RULE_LABELS, OVERTIME_RULE_LABELS, SHORT_NOTICE_LABELS } from "~/leave/rules";
+import { halfDaysLabel } from "~/leave/kinds";
+import {
+	NON_WORKING_RULE_LABELS,
+	OVERTIME_RULE_LABELS,
+	SHORT_NOTICE_LABELS,
+	WORK_KIND_LABELS,
+	WorkKind,
+} from "~/leave/rules";
+import { WEEKDAY_NAMES } from "~/leave/words";
 import { activityScopeOf, type TimeScope } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import type { Membership } from "~/organisations/membership.server";
@@ -212,6 +220,9 @@ const STEPS: Record<string, string> = {
 	assigned: "Assigned",
 	granted: "Granted",
 	used: "Used",
+	added: "Added",
+	settings_changed: "Changed",
+	time_zone_changed: "Changed the time zone of",
 };
 
 /** What each kind of thing an action names is called in a sentence. */
@@ -243,6 +254,9 @@ const NOUNS: Record<string, string> = {
 	work_schedule: "work schedule",
 	brand: "the brand",
 	support_access: "support access for Timesifier",
+	leave_kind: "kind of leave",
+	public_holiday: "public holiday",
+	organisation: "the organisation's settings",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */
@@ -300,6 +314,17 @@ const FIELD_LABELS: Record<string, string> = {
 	organisation: "Organisation",
 	logo: "Logo",
 	colour: "Colour",
+	timeZone: "Time zone",
+	weekStartsOn: "Week starts on",
+	day: "Day",
+	keptFor: "Time already tracked, kept",
+	appliesFrom: "Applies from",
+	enabled: "Switched on",
+	needsApproval: "Needs approval",
+	allowanceHalfDays: "Allowance",
+	noticeDays: "Notice (working days)",
+	kind: "Kind",
+	minutesPerDay: "Hours a day",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */
@@ -307,6 +332,7 @@ const RULE_VALUES: Record<string, Record<string, string>> = {
 	overtime: OVERTIME_RULE_LABELS,
 	weekend: NON_WORKING_RULE_LABELS,
 	shortNotice: SHORT_NOTICE_LABELS,
+	kind: WORK_KIND_LABELS,
 };
 
 /** The names a page shows for the ids its records hold. */
@@ -437,12 +463,20 @@ function valueText(key: string, value: ActivityValue | undefined, names: Names, 
 			.join(", ");
 	}
 	if (typeof value === "string" && RULE_VALUES[key]?.[value]) return RULE_VALUES[key][value];
-	if ((key.endsWith("Cap") || key === "weekMinutes") && typeof value === "number")
+	if (
+		(key.endsWith("Cap") || key === "weekMinutes" || key === "minutesPerDay") &&
+		typeof value === "number"
+	)
 		return formatDuration(value * 60);
+	if (key === "weekStartsOn" && typeof value === "number") return WEEKDAY_NAMES[value - 1] ?? "";
+	if (key === "allowanceHalfDays" && typeof value === "number") return halfDaysLabel(value);
 	if (key.endsWith("Id") && typeof value === "string") {
 		return names.things.get(value) ?? names.people.get(value) ?? "a deleted one";
 	}
-	if ((key.endsWith("On") || key === "lockedThrough") && typeof value === "string") {
+	if (
+		(key.endsWith("On") || key === "lockedThrough" || key === "day" || key === "appliesFrom") &&
+		typeof value === "string"
+	) {
 		return Day.safeParse(value).success ? formatRange(value, value) : value;
 	}
 	return String(value);
@@ -483,7 +517,12 @@ function whatOf(r: RecordRow, names: Names): string {
 	if (action === "time_entry.started") return "Started the timer";
 	if (action === "time_entry.stopped") return "Stopped the timer";
 	if (action === "time_entry.split") return "Split a time entry at the day's expected hours";
-	if (prefix === "membership" && r.ownerId) {
+	if (prefix === "work_request") {
+		const kind = WorkKind.safeParse(r.summary.after?.kind ?? r.summary.before?.kind);
+		const what = kind.success ? WORK_KIND_LABELS[kind.data].toLowerCase() : "work";
+		return `${verb} ${what}`;
+	}
+	if ((prefix === "membership" || prefix === "user") && r.ownerId) {
 		return `${verb} ${names.people.get(r.ownerId) ?? "a former member"}`;
 	}
 	return named && !noun.startsWith("a") ? `${verb} ${noun} ${named}` : `${verb} ${noun}`;

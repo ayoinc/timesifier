@@ -85,6 +85,16 @@ export const ActivityAction = z.enum([
 	"leave.declined",
 	"leave.cancelled",
 	"leave.withdrawn",
+	"leave_kind.changed",
+	"public_holiday.added",
+	"public_holiday.removed",
+	"work_request.requested",
+	"work_request.withdrawn",
+	"work_request.approved",
+	"work_request.declined",
+	"work_request.cancelled",
+	"organisation.settings_changed",
+	"user.time_zone_changed",
 	"lock_date.changed",
 	"timesheet_rules.changed",
 	"brand.changed",
@@ -134,6 +144,10 @@ export const SubjectType = z.enum([
 	"webhook",
 	"import",
 	"support_access",
+	"leave_kind",
+	"public_holiday",
+	"work_request",
+	"user",
 ]);
 export type SubjectType = z.infer<typeof SubjectType>;
 

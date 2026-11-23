@@ -306,4 +306,110 @@ describe("the pages record", () => {
 		expect(text).toContain("Changed the lock date");
 		expect(text).toContain("Lock date: 5 November 2026");
 	});
+
+	it("each change of what a day expects, and each step of an overtime request, is in the log (TR-11)", async () => {
+		const settings = `/app/${acme.slug}/settings`;
+		const timeOff = `/app/${acme.slug}/time-off`;
+		const mona = await joined("mona@example.com", "member", "Mona Lisa");
+		const nils = await joined("nils@example.com", "member", "Nils Bohr");
+		// Mona and Nils each manage a team the other is in (M2).
+		await seedTeam(acme.id, "Design", { members: [nils.user.id], managers: [mona.user.id] });
+		await seedTeam(acme.id, "Ops", { members: [mona.user.id], managers: [nils.user.id] });
+		await env.DB.prepare("update organisations set overtime_policy = 'approval' where id = ?")
+			.bind(acme.id)
+			.run();
+		const annual = await value<string>(
+			"select id from leave_kinds where organisation_id = ? and key = 'annual'",
+			acme.id,
+		);
+
+		// What a day expects (J6).
+		expect(
+			await post(
+				settings,
+				{
+					intent: "kind",
+					kindId: annual ?? "",
+					name: "Annual leave",
+					enabled: "on",
+					noticeDays: "",
+				},
+				ada,
+			),
+		).toBe(200);
+		expect(
+			await post(
+				settings,
+				{ intent: "add-holiday", day: "2099-12-25", name: "Christmas Day" },
+				ada,
+			),
+		).toBe(200);
+		const holiday = await value<string>("select id from public_holidays where day = '2099-12-25'");
+		expect(await post(settings, { intent: "remove-holiday", holidayId: holiday ?? "" }, ada)).toBe(
+			200,
+		);
+		expect(await post(settings, { intent: "time-zone", timeZone: "Asia/Tokyo" }, ada)).toBe(200);
+		expect(await post(settings, { intent: "week-start", weekStartsOn: "7" }, ada)).toBe(200);
+		expect(
+			await post(
+				`/app/${acme.slug}/account`,
+				{ intent: "time-zone", timeZone: "America/New_York" },
+				grace,
+			),
+		).toBe(200);
+
+		// Each step of a request for overtime.
+		const ask = async (who: Person, day: string) => {
+			const fields = { intent: "request-work", kind: "overtime", startsOn: day, endsOn: day };
+			expect(await post(timeOff, { ...fields, hours: "4" }, who)).toBe(200);
+			return (
+				(await value<string>(
+					"select id from work_requests where user_id = ? and starts_on = ?",
+					who.user.id,
+					day,
+				)) ?? ""
+			);
+		};
+		const monas = await ask(mona, "2099-12-14");
+		const nilss = await ask(nils, "2099-12-14");
+		expect(await post(timeOff, { intent: "approve-work", requestId: monas }, nils)).toBe(200);
+		expect(await post(timeOff, { intent: "approve-work", requestId: nilss }, mona)).toBe(200);
+		const refused = await ask(mona, "2099-12-15");
+		expect(await post(timeOff, { intent: "refuse-work", requestId: refused }, nils)).toBe(200);
+		const withdrawn = await ask(mona, "2099-12-16");
+		expect(await post(timeOff, { intent: "withdraw-work", requestId: withdrawn }, mona)).toBe(200);
+		expect(
+			await post(
+				timeOff,
+				{ intent: "cancel-work", requestId: monas, comment: "Plans changed" },
+				ada,
+			),
+		).toBe(200);
+
+		const { results } = await env.DB.prepare(
+			"select action, actor_id as actor from activity_records where organisation_id = ? order by id",
+		)
+			.bind(acme.id)
+			.all<{ action: string; actor: string }>();
+		expect(results).toEqual([
+			{ action: "leave_kind.changed", actor: ada.user.id },
+			{ action: "public_holiday.added", actor: ada.user.id },
+			{ action: "public_holiday.removed", actor: ada.user.id },
+			{ action: "organisation.settings_changed", actor: ada.user.id },
+			{ action: "organisation.settings_changed", actor: ada.user.id },
+			{ action: "user.time_zone_changed", actor: grace.user.id },
+			{ action: "work_request.requested", actor: mona.user.id },
+			{ action: "work_request.requested", actor: nils.user.id },
+			{ action: "work_request.approved", actor: nils.user.id },
+			{ action: "work_request.approved", actor: mona.user.id },
+			{ action: "work_request.requested", actor: mona.user.id },
+			{ action: "work_request.declined", actor: nils.user.id },
+			{ action: "work_request.requested", actor: mona.user.id },
+			{ action: "work_request.withdrawn", actor: mona.user.id },
+			{ action: "work_request.cancelled", actor: ada.user.id },
+		]);
+		const text = textOf(await (await open(log, ada)).text());
+		expect(text).toContain("Requests for work");
+		expect(text).toContain("Public holidays");
+	});
 });
