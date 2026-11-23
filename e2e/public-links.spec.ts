@@ -7,7 +7,15 @@ import { expect, test } from "./fixtures";
 
 test.use({ storageState: SIGNED_OUT });
 
-const PAGES = ["/", "/privacy", "/terms", "/security", "/accessibility", "/sign-in"] as const;
+const PAGES = [
+	"/",
+	"/privacy",
+	"/terms",
+	"/dpa",
+	"/security",
+	"/accessibility",
+	"/sign-in",
+] as const;
 
 for (const path of PAGES) {
 	test(`every link on ${path} leads to a page or a place that exists`, async ({
@@ -69,7 +77,7 @@ for (const path of PAGES) {
 }
 
 test("the home page is reached from the name at the top of each notice", async ({ page }) => {
-	for (const path of ["/privacy", "/terms"]) {
+	for (const path of ["/privacy", "/terms", "/dpa", "/security", "/accessibility"]) {
 		await page.goto(path);
 		await page.getByRole("banner").getByRole("link", { name: "Timesifier" }).click();
 		await expect(page).toHaveURL("/");

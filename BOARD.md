@@ -80,7 +80,7 @@ Builder: AI session on branch `ts-106-buyer-pages`. In review: the pull request 
 
 ### TS-105 · Trust centre
 
-Builder: AI sessions on branch `ts-105-trust`, pull request #86 (slices 105a–105c); slice 105d, the data processing agreement, follows on `ts-105-dpa`, stacked on it. The owner's answers of 23 November 2026 (`research/corporate/cards.md`, TS-105). No migration in #86. Decision 59.
+Builder: AI sessions on branch `ts-105-trust`, pull request #86 (slices 105a–105c); slice 105d, the data processing agreement, on `ts-105-dpa`, pull request #90, stacked on it. The owner's answers of 23 November 2026 (`research/corporate/cards.md`, TS-105). No migration in #86; #90 adds migration 0029, which only adds columns. Decisions 59 and 60.
 
 - [x] `/.well-known/security.txt` answers in plain text with one `Contact`, `Expires`, `Canonical`, `Policy` and `Preferred-Languages` (`test/trust.test.ts`, "security.txt has the fields RFC 9116 requires, once each").
 - [x] Its `Expires` is within a year, and the test fails 30 days before it passes (`test/trust.test.ts`, "security.txt expires within a year and is renewed a month before").
@@ -97,7 +97,14 @@ Builder: AI sessions on branch `ts-105-trust`, pull request #86 (slices 105a–1
 - [x] The ICO registration shows only from `OPERATOR_ICO_REFERENCE` (`test/documents.test.ts`, "the ICO reference is the setting's" and "without the setting, no page says anything of the ICO"; `scripts/deploy-config.test.ts`; `test/deployment.test.ts`).
 - [x] The foot's notices gain Security and Accessibility; the sitemap lists both; a public page links only to public pages and to `OUTSIDE_LINKS`, each matched whole (`test/claims.test.ts`, "the sitemap lists exactly the public pages…"; `e2e/public-links.spec.ts`; `e2e/one-way-in.spec.ts`).
 - [x] The owner accepts the screenshots of `/security` and `/accessibility` at 390px and 1280px, in both schemes (`cmux-assets/browser/timesifier/TS-105/`). _Accepted: the owner's form answer, 23 Nov 2026._
-- [ ] Slice 105d: `/dpa`, accepted by an organisation's owner, on `ts-105-dpa`.
+- [x] `/dpa` states the Article 28(3) terms, with its sub-processors from `SUB_PROCESSORS`, the 48-hour breach notice and the 30 days' notice of a new sub-processor from `BREACH_NOTICE_HOURS` and `SUB_PROCESSOR_NOTICE_DAYS`, and where the data is kept in the same words as the other pages (`test/claims.test.ts`, "the sub-processors on /security and /dpa…", "the data processing agreement gives the owner's notice periods from their constants", and the three location claims, now over `/dpa` as well); it passes axe at 390px and 1280px in both schemes, and its links all lead somewhere (`e2e/documents.spec.ts`, `e2e/public-links.spec.ts`).
+- [x] The terms incorporate it, in "Processing your organisation's data"; a signed copy is on request; the foot's notices and the sitemap gain it (`test/documents.test.ts`).
+- [x] The privacy notice's `#who-we-are` names each organisation the controller of its people's work data and the company its processor (`test/documents.test.ts`).
+- [x] Creating an organisation says "By creating it you accept the terms and the data processing agreement for it", with both links, and is refused with `DPA_NOT_ACCEPTED` without the current version; the organisation keeps who accepted, when, and which version (`test/organisations/terms-acceptance.test.ts`, "creating an organisation").
+- [x] An owner of an organisation that has not accepted this version is asked once, at the top of Workspace settings, until one owner accepts; nobody else is asked, every other role and a stranger is refused, and nothing waits on it (`test/organisations/terms-acceptance.test.ts`; `e2e/dpa-acceptance.spec.ts`, with axe at 390px and 1280px: a journey of the organisations', in a file of its own because it writes to the database and so runs with the seeded tests). Creating an organisation names both documents, each a link the keyboard reaches before the action (`e2e/organisations-keyboard.spec.ts`).
+- [x] Each acceptance is a `dpa.accepted` record in the activity log, with the version (`test/organisations/terms-acceptance.test.ts`, "the activity log").
+- [x] The owner approves the text of `/dpa` before it goes live. _Approved: the owner's form answer, 23 Nov 2026._
+- [x] The owner accepts the screenshots of `/dpa` and of the ask in Settings at 390px and 1280px, in both schemes (`cmux-assets/browser/timesifier/TS-105/`). _Accepted: the owner's form answer, 23 Nov 2026._
 - [ ] typecheck, lint and tests pass in the pipeline.
 
 ### TS-103 · The public pages at their best

@@ -159,7 +159,7 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 						Timesifier are its documented instructions, and the company processes the data only on
 						them, transfers included, unless the law requires otherwise; it then tells the
 						organisation first, unless the law forbids that. It tells the organisation at once if it
-						thinks an instruction breaks data protection law. (Article 28(3)(a).)
+						thinks an instruction breaks data protection law. <Cites>Article 28(3)(a)</Cites>
 					</Row>
 					<Row term="Confidentiality">
 						Of the company's people, only its platform owners can reach the data, and the company
@@ -167,14 +167,15 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 						organisation's name, plan and counts, never what is in it. To read its people, projects,
 						latest time entries and invoices, they need support access, which only an owner of the
 						organisation grants, for {SUPPORT_HOURS.join(" or ")} hours, and each reading is
-						recorded in its activity log. (Article 28(3)(b).)
+						recorded in its activity log. <Cites>Article 28(3)(b)</Cites>
 					</Row>
 					<Row term="Security">
 						The measures on{" "}
 						<a href={SECURITY_PATH} className={LINK}>
 							the security page
 						</a>
-						, which says what is done and what is not done yet. (Article 28(3)(c), Article 32.)
+						, which says what is done and what is not done yet.{" "}
+						<Cites>Article 28(3)(c), Article 32</Cites>
 					</Row>
 					<Row term="Sub-processors">
 						The organisation authorises the sub-processors listed below. The company tells every
@@ -182,7 +183,7 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 						one starts. An organisation that objects within that time may download its data and
 						delete the organisation before the new one starts. The company binds each sub-processor
 						by contract to the same obligations as this agreement, and answers to the organisation
-						for them. (Article 28(2), 28(3)(d) and 28(4).)
+						for them. <Cites>Article 28(2), 28(3)(d) and 28(4)</Cites>
 					</Row>
 					<Row term="People's rights">
 						The organisation's owners and admins can download its data and delete it in Timesifier,
@@ -195,14 +196,14 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 						<a href={`mailto:${PRIVACY_EMAIL}`} className={LINK}>
 							{PRIVACY_EMAIL}
 						</a>
-						. (Article 28(3)(e).)
+						. <Cites>Article 28(3)(e)</Cites>
 					</Row>
 					<Row term="Breaches, and assessments">
 						The company tells the organisation's owners of a personal data breach that affects the
 						organisation without undue delay, and at the latest {BREACH_NOTICE_HOURS} hours after it
 						becomes aware of it, with what it knows then and the rest as it learns it. It gives the
 						organisation, on request, the information it needs for a data protection impact
-						assessment or to consult the ICO. (Article 28(3)(f), Articles 32 to 36.)
+						assessment or to consult the ICO. <Cites>Article 28(3)(f), Articles 32 to 36</Cites>
 					</Row>
 					<Row term="At the end">
 						The organisation's data ends when an owner deletes the organisation: everything in it is
@@ -213,13 +214,13 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 							{PRIVACY_EMAIL}
 						</a>{" "}
 						for anything else. The company keeps none of it after that, unless the law requires it
-						to. (Article 28(3)(g).)
+						to. <Cites>Article 28(3)(g)</Cites>
 					</Row>
 					<Row term="Information and audits">
 						The company makes available what the organisation needs to show that this agreement is
 						kept: the security page, and answers to a security questionnaire. It allows an audit by
 						the organisation or an auditor it chooses, with reasonable notice and at the
-						organisation's cost. (Article 28(3)(h).)
+						organisation's cost. <Cites>Article 28(3)(h)</Cites>
 					</Row>
 				</Rows>
 			</DocumentSection>
@@ -259,4 +260,12 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 			</DocumentSection>
 		</Document>
 	);
+}
+
+/**
+ * The articles of the UK GDPR a term answers, kept on one line: a narrow
+ * window would otherwise break "28(3)(b)" between its brackets.
+ */
+function Cites({ children }: { children: string }) {
+	return <span className="whitespace-nowrap">({children}.)</span>;
 }

@@ -32,6 +32,7 @@ import {
 	ACCESSIBILITY_PATH,
 	API_DOCS_PATH,
 	CONTACT_PATH,
+	DPA_PATH,
 	FEATURES_PATH,
 	HELLO_EMAIL,
 	INTEGRATIONS_PATH,
@@ -47,7 +48,13 @@ import {
 	TERMS_PATH,
 } from "~/landing/Site";
 import { homeStructuredData } from "~/landing/structured-data";
-import { SUB_PROCESSORS, TIME_TRAVEL_DAYS, WORKERS_LOGS_DAYS } from "~/landing/trust";
+import {
+	BREACH_NOTICE_HOURS,
+	SUB_PROCESSOR_NOTICE_DAYS,
+	SUB_PROCESSORS,
+	TIME_TRAVEL_DAYS,
+	WORKERS_LOGS_DAYS,
+} from "~/landing/trust";
 import { DEFAULT_KINDS, KIND_KEYS } from "~/leave/kinds";
 import { LOCK_LABELS } from "~/locks/locks";
 import {
@@ -139,6 +146,9 @@ it("the privacy notice lists every cookie the application sets, and counts them"
 	expect(words(html)).toContain(`sets ${COUNT[COOKIES.length]} cookies and no others`);
 });
 
+/** The pages that say where the data is kept and handled: each says it the same way. */
+const LOCATED = ["/", PRIVACY_PATH, SECURITY_PATH, DPA_PATH];
+
 it("the pages say the database is in the EU because that is how the databases are created", async () => {
 	// A D1 database's jurisdiction is fixed when it is created and is in no
 	// configuration file: the README's commands are where the repository keeps it.
@@ -159,13 +169,13 @@ it("the pages say the database is in the EU because that is how the databases ar
 	]);
 	for (const command of buckets) expect(command).toContain("--jurisdiction eu");
 
-	for (const path of ["/", PRIVACY_PATH, SECURITY_PATH]) {
+	for (const path of LOCATED) {
 		expect(words(await page(path)), path).toContain("runs and stores its data only inside the EU");
 	}
 });
 
 it("wherever a page says the database is in the EU, it says what is not", async () => {
-	for (const path of ["/", PRIVACY_PATH, SECURITY_PATH]) {
+	for (const path of LOCATED) {
 		const text = words(await page(path));
 		expect(text, path).toContain("data centre nearest to you");
 		expect(text, path).toContain("not restricted to the EU");
@@ -177,7 +187,7 @@ it("the pages say requests are handled in Frankfurt because the Worker is placed
 	// to the cloud region it names; aws:eu-central-1 is Frankfurt
 	// (docs/decisions.md 34). A commented-out line does not count.
 	expect(wrangler).toMatch(/^\t"placement": \{ "region": "aws:eu-central-1" \},$/m);
-	for (const path of ["/", PRIVACY_PATH, SECURITY_PATH]) {
+	for (const path of LOCATED) {
 		expect(words(await page(path)), path).toContain("is passed to Frankfurt");
 	}
 });
@@ -935,7 +945,7 @@ it("the security page's hashed secrets are the ones docs/security.md lists, and 
 	expect(encryption).toContain("with AES-256");
 });
 
-it("the sub-processors on /security are the ones the notice names, and every binding in wrangler.jsonc belongs to one of them", async () => {
+it("the sub-processors on /security and /dpa are the ones the notice names, and every binding in wrangler.jsonc belongs to one of them", async () => {
 	// Every part of the configuration that sends data to a provider is one sub-processor's.
 	const NOT_DATA = new Set([
 		"$schema",
@@ -958,19 +968,49 @@ it("the sub-processors on /security are the ones the notice names, and every bin
 	const covered = new Set(SUB_PROCESSORS.flatMap(({ bindings }) => bindings));
 	for (const binding of bindings) expect(covered, binding).toContain(binding);
 
-	// /security lists exactly them, each with its agreement.
-	const html = await page(SECURITY_PATH);
-	const section = html.match(/<section id="sub-processors"[\s\S]*?<\/section>/)?.[0] ?? "";
-	const terms = [...section.matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map(([, term]) => term);
-	expect(terms).toEqual(SUB_PROCESSORS.map(({ name }) => name));
-	for (const each of SUB_PROCESSORS) {
-		expect(section, each.name).toContain(`href="${each.dpa.href}"`);
-		if (each.list) expect(section, each.name).toContain(`href="${each.list.href}"`);
+	// /security and /dpa list exactly them, from the one constant, each with its agreement.
+	for (const path of [SECURITY_PATH, DPA_PATH]) {
+		const html = await page(path);
+		const section = html.match(/<section id="sub-processors"[\s\S]*?<\/section>/)?.[0] ?? "";
+		const terms = [...section.matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map(([, term]) => term);
+		expect(terms, path).toEqual(SUB_PROCESSORS.map(({ name }) => name));
+		for (const each of SUB_PROCESSORS) {
+			expect(section, `${path}: ${each.name}`).toContain(`href="${each.dpa.href}"`);
+			if (each.list) expect(section, `${path}: ${each.name}`).toContain(`href="${each.list.href}"`);
+			for (const what of each.receives) expect(words(section), `${path}: ${what}`).toContain(what);
+		}
+		const count = COUNT[SUB_PROCESSORS.length] ?? "";
+		expect(words(section), path).toContain(
+			`${count.charAt(0).toUpperCase()}${count.slice(1)} companies process personal data for Timesifier, and no others.`,
+		);
 	}
 	// And the notice names each, under "Who else handles it", and the mailbox's addresses.
 	const who = await part(PRIVACY_PATH, "who");
 	for (const { name } of SUB_PROCESSORS) expect(who, name).toContain(name);
 	expect(who).toContain(`${SECURITY_EMAIL} is received by Microsoft`);
+});
+
+it("the data processing agreement gives the owner's notice periods from their constants", async () => {
+	// The owner's answer 2, 23 November 2026 (research/corporate/cards.md).
+	expect(BREACH_NOTICE_HOURS).toBe(48);
+	expect(SUB_PROCESSOR_NOTICE_DAYS).toBe(30);
+	const processor = await part(DPA_PATH, "processor");
+	expect(processor).toContain(
+		`at the latest ${BREACH_NOTICE_HOURS} hours after it becomes aware of it`,
+	);
+	expect(processor).toContain(`at least ${SUB_PROCESSOR_NOTICE_DAYS} days before a new one starts`);
+	expect(await part(DPA_PATH, "changes")).toContain(
+		`A new sub-processor is told ${SUB_PROCESSOR_NOTICE_DAYS} days ahead`,
+	);
+	// No other figure is stated for either.
+	const text = words(await page(DPA_PATH));
+	expect(text.match(/\d+ hours after it becomes aware/g)).toEqual([
+		`${BREACH_NOTICE_HOURS} hours after it becomes aware`,
+	]);
+	expect(text.match(/\d+ days (?:before a new one starts|ahead)/g)).toEqual([
+		`${SUB_PROCESSOR_NOTICE_DAYS} days before a new one starts`,
+		`${SUB_PROCESSOR_NOTICE_DAYS} days ahead`,
+	]);
 });
 
 it("the security page says what is not done, and where to report a vulnerability", async () => {

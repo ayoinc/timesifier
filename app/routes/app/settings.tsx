@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, redirect, useFetcher } from "react-router";
 import * as z from "zod";
 
@@ -475,6 +475,7 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 	const { organisation, zones, leave, rules, expenses, locking } = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
+	useDpaAnswer(setSaid);
 	// The name typed to confirm a deletion. The confirmation waits until it is the name exactly.
 	const [typedName, setTypedName] = useState("");
 	const close = () => setTask(null);
@@ -493,9 +494,7 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 				{said}
 			</p>
 
-			{loaderData.dpaToAccept && (
-				<DpaToAccept organisationName={organisation.name} onDone={setSaid} />
-			)}
+			{loaderData.dpaToAccept && <DpaToAccept organisationName={organisation.name} />}
 
 			<Section
 				id="general"
@@ -969,23 +968,37 @@ function ClientsRow({
 	);
 }
 
+/** The fetcher of "Accept the agreement": the ask and the page that holds it read the same one. */
+const ACCEPT_DPA = "settings-accept-dpa";
+
+/**
+ * What accepting the agreement did, for the page. The ask is gone by the time
+ * the answer is read, with the button that had the focus: the page says what
+ * happened, and the focus goes to its heading.
+ */
+function useDpaAnswer(onSaid: (said: string) => void) {
+	const fetcher = useFetcher<Outcome>({ key: ACCEPT_DPA });
+	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
+	const handled = useRef<Outcome | undefined>(undefined);
+	useEffect(() => {
+		if (!answer || handled.current === answer) return;
+		handled.current = answer;
+		if (!answer.ok) return;
+		onSaid(answer.said);
+		if (document.activeElement === document.body) {
+			document.querySelector<HTMLElement>("main h1")?.focus();
+		}
+	}, [answer, onSaid]);
+}
+
 /**
  * The owners' one ask of an organisation that holds an older version of the
  * data processing agreement, or none (TS-105): read it and accept it. Nothing
  * waits on it, and once one owner has accepted, nobody is asked again.
  */
-function DpaToAccept({
-	organisationName,
-	onDone,
-}: {
-	organisationName: string;
-	onDone: (said: string) => void;
-}) {
-	const fetcher = useFetcher<Outcome>();
+function DpaToAccept({ organisationName }: { organisationName: string }) {
+	const fetcher = useFetcher<Outcome>({ key: ACCEPT_DPA });
 	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
-	useEffect(() => {
-		if (answer?.ok) onDone(answer.said);
-	}, [answer, onDone]);
 
 	return (
 		<section
