@@ -2,6 +2,453 @@
 
 The cards that are Done, as they stood when they were finished: every criterion with its evidence. `BOARD.md` keeps one line for each. The integrator moves a card here in the pull request that takes it to Done. The newest is first.
 
+## TS-113 · Fast at company size
+
+Done 2026-11-23. Pull request #84, deployed.
+
+Builder: AI sessions on branch `ts-113-scale` (PR #84), stacked on 1146f18 (#72, #70, #66, #67, #68). From the scale test (`research/corporate/scale-test.md`, D4 to D8), measured before and after with `research/corporate/scale/run.sh` ("After TS-113"). Decisions 57 and 58. Migration `0028_scale_indexes`, indexes only.
+
+- [x] **1. D4, Reports added up in SQL.** Time, Utilisation, Profitability and Dashboards read one summed statement by person, project, billable and overtime (`sumsOf`), not every entry 200 at a time; money is priced once per span of days in which no rate starts, bounded by people × projects × tasks × rate changes, with regular and overtime minutes apart for TS-111f's multiplier. Every figure equals the old per-entry figure, for every role, over a company with overtime, half days, missing rates and entries either side of midnight in three zones: the snapshots written by the code before TS-113 pass unchanged (`test/reports/sums.test.ts`, "adds up a month for an owner as the entries do, one by one", "utilisation / profitability / Dashboards as %s over %s is what it was"). An owner's year: 2,147 → 36 statements, 215,307 → 14,565 rows.
+- [x] **2. D5, budgets in three statements.** A Timesheet load works out every warned budget from one summed statement, its lines and its expenses: 15 statements with 4 or 16 warned projects, 19 and 31 before (`test/budgets/statements.test.ts`); every kind of budget's spend is what it was (`test/budgets/spend.test.ts`, "over a month %s, counting non-billable time %s, is what it was"). Timesheet views 82 → 56 statements, 38,300 → 4,200 rows.
+- [x] **3. D6, reads kept for a request.** A GET or HEAD reads the membership, the access, a manager's teams and the people once (`app/organisations/request-memo.server.ts`); a form post, the Cron run and a test calling a loader read afresh, and nothing reaches another request or organisation (`test/organisations/request-memo.test.ts`, "Team reads the manager's membership, their teams and their people once", "in a POST, reads afresh", "outside a request … reads every time", "keeps nothing past its request").
+- [x] **4. D7, three indexes.** `time_entries (organisation_id, spent_on, started_at, id)`, `time_entries (organisation_id, started_at, id)` and `expenses (organisation_id, spent_on, id)` are new, with their `EXPLAIN QUERY PLAN` before and after in decision 58. 0028 only adds, so it ships with the code; the shorter `(organisation_id, spent_on)` stays until TS-113b. 0028 applies on a fresh database and on one migrated to 0023 that holds entries and expenses, and keeps them (`test/db/scale-indexes.test.ts`).
+- [x] **5. Wellbeing and Contractors by stored day.** Wellbeing counts the 28 whole days before the organisation's today, by stored day, summed by person and week; its figures change near midnight (decision 58; `test/wellbeing/range.test.ts`). Contractors reads one summed statement (`test/pages/contractors.test.ts`, "reads the range by stored day: its first and last days count, the days either side do not").
+- [x] **6. D8, Team and Default rates paged at 50 with a search.** `?q=` by part of a name or address, `?page=` keeping it, without script; only the page's people's week or rates are read and sent (`test/pages/people-paging.test.ts`; `e2e/people.spec.ts`, "Team and Default rates page through the people and find them, with the keyboard"). Team for an owner 503 → 112 KB, Rates 407 → 147 KB.
+- [x] **7. D8, Reports open a group's people when asked.** The groups first; a group's people, and the People section past 50 people, from `reports/people`, or with `show=` without script (`test/reports/people.test.ts`; `test/reports/sums.test.ts`, "as %s, %s, add up to each group's time, person by person").
+- [x] **8. D8, both CSV exports by keyset.** The report's export in pages of 2,000 by day, start and id, the all-time export by start and id, each page one statement on its index; every entry once, and the first, last and boundary rows right across a page boundary (`test/reports/exports.test.ts`).
+- [x] **9. Before and after.** `scale/run.sh` on 1146f18 and on the branch, back to back: the table under "After TS-113" in `research/corporate/scale-test.md` and in PR #84.
+- [x] **10. Docs.** Decisions 57 and 58; `docs/architecture.md` (Reports and its people route, both exports, Team, D1's limits).
+
+## TS-111e · The rules hold together, part 3: leave, the day's rules and their records
+
+Done 2026-11-23. Pull request #80, deployed.
+
+Builder: AI sessions on branch `ts-111e-leave` (PR #80), after #83 (`ts-111e-holiday-requests`, migration `0026_work_on_holidays`, ships alone) and #68. Migration `0027_rules_dated` (additive), numbered after #83's 0026, which runs before it. Decisions 50–53. From research/time-rules-scenarios.md: TR-04, TR-08, TR-10, TR-11, TR-16, TR-17, TR-18a and f; OQ1, OQ5, OQ8 and OQ12.
+
+- [x] TR-04: leave is not approved, or recorded without approval, onto a day that holds time or a day of a submitted or approved week, and the approver's row shows the time (`test/pages/time-off-rules.test.ts`, "leave is not approved onto a day that holds time, and the approver sees the time", "sick leave is not recorded onto a day of an approved week").
+- [x] TR-04, third fix: an owner or admin cancels approved leave that has begun, with a reason, while none of its days is on or before the lock date or in a submitted or approved week; Time off lists such leave for them under "Approved, begun"; the person is still told "That leave has begun, so it can no longer be cancelled."; the Activity log keeps the reason with who cancelled it (`test/pages/time-off-rules.test.ts`, "an owner or admin cancels approved leave that has begun, with a reason, while its days are open").
+- [x] TR-08: a pending request the lock date has reached can be withdrawn or refused, and its later days asked for again; approving names the first open day (`test/pages/lock-date.test.ts`, "a pending request the lock date has reached can be withdrawn or refused, and its later days asked for again").
+- [x] TR-10: the timesheet rules apply from a day, next Monday unless chosen, and saving says how many days of how many people it puts over; a public holiday on a day that holds time says whose and how much, and the time kept stands (`test/pages/settings-rules.test.ts`, "overtime turned off applies from next Monday, and leaves the overtime already tracked alone", "says how many days of how many people …"; `test/pages/settings.test.ts`, "a public holiday on a day that holds time is asked about …"; `test/leave/rules.test.ts`, "rules dated from a day").
+- [x] TR-11: kinds of leave, public holidays, the organisation's zone and week start, a person's zone and each step of a request for work are in the Activity log, by who took them (`test/pages/activity.test.ts`, "each change of what a day expects, and each step of an overtime request, is in the log").
+- [x] TR-16 and D4: notice is counted in working days, to the first day taken (`test/pages/time-off-rules.test.ts`, "notice runs to the first day taken"; `test/leave/rules.test.ts`, "notice in working days, to the first day taken").
+- [x] D2: a day of part-day leave takes regular time up to the full day where more may be recorded, then overtime (`test/pages/timesheet-rules.test.ts`, "takes time past its half as regular up to the full day …", "cuts a timer that ran past the limit …"; `test/leave/rules.test.ts`, "overtime on a day of half-day leave").
+- [x] D8: a day holding more than 24 hours is over and blocks Submit with its own sentence; work on a public holiday is asked for wherever overtime is allowed at all, and is overtime once approved (`test/pages/timesheet-rules.test.ts`, "refuses a week with a day holding more than 24 hours …"; `test/leave/rules.test.ts`, "a day holding more than 24 hours", "work on a public holiday"; `test/db/work-on-holidays.test.ts`).
+- [x] TR-17 and TR-18a, f: a timer remainder under a minute is not cut; a timer's start once overtime is used says so (`test/leave/rules.test.ts`, "a timer cut at the limit (TR-17)", "a timer's start once overtime is used up (TR-18a)").
+
+## TS-111f · The rules hold together, part 4: the writers and invoices
+
+Done 2026-11-23. Pull request #81, deployed.
+
+Builder: an AI session on branch `ts-111f-writers`, on the merge train's stack (1146f18: #73, #72, #70, #66/#67/#68). Fixes TR-09, TR-13, TR-14 and TR-18b–e of research/time-rules-scenarios.md and applies the owner's D3 (OQ2) and D9 (OQ3, OQ4): decisions 54, 55 and 56. Migration `0025_overtime_rate` (renumbered at merge; its snapshot's `prevId` follows 0023 until 0024 merges). The system stop TS-111d adds calls `stopTimer(scope, userId, now, { actorId: null, source: "system" })`.
+
+- [x] A timer's end, its cut at the day's limit and their records are one batch, in Stop and in starting another; two Stops at once leave one end and one remainder (`stopTimer`, `startTimer`, `endingOf`; `test/pages/timesheet-rules.test.ts`, "the stop and the cut are one write", "two Stops at once leave exactly one end and one remainder"; `test/time/entries.test.ts`, "two stops at once write one end and one remainder").
+- [x] The invoice preview, the draft, Uninvoiced and recurring invoices leave out time on a day over its limit for its person, and say whose and which days (`uninvoicedTime`; `test/billing/sources.test.ts`, "time on a day over its limit is not offered", "says how many entries of whose are left out", "a recurring invoice of uninvoiced time leaves it out").
+- [x] A change to an entry on an invoice is refused naming the invoice and who can let it go (`invoicedRefusal`; `test/pages/timesheet-rules.test.ts`, "refuses a change to an entry on an invoice, naming it and who can let it go").
+- [x] An edit cannot end after now or last over 24 hours (`editEntry`; `test/pages/timesheet-rules.test.ts`, "an edit cannot put time ahead of now"); the API refuses the same, and hours that round to no minutes (`test/integrations/api.test.ts`, "a change cannot put time ahead of now, or make an entry longer than a day", "hours that round to nothing are refused"); the import skips a row dated after its member's today (`test/integrations/import.test.ts`, "skips a row dated after today").
+- [x] An end clock at or before the start is the next day's, the entry keeping its day, and the sheet says "+1 day" (`test/pages/timesheet-rules.test.ts`, "an entry that ends after midnight is saved with its end"; `e2e/timesheet.spec.ts`).
+- [x] A CSV row past its day's limit is cut as a timer is, regular to the limit and overtime after, and found again when the file is imported twice (decision 54; `test/integrations/import.test.ts`, "cuts a row past its day's limit as a timer is cut").
+- [x] A project's "Overtime billed at" (×1, ×1.25, ×1.5, ×2 or custom) prices overtime at the day's rate times it; other than ×1, on its own "(overtime)" line in the preview, the saved lines, recurring invoices, the PDF and the Xero CSV, while ×1 bills it as before, on its group's line, unmarked; reports, budgets and profitability follow (decision 55; `test/billing/overtime.test.ts`, `test/rates/price.test.ts`, `test/reports/profitability.test.ts`; `e2e/billing.spec.ts`, "a project bills overtime at its own rate").
+- [x] Copying a day keeps each entry regular or overtime within the day's rules (decision 56; `test/pages/timesheet-taste.test.ts`, "copying a day keeps each entry regular or overtime").
+- [x] Stop names every day it leaves over, the remainder's too (TR-18b; `test/pages/timesheet-rules.test.ts`, "names the day the timer started, and the remainder's day").
+- [x] The API's refusals use the Timesheet's sentences, lock date and invoice included (TR-18c; `test/integrations/api.test.ts`, "says what the Timesheet says of a locked day and of an entry on an invoice").
+- [x] The import names the person on leave: "Max is on annual leave that day." (TR-18d; `test/integrations/import.test.ts`, "names the person whose leave a row falls on").
+- [x] A day holding overtime the target does not take is copied without it, saying so, and Copy week names each day it left and why (TR-18e; `test/pages/timesheet-taste.test.ts`, "copies a day holding overtime…", "Copy week names the days it left out, and why").
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline. _Main run 45213499026 (2aef7ad, #95), which holds #81: checks and browser tests passed, deployed 23 Nov 16:43 UTC. #81's own main run 45137788218 had failed one browser test, fixed by #92._
+
+## TS-120 · The console's Brand page
+
+Done 2026-11-23. Pull request #74, deployed.
+
+Builder: an AI session on branch `ts-120-brand-page`. Decision 45, within 36 and 38. Migration `0024_platform_brand_dark_logo`, after TS-111's 0022 and 0023. In review: the pull request against `main`.
+
+- [x] **1. Where.** `/platform/brand`, the console's last tab, behind the allowlist and the step-up: a stepped-up platform owner opens it; one who has not is sent to the code and back, and their posts do nothing; an organisation's owner, a member and a signed-in stranger get the console's 404 (`test/platform/console-brand.test.ts` "who opens the Brand page"; every console route in `test/platform/console-roles.test.ts`).
+- [x] **2. Sender name and reply-to.** Saved through `setPlatformBrand`; each refusal says why (`test/platform/console-brand.test.ts` "a save that is not valid").
+- [x] **3. Tagline and email footer line.** One line each, at most 120 and 200 characters; each refusal said (same).
+- [x] **4. Brand colour, contrast-checked.** Ink or white must read on it at 4.5 to 1 (`platformColourProblem`), checked as it is typed, the save disabled until it does, and refused by the server too (same; `e2e/platform-brand.spec.ts`).
+- [x] **5. Logo and mark, each light and dark.** Four PNGs within 64 KB and 16 to 1,024 px; `platform_brand.logo_dark` added; an SVG or WebP drawn as a PNG in the browser (`app/brand/rendition.ts`, shared with Workspace settings › Brand) and the PNG taken in its place; a box puts each built-in one back; the page says which ones messages carry (same, "a save"; `e2e/platform-brand.spec.ts`).
+- [x] **6. Live preview** of a message's top and foot and of the band, drawn from the form as it is typed, in the light scheme a message is drawn in, with each image on its ground (`e2e/platform-brand.spec.ts`).
+- [x] **7. Save and log.** `setPlatformBrand` with the platform owner as the actor; `brand.changed` in the platform log with the fields that changed; nothing written when nothing changed (`test/platform/console-brand.test.ts` "a save").
+- [x] **8. The next sign-in code email** carries the saved sender name, reply-to, footer line, tagline, colour and logo, attached inline (same, "frames the next sign-in code email in what was saved").
+- [x] **9. Send me a test email.** The saved brand, to the signed-in platform owner only, five an hour, each logged as `brand.test_sent` (`test/platform/console-brand.test.ts` "the test email"; `e2e/platform-brand.spec.ts`).
+- [x] **10. Browser spec.** Keyboard and axe at 390 and 1280 px in both schemes; screenshots in `cmux-assets/browser/timesifier/TS-120/` (`e2e/platform-brand.spec.ts`).
+- [x] **11. Docs.** Decision 45; `docs/security.md` (the console's threats); `docs/architecture.md`; `docs/design-direction.md`.
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline. _Main run 45213499026 (2aef7ad, #95), which holds #74: checks and browser tests passed, deployed 23 Nov 16:43 UTC._
+
+## TS-099 · The platform console
+
+Done 2026-11-23. Pull requests #60 and #62, deployed.
+
+Builder: AI sessions on branch `ts-099-platform` (PR #60). Decided by the owner on 2026-11-12 (`docs/decisions.md` entry 36); its threats and their tests are in `docs/security.md`, "The platform console (TS-099)". Migration `0021_platform_console`; its trigger change, `0018_invoiced_expense_receipts`, shipped alone first in #62. Production needs the `PLATFORM_OWNERS` secret before deploy. The console's Brand page comes with TS-100, as a sixth tab after Log.
+
+- [x] **Who.** The owners are the addresses in `PLATFORM_OWNERS`, trimmed and lower-cased; required in production by `scripts/deploy-config.ts`, an empty variable elsewhere, so a preview or a clone has the console closed. Anybody else gets the same 404 as an address that holds nothing, on every route and every form; a request without a session is sent to sign in (`test/platform/console-roles.test.ts`, every route read from the route configuration for a stepped-up owner, an owner without step-up, an organisation's owner, admin and member, and a stranger; `test/platform/step-up.test.ts`, "the platform's owners").
+- [x] **Step-up.** `/platform/verify` sends a code of the session's own to the owner's address; 5 minutes, 3 wrong tries, 5 codes a session, open 12 hours, gone with the session; `next` kept inside the console (`test/platform/step-up.test.ts`; `test/platform/console-pages.test.ts`, "the step-up page"; `e2e/platform.spec.ts`, by the keyboard alone).
+- [x] **Metadata only.** Health, Organisations (with its detail) and Accounts (with its detail and sign-in history) read through `app/db/platform.ts` alone; a test wraps D1 under every one of those reads, fails on any table or column outside the allowlist, and is shown to fail on `time_entries.description`, `expenses.notes` and `select *` (`test/platform/metadata.test.ts`, `test/platform/metadata-guard.ts`). The Log lists every step with who, what, the subject and the reason.
+- [x] **Support access.** Workspace settings › Support access, owners only: grant for 24 or 72 hours, end it, the history by name; every grant, end and reading in the organisation's activity log and the platform's. The console's support view reads people, projects, latest entries and invoices under a grant in force only, has no action, and says until when (`test/platform/support-access.test.ts`; `test/platform/console-pages.test.ts`, "the support view"; `e2e/platform.spec.ts`, "an owner grants support access; …").
+- [x] **Mail.** The console's Mail writes an announcement or a newsletter, previews it, and queues it after a confirmation to the open accounts that have the kind on; the sends list shows what is sent and waiting. The minute cron sends 40 a run and 1,000 a UTC day, skips who turned the kind off or closed since, and stops on a failed send. The newsletter is asked for on the sign-in page, off until ticked; My account has a switch for each kind; every message has a signed one-press unsubscribe link and the RFC 8058 headers, and `/unsubscribe/…` turns off that kind only, by its button or a mail client's one-click POST, 404 for any other signature (`test/platform/console-mail.test.ts`; `test/platform/mail-cron.test.ts`; `test/platform/unsubscribe.test.ts`; `test/platform/organisation-side.test.ts`, "mail from Timesifier on My account"; `e2e/platform.spec.ts`, "a new person asks for the newsletter …").
+- [x] **Plans and seats.** The console's organisation detail sets the plan, seats and trial with a reason; Workspace settings › Plan shows the plan, seats used and the trial to owners and admins and warns with one seat left and at the limit; an invitation past it is refused with `SEATS_FULL`, pending invitations counted; an ended trial is Free (`test/platform/seats.test.ts`; `test/platform/console-pages.test.ts`, "an organisation's plan"; `test/platform/organisation-side.test.ts`, "the plan on Workspace settings").
+- [x] **Support tools and data requests.** On an account: end every session, close and restore, send an invitation again, send the link to their data, delete; each in a sheet that asks for the reason (delete also for the address typed), each in the platform log. Deleting keeps the organisations' records under "Deleted person", deletes the person's receipts unless an issued invoice holds them (a draft's go too, which migration `0018` allows) and the organisations they were alone in, and is refused while they are the only owner of an organisation with others. My account › Your data downloads a ZIP of the person's own account, sign-ins, time, expenses and leave in every organisation, and nobody else's (`test/platform/console-accounts.test.ts`; `test/platform/account-deletion.test.ts`; `test/platform/closed-account.test.ts`; `test/platform/personal-data.test.ts`; `test/platform/organisation-side.test.ts`, "a person's own data").
+- [x] **Wellbeing.** Workspace settings › Wellbeing, owners only: the share regularly over their hours and the share with no leave in six months, rounded to 10%, no names, nothing below 5 people; the platform never reads it (`test/platform/wellbeing.test.ts`; `test/platform/organisation-side.test.ts`, "wellbeing"). Support access, Wellbeing and the data download each have a row in the role table of `test/pages/finance.test.ts`: the first two 200 to owners and 404 to everyone else, admins included; the download every member's.
+- [x] A browser spec: the step-up, every console page, granting and ending support access, the newsletter opt-in, the keyboard, and axe at 390px and 1280px in both schemes (`e2e/platform.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-099/`.
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline. _Main run 45213499026 (2aef7ad, #95), which holds #60 and #62: checks and browser tests passed, deployed 23 Nov 16:43 UTC._
+
+## TS-093 · Taste: the timesheet as Harvest makes it feel
+
+Done 2026-11-23. Pull request #55, deployed.
+
+Builder: an AI session on branch `ts-wave3-taste` (PR #55), integrated by the merge queue. No migration.
+
+- [x] Start again on every finished entry outside a submitted or locked week, starting a timer with its project, task, tags and description; the row's Actions menu holds Edit entry, Delete entry and History (`test/pages/timesheet-taste.test.ts`; `e2e/timesheet-taste.spec.ts`, "Start again, delete with Undo, and the row that changed is marked").
+- [x] Amber marks the running timer and today: the running bar and row, the navigation's timer, today's chip, column and calendar day, this week in History; the elapsed time is the Day view's largest text (`e2e/timesheet-taste.spec.ts`, the axe tests at 390px and 1280px in both schemes).
+- [x] Track time opens one sheet over any page, with a Date field, keeping the address and returning focus; the chosen day's rules come from `timesheet/day` and a closed day says why (audit W01; `test/pages/timesheet-taste.test.ts`; `e2e/timesheet-taste.spec.ts`, "Track time opens over Projects with a date").
+- [x] A searchable project picker grouped by client, recent projects first, in Track time, Edit entry and Expenses (`test/projects/`; `e2e/timesheet-taste.spec.ts`, "the project picker finds a project by typing").
+- [x] One snackbar with Undo for start, stop, save, copy and delete; delete asks nothing and Undo restores the entry unless its day has since been locked (decision 32; `test/pages/timesheet-taste.test.ts`).
+- [x] Empty day with Track time and Copy from the last working day; Copy last week on the Week view; neither touches a day with time, locked or closed (`test/pages/timesheet-taste.test.ts`).
+- [x] Keys N, `[`, `]`, T and `?`; the day title opens a month picker with each day's total, and Back to today (`e2e/timesheet-taste.spec.ts`, "the day title opens the month").
+- [x] Audit W02, W10, W12 (the Calendar writes its weekdays, months and weeks through `app/time/format.ts`), W16, W23 (PeriodStepper on Day, Week and Calendar).
+- [x] typecheck, lint, tests and browser tests pass in the pipeline. _Main run 45213499026 (2aef7ad, #95), which holds #55: checks and browser tests passed, deployed 23 Nov 16:43 UTC._
+
+## TS-111d · The rules hold together, part 2: locks, approvals and who decides
+
+Done 2026-11-23. Pull request #82, deployed.
+
+Builder: an AI session on branch `ts-111d-locks`, stacked on #68 (with #66, #67, #70 and #72 under it). The time-rules review (`research/time-rules-scenarios.md`), TR-01, TR-02, TR-07, TR-12 and TR-15, and the owner's decisions D5, D6 and D7 (OQ6, OQ10, OQ7): decisions 47, 48 and 49. No migration.
+
+- [x] TR-01: Approvals shows on each waiting week what Submit would have refused, "Over by 7:30 on Tue 10", and "Submitted by the system" when the system submitted it; Approve all leaves weeks with a day over and says how many; approving one alone asks first and its record says it was over (`test/pages/lock-date.test.ts`, "a week the system submits with a day over its limit says so to its approver").
+- [x] TR-02: a timer running on a day the lock date reaches is stopped by the system at the move, recorded with no actor, and cut at the limit, by the Cron Trigger and by hand; one after the locked days runs on (`test/pages/lock-date.test.ts`, "a timer running on a day the lock date reaches is stopped by the system at that moment", "moving the lock date by hand stops a timer on the days it locks, and one after them runs on").
+- [x] TR-02: neither Approve nor Approve all approves a week in which its person's timer runs (`test/pages/lock-date.test.ts`, "a week with a running timer is not approved").
+- [x] TR-07: returning or reopening a week on locked days is refused with what to do (`test/pages/approvals-rules.test.ts`, "a week on locked days is not returned as if it could be changed").
+- [x] TR-07: auto-submit leaves a returned week returned, with its reason, and its Day view says only that the lock date holds it (`test/pages/lock-date.test.ts`, "auto-submit leaves a returned week as it is, with its reason").
+- [x] TR-12: the day weeks start on does not change while a week waits, and a week drawn after the change begins after every period on record; periods are found by range (`test/pages/settings.test.ts`, "the week's first day does not change under a week that is waiting"; `test/periods/periods.test.ts`, "a person's period found by range").
+- [x] TR-15: a week is auto-submitted once its days with expected hours are all locked: a Friday deadline submits the week it closes (`test/pages/lock-date.test.ts`, "a Friday deadline submits the week it closes").
+- [x] D5: nobody approves their own week, owners and admins included (`test/pages/approvals-rules.test.ts`, "nobody approves their own week, owners and admins included").
+- [x] D5: a week nobody else may approve is approved by the system as it is submitted, and says so (`test/pages/approvals-rules.test.ts`, "the system approves a week nobody else may approve, and says so").
+- [x] D5: after a refusal, only whoever refused, an owner or an admin approves a request for the same days, and the others are told why (`test/pages/approvals-rules.test.ts`, "after a manager refuses, only they or an owner or admin approve a request for the same days").
+- [x] D6: a manager on leave all day is skipped, and owners and admins are told what waits on them (`test/pages/approvals-rules.test.ts`, "is skipped: what waits on them is shown to owners and admins as theirs").
+- [x] D7: the lock date reaches a person's day once it has ended where they are, for the writers, the Week grid's cells, the Day view and the timers it stops; Workspace settings says so (`test/pages/lock-date.test.ts`, "locks today for each person only at their midnight", "stops a timer once its day has ended where its person is", "says so in Workspace settings beside the field"; `test/locks/locks.test.ts`, "lockReachOf (D7)"; `test/integrations/import.test.ts`, "reads the lock date in each row's person's zone").
+- [x] `docs/security.md` (Locks, Whose time) and decisions 47, 48 and 49.
+
+## TS-114 · The Timesheet answers the press
+
+Done 2026-11-23. Pull request #69, deployed.
+
+Builder: an AI session on branch `ts-114-press`, stacked on #65. From `timesifier/research/corporate/live-feel.md` (F1 to F6) and the harvest sweep 2 (S2-01 to S2-04, S2-15). No migration. `docs/design-system.md` ("A press answered before the server"), decision 41. In review: the draft pull request, with the feel measured before and after against the local server.
+
+- [x] **1. Steps and tabs answer in the press's frame.** Previous and Next day, week and month, and the Day, Week, Calendar and History tabs draw the date label, the selected day and the tab from the address pressed, before the server answers; what they replace dims (`.awaiting`). The periods either side are read 150ms after the page settles, kept for 30 seconds and cleared by anything sent, so a warm step draws the next day whole from memory; a read ahead shows no pending bar (`app/timesheet/aim.ts`, `READ_AHEAD`; `e2e/timesheet-press.spec.ts`, "a step and a tab answer the press before the server does, and a warm step lands from memory").
+- [x] **2. The Timesheet's two parts load in parallel.** `timesheetData` and `trackChoices` start together; only the two reads of the shown entries' tasks and tags wait for the entries' ids (`app/routes/app/timesheet.tsx`, `app/tasks/track.server.ts`).
+- [x] **3. Track time opens from what the page holds.** On the Timesheet, any day the view shows is opened from its projects, choices, rules and lock reasons (`lockReasons` in the Day, Week and Calendar data), with no request; it reads again behind the sheet only when the page's answer is older than 30 seconds (`app/timesheet/TrackTime.tsx`; spec, "Track time opens from what the page holds…", no request to `timesheet/day`).
+- [x] **4. The day picker draws its grid at once.** The month is drawn from the date and the organisation's first weekday; the totals are read on open and on hover or focus of the title, and each day's dot fades in where its place was kept (`app/timesheet/DayPicker.tsx`; spec: the grid stands while the totals are held, and does not move when they come).
+- [x] **5. Projects filters on the page.** Each key filters the list the page holds by the server's rule (`projectMatches`) and replaces `?q=`; the page and the layouts read nothing again for a move of the query alone (`app/shell/revalidation.ts`, decision 41); words that do not narrow those the page was sent for are asked of the server; without script the GET form searches on the server (spec: no `.data` request while typing; `?q=pay` loaded whole finds the same).
+- [x] **6. Menus close within 100ms.** A menu or popover leaves in 100ms by opacity alone; Escape dismisses with no transition and the button takes its state at once (`POPOVER_MOTION`, `settleOnEscape`; spec: the account menu is gone ≤ 100ms after Escape with no transition running, with and without reduced motion).
+- [x] **7. No uncaught AbortError when a navigation aborts a fetcher's load.** Fixed in React Router's turbo-stream decoder (`patches/react-router@8.5.1.patch`, decision 41; `test/node/turbo-stream-abort.test.ts`).
+- [x] **Browser spec** with reduced motion and without, and axe on the day, the picker before and after its totals, and Projects filtered, at 390px and 1280px in both schemes (`e2e/timesheet-press.spec.ts`).
+
+## TS-111b · The rules hold together, part 1: every writer stores an entry's day
+
+Done 2026-11-23. Pull request #67, deployed.
+
+Builder: an AI session on branch `ts-111-rules-day`, on TS-111a (PR #66). No migration: `app/db/schema.ts` names `spent_on`, required of every insert, with migration 0022's snapshot. The second of three: every writer stores the day; readers still work it out from the start, as before, until TS-111c switches them (decision 39).
+
+- [x] The timer stores the day it starts on in the person's zone; a timer stopped after midnight, or by starting another, keeps it; one started before TS-111b takes the day it started when it stops (`startTimer`, `stopTimer`, `entryDay`; `test/pages/entry-day.test.ts`, per role).
+- [x] The timer's split at the limit: the overtime keeps the day the timer started on, even when the cut is past midnight (TR-06's storage; `splitStopped`; `test/pages/entry-day.test.ts`).
+- [x] Hours tracked, a slot of the calendar and a cell store the day chosen; a cell changed keeps it (`addHours`, `setCellHours`; `test/pages/entry-day.test.ts`).
+- [x] An edit keeps the entry's day unless its start moves, then takes the start's day in the person's zone; Undo puts an entry back on its day, carried in the signed token, though the zone has changed since; Copy day and Copy week store the day copied onto (`editEntry`, `restoreEntry`, `copy.server.ts`; `test/pages/entry-day.test.ts`).
+- [x] The API's create stores `spent_date`, or the start's day in the maker's zone, and its change keeps the day unless the start moves; the CSV import stores each row's date (`test/integrations/api.test.ts`, `test/integrations/import.test.ts`, "stores each … day (TS-111)").
+
+## TS-111a · The rules hold together, part 1: room for an entry's day
+
+Done 2026-11-23. Pull request #66, deployed.
+
+Builder: an AI session on branch `ts-111-entry-day-trigger`. Ships alone, before TS-111b: its migration drops and recreates a trigger (`.github/workflows/ci.yml`, "migration check"). Migration `0022_entry_day_column`, after #64's 0020 and #60's 0021. The first of three: room for the day (this card), every writer storing it (TS-111b), then the backfill and every reader on it (TS-111c; decision 39).
+
+- [x] `time_entries.spent_on` added, text, NOT NULL, empty by default, so the Worker running before TS-111b still writes (`app/db/schema.ts`, `migrations/0022_entry_day_column.sql`).
+- [x] The backstop of 0016 still refuses every change of an invoiced entry, its billed columns and `updated_at` included, except its empty day written once with a real date; once the day is set it never changes (`test/billing/invoices.test.ts`, "is locked while on an invoice", which ships with TS-111b).
+
+## TS-112 · Lists of any length
+
+Done 2026-11-22. Pull request #70, deployed.
+
+Builder: an AI session on branch `ts-112-lists`, stacked on 8b6880d (#61, #64, #60). From the scale test (`research/corporate/scale-test.md`, D1 to D3): D1 takes at most 100 bound parameters a statement, and every list of people, projects or records was bound a parameter a value. Decision 40. No migration.
+
+- [x] **1. One helper.** `among(column, ids)` and `notAmong` in `app/db/among.ts` bind a list as one JSON value, `column in (select value from json_each(?))`, each value once; every list that grows with data goes through it (people, teams, projects, tasks, tags, entries, expenses, invoices, lines, payments, retainers, reports, tokens, webhooks, imports, the console). The five private copies (`contractors`, `db/platform`, `expenses`, `projects/search`, `reports`) and a sixth (`projects/project`), the chunked loops of 90 and the silent cuts at 90 ids (`budget.server.ts`, `projects/settings.server.ts`, `tasks/tasks.server.ts`) are gone. `inArray` stays only over fixed lists of constants.
+- [x] **2. The Approvals link in one statement.** `waitingFor` (`app/db/waiting.ts`) counts submitted periods and pending leave, overtime and weekend requests in one `count(*)`, reading whom the person decides for in SQL (`mayDecidePeriodOf`, `mayDecideLeaveOf`): an owner's and admin's 294 and a manager's 240 in an organisation of 150 (`test/lists/pages.test.ts`).
+- [x] **3. Every page of an owner and an admin, and a manager of 120.** Timesheet (day and week), Team (week, teams, Members), Approvals (pending and not submitted), Time off (and its requests), Settings (and Work schedules) answer 200 with all 150 people in an organisation of 150; a manager of 120 sees their 120 and no other (`test/lists/pages.test.ts`). Members reads its list through the scope, not Better Auth's `list-members`, which reads at most 100 (`membersByJoining` in `app/teams/people.server.ts`).
+- [x] **4. Activity and its export.** Each table is asked only for the ids that can be its own, by the record's kind and the summary's field; tasks, invoices and estimates are named too. A page naming 150 things of every kind, a manager's page naming 121 projects, and an export of all 270 records (`test/lists/activity.test.ts`).
+- [x] **5. The API.** `/time_entries` names each project once, through `among`: a first page of 100 entries over 100 projects, and 150 entries over 150 projects page after page; `/users` pages by `id` with `per_page` and `cursor`, 150 people in three pages of 60; `/leave` pages by `starts_on` and `id` in place of its silent cut at 1,000, naming 147 people (`test/lists/api.test.ts`, `docs/api.md`).
+- [x] **6. A check in CI.** `test/node/lists.test.ts` fails `pnpm test` on any `inArray(` over a list that is not fixed, `in (${…})` written into SQL, or a private `json_each(${…})` in `app/` outside `app/db/among.ts`, naming file:line; on 8b6880d it names 127.
+- [x] **7. Before and after.** Of the 13 tests in `test/lists/` and `test/node/lists.test.ts`, 12 fail on 8b6880d (500s, the export cut short, 127 lists named) and all pass on this branch; the 13th tests the check itself on a fixture.
+- [x] **8. Docs.** Decision 40 with Cloudflare's limits page; `docs/architecture.md` (D1's limits), `docs/security.md` (reports), `AGENTS.md`, `docs/api.md`.
+- [x] **9. More than 100 members.** Better Auth's own ceilings no longer decide; the plan's seats do. `membershipLimit` and `invitationLimit` are `LIBRARY_CEILING` (1,000,000, `app/auth/organisations.server.ts`), and so is `defaultFindManyLimit`, below which every list the library read stopped at 100 rows; teams are off and their two ceilings unset. `get-full-organization` and `list-members` are no longer offered: no page called them, and they bound each member's person as a parameter, failing past about 99 members whatever their limits. `test/lists/membership.test.ts`: of 100 members the 101st accepts an invitation, the 150th too, the Members page lists all 150, 120 pending invitations are sent and listed, and every organisation endpoint offered answers 200 in an organisation of 150 (a new one fails the test until it has a request there). Before the change 8 of its 20 tests fail (403 `ORGANIZATION_MEMBERSHIP_LIMIT_REACHED` at the 101st and 150th acceptance, 403 at the 101st invitation, and the two withdrawn endpoints failing in an organisation of 150); after it all 20 pass, with the 840 tests of `test/lists/`, `test/organisations/` and `test/auth/`.
+
+## TS-119 · Expense categories from day one, and Invoices opening on what's owed
+
+Done 2026-11-22. Pull request #72, deployed.
+
+Builder: an AI session on branch `ts-119-sweep-small`. From `research/harvest-sweep-2.md`, S2-05 and S2-11; `docs/decisions.md` entry 44. No migration. In review: the pull request against `main`.
+
+- [x] **1. The usual categories on day one.** A new organisation is given Travel, Accommodation, Meals and subsistence, Mileage, Equipment, Software and subscriptions, Training and Other, active, each recorded in the Activity log as the system's (`afterCreateOrganization`, `addUsualCategories`, `app/expenses/starter.ts`; `test/pages/expense-starter.test.ts`, "a new organisation").
+- [x] **2. Mileage at HMRC's rate, in GBP only.** Mileage is priced per mile at HMRC's approved rate for cars and vans, 45p from 6 April 2011 and 55p from 6 April 2026, quoted and linked to GOV.UK in `app/expenses/starter.ts`, the sheet and decision 44; in another currency it is an amount each time (`test/pages/expense-starter.test.ts`, "HMRC's rate", "leaves Mileage unpriced in a currency other than GBP"). Category prices now show their year in Workspace settings.
+- [x] **3. "Add the usual categories" for an organisation with none.** Owners and admins see it on Expenses and in Workspace settings, with a sheet naming each and Mileage's price; it adds the eight once however often or however simultaneously it is pressed, each recorded as the person's, and is refused 409 once there is any category; Finance, managers and members are refused 404 (`keepCategory`; `test/pages/expense-starter.test.ts`; `test/activity/business.test.ts`, "the usual categories … one record each", per role).
+- [x] **4. Who can add them, by name.** A person who may not keep categories and finds none is told "Ask Ada Lovelace or Grace Hopper to add them.", three named, owners first, the rest counted, and no link to settings they cannot open, in the week's empty state or, in a week that has expenses, above them (`categoryKeepers`, `askToAddCategories`; `test/pages/expense-starter.test.ts`, "who can add categories").
+- [x] **5. Invoices opens on its overview.** For owners, admins and Finance: outstanding with what is overdue, paid since 1 January, and a bar pair a month for the last twelve, issued against paid, above the open invoices; each figure links to its list. SQL sums in the organisation's currency, other currencies named and not added; Outstanding equals the receivables report's total on the same day; managers and members still get 404 (`app/invoices/overview.server.ts`; `test/billing/overview.test.ts`, fixed figures on a fixed day, per role).
+- [x] **6. Bars from tokens, with a table beside them.** Heights in steps of the spacing scale, no style attribute, hidden from assistive technology; the table holds each month's issued and paid (`app/invoices/Overview.tsx`; `test/billing/overview.test.ts`, "draw a bar in steps").
+- [x] A browser spec: the owner adds the usual categories from Expenses with the keyboard, and the page says "8 expense categories added.", while a member is told whom to ask; each figure of the overview reached and followed from the keyboard; axe at 390px and 1280px in both schemes on Expenses (the owner's and the member's), the sheet, Workspace settings before and after they are added there, and Invoices (`e2e/usual-and-owed.spec.ts`, seeded). `e2e/expenses.spec.ts` starts from the usual categories.
+
+## TS-097 · Work schedules
+
+Done 2026-11-13. Pull request #59, deployed.
+
+Builder: an AI session on branch `ts-097-schedules`. Decided by the owner on 2026-11-12 (`docs/decisions.md` entry 35), replacing TS-061's one working week. Migration `0019_work_schedules`, which drops and renames nothing (`working_days` is kept, no longer read, for a later migration alone). In review: the pull request against `main`. TS-098, contracts, builds on its person assignments (`source_kind`, `source_id`).
+
+- [x] **1. Named schedules.** Owners and admins create schedules: per weekday worked or not, start, finish and unpaid break, hours = finish − start − break; every organisation has Standard (09:00–17:30, 60 min, 37.5h) and Long (09:00–18:00, 60 min, 40h); an organisation that had changed its working week has it as its default "Working week", every day's minutes kept exactly (trigger `organisations_schedule_defaults`; `app/schedules/schedules.ts`; `test/schedules/schedules.test.ts`, the migrated day a property over every minute; `test/pages/schedules.test.ts`, "every organisation's schedules", the migration's own statements run over a changed week).
+- [x] **2. Assignment, most specific first.** Person > team > role (contractor, manager, then the membership's role) > organisation; of two teams, the schedule with more weekly hours, then the team named first, shown with why on the person's row (Settings › Work schedules, Team) and My account (`resolve`, `sourceLabel`; `test/schedules/schedules.test.ts`, precedence, roles, two teams and 150 random books; `test/pages/schedules.test.ts`, "of two teams").
+- [x] **3. Dated changes.** A schedule edit is a version from a chosen day and an assignment holds from its day, today or later, else refused; days before keep what they had, and My account says the next change (`versionOn`, `assignmentOn`, `changeSchedule`, `assignSchedule`; property: an assignment from a later day changes no day before it; `test/pages/schedules.test.ts`, "changes a schedule from a day", "assigns to a person, a team, a role and the organisation").
+- [x] **4. Time outside start and finish.** Allowed; only the day's total meets the ceiling (`test/schedules/schedules.test.ts`, "lets a day's total, not its clock times, meet the ceiling").
+- [x] **5. A schedule's own overtime and weekend rules.** Optional overtime rule with day and week caps and rule for days not worked on each version; unset, the organisation's (`rulesOn` in `app/leave/rules.ts`; `test/schedules/schedules.test.ts`; `test/pages/schedules.test.ts`, "the day's ceiling is the schedule's, and its own overtime rule applies").
+- [x] **6. Every reader on the person's schedule for the day.** Day limits and half days (half that day's hours), overtime, Team, Reports, Utilisation, Dashboards, Approvals "Not submitted", leave balances in the person's working days, the calendar's "Not a working day" and working-hours band, the Day view's and Week view header's start–finish, the API (`GET /work_days`), the CSV import and calendar feeds (leave events say the working days and hours they take); notice stays in calendar days (`leaveContext`, `calendarOf`, `rulesCalendarOf` read `timetablesOf`; `test/pages/schedules.test.ts`, "what reads a person's schedule", one test each; `test/leave/*` on timetables).
+- [x] **7. Settings › Work schedules.** List, create, change from a day, archive (refused while assigned today or later) and restore, assign to people, teams, roles and the default from a day, and who gets which; 404 to Finance, managers and members, who see their own on My account and managers their teams' on Team, read only; `work_schedule.created`, `.updated`, `.archived`, `.restored`, `.assigned` in the Activity log, a person's assignment owned by them (`routes/app/schedules.tsx`; `test/pages/schedules.test.ts`, "the page, by role", "changes an owner or admin makes", per role).
+- [x] A browser spec on the person's own organisation with `fill()` for times, the keyboard alone to assign, and axe at 390px and 1280px in both schemes: `e2e/schedules.spec.ts`, "an owner adds a schedule, gives it to themselves with the keyboard, and it holds on their days", "a day that finishes before it starts is refused in the sheet, which stays open", "axe finds nothing on Work schedules, its sheets, and the schedule on My account"; `workEveryDay` now changes Standard from today (`e2e/timesheet.ts`).
+
+## TS-096 · Loading and motion like Royal London
+
+Done 2026-11-13. Pull request #57, deployed; the placement measured in production the same day (decision 34).
+
+Builder: AI sessions on branch `ts-096-motion` (PR #57). In review: the placement's effect is proven on the preview and again in production after the merge. No migration. `docs/design-system.md` ("While the page waits", "How a page loads"), decision 34.
+
+- [x] No blink on a load or a reload: times are simply there, metric-matched fallback faces, `/assets/` kept a year, the scheme from the server, no whole-page view transition (`e2e/shell-loading.spec.ts`).
+- [x] A move to another destination shows the pending bar after 150ms, then the destination's shape in `Skeleton` blocks; the frame never unmounts; the page arrives with its sections revealed in turn, and stands still with reduced motion (`e2e/shell-loading.spec.ts`, `e2e/shell-pending.spec.ts`).
+- [x] The Timesheet keeps the conventions: Track time's fields held by their shape while it reads, the Day view's sections revealed in turn, a timer's start and stop shown at once from the navigation, the Day view and Track time, put back with the reason when refused (`e2e/timesheet-motion.spec.ts`).
+- [x] The Worker placed beside D1 (`placement` in `wrangler.jsonc`): the `cf-placement` header and the time to first byte measured on the preview and in production against the 'before' (decision 34). Preview, 2026-11-12: every request `remote-FRA`; one D1 query 42ms from Frankfurt against 130ms from Newark, the journey there about 115ms (`scripts/placement-ttfb.sh`, decision 34, "Measured"). Production, 2026-11-13 after #57's deploy: every request `remote-FRA`; one D1 query 13ms from Frankfurt against 118ms from Newark before, the journey there about 125ms (decision 34, "Measured in production").
+- [x] The public pages say where a request is handled now that it is placed: it reaches the nearest data centre and is passed to Frankfurt (`app/routes/home.tsx`, `app/routes/privacy.tsx`; `test/claims.test.ts` ties the sentence to `wrangler.jsonc`; `docs/design-direction.md` rule 3).
+- [x] The page does not stretch past its top or bottom when pulled (the owner, 2026-11-12: bare canvas showed above the band): `overscroll-behavior: none` on the document; a box that scrolls inside the page keeps `overscroll-contain` (`app/app.css`).
+- [x] Photographers are named once, in the Credits at the foot of the page after the Privacy notice and Terms, never under their photographs, which carry their place alone (the owner, 2026-11-12; `SiteFooter` `photos`, `app/landing/photos.ts`; `test/claims.test.ts`).
+
+## TS-095 · Expected hours as a ceiling, overtime recorded as such
+
+Done 2026-11-12. Pull request #58, deployed.
+
+Builder: an AI session on branch `ts-095-overtime`. Decided by the owner on 2026-11-12 (`docs/decisions.md` entry 33), amending TS-090: a day takes at most its expected hours, and time past them is overtime, entered as such, only where an admin allows it. Migration `0017_overtime`. In review: the pull request against `main`, built on TS-093's Track time sheet, Day view and Week grid.
+
+- [x] **1. A ceiling by default.** Every organisation, those that existed included, has overtime not allowed (`organisations.overtime_policy` `none`, set for all by migration `0017`); a day takes at most its expected hours (the working week less leave and public holidays); a write past them is refused with what is left, "This day has 0:00 left."; a day already over is "Over by" and blocks submission (`app/leave/rules.ts` `dayLimit`, `mayWrite`; `test/leave/rules.test.ts`; `test/pages/timesheet-rules.test.ts`, "a working day, overtime not allowed", per role on track, a calendar slot, a cell, an edit and the timer).
+- [x] **2. Settings.** Workspace settings › Timesheet rules: Overtime Not allowed, Allowed or Only with pre-approval, with an optional cap a day and a week in hours; Weekends and non-working days Counts as overtime or Not allowed; pre-approval requests as TS-090 built them, asked for while overtime needs pre-approval (`overtime_policy`, `non_working_days`, `overtime_day_cap_minutes`, `overtime_week_cap_minutes`; `test/pages/settings-rules.test.ts`, owner and admin save, member, Finance and manager 404, bad values 400; `test/pages/time-off-rules.test.ts`).
+- [x] **3. Overtime recorded explicitly, server side.** `time_entries.overtime`; regular time past the limit is refused saying "Track more as overtime" where overtime is to be had; overtime is refused where not allowed, past a cap or past approved hours (`refusalOf`, `timerStartOf`; `test/pages/timesheet-rules.test.ts`, "overtime allowed", "overtime with pre-approval", "weekends and non-working days", per role on every write path).
+- [x] **3. Overtime recorded explicitly, in the pages.** Track time asks for Overtime, not Hours, once the chosen day has no regular time left and takes overtime, and says why ("This day's 7:30 of regular time is tracked: more is overtime."); a full day that takes none closes Track time with the server's reason; the Week grid has an overtime row under each project while any day of the week takes overtime or the project has some, its cells held to the overtime left; the Day view marks an overtime entry "Overtime" and reads its total "7:30 + 1:00 overtime"; the Week grid's day and week totals, the week calendar's day heads and blocks and the month's days say how much is overtime; Undo puts an entry back as the kind it was (`app/timesheet/DayRules.tsx` `refusalOfDay`, `takesOvertimeOnly`, `OvertimeTag`; `app/timesheet/sheets.ts` `weekSheet` rows by kind; `test/timesheet/sheets.test.ts`, "gives a project's overtime a row of its own").
+- [x] **4. A timer past the limit.** On stop it is cut where the limit was reached, regular before and overtime after, where the day takes overtime (past a cap the day is also flagged); where it takes none it stays whole and the day is over; starting another timer cuts the one it stops (`splitAtLimit`, `stopSplitOf`, `splitStopped`; unit tests across midnight, both clock changes and half days; `test/pages/timesheet-rules.test.ts`, the four timer tests).
+- [x] **5. Shown apart everywhere.** Reports (each group, person and entry, the headline, utilisation), its CSV (`overtime` column), Approvals, Team, Dashboards and the API (`overtime` on each entry, accepted on create and change with the same rules); a CSV import marks a row past the limit as overtime where allowed, else skips it with the reason (`test/pages/reports.test.ts`, `test/reports/report.test.ts`, `test/pages/approvals.test.ts`, `test/pages/team.test.ts`, `test/pages/dashboards.test.ts`, per role; `test/integrations/api.test.ts`, per role; `test/integrations/import.test.ts`).
+- [x] **6. Activity.** A change of the timesheet rules is recorded as `timesheet_rules.changed` with each field before and after, in words on the Activity log; a timer cut at the limit as `time_entry.split`, with the overtime entry's `time_entry.created` (`test/pages/settings-rules.test.ts`; `test/pages/timesheet-rules.test.ts`).
+- [x] A browser spec on the person's own time with `fill()`, the keyboard and axe at 390px and 1280px in both schemes (`e2e/overtime.spec.ts`). Every timesheet and calendar spec is robust to a run on a weekend: time is tracked on the latest weekday before today (`pastWeekday`), and a test whose timer runs today works every day of the week (`workEveryDay`, `e2e/timesheet.ts`).
+
+## TS-092 · Wiring between the business features
+
+Done 2026-11-12. Pull request #56, deployed.
+
+Builder: an AI session on branch `ts-wave3-wiring`. In review: the pull request against `main`. What the parallel builds of TS-064 to TS-089 left between them, closed once they had all merged. No migration (`expense_tags` was laid by TS-064).
+
+- [x] Expenses honour the lock date and invoices on every write through `lockReasonsOn` and `invoicedIds` (`app/locks`), with the reason shown (TS-065's and TS-070's criteria, ticked there; `test/pages/expenses.test.ts`, "refuses recording, changing and deleting on or before it for every role, naming the reason", "refuses deleting an expense on an invoice, and Approvals still totals the week").
+- [x] Activity records, in the same batch as their change, for rates, budgets, invoices (create, issue, void), payments, sends, estimates, recurring invoices, retainers, imports, expense categories and API writes (TS-072's criteria, ticked there; `test/activity/business.test.ts`; `test/integrations/import.test.ts`; `test/integrations/api.test.ts`).
+- [x] Tags on expenses: the form, `recordExpense` and `changeExpense`, the row, and the Expenses report's tag filter and CSV column (TS-085's criterion, ticked there).
+- [x] Reports' tabs include Expenses and Contractors (`REPORT_VIEWS`), the "Report on expenses" link gone; the Expenses report uses `FilterBar` (`ReportChoice`) and `PeriodStepper` (`RangeSteps`), a bad range answered under its field (`test/pages/expenses.test.ts`, "the Expenses report shows a backwards custom range's error under its field, with no figures", "for the %s, Contractors shown: %s"; `e2e/expenses.spec.ts`; `e2e/contractors.spec.ts`).
+- [x] Dashboards' Uninvoiced and Outstanding panels from `uninvoicedTotalsOf` and `receivablesOf`, for those who see rates only (TS-086's criterion, ticked there).
+- [x] Every invoice as one ZIP of PDFs on Integrations' export (TS-076's criterion, ticked there).
+- [x] Profit on the project page (TS-071's criterion, ticked there).
+- [x] The budget alert in-app, where TS-069 left it: not built, because there is no in-app notification surface to put it on (TS-069's criterion says why; it comes with TS-049).
+
+## TS-073 · B10 · Invoices from tracked time and expenses (draft and issue)
+
+Done 2026-11-12. Pull request #46, deployed.
+
+Depends on: TS-064, TS-067, TS-070, TS-011b, TS-046.
+
+Builder: an AI session on branch `ts-b2b-bill` (PR #46).
+
+- [x] Owners, admins and Finance only (`mayInvoice`; role table). Choose a client, a date range and its projects. The preview lists uninvoiced billable entries and billable expenses. Entries in periods that are not approved are flagged, not hidden (test). (`mayInvoice`; `test/billing/invoices.test.ts` "owners, admins and Finance can; a manager and a member get 404"; `test/billing/sources.test.ts` "flags entries in periods that are not approved, and hides none of them")
+- [x] Hours are grouped by project, task or person, or one line per entry. For every grouping, the invoice subtotal equals the sum of the included entries' billable amounts (property test across groupings). (`test/billing/sources.test.ts` "property: for every grouping the subtotal is the sum of the entries' billable amounts")
+- [x] A fixed-fee project adds one line for its fee or a chosen part of it (test). (`test/billing/sources.test.ts` "a fixed-fee project adds one line for its fee, or the part of it chosen")
+- [x] Saving creates a draft with the next number in the organisation's sequence. Numbers are unique per organisation and never reused, even after a draft is deleted (test, including two drafts saved at once). (`test/billing/invoices.test.ts` "never repeats under concurrent saves, and a deleted draft's number is not given again": eight saved at once; the number is read inside the batch that raises the sequence)
+- [x] Included entries and expenses are marked as invoiced on this invoice. Deleting the draft or one of its lines returns them to uninvoiced (test). An invoiced entry cannot be edited or deleted by anyone until it is released (test). (`test/billing/invoices.test.ts` "is locked while on an invoice and let go by deleting the line, the draft or voiding"; the trigger `time_entries_invoiced_unchanged` in `0009_billing`)
+- [x] Lines can be edited and free lines added. Free lines change the total but never the invoiced state of any entry (test). (`test/billing/sources.test.ts` "change the total but never what is invoiced")
+- [x] An Uninvoiced view lists, per client and project, uninvoiced hours, expenses and amount for a range (test that it equals the billable total minus what is invoiced). (`test/billing/sources.test.ts` "property: it is the billable total less what has been invoiced")
+- [x] An invoice has exactly one currency, the projects' currency. Mixing projects in different currencies is refused (test). (`test/billing/sources.test.ts` "refuses projects, or expenses, in more than one currency")
+
+## TS-077 · B12 · Estimates
+
+Done 2026-11-12. Pull request #46, deployed.
+
+Depends on: TS-064, TS-074.
+
+Built with TS-073 on `ts-b2b-bill` (PR #46).
+
+- [x] An owner, admin or Finance creates an estimate: client, number, issue date, subject, lines, tax, discount, notes, currency. The arithmetic is shared with TS-074 (test). (`test/billing/estimates.test.ts` "prices it with the invoice's arithmetic")
+- [x] Send it by email with a secret link. The client accepts or declines on the link without signing in, and the status and time are recorded once. A second click changes nothing. An owner, admin or Finance can record the decision or revert it (test). (`/estimate/<id>/<token>`; `test/billing/estimates.test.ts` "is proved by its token alone…", "records the client's answer once; a second click changes nothing", "record a decision for the client and take it back"; `e2e/billing.spec.ts`)
+- [x] An accepted estimate becomes a draft invoice with the same lines (test). Turning an estimate into a project is out of scope, as in Harvest. (`test/billing/estimates.test.ts` "becomes a draft invoice with the same lines, once")
+
+## TS-078 · B13 · Recurring invoices and retainers
+
+Done 2026-11-12. Pull request #46, deployed.
+
+Depends on: TS-064, TS-074.
+
+Built with TS-073 on `ts-b2b-bill` (PR #46).
+
+- [x] A recurring template (client, lines or "this client's uninvoiced time", frequency monthly, quarterly or yearly, first issue date, end) creates a draft, or an issued and sent invoice, on each date. The 31st becomes the month's last day (test with a fake clock). (`/invoices/recurring`; `test/billing/schedule.test.ts` "makes the due recurring invoice with the next number and moves the template to the month's end", 31 October to 30 November)
+- [x] A retainer per client, or per client and project: a funds invoice adds to it when paid, and a time invoice may draw from it up to its balance. The balance never goes below 0 (property test). (`/invoices/retainers`; `test/billing/retainers.test.ts`, including "property: never below 0 under random deposits, draws and payment deletions"; a funds invoice adds what was paid, not what was written off)
+
+## TS-088 · Xero CSV export of invoices
+
+Done 2026-11-12. Pull request #46, deployed.
+
+Depends on: TS-064, TS-074. Asked for by the owner; before TS-083's connection.
+
+Built with TS-073 on `ts-b2b-bill` (PR #46).
+
+- [x] An owner, admin or Finance downloads issued invoices for a range as a CSV in Xero's sales-invoice import format: contact, number, dates, lines, tax, currency (test against a fixture Xero accepts). (`/invoices/xero`; `test/billing/xero.test.ts` against `test/billing/fixtures/`. The 27 columns are those of Xero's documented sales-invoice template; what Xero's template leaves uncertain is written in `app/invoices/xero.ts`. No file has been imported into a real Xero organisation yet.)
+- [x] Totals in the file equal the invoices' to the penny, one currency per invoice (test). (`test/billing/xero.test.ts` "formats invoices exactly as the fixture": line amounts at the stored unit prices, one currency per invoice)
+
+## TS-068 · B8 · Utilisation report
+
+Done 2026-11-12. Pull request #52, deployed.
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-061 (B1), TS-066, TS-014a.
+
+- [x] Reports shows, per person and per team for a range: capacity, logged, billable logged, utilisation and billable utilisation (billable ÷ capacity) (`routes/app/reports.utilisation.tsx`, `app/reports/utilisation.ts`; `test/pages/report-views.test.ts`, "Utilisation": per role, and 2:00 of 15:00 capacity, 13%).
+- [x] Leave reduces capacity as in TS-084. Utilisation for a person on leave all week shows "—" (`test/pages/report-views.test.ts`, "shows — for a person on leave all week").
+- [x] Harvest-taste items 8 and 9: the range's total is the largest figure with a week drawn as a timetable of projects by days, and people are titled by name or the start of their address with the whole address under it on Reports, Team and Approvals (`app/reports/WeekTimetable.tsx`, `shownName`/`addressLine`; `test/pages/team.test.ts`, `test/pages/approvals.test.ts`).
+- [x] On the shared FilterBar, PeriodStepper and LinkTabs of TS-091 (`app/reports/ReportChoice.tsx`, `RangeSteps.tsx`, `ReportTabs.tsx`); keyboard and axe at 390px and 1280px in both schemes (`e2e/report-views.spec.ts`).
+
+## TS-071 · B6 · Cost rates and profitability
+
+Done 2026-11-12. Pull request #52, deployed.
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-067 (TS-070 for expense costs).
+
+- [x] An owner, admin or Finance gives each person a cost rate per hour with an effective-from date, in the organisation currency (`test/pages/report-views.test.ts`, "Cost rates"; a manager or member gets 404).
+- [x] The project page and a Profitability report show, for a range: revenue, cost and profit, with margin. Revenue is the billable amount for hourly projects, or the fee spread evenly over the project's start-to-end days for fixed fee. Cost is hours × cost rate plus expenses (TS-070) (tests with fixtures in Harvest's own worked examples). The Profitability report: `test/reports/profitability.test.ts` on the rules of Harvest's "Profitability report" article; `test/pages/report-views.test.ts`, £940 profit on £1,200 revenue. The project page (TS-092): Overview's Profit section, over Reports' range with `PeriodStepper`, is the report's own row (`projectProfit` in `app/projects/project.server.ts`; `test/pages/dashboard-money.test.ts`, "shows the %s an hourly project's row of the Profitability report", "shows the %s a fixed-fee project's row, its fee spread over its days", "links to the Profitability report over the same range…", "shows the %s no profit and no amount" for a manager and a member; `e2e/report-views.spec.ts`).
+- [x] Only owners, admins and Finance see cost and profit; never a manager (`RATES_ONLY` in `routes/app/organisation.tsx`; `test/pages/destinations.test.ts`; `test/pages/report-views.test.ts`, "Profitability").
+
+## TS-080 · B18 · Saved and shared reports
+
+Done 2026-11-12. Pull request #52, deployed.
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-014a, TS-014b.
+
+- [x] Any report view (range kind, filters, grouping) can be saved under a name. Reopening it reruns it against today's data, with a relative range such as "last month" moving with the date (`test/pages/report-views.test.ts`, "keeps the question", with a fake clock).
+- [x] The owner of a saved report shares it with named people as view or edit. A recipient sees only the rows their own role allows, never the sharer's scope (`test/pages/report-views.test.ts`: a member opening an admin's shared report sees 2:00, the admin 8:00).
+- [x] Out of scope: a custom-metric builder. Dashboards are TS-086.
+
+## TS-086 · Dashboards
+
+Done 2026-11-12. Pull request #52, deployed.
+
+Builder: an AI session on branch `ts-b2b-review`. In review: the pull request against `main`. Migration `0015_project_dates` adds project start and end dates, for fixed-fee spreading.
+
+Depends on: TS-064, TS-067, TS-068, TS-069, TS-071. Asked for by the owner; the research left dashboards out.
+
+- [x] Review > Dashboards shows owners, admins, Finance and team managers panels for a range: utilisation, billable utilisation, hours by project and the budgets nearest their limit, each over the people the viewer may see (`timeScopeOf`; `test/pages/report-views.test.ts`, "Dashboards", per role; a member gets 404).
+- [x] Panels with money, revenue, cost, profit, uninvoiced and receivables, are shown only to those who see rates; a manager never sees them. Revenue, cost and profit: `test/pages/report-views.test.ts`. Uninvoiced and Outstanding (TS-092) read `uninvoicedTotalsOf` and `receivablesOf` from `app/invoices`, one total per currency, each equal to the page it links to (`test/pages/dashboard-money.test.ts`, "show the %s what is waiting to be invoiced, one total per currency, equal to Uninvoiced's", "show the %s what clients owe, one total per currency, equal to the Receivables report's", "says nothing is owed, with the way to an invoice…", "shows a manager no amount and neither panel"; `e2e/report-views.spec.ts`, "an owner reads the money panels of Dashboards and a project's profit…").
+- [x] Each panel's figure equals the report it links to (`test/pages/report-views.test.ts`: total, utilisation and profit against their views).
+## TS-066 · B4 · Tasks and billable time
+
+Done 2026-11-12. Pull request #48, deployed.
+
+Depends on: TS-064, TS-011a, TS-012a, TS-012b.
+
+Builder: an AI session on branch `ts-b2b-money`, PR #48, one slice of the business features built on TS-064; finished by a second session when the first ran out of budget. In review: the pull request against `main`. Migration `0014_general_task` gives every organisation the task General, puts it on every project and gives every entry before it General. The browser spec `e2e/money.spec.ts` covers the four cards' pages: an owner, a person of their own, makes a task, opens a project's page and moves between its tabs, sets a rate and a budget, and tracks time with the task picker, the keyboard alone doing all of it; axe at 390px and 1280px in both schemes finds nothing on Tasks, Tags, a project's four tabs and its Billing and Budget sheets, the default rates and Track time with its task picker. The route tests ask a page of one record at a record made for it (`addressFor` in `test/routes.ts`), so a project's page and the default rates are back in `test/auth/guard.test.ts`, `test/pages/destinations.test.ts` and `test/pages/isolation.test.ts` with no skip.
+
+- [x] An owner or admin keeps the organisation's task list: name, billable by default, common (added to new projects); archive and restore. A manager, Finance or a member cannot change it (role table: `test/pages/money-pages.test.ts`, "Tasks and its Tags list open to owners and admins alone" and "Tasks takes a new task and a new tag from owners and admins alone", per role; `app/routes/app/tasks.tsx`).
+- [x] Each project has its tasks. For each project, a task is billable or not. A new project starts with the common tasks (`test/db/general-task.test.ts`, "gives a new project the common tasks that are not archived, billable as each says"; a project's Tasks tab adds, removes and sets billable: `test/pages/money-pages.test.ts`, the project's forms per role, and `test/pages/money-rules.test.ts`, "cannot be added to a project").
+- [x] A time entry has a task from its project's list. Entries made before this card get a task called "General", added to each existing project by the migration (`test/db/general-task.test.ts`, "are given General, on every project, billable as their project bills").
+- [x] An entry is billable when its task is billable on its project. Changing that flag re-rates past entries no invoice bills, and an invoiced entry keeps what it was billed as. Each report shows billable and non-billable hours and their sum (`test/pages/money-rules.test.ts`, "re-rating" and "billable time": "is split from the rest on a report").
+- [x] An archived task cannot be chosen for a new entry, and its past entries keep it (`test/pages/money-rules.test.ts`, "an archived task": refused with "Choose an active task of this project.", its entry edited and keeping it, offered again once restored; `app/tasks/EntryChoices.tsx` offers it only to the entries that have it).
+
+## TS-067 · B5 · Project types and billable rates
+
+Done 2026-11-12. Pull request #48, deployed.
+
+Depends on: TS-064, TS-066.
+
+The same branch and pull request as TS-066. A project's Settings tab sets its type, how it bills, its rate and its currency; Projects > Default rates sets each person's and each task's.
+
+- [x] A project is Hourly (time and materials), Fixed fee (with an amount) or Non-billable. Non-billable makes all its tasks non-billable (`test/pages/money-rules.test.ts`, "of a project made non-billable and back changes the entries no invoice bills alone" and "of a fixed-fee project needs its fee").
+- [x] An hourly or fixed-fee project bills by one of: project rate, person rate (person default, or a project override) or task rate (task default, or a project override) (`test/rates/price.test.ts`, "the rate that prices time", one test per mode; `test/rates/rates.test.ts`, "the rate in force", with a brute-force property).
+- [x] Every rate (project, person default, person-on-project, task-on-project) is stored with an effective-from date. An entry is priced at the rate in force on its own local date, so a rate change never re-prices earlier entries (property tests: `test/rates/price.test.ts`, "is the one in force on the time's own day", and `test/rates/rates.test.ts`, "a rate added later never re-prices work before it starts"; a rate is set from today or later: `test/pages/money-pages.test.ts`, "refuse a rate from a day already past"; `test/pages/money-rules.test.ts`, "prices the billable hours at the rate in force on each entry's day").
+- [x] An entry's billable amount is hours × rate, rounded to the currency's minor unit only at totals. A report total equals the sum of its rows to the penny (`test/rates/price.test.ts`, "adds up to the penny however the rows are grouped (property)").
+- [x] An entry with no rate shows "Missing rate", as Harvest does, and counts 0 in totals. The project page lists those entries (`test/rates/price.test.ts`, "is a missing rate for billable time with no rate, which counts 0"; `test/pages/money-rules.test.ts`, "with no rate is listed on its project's page as Missing rate, and counts 0", on Reports too).
+- [x] The organisation has a currency. A client may override it, and a project may override its client. All amounts carry their currency, and totals are never summed across currencies; a report shows one total per currency (`test/pages/money-rules.test.ts`, "is in the organisation's currency, or its client's, or its project's own, the nearest one", and the report with a GBP and a EUR total).
+- [x] Only owners, admins and Finance see rates and amounts, and set rates (`maySeeRates`, `mayManageRates`); a manager never does (role table: `test/pages/money-pages.test.ts`, a project's page, its forms and the default rates per role; a manager's report holds no amount; `docs/security.md`, "Rates and money").
+
+## TS-085 · Tags
+
+Done 2026-11-12. Pull request #48, deployed.
+
+Depends on: TS-064, TS-014a, TS-070. Asked for by the owner; not in the research.
+
+The same branch and pull request as TS-066. Tasks has a second list, Tags (`?list=tags`).
+
+- [x] An owner or admin keeps the organisation's tags: create, rename, archive, restore; names unique in the organisation (`test/pages/money-rules.test.ts`, "has a name no other tag of the organisation has, in any case"; `test/pages/money-pages.test.ts`, a tag made by owners and admins alone).
+- [x] A person puts tags on their own entries and expenses; an owner or admin puts them on projects. Entries and projects: `test/pages/money-rules.test.ts`, tags put on an entry from Track time and its sheet; `test/pages/money-pages.test.ts`, a project's Tags form 403 to anybody but owners and admins. Expenses (TS-092): the expense form's tag picker, saved in the same batch as the expense and filtered in the Expenses report and its CSV (`test/pages/expenses.test.ts`, "are saved, changed and shown, with the change in the activity log as tag ids", "offers only active tags; an archived tag already on the expense stays; another organisation's is refused", "filter the Expenses report and its CSV"; `e2e/expenses.spec.ts`, "an expense tagged from the keyboard, the report filtered by it, stepped, and a range refused inline").
+- [x] Reports filter by tag, in the address, and a project's tags count for its entries (`test/pages/money-rules.test.ts`, "filters a report, and its export, to the time with it on the entry or on its project": the filtered total is the tagged rows' sum, and the CSV holds those rows alone).
+- [x] An archived tag cannot be added, and stays on what has it (`test/pages/money-rules.test.ts`, "archived, is put on nothing new, and stays on what has it", on an entry and on a project).
+
+## TS-090 · Leave and time together: limits, notice, overtime and weekend work
+
+Done 2026-11-12. Pull request #45, deployed.
+
+Builder: an AI session on branch `ts-090-leave-rules`. Asked for by the owner on 2026-11-12, after TS-061 and TS-062 merged: leave and tracked time follow one set of rules, and leave is booked in good time. Migrations `0009_leave_notice` (each kind's notice and the trigger made again, merged alone first as a migration that drops must, branch `ts-090-leave-schema`) and `0010_timesheet_rules`.
+
+- [x] A public holiday or a day of whole-day leave takes no time anywhere: the Day view's Track time is disabled with the reason, the Week grid's cells are locked, the calendar offers no slots, a timer does not start, and the server refuses each (`app/leave/rules.ts` `dayLimit`, `mayWrite`, `mayStart`; `app/leave/rules.server.ts` `refusalOf`, `startRefusalOf`, asked by `addHours`, `setCellHours`, `editEntry`, `startTimer`; `test/pages/timesheet-rules.test.ts`: track, cell, edit, calendar slot and timer start on a holiday and on whole-day leave answer 409 with the reason; `test/pages/timesheet-rules-views.test.ts`; `e2e/leave-rules.spec.ts`, "a whole day of leave closes the day"; `e2e/leave.spec.ts`).
+- [x] A day of half-day leave takes what is left of its expected hours (7:30 less 3:45 is 3:45); the Week view shows each day's limit and what is left; more is refused with "This day has 3:45 left"; on a leave day only approved overtime raises the limit (`test/leave/rules.test.ts`, unit and property tests; `test/pages/timesheet-rules.test.ts`; `e2e/leave-rules.spec.ts`, "half a day of leave leaves the day 3:45", with `fill()`).
+- [x] A day holding more than it takes shows "Over by H:MM" with the entries to trim or move; its week cannot be submitted until it is corrected; a timer stopped past the limit keeps its entry and the day is flagged (`daysOver`, `submitPeriod` reason `over`; `test/pages/timesheet-rules.test.ts`: leave approved after time was tracked refuses the submission naming the day, trimming lets it through, Stop past the limit answers 200 and names the day; `e2e/leave-rules.spec.ts`, the axe test: Over by 3:45 on Day, Week and Calendar, Submit week disabled).
+- [x] Workspace settings > Timesheet rules (owners and admins): overtime and weekend work each allowed freely, only with pre-approval, or not allowed; "Request overtime" and "Request weekend work" on Time off are decided as leave is and shown on Approvals with it (`organisations.overtime_rule`, `weekend_rule`; `work_requests`; `app/leave/work.server.ts`; `test/pages/settings-rules.test.ts`, `test/pages/time-off-rules.test.ts`, `test/pages/approvals-rules.test.ts`, per role; `e2e/leave-rules.spec.ts`, the rules set with the keyboard alone, overtime approved as it is sent).
+- [x] Each kind of leave has a notice in days (annual 14, unpaid 14, study 28, parental 56, sick and public holidays none); the request sheet states it and the earliest well-noticed day; a short-notice request needs a one-line reason and is marked "Short notice (N days)" for the approver; the organisation allows short notice with a reason or not at all; approvers see the notice of every request; Reports counts short-notice requests per person; Time off shows the team's leave to come, the kind only to those who may see it (`leave_kinds.notice_days`, set by migration `0009` and the trigger made again; `leave_requests.notice_days`, `short_notice`, `notice_reason`; `teamLeaveAhead`; `shortNoticeCounts`; `test/pages/time-off-rules.test.ts`, `test/pages/approvals-rules.test.ts`, `test/pages/settings-rules.test.ts`; `e2e/leave-rules.spec.ts`, "annual leave at short notice").
+- [x] "Submit week" has one look and one place on Day, Week and Calendar, with one filled primary in each view (`PeriodHeader` in `app/timesheet/Submission.tsx`, tonal, in the header row of each; `test/pages/timesheet.test.ts`; `e2e/timesheet.spec.ts`, "its header submits the week").
+- [x] Unit and property tests of the rules; worker tests per role for every write path and every new intent; the new intents in the cross-organisation 404 and action-validation tests; a browser spec on the person's own time with `fill()`, the keyboard and axe at 390px and 1280px in both schemes (`test/leave/rules.test.ts`, 600 seeded cases a property; `test/pages/isolation.test.ts`, each new intent of Time off, Approvals and Settings; `test/action-validation.test.ts` is per route and no route is new; `e2e/leave-rules.spec.ts`).
+
+## TS-091 · The audit's fixes, first pass
+
+Done 2026-11-12. Pull request #44, deployed.
+
+Builder: an AI session on branch `ts-066-fixes`. In review: the pull request against `main`. The wonky audit of production (2026-11-11) found 33 defects, W01 to W33. This pass fixes the ones outside the files of TS-061 (Time off), TS-062 (Calendar), TS-063 (the profile menu) and TS-064 (Foundation 2). W01, W02, W13, W16, W17, W25, W29 and W31 are left for the second pass; W03 and W11 are TS-064's. The Timesheet's and Approvals' own Previous/Next controls (W23) and their standalone text links (W10) are in files TS-061 and TS-062 change, and move to `PeriodStepper` and `ACTION_LINK` in the second pass. Before and after screenshots of each fix, from local runs (`e2e/zz-fixes-shots.spec.ts`, `SHOT_PHASE=before|after`), are in `cmux-assets/browser/timesifier/fixes/`.
+
+**Merged with TS-061, TS-062 and TS-063** (rebased on 2026-11-12): Track time, from the Day view or a slot of the calendar, places its entry with `placeOnDay` (W08), a slot's start kept; the calendar's browser spec tracks yesterday, so it passes at any hour; the leave tests take the one written form of a range; Reports' People lines count whole minutes, as its totals do.
+
+- [x] **W04, W33.** An entry belongs whole to the local day it starts in, in the zone of the person looking (decision 26), on the Timesheet, Team, Reports, the CSV export and the hours on Projects; no page cuts an entry at midnight, and Reports bounds its days in the viewer's zone (`test/pages/reports.test.ts`, "counts an entry of 21:33 to 02:33 whole on the day it starts, by day and in one CSV row" and "counts its days in the viewer's zone, not the organisation's"; `test/reports/report.test.ts`, "21:33 to 02:33 counts whole on its start day, never cut at midnight"; `e2e/reports.spec.ts`, "a report is chosen and shown with the keyboard alone").
+- [x] **W07.** On Reports, by day, project or client, the rows add up to the total as written: every figure is whole minutes (`test/reports/report.test.ts`, "a property of every report (W07)").
+- [x] **W05.** A custom range that is backwards, longer than 366 days or malformed is answered on Reports itself with a field error, the dates kept in the fields, never the error page (`test/reports/report.test.ts` and `test/pages/reports.test.ts`, the bad-range cases; `e2e/reports.spec.ts`, "a custom range that runs backwards shows the page again, the days as typed and why").
+- [x] **W06, W12.** Every day, range, month and time is written by `app/time/format.ts`, with a fixed locale and an explicit zone, one written form per kind (`docs/design-system.md`, "Dates and times"), and a server render and a browser's render give the same text (`test/time/format.test.ts`; `test/node/date-parity.test.ts`; `e2e/dates.spec.ts`, "the Timesheet hydrates with the server's dates in a browser of another locale and zone"; `e2e/design.spec.ts`, the Dates section, in Chromium and WebKit).
+- [x] **W08.** Hours typed into the grid, into Track time or from a slot of the calendar never make an entry that crosses the day's midnight or ends after now; when the day cannot hold them, the form says so (`test/time/grid-placement.test.ts`; `test/pages/timesheet.test.ts`, "keeps the slot's start, and refuses hours that would cross midnight or end after now (TS-091, W08)").
+- [x] **W09.** A slim progress bar shows while a navigation or a form is pending for longer than 150 ms, and does not move under reduced motion (`e2e/shell-pending.spec.ts`).
+- [x] **W10.** Every button, icon button and standalone link the shared components draw is at least 44 × 44 px (`e2e/components.spec.ts`, "W10: at 390px every button, icon button and standalone link is at least 44 by 44px").
+- [x] **W14.** A 404 or bad request inside an organisation keeps its navigation and the colour scheme, and its label and title say what happened (`test/pages/errors.test.ts`; `e2e/shell-errors.spec.ts`).
+- [x] **W15, W28, W18.** Projects, Clients, Team and Reports filter with one filter row: a field that applies as you type or on Enter and a clear button, no Apply button, and a label that fits at 390 px (`e2e/components.spec.ts`, "FilterField applies after typing stops and on Enter, and Clear empties it and applies"; `e2e/projects-search.spec.ts`; `test/pages/audit-fixes.test.ts`).
+- [x] **W19.** WebKit logs no Content Security Policy violation for React Aria's style; the one the audit saw is Playwright's own screenshot style (`docs/security.md`; `e2e/react-aria-style.spec.ts` in `webkit` and `ios-webkit`).
+- [x] **W20.** Tabs are drawn one way, and sit below the page's heading and intro (`e2e/components.spec.ts`, "W20: Tabs and LinkTabs draw the same row and the same indicator"; `test/pages/audit-fixes.test.ts`, "Team pages: the tabs are under the heading and its sentence (W20)").
+- [x] **W23.** Reports and Team step their range with the one `PeriodStepper` (`e2e/components.spec.ts`, "PeriodStepper steps by keyboard and names each arrow by its step"; `e2e/reports.spec.ts`, "the stepper moves the range by its own length, with the keyboard"; `e2e/people.spec.ts`).
+- [x] **W21, W22.** Every page of an organisation is drawn in one 800 px column, and the lists in tab panels are not inset (`docs/design-system.md`, "The content column"; screenshots `W21-after-*`, `W22-after-*`).
+- [x] **W24.** A row on Projects and Clients opens its edit sheet, which holds Archive; there is no two-item Actions menu (`test/pages/audit-fixes.test.ts`, "Projects and Clients: a row opens its sheet (W24, W15)"; `e2e/organize.spec.ts`).
+- [x] **W26.** The only owner of an organisation is not offered Leave organisation; the page says why (`test/pages/audit-fixes.test.ts`, "My account: leaving (W26)").
+- [x] **W27.** The confirmation that deletes an organisation is styled as destructive and is enabled only when the name typed matches (`e2e/components.spec.ts`, "W27: a danger button is drawn in the error colour"; `e2e/organisations-journeys.spec.ts`).
+- [x] **W30.** Clients' intro, the Member role's description and Team's week total read as the audit proposes (`test/pages/audit-fixes.test.ts`; `test/pages/team.test.ts`).
+- [x] **W32.** From 600 px wide, a sheet is a centred dialog with every corner rounded, clear of the window's bottom edge (`e2e/components.spec.ts`, "W32: at 1280px the sheet sits in the middle, clear of every edge" and "W32: at 390px the sheet sits along the bottom").
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test` and the full Chromium browser run pass.
+
+## TS-063 · The profile menu
+
+Done 2026-11-11. Pull request #40, deployed.
+
+Builder: an AI session on branch `ts-063-profile-menu`. Harvest opens profile and sign out from the person at the top (`docs/research/harvest-app/*.txt`, "Profile and settings for <owner>"); Timesifier had a "My account" link in the band and a Sign out button on My account. This card puts both in one profile menu at the end of the band. In review: the pull request against `main`; screenshots at 390px and 1280px in both schemes are in `cmux-assets/browser/timesifier/TS-063/` (band, menu open, the menu outside an organisation).
+
+- [x] A round button with the person's initials (from their name, else the first letter of their address), named "Account menu for <name>, <initials>", stands in the band beside the organisation's name; design tokens only, 40px across, a visible focus ring, at 390px and 1280px in both schemes (`app/shell/ProfileMenu.tsx`; `test/pages/destinations.test.ts`, "the profile menu"; `e2e/profile-menu.spec.ts`: size, initials, the focus ring after Escape; `pnpm check:tokens`).
+- [x] A click, Enter, Space or ArrowDown opens a menu with exactly Account settings (My account) and Sign out, under the person's name and address as plain text; Escape closes it and gives the focus back (`e2e/profile-menu.spec.ts`, the first two tests).
+- [x] Sign out ends the session the way the old button did and lands on `/sign-in` (`e2e/profile-menu.spec.ts`: the session is `null` after; `e2e/one-way-in.spec.ts`, a whole page load).
+- [x] The band's "My account" link and My account's Sign out are gone; Sign out everywhere stays on My account. Outside an organisation the same menu holds the way out alone, "Use a different email" on `/app/new` (`test/pages/settings.test.ts`; `e2e/profile-menu.spec.ts`, the outside test; `e2e/organisations-keyboard.spec.ts`).
+- [x] A worker test for the initials; a browser spec for the menu; every spec that used the link or the button uses the menu (`test/auth/initials.test.ts`; `e2e/auth.ts` `signOut` and `chooseAccountSettings`; axe at 390px and 1280px in both schemes in `e2e/profile-menu.spec.ts`, and the shell's and organisations' scans with the menu in the band; the Chromium run: 338 passed).
+- [x] `docs/navigation.md` and `docs/design-system.md` say where My account and Sign out are ("Utility items"; `docs/design-system.md`, "Shell" and the Menu row; `docs/architecture.md`, `docs/security.md`).
+
 ## TS-055 · A signed-in person never sees the home page
 
 Done 2026-11-11. Pull request #31, deployed and checked in production: `/` signed in goes to the organisation, and the back button does not return to it.
