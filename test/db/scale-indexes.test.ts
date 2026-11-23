@@ -8,7 +8,7 @@ import { freshDatabase } from "./database";
 // day carries the start and the id, and two indexes are added, for everyone's
 // entries by start and everyone's expenses by day. It only adds, so it ships
 // with the code; the shorter day index stays until TS-113b takes it away. It
-// applies on a fresh database and on one already migrated to 0023 with rows in
+// applies on a fresh database and on one already migrated to 0027 with rows in
 // it, and the queries it is for use the indexes it makes, the shorter one
 // beside them.
 
@@ -42,10 +42,10 @@ describe("migration 0028", () => {
 		expect(names).toContain("time_entries_organisation_id_spent_on_idx");
 	});
 
-	it("applies on a database migrated to 0023 that holds entries and expenses, and keeps them", async () => {
+	it("applies on a database migrated to 0027 that holds entries and expenses, and keeps them", async () => {
 		await reset();
 		const at = MIGRATIONS.findIndex((m) => m.name === INDEXES);
-		expect(MIGRATIONS[at - 1]?.name).toBe("0023_entry_day_backfill.sql");
+		expect(MIGRATIONS[at - 1]?.name).toBe("0027_rules_dated.sql");
 		await applyD1Migrations(env.DB, MIGRATIONS.slice(0, at));
 		expect(await indexNames()).toContain("time_entries_organisation_id_spent_on_idx");
 

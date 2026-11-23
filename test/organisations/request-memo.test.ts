@@ -76,11 +76,16 @@ describe("a page as a manager of 120 of 150 people", () => {
 	// manager's teams read three times. Timesheet day 50 (4 and 3), as now: it
 	// read the teams once already, and its repeats are TS-113b's, the
 	// timetables of the leave reading the people's places twice (`placesOf`).
+	// Since TS-111d and TS-111e, Timesheet day reads 5 more (the dated rules,
+	// leave and weeks for the day's limits, the people's zones, and the lock
+	// date as it reaches the person, twice) and Team 2 more (leave, and the
+	// people's zones): none of the memberships or the teams, and the repeats
+	// among them are TS-113b's too.
 	it("Timesheet day reads the manager's membership and their teams once", async () => {
 		const counts = await statementsOf(`/app/acme?day=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 50,
+			total: 55,
 			memberships: 4,
 			teamMembers: 3,
 			ownMembership: 1,
@@ -92,7 +97,7 @@ describe("a page as a manager of 120 of 150 people", () => {
 		const counts = await statementsOf(`/app/acme/team?week=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 33,
+			total: 35,
 			memberships: 5,
 			teamMembers: 3,
 			ownMembership: 1,
