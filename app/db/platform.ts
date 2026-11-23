@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, isNull, lt, max, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import { SIGN_IN_DAYS } from "~/platform/limits";
 import { among } from "./among";
 import {
 	invitations,
@@ -551,11 +552,11 @@ export async function recordSignIn(database: D1Database, userId: string, device:
 	await drizzle(database).insert(signIns).values({ userId, device });
 }
 
-/** Deletes sign-ins older than the 90 days they are kept. */
+/** Deletes sign-ins older than the `SIGN_IN_DAYS` they are kept. */
 export async function deleteOldSignIns(database: D1Database, now: Date): Promise<void> {
 	await drizzle(database)
 		.delete(signIns)
-		.where(lt(signIns.createdAt, new Date(now.getTime() - 90 * DAY)));
+		.where(lt(signIns.createdAt, new Date(now.getTime() - SIGN_IN_DAYS * DAY)));
 }
 
 // ---------------------------------------------------------------------------

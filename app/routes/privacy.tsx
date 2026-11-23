@@ -10,17 +10,21 @@ import { EVENT_LABELS } from "~/integrations/scopes";
 import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
 import { DOCUMENT_EMAILS } from "~/invoices/mail.server";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
-import { deploymentOperator, OperatorDetails } from "~/landing/operator";
+import { deploymentOperator, icoReference, OperatorDetails } from "~/landing/operator";
 import {
 	LINK,
 	PRIVACY_EMAIL,
 	PRIVACY_PATH,
 	pageMeta,
 	rootOrigin,
+	SECURITY_EMAIL,
 	TERMS_PATH,
 } from "~/landing/Site";
+import { IcoRegistration, TIME_TRAVEL_DAYS } from "~/landing/trust";
+import { WhoSeesWhat } from "~/landing/WhoSees";
 
 import { setting } from "~/lib/deployment";
+import { SIGN_IN_DAYS } from "~/platform/limits";
 
 import type { Route } from "./+types/privacy";
 
@@ -52,6 +56,7 @@ export function loader({ request }: Route.LoaderArgs) {
 	return {
 		host: new URL(request.url).host,
 		operator: deploymentOperator(env),
+		ico: icoReference(env),
 		sender: setting(env, "EMAIL_FROM") ?? null,
 		facts: {
 			activityDays: ACTIVITY_RETENTION_DAYS,
@@ -64,7 +69,7 @@ export function loader({ request }: Route.LoaderArgs) {
 }
 
 /** This version of the notice. */
-const VERSION = { date: "2026-11-14", inWords: "14 November 2026" };
+const VERSION = { date: "2026-11-23", inWords: "23 November 2026" };
 
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
 
@@ -78,7 +83,7 @@ const EVENTS = Object.values(EVENT_LABELS)
 	.join("");
 
 export default function Privacy({
-	loaderData: { host, operator, sender, facts },
+	loaderData: { host, operator, ico, sender, facts },
 }: Route.ComponentProps) {
 	/** What each row of "What is stored" says. Every row of `STORED` has its words here. */
 	const stored: Record<StoredTerm, ReactNode> = {
@@ -264,6 +269,11 @@ export default function Privacy({
 					That company decides what Timesifier stores and answers for it. Data protection law calls
 					it the controller.
 				</p>
+				{ico && (
+					<p>
+						<IcoRegistration reference={ico} />
+					</p>
+				)}
 			</DocumentSection>
 
 			<DocumentSection id="stored" title="What is stored">
@@ -287,58 +297,7 @@ export default function Privacy({
 			</DocumentSection>
 
 			<DocumentSection id="who-sees" title="Who sees what">
-				<p>
-					Nobody outside an organisation can read anything in it, or learn that it exists, except
-					Timesifier's platform owners, as their row below says. Inside it, what a person sees
-					depends on their role, and on whether they manage a team.
-				</p>
-				<Rows>
-					<Row term="Owners and admins">
-						Everyone's time, timesheets, expenses with their receipts, and leave, with its kind;
-						every rate and amount, the invoices and estimates, and the clients' contacts; the whole
-						activity log; the integrations. They invite and remove people. Only an owner deletes the
-						organisation.
-					</Row>
-					<Row term="Finance">
-						Everyone's time, timesheets, expenses with their receipts, every rate and amount, the
-						invoices and estimates, the clients' contacts and the whole activity log. That a
-						colleague is on leave, but not which kind, unless Finance manages their team. Finance
-						approves no timesheet or leave except as a manager.
-					</Row>
-					<Row term="Managers">
-						Any member of the organisation can be made the manager of a team. A manager sees the
-						time, timesheets, expenses with their receipts, leave with its kind, and records in the
-						activity log of the people in the teams they manage, and approves or returns their
-						timesheets and leave, never their own. A manager sees no rate, invoice or estimate.
-					</Row>
-					<Row term="Members">
-						Their own time, timesheets, expenses and leave, and the history of their own entries;
-						the organisation's projects; who belongs to the organisation, with their names and email
-						addresses; and that a colleague is on leave, but not which kind. A member can share a
-						report they saved with other members, who see in it only what their own role lets them.
-					</Row>
-					<Row term="Contractors">
-						A member an owner or admin marks as a contractor sees what their role lets them, the
-						same as anyone else with it. Owners, admins and Finance see contractors' hours in the
-						Contractors report.
-					</Row>
-					<Row term="Timesifier's platform owners">
-						The people who run Timesifier, each of whom must prove their session with a code emailed
-						to them, see every account's name, email address, organisations and sign-ins, and each
-						organisation's name, plan and seats, how many members, invitations, time entries,
-						projects and invoices it has, and when it was last used: never what is in them. Only
-						while an owner of the organisation grants support access, for 24 or 72 hours, can they
-						read its people, projects, latest time entries and invoices, and change nothing; each
-						reading is recorded in the organisation's activity log. They never see the
-						organisation's wellbeing figures, which only its owners see.
-					</Row>
-				</Rows>
-				<p>
-					Nobody changes another person's time entries or expenses, except that an owner or admin
-					can import time entries for people in the organisation and undo that import. What leaves
-					the organisation leaves because someone in it sends it: an invoice or an estimate to a
-					client, a webhook, an API token or a calendar feed. Each is under "Who else handles it".
-				</p>
+				<WhoSeesWhat leaving={<>Each is under "Who else handles it".</>} />
 			</DocumentSection>
 
 			<DocumentSection id="where" title="Where it is kept">
@@ -364,7 +323,10 @@ export default function Privacy({
 					Cloudflare, for everything the application does. Every service Timesifier runs on is
 					Cloudflare’s. Cloudflare, Inc. is a company in the United States.
 				</p>
-				<p>Mail you send to {PRIVACY_EMAIL} is received by Microsoft, which hosts that mailbox.</p>
+				<p>
+					Mail you send to {PRIVACY_EMAIL} or {SECURITY_EMAIL} is received by Microsoft, which hosts
+					that mailbox.
+				</p>
 				<Rows>
 					<Row term="Hosting, the database and files">
 						Cloudflare Workers answers every request, Cloudflare D1 holds the database and
@@ -532,7 +494,7 @@ export default function Privacy({
 						to 30 days. The counts of codes sent to an address stop counting after one hour.
 					</Row>
 					<Row term="Your sign-ins">
-						Each is deleted 90 days after it was made, by a job that runs every day.
+						Each is deleted {SIGN_IN_DAYS} days after it was made, by a job that runs every day.
 					</Row>
 					<Row term="An invitation">
 						It can be accepted for {INVITATION_DAYS} days. Its record stays with the organisation.
@@ -576,9 +538,10 @@ export default function Privacy({
 						again. The accounts of the people in it are not deleted.
 					</Row>
 					<Row term="Copies">
-						Cloudflare keeps the means to restore the database to any minute of the last 30 days, so
-						what is deleted from the database is gone for good 30 days later. Timesifier keeps no
-						other copy, of the database, a receipt or a logo.
+						Cloudflare keeps the means to restore the database to any minute of the last{" "}
+						{TIME_TRAVEL_DAYS} days, so what is deleted from the database is gone for good{" "}
+						{TIME_TRAVEL_DAYS} days later. Timesifier keeps no other copy, of the database, a
+						receipt or a logo.
 					</Row>
 				</Rows>
 			</DocumentSection>

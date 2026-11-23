@@ -19,6 +19,8 @@ import "./public.css";
 
 export const PRIVACY_PATH = "/privacy";
 export const TERMS_PATH = "/terms";
+export const SECURITY_PATH = "/security";
+export const ACCESSIBILITY_PATH = "/accessibility";
 
 // What a buyer reads before signing in (TS-106): what Timesifier does, what it
 // costs, what it connects to and how to reach the company.
@@ -38,6 +40,8 @@ export const PUBLIC_PAGES = [
 	SIGN_IN_PATH,
 	PRIVACY_PATH,
 	TERMS_PATH,
+	SECURITY_PATH,
+	ACCESSIBILITY_PATH,
 	FEATURES_PATH,
 	PRICING_PATH,
 	INTEGRATIONS_PATH,
@@ -50,6 +54,46 @@ export const PUBLIC_PAGES = [
  * the API's description for tools. Not in the sitemap, which lists pages.
  */
 export const PUBLIC_FILES = [OPENAPI_PATH] as const;
+
+/** A link from a public page to another site: where it goes, and why a public page may send a person there. */
+export interface OutsideLink {
+	href: string;
+	reason: string;
+}
+
+/**
+ * The only other sites a public page links to (TS-105). test/claims.test.ts allows
+ * exactly these addresses and no other, and every one must be linked from a public page.
+ */
+export const OUTSIDE_LINKS = {
+	status: {
+		href: "https://status.timesifier.com/",
+		reason: "Whether Timesifier is up, from outside it (TS-107).",
+	},
+	cloudflareDpa: {
+		href: "https://www.cloudflare.com/cloudflare-customer-dpa/",
+		reason:
+			"The terms on which Cloudflare, which runs everything Timesifier does, processes its data.",
+	},
+	cloudflareSubprocessors: {
+		href: "https://www.cloudflare.com/gdpr/subprocessors/cloudflare-services/",
+		reason: "Whom Cloudflare in turn has process that data: its list, not a copy of it.",
+	},
+	cloudflareCompliance: {
+		href: "https://www.cloudflare.com/trust-hub/compliance-resources/",
+		reason:
+			"Cloudflare's certifications, which are Cloudflare's: /security links to them and claims none for Timesifier.",
+	},
+	microsoftDpa: {
+		href: "https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA",
+		reason: "The terms on which Microsoft hosts the mailbox that mail to the company goes to.",
+	},
+	icoRegister: {
+		href: "https://ico.org.uk/ESDWebPages/Search",
+		reason:
+			"The ICO's public register, where the operator's registration can be checked. Shown only with OPERATOR_ICO_REFERENCE.",
+	},
+} as const satisfies Record<string, OutsideLink>;
 
 /** Where a person writes about their data until the controls are in the product. */
 export const PRIVACY_EMAIL = "privacy@timesifier.com";
@@ -247,6 +291,8 @@ export function SiteHeader({ current, sections = [], end }: SiteHeaderProps) {
 const NOTICES: readonly SiteLink[] = [
 	{ href: PRIVACY_PATH, label: "Privacy notice" },
 	{ href: TERMS_PATH, label: "Terms" },
+	{ href: SECURITY_PATH, label: "Security" },
+	{ href: ACCESSIBILITY_PATH, label: "Accessibility" },
 ];
 
 /**

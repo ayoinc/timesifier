@@ -10,6 +10,8 @@ test.use({ storageState: SIGNED_OUT });
 const DOCUMENTS = [
 	{ path: "/privacy", link: "Privacy notice" },
 	{ path: "/terms", link: "Terms" },
+	{ path: "/security", link: "Security" },
+	{ path: "/accessibility", link: "Accessibility" },
 ] as const;
 
 /** Who runs the deployment, with the four details a company's website must show. */

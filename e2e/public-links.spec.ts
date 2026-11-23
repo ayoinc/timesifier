@@ -7,7 +7,7 @@ import { expect, test } from "./fixtures";
 
 test.use({ storageState: SIGNED_OUT });
 
-const PAGES = ["/", "/privacy", "/terms", "/sign-in"] as const;
+const PAGES = ["/", "/privacy", "/terms", "/security", "/accessibility", "/sign-in"] as const;
 
 for (const path of PAGES) {
 	test(`every link on ${path} leads to a page or a place that exists`, async ({
@@ -39,8 +39,15 @@ for (const path of PAGES) {
 				continue;
 			}
 
+			// Another site: which ones a public page may link to is OUTSIDE_LINKS
+			// (app/landing/Site.tsx), held by test/claims.test.ts. Another site's answer
+			// is not this one's to test, so it is not fetched; it is reached over HTTPS.
+			if (address.origin !== baseURL) {
+				expect(address.protocol, words).toBe("https:");
+				continue;
+			}
+
 			// Everything else is a page of our own.
-			expect(address.origin, words).toBe(baseURL);
 			const response = await context.request.get(address.pathname + address.search, {
 				maxRedirects: 0,
 			});

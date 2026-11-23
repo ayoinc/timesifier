@@ -147,7 +147,8 @@ const platform = route(PLATFORM_PATH, "routes/platform/layout.tsx", [
 	]),
 ]);
 
-// The privacy notice and the terms have their addresses in landing/Site.tsx.
+// The privacy notice, the terms, the security page and the accessibility
+// statement have their addresses in landing/Site.tsx.
 // The one page a person uses without a session has its address in
 // routes/auth/paths.ts as well, which the guard and the pages read. An
 // invitation's page is outside `/app`: the person it is for is not a member yet.
@@ -156,6 +157,8 @@ export default [
 	route("sign-in", "routes/sign-in.tsx"),
 	route("privacy", "routes/privacy.tsx"),
 	route("terms", "routes/terms.tsx"),
+	route("security", "routes/security.tsx"),
+	route("accessibility", "routes/accessibility.tsx"),
 	// What a buyer reads before signing in (TS-106).
 	route("features", "routes/features.tsx"),
 	route("pricing", "routes/pricing.tsx"),
@@ -165,6 +168,8 @@ export default [
 	// For search engines: robots.txt names the sitemap, which lists the pages above.
 	route("robots.txt", "routes/robots.ts"),
 	route("sitemap.xml", "routes/sitemap.ts"),
+	// For whoever finds a vulnerability: RFC 9116 (TS-105).
+	route(".well-known/security.txt", "routes/security-txt.ts"),
 	app,
 	platform,
 	// A mailing's unsubscribe link (TS-099): its signature, not a session, says whose it is.

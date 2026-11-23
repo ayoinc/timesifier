@@ -2,6 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { expect, type MockInstance, onTestFinished, vi } from "vitest";
 import * as z from "zod";
 import { SIGN_IN_CODE_LENGTH } from "~/auth/code";
+import type { Setting } from "~/lib/deployment";
 
 export const ORIGIN = "https://timesifier.example";
 
@@ -211,10 +212,12 @@ export async function whoIs(cookie: string, options: RequestOptions = {}) {
  * Gives the Worker a different value for one binding until the test ends, or
  * removes the binding when the value is `undefined`. `withEnv` does not reach
  * a request made through `exports.default.fetch`; the imported `env` object is
- * the one the Worker reads, because tests run in the Worker's own isolate.
+ * the one the Worker reads, because tests run in the Worker's own isolate. An
+ * optional setting, which the committed wrangler.jsonc leaves out and so `Env`
+ * does not name, is a binding like any other.
  */
-export function setBinding(name: keyof Env, value: unknown): void {
-	const original = env[name];
+export function setBinding(name: keyof Env | Setting, value: unknown): void {
+	const original = Reflect.get(env, name);
 	if (value === undefined) Reflect.deleteProperty(env, name);
 	else Reflect.set(env, name, value);
 	onTestFinished(() => {

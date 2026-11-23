@@ -18,5 +18,8 @@ export const STEP_UP_HOURS = 12;
 export const SUPPORT_HOURS = [24, 72] as const;
 export type SupportHours = (typeof SUPPORT_HOURS)[number];
 
+/** How long a sign-in is kept: the daily job deletes older ones (app/db/platform.ts). */
+export const SIGN_IN_DAYS = 90;
+
 /** Test emails of the brand one platform owner may send in any hour (TS-120). */
 export const BRAND_TESTS_PER_HOUR = 5;

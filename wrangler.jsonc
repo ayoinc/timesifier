@@ -49,6 +49,9 @@
 	//   OPERATOR_REGISTERED_OFFICE: the company that runs a deployment, which the
 	//   foot of every public page, the terms and the privacy notice name
 	//   (app/landing/operator.tsx). Here it is a company that does not exist.
+	// OPERATOR_ICO_REFERENCE, optional and absent here: that company's
+	//   registration with the ICO, which /privacy and /security show when it is
+	//   set and say nothing of when it is not.
 	"vars": {
 		"ENVIRONMENT": "development",
 		"APP_HOST": "",
@@ -78,7 +81,7 @@
 		// The two Turnstile values are Cloudflare's published test keys, which pass
 		// every check. They are the same for everyone and are not secrets:
 		// https://developers.cloudflare.com/turnstile/troubleshooting/testing/
-		// The pipeline adds PREVIEW_HOST_SUFFIX and the four OPERATOR_ variables:
+		// The pipeline adds PREVIEW_HOST_SUFFIX and the OPERATOR_ variables:
 		// a preview is run by the company that runs production.
 		// BETTER_AUTH_SECRET is not here: it is set once for all previews with
 		// `wrangler preview base-config secret put BETTER_AUTH_SECRET`.

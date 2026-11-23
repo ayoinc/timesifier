@@ -10,7 +10,7 @@
  * (docs/security.md, "Secrets"), and a page that would name the company is not
  * served while one of them is missing.
  */
-import { required, type Settings } from "~/lib/deployment";
+import { required, type Settings, setting } from "~/lib/deployment";
 
 export interface Operator {
 	/** The registered name, as the register has it. */
@@ -31,6 +31,24 @@ export function deploymentOperator(env: Settings): Operator {
 		registeredIn: required(env, "OPERATOR_REGISTERED_IN"),
 		registeredOffice: required(env, "OPERATOR_REGISTERED_OFFICE"),
 	};
+}
+
+/**
+ * The shape of a registration number on the ICO's register of fee payers:
+ * Z and seven capitals or digits, such as ZA123456. scripts/deploy-config.ts
+ * checks the same shape before a deploy.
+ */
+export const ICO_REFERENCE = /^Z[A-Z0-9]{7}$/;
+
+/**
+ * The company's registration with the ICO (TS-105), or `null` where the
+ * deployment names none: it is optional, and a page without it says nothing
+ * of the ICO. One that is set but malformed throws, as a malformed company
+ * number would.
+ */
+export function icoReference(env: Settings): string | null {
+	if (setting(env, "OPERATOR_ICO_REFERENCE") === undefined) return null;
+	return required(env, "OPERATOR_ICO_REFERENCE", ICO_REFERENCE);
 }
 
 /** Who runs Timesifier, in the same two sentences wherever a page says it. */
