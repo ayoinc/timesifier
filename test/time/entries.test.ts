@@ -8,6 +8,7 @@ import type { Membership } from "~/organisations/membership.server";
 import { lockedDays } from "~/periods/locks.server";
 import { activeProjects, findActiveProject } from "~/projects/projects.server";
 import { managedPeople } from "~/teams/teams.server";
+import { dayOf } from "~/time/calendar";
 import { runningEntry, startTimer, stopTimer } from "~/time/entries.server";
 import { freshDatabase } from "../db/database";
 
@@ -92,6 +93,7 @@ describe("the timer", () => {
 				projectId: "no-such-project",
 				description: null,
 				startedAt: new Date(T0 + MINUTE),
+				spentOn: dayOf(T0 + MINUTE, ZONE),
 				endedAt: null,
 			}),
 		);

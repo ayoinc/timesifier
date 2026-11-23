@@ -5,6 +5,7 @@ import { organisationScope } from "~/db";
 import { changeExpense } from "~/expenses/expenses.server";
 import { receiptKey } from "~/expenses/receipts.server";
 import { deletePersonAccount } from "~/platform/account-deletion.server";
+import { dayOf } from "~/time/calendar";
 import {
 	captureEmail,
 	codeCookie,
@@ -70,6 +71,7 @@ async function ada() {
 		description: "Survey",
 		startedAt: new Date(Date.now() - 2 * HOUR),
 		endedAt: new Date(Date.now() - HOUR),
+		spentOn: dayOf(Date.now() - 2 * HOUR, "UTC"),
 	});
 	if (!entry) throw new Error("seed failed");
 

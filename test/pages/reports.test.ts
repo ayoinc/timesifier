@@ -44,6 +44,7 @@ async function track(
 		projectId,
 		description,
 		startedAt: new Date(from),
+		spentOn: dayOf(Date.parse(from), "UTC"),
 		endedAt: to === null ? null : new Date(to),
 	});
 }
@@ -181,6 +182,7 @@ describe("whose time a report holds", () => {
 			projectId: project.id,
 			description: "Elsewhere",
 			startedAt: new Date("2026-10-05T12:00:00Z"),
+			spentOn: dayOf(Date.parse("2026-10-05T12:00:00Z"), "UTC"),
 			endedAt: new Date("2026-10-05T13:00:00Z"),
 		});
 		const { rows } = await exported(ada, WEEK);
@@ -330,6 +332,7 @@ describe("a report", () => {
 			projectId: billing,
 			description: "Still going",
 			startedAt: new Date(now - 90 * 60_000),
+			spentOn: dayOf(now - 90 * 60_000, "UTC"),
 			endedAt: null,
 		});
 		const today = dayOf(now, "UTC");
@@ -459,10 +462,11 @@ describe("the export", () => {
 			startedAt: new Date(Date.parse("2026-10-09T00:00:00Z") + i * 120_000),
 			// A minute and a half: a whole minute, as the report counts it.
 			endedAt: new Date(Date.parse("2026-10-09T00:00:00Z") + i * 120_000 + 90_000),
+			spentOn: "2026-10-09",
 		}));
-		// D1 binds at most 100 values a statement: nine entries an insert.
-		for (let at = 0; at < many.length; at += 9)
-			await scope.timeEntries.insert(many.slice(at, at + 9));
+		// D1 binds at most 100 values a statement: eight entries an insert.
+		for (let at = 0; at < many.length; at += 8)
+			await scope.timeEntries.insert(many.slice(at, at + 8));
 		const { rows } = await exported(linus, WEEK);
 		expect(rows).toHaveLength(451);
 		expect(new Set(rows.map((row) => row.entry_id)).size).toBe(451);
@@ -534,6 +538,7 @@ describe("regular time and overtime apart (TS-095)", () => {
 			projectId: billing,
 			description: "Late",
 			startedAt: new Date("2026-10-08T13:00:00Z"),
+			spentOn: dayOf(Date.parse("2026-10-08T13:00:00Z"), "UTC"),
 			endedAt: new Date("2026-10-08T14:00:00Z"),
 			overtime: true,
 		});

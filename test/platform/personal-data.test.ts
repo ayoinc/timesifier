@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
 import { crc32 } from "~/lib/zip";
 import { personalDataResponse } from "~/platform/personal-data.server";
+import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { seedMember, seedMembership, seedOrganisation } from "../organisations/harness";
@@ -77,6 +78,7 @@ async function records(organisationId: string, userId: string, mark: string, day
 		description: `${mark} entry`,
 		startedAt,
 		endedAt: new Date(startedAt.getTime() + HOUR),
+		spentOn: dayOf(startedAt, "UTC"),
 	});
 	await scope.expenses.insert({
 		userId,

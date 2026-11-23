@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
+import { dayOf } from "~/time/calendar";
 import { MINIMUM_GROUP } from "~/wellbeing/wellbeing";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
@@ -94,6 +95,7 @@ describe("wellbeing", () => {
 				projectId: project.id,
 				startedAt,
 				endedAt: new Date(startedAt.getTime() + 45 * HOUR),
+				spentOn: dayOf(startedAt, "UTC"),
 			});
 		}
 		// One person has had leave lately.
@@ -184,6 +186,7 @@ describe("a person's own data", () => {
 				description,
 				startedAt,
 				endedAt: new Date(startedAt.getTime() + HOUR),
+				spentOn: dayOf(startedAt, "UTC"),
 			});
 		}
 

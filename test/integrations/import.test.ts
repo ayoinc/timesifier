@@ -254,6 +254,33 @@ describe("importing Harvest's export of all time", () => {
 		).toBe(1);
 	});
 
+	it("stores each row's day as its date, in each person's zone (TS-111)", async () => {
+		await env.DB.prepare("update users set time_zone = 'Pacific/Auckland' where id = ?")
+			.bind(ada.user.id)
+			.run();
+		await env.DB.prepare("update users set time_zone = 'America/Los_Angeles' where id = ?")
+			.bind(max.user.id)
+			.run();
+		const csv = [
+			"Date,Project,Task,Notes,Hours,First Name,Last Name",
+			"2026-10-05,Website,Design,Ada,2,Ada,Lovelace",
+			"2026-10-06,Website,Design,Max,2,Max,Member",
+		].join("\n");
+		const { location } = await upload(csv);
+		const id = importIdOf(location);
+		await submit(`${IMPORT}?kind=time`, { intent: "import", importId: id }, ada);
+		const { results } = await env.DB.prepare(
+			"select description, spent_on, date(started_at / 1000, 'unixepoch') as utc from time_entries where import_id = ? order by description",
+		)
+			.bind(id)
+			.all();
+		// 09:00 in Auckland is the day before in UTC; 09:00 in Los Angeles the same day.
+		expect(results).toEqual([
+			{ description: "Ada", spent_on: "2026-10-05", utc: "2026-10-04" },
+			{ description: "Max", spent_on: "2026-10-06", utc: "2026-10-06" },
+		]);
+	});
+
 	it("matches people by email where the file has one", async () => {
 		const csv =
 			"Date,Project,Hours,Email,First name,Last name\r\n2026-10-05,Apollo,1,MAX@example.com,Someone,Else\r\n";
