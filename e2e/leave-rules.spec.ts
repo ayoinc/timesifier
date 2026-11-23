@@ -277,6 +277,8 @@ for (const viewport of [
 					.getByRole("radiogroup", { name: "Overtime" })
 					.getByText("Only with pre-approval", { exact: true })
 					.click();
+				// From today, so Time off offers overtime now rather than from next Monday (TR-10).
+				await rules.getByRole("textbox", { name: "From" }).fill(dayFromToday(0));
 				await rules.getByRole("button", { name: "Save" }).click();
 				await expect(rules).toBeHidden();
 				await expectNoProblems(page, "Workspace settings");
