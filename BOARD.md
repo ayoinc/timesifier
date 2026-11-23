@@ -74,8 +74,8 @@ Builder: AI session on branch `ts-106-buyer-pages`. In review: the pull request 
 - [x] The terms' Price section says the same, from the same prices, in a new version of 23 November 2026 (`test/documents.test.ts`, "the terms' Price section says what the pricing page says").
 - [x] The band leads to Features and Pricing; the foot groups Notices, Product and Company; every page is in the sitemap with its canonical link and description (`e2e/buyer-pages.spec.ts`; `test/claims.test.ts`, "the sitemap lists exactly the public pages…", "each public page names itself…"; `test/documents.test.ts`, the foot of every public page).
 - [x] No accessibility violations at 390 and 1280px in both schemes, nothing runs off the side, nothing moves with reduced motion, pricing works without script (`e2e/buyer-pages.spec.ts`).
-- [ ] The owner approves the terms' new Price text (quoted in the pull request).
-- [ ] The owner accepts the screenshots (`cmux-assets/browser/timesifier/TS-106/`).
+- [x] The owner approves the terms' new Price text (quoted in the pull request). _Approved: the owner's form answer, 23 Nov 2026._
+- [x] The owner accepts the screenshots (`cmux-assets/browser/timesifier/TS-106/`). _Accepted: the owner's form answer, 23 Nov 2026._
 - [ ] **Owner (106a):** the Search Console Domain property verified by DNS TXT, the sitemap submitted, Bing imported from Search Console (steps in the pull request).
 
 ### TS-103 · The public pages at their best
