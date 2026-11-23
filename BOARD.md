@@ -117,17 +117,17 @@ Branch `ts-107-monitoring`. Decision 61; `docs/operations.md`. Status repository
 - [x] A second check within 30 seconds reaches neither D1 nor R2. _Same file, "a second check within 30 seconds reaches neither D1 nor R2"._
 - [x] `scripts/smoke.sh` requires `/health` to answer `200 ok` after every deploy. _The script; it runs in CI after each preview and production deploy._
 - [x] The status repository checks `/health` and the four public pages every 5 minutes on `GITHUB_TOKEN`, and an outage opens an issue. _Its Uptime CI runs; issue #1 opened while `/health` did not exist yet in production._
-- [x] The footer links to the status page under Company, through `OUTSIDE_LINKS`. _`test/claims.test.ts`, "the sitemap lists exactly the public pages…"; `e2e/browser-errors.spec.ts`, "links to the status page under Company", at 390 and 1280 px with axe._
+- [x] The footer links to the status page under Company, through `OUTSIDE_LINKS`: the repository's page until `status.timesifier.com` resolves (on 2026-11-23 Cloudflare's name server still answered NXDOMAIN and Pages had no certificate). _`test/claims.test.ts`, "the sitemap lists exactly the public pages…"; `e2e/browser-errors.spec.ts`, "links to the status page under Company", at 390 and 1280 px with axe._
 - [x] An uncaught error sends exactly one report, of exactly `kind`, `name`, `route`, `frame`, `release` and `time`, holding neither the address nor the message. _`e2e/browser-errors.spec.ts`, "sends exactly one report per distinct error…"._
 - [x] The handler logs one line and never reads the session. It answers 204, or 400 to a body over the limit or anything not in the schema. _`test/browser-errors.test.ts`._
 - [x] Above 20 a minute from one client, nothing more is logged. _Same file, "logs at most 20 reports a minute from one client…"._
 - [x] A CSP report keeps only the four fields. _Same file, "keeps only the directive, the blocked origin, the script and the line"._
 - [x] Every response carries `Reporting-Endpoints` and a CSP with `report-to csp`. _`test/browser-policy.test.ts`; `public/_headers`._
 - [x] The privacy notice names the report's fields from the same constants. _`test/claims.test.ts`, "the notice names exactly the fields a browser error report carries"._
-- [ ] Owner: the DNS record `status` → `ayoinc.github.io`, then Enforce HTTPS (`docs/operations.md`).
+- [ ] Owner: the DNS record `status` → `ayoinc.github.io`, then Enforce HTTPS (`docs/operations.md`). The owner reports it added; on 2026-11-23 `elias.ns.cloudflare.com` still answered NXDOMAIN for `status.timesifier.com`. Once it resolves and has a certificate, `OUTSIDE_LINKS.status` moves to `https://status.timesifier.com/`.
 - [ ] Owner: UptimeRobot's two monitors and the drill, with its date (`docs/operations.md`).
 - [ ] Owner: the four Cloudflare Monitors and the drill, with its date (`docs/operations.md`).
-- [ ] Owner accepted the footer and notice screenshots (`cmux-assets/browser/timesifier/TS-107/`).
+- [x] Owner accepted the footer and notice screenshots (`cmux-assets/browser/timesifier/TS-107/`): the owner's form, about 10:45 UTC on 2026-11-23, "Screenshots accepted".
 
 ### TS-103 · The public pages at their best
 

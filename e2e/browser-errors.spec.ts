@@ -82,7 +82,7 @@ test.describe("the footer", () => {
 			await expect(company.getByRole("link", { name: "Status" })).toHaveAttribute(
 				"href",
 				// OUTSIDE_LINKS.status in app/landing/Site.tsx.
-				"https://status.timesifier.com/",
+				"https://github.com/ayoinc/timesifier-status",
 			);
 			expect(await problems(page)).toEqual([]);
 		});
