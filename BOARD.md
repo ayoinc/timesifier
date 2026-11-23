@@ -107,6 +107,28 @@ Builder: AI sessions on branch `ts-105-trust`, pull request #86 (slices 105a–1
 - [x] The owner accepts the screenshots of `/dpa` and of the ask in Settings at 390px and 1280px, in both schemes (`cmux-assets/browser/timesifier/TS-105/`). _Accepted: the owner's form answer, 23 Nov 2026._
 - [ ] typecheck, lint and tests pass in the pipeline.
 
+### TS-107 · Monitoring and status
+
+Branch `ts-107-monitoring`. Decision 61; `docs/operations.md`. Status repository: https://github.com/ayoinc/timesifier-status.
+
+- [x] `GET` or `HEAD` `/health` answers `200 {"status":"ok","database":"ok","files":"ok"}` when D1 and R2 answer. _`test/health.test.ts`, "health answers ok when the database and the files answer"._
+- [x] Otherwise `503`, naming the part that failed and nothing more. _Same file, "health answers 503 naming the part that failed: the database" and "…: the files"._
+- [x] It reads no row, writes nothing, sets no cookie and is `no-store`. _Same file, "reads no row and writes nothing…" and the first test._
+- [x] A second check within 30 seconds reaches neither D1 nor R2. _Same file, "a second check within 30 seconds reaches neither D1 nor R2"._
+- [x] `scripts/smoke.sh` requires `/health` to answer `200 ok` after every deploy. _The script; it runs in CI after each preview and production deploy._
+- [x] The status repository checks `/health` and the four public pages every 5 minutes on `GITHUB_TOKEN`, and an outage opens an issue. _Its Uptime CI runs; issue #1 opened while `/health` did not exist yet in production._
+- [x] The footer links to the status page under Company, through `OUTSIDE_LINKS`. _`test/claims.test.ts`, "the sitemap lists exactly the public pages…"; `e2e/browser-errors.spec.ts`, "links to the status page under Company", at 390 and 1280 px with axe._
+- [x] An uncaught error sends exactly one report, of exactly `kind`, `name`, `route`, `frame`, `release` and `time`, holding neither the address nor the message. _`e2e/browser-errors.spec.ts`, "sends exactly one report per distinct error…"._
+- [x] The handler logs one line, never reads the session, answers 204 and drops bodies over the limit, and anything that is not the schema. _`test/browser-errors.test.ts`._
+- [x] Above 20 a minute from one client, nothing more is logged. _Same file, "logs at most 20 reports a minute from one client…"._
+- [x] A CSP report keeps only the four fields. _Same file, "keeps only the directive, the blocked origin, the script and the line"._
+- [x] Every response carries `Reporting-Endpoints` and a CSP with `report-to csp`. _`test/browser-policy.test.ts`; `public/_headers`._
+- [x] The privacy notice names the report's fields from the same constants. _`test/claims.test.ts`, "the notice names exactly the fields a browser error report carries"._
+- [ ] Owner: the DNS record `status` → `ayoinc.github.io`, then Enforce HTTPS (`docs/operations.md`).
+- [ ] Owner: UptimeRobot's two monitors and the drill, with its date (`docs/operations.md`).
+- [ ] Owner: the four Cloudflare Monitors and the drill, with its date (`docs/operations.md`).
+- [ ] Owner accepted the footer and notice screenshots (`cmux-assets/browser/timesifier/TS-107/`).
+
 ### TS-103 · The public pages at their best
 
 Builder: AI sessions on branch `ts-103-marketing`. The owner: "marketing on the side we'll beautify it". In review: the pull request against `main`; verifying the site in Google Search Console and Bing Webmaster Tools needs the owner (steps in the pull request). No migration. `docs/design-system.md` ("Pages outside the shell"), decision 43.
