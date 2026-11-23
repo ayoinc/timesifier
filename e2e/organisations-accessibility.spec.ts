@@ -1,3 +1,5 @@
+import { setTimeout as sleep } from "node:timers/promises";
+
 import type { Locator, Page } from "@playwright/test";
 
 import { accountPath, membersPath } from "../app/shell/destinations";
@@ -224,6 +226,81 @@ async function walkTheViews(page: Page) {
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 }
 
+// A move to another destination takes one of two designed paths (app/shell/arrival.ts).
+// An answer within SKELETON_DELAY_MS (150ms) slides the page in from the side it lies on, a
+// view transition on <html>. A later one shows the destination's shape first, and
+// the page that takes its place brings its sections in one after another
+// (`data-reveal`, app/app.css). In the pipeline the server's answers took 135–158ms,
+// around that delay, so a test that let the server decide saw either path. These
+// tests decide: the answer comes at once, or after LATE_MS.
+
+/** How long a late answer is held: well past SKELETON_DELAY_MS, when the destination's shape shows. */
+const LATE_MS = 400;
+
+declare global {
+	interface Window {
+		/** What watchArrivals saw, in order: each shape shown, and each page whose sections came in. */
+		__destinationArrivals?: string[];
+	}
+}
+
+/** Headers of an answer read beforehand that do not describe the body it is given back with. */
+const NOT_COPIED = ["content-encoding", "content-length", "transfer-encoding", "set-cookie"];
+
+/**
+ * Moves to these destinations are answered at once, with an answer read before the
+ * move and given back without going to the server. The read names no routes, so it
+ * carries every matched route's data; the router takes the routes it asked for. The
+ * route matches the move's `.data` request whichever routes it names.
+ */
+async function answerAtOnce(page: Page, ...paths: string[]) {
+	for (const path of paths) {
+		const read = await page.request.get(`${path}.data`);
+		expect(read.status(), `the read of ${path}.data`).toBe(200);
+		const body = await read.body();
+		const headers = Object.fromEntries(
+			Object.entries(read.headers()).filter(([name]) => !NOT_COPIED.includes(name)),
+		);
+		await page.route(
+			(url) => url.pathname === `${path}.data`,
+			(route) => route.fulfill({ status: 200, headers, body }),
+		);
+	}
+}
+
+/** Moves to `path` are answered after LATE_MS: its shape shows first. */
+async function answerLate(page: Page, path: string) {
+	await page.route(
+		(url) => url.pathname === `${path}.data`,
+		async (route) => {
+			await sleep(LATE_MS);
+			await route.continue();
+		},
+	);
+}
+
+/**
+ * Watches every frame for a destination's shape on screen, and for a page that took
+ * a shape's place, and records each in the order seen. Call before the page is opened.
+ */
+async function watchArrivals(page: Page) {
+	await page.addInitScript(() => {
+		const seen: string[] = [];
+		window.__destinationArrivals = seen;
+		const note = (what: string) => {
+			if (seen.at(-1) !== what) seen.push(what);
+		};
+		const look = () => {
+			const shape = document.querySelector("[data-skeleton]");
+			const revealed = document.querySelector("main[data-reveal] h1");
+			if (shape) note(`the shape of ${shape.getAttribute("data-skeleton")}`);
+			else if (revealed) note(`the sections of "${revealed.textContent?.trim()}" come in`);
+			requestAnimationFrame(look);
+		};
+		requestAnimationFrame(look);
+	});
+}
+
 test.describe("with reduced motion requested", () => {
 	test.use({ reducedMotion: "reduce" });
 
@@ -243,8 +320,12 @@ test.describe("with motion allowed", () => {
 	// The same views and the same watcher. This is what shows the test above can fail.
 	test("the watcher sees the welcome, the pages and the sheets move", async ({ page }) => {
 		await watchForMovement(page);
+		await watchArrivals(page);
+		await answerAtOnce(page, homePath("settings"), homePath("team"));
 		await walkTheViews(page);
 
+		// Each destination came at once: no shape showed, no page's sections came in.
+		expect(await page.evaluate(() => window.__destinationArrivals)).toEqual([]);
 		const seen = await movement(page);
 		for (const moved of [
 			/^transition of scale on <span>/, // the mark of the moment grows in
@@ -255,4 +336,68 @@ test.describe("with motion allowed", () => {
 			expect(seen).toContainEqual(expect.stringMatching(moved));
 		}
 	});
+
+	// One move from the Timesheet to Projects, which the navigation shows at both
+	// widths, down each of the two paths.
+	for (const viewport of [
+		{ width: 390, height: 844 },
+		{ width: 1280, height: 800 },
+	]) {
+		test.describe(`in a window ${viewport.width}px wide`, () => {
+			test.use({ viewport });
+
+			test("a destination that answers at once slides in from the side it lies on", async ({
+				page,
+			}) => {
+				await watchForMovement(page);
+				await watchArrivals(page);
+				await answerAtOnce(page, homePath("projects"));
+				await openShell(page, homePath("timesheet"));
+				await page.evaluate(() => window.__movement?.clear());
+
+				await page
+					.getByRole("navigation", { name: "Main" })
+					.getByRole("link", { name: "Projects" })
+					.click();
+				await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeFocused();
+
+				// No shape stood in, and the page did not bring its sections in on its own.
+				expect(await page.evaluate(() => window.__destinationArrivals)).toEqual([]);
+				expect(await movement(page)).toContainEqual(
+					expect.stringMatching(/^animation of translate on <html>/),
+				);
+			});
+
+			test("a destination that answers late shows its shape, then its sections rise", async ({
+				page,
+			}) => {
+				await watchForMovement(page);
+				await watchArrivals(page);
+				await answerLate(page, homePath("projects"));
+				await openShell(page, homePath("timesheet"));
+				await page.evaluate(() => window.__movement?.clear());
+
+				await page
+					.getByRole("navigation", { name: "Main" })
+					.getByRole("link", { name: "Projects" })
+					.click();
+				await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeFocused();
+				await expect(page.locator("main[data-reveal]")).toBeAttached();
+
+				// The shape stood in while the answer was held, then the page took its place.
+				expect(await page.evaluate(() => window.__destinationArrivals)).toEqual([
+					"the shape of projects",
+					'the sections of "Projects" come in',
+				]);
+				// The heading, and the sections after it, rise into place.
+				const seen = await movement(page);
+				expect(seen).toContainEqual(
+					expect.stringMatching(/^animation of translate on <h1> "Projects"/),
+				);
+				expect(seen).toContainEqual(
+					expect.stringMatching(/^animation of translate on <(?!html|h1)/),
+				);
+			});
+		});
+	}
 });
