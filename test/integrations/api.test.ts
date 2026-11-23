@@ -1,6 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organisationScope } from "~/db";
+import { apiOperations } from "~/integrations/api.server";
 import { API_RATE_LIMIT, makeToken } from "~/integrations/api-tokens.server";
 import { API_SCOPES, type ApiScope } from "~/integrations/scopes";
 import { hashApiToken } from "~/integrations/tokens.server";
@@ -620,5 +621,46 @@ describe("the rate limit", () => {
 		expect(wait).toBeGreaterThanOrEqual(1);
 		expect(wait).toBeLessThanOrEqual(API_RATE_LIMIT.seconds);
 		expect((await api("/me", other)).status).toBe(200);
+	});
+});
+
+// The API's description for tools (TS-106): docs/openapi.yaml, served to
+// anyone, and held to the routes the API answers, both ways.
+const openapi = import.meta.glob<string>("../../docs/openapi.yaml", {
+	eager: true,
+	query: "?raw",
+	import: "default",
+})["../../docs/openapi.yaml"];
+
+/** Every operation the description names: `GET /me`, `PATCH /time_entries/{id}`. */
+function describedOperations(yaml: string): string[] {
+	const operations: string[] = [];
+	let path: string | null = null;
+	let inPaths = false;
+	for (const line of yaml.split("\n")) {
+		if (/^\S/.test(line)) inPaths = line === "paths:";
+		if (!inPaths) continue;
+		const pathLine = line.match(/^ {2}(\/\S*):$/);
+		if (pathLine) path = pathLine[1] ?? null;
+		const method = line.match(/^ {4}(get|put|post|patch|delete):$/);
+		if (method && path) operations.push(`${(method[1] ?? "").toUpperCase()} ${path}`);
+	}
+	return operations;
+}
+
+describe("the OpenAPI document", () => {
+	it("is public: answered without a token, as docs/openapi.yaml has it", async () => {
+		const response = await api("/openapi.yaml", null);
+		expect(response.status).toBe(200);
+		expect(response.headers.get("Content-Type")).toBe("application/yaml; charset=utf-8");
+		expect(await response.text()).toBe(openapi);
+		// Every other address under the API still asks for a token.
+		expect((await api("/openapi.json", null)).status).toBe(401);
+	});
+
+	it("documents every route the API answers, and no route it does not", () => {
+		const described = describedOperations(openapi ?? "");
+		expect(described.length).toBeGreaterThan(0);
+		expect([...described].sort()).toEqual([...apiOperations()].sort());
 	});
 });

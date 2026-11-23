@@ -4,7 +4,8 @@ info:
   version: "1"
   description: >
     The public API (TS-081). A token acts as the person who made it, with
-    their role as it is, within its scopes. See docs/api.md.
+    their role as it is, within its scopes. Documented at
+    https://timesifier.com/developers/api, which is docs/api.md.
 servers:
   - url: https://timesifier.com/api/v1
 security:
@@ -227,6 +228,20 @@ paths:
       parameters:
         - $ref: "#/components/parameters/From"
         - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200": { description: "`{ data }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /work_days:
+    get:
+      summary: One row a person and day, with the schedule in force and the hours expected
+      description: >
+        Scope time:read. from and to are required, at most 62 days apart.
+        user_id is the maker's own when not given, and only a person whose time
+        the maker may see.
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
         - $ref: "#/components/parameters/UserId"
       responses:
         "200": { description: "`{ data }`" }
