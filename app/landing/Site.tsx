@@ -72,7 +72,8 @@ export const OUTSIDE_LINKS = {
 		// repository's README carries the same table of checks, and every outage is
 		// an issue in it. Switch to https://status.timesifier.com/ once it resolves.
 		href: "https://github.com/ayoinc/timesifier-status",
-		reason: "Whether Timesifier is up, from outside it: the status checks and their outage issues (TS-107).",
+		reason:
+			"Whether Timesifier is up, from outside it: the status checks and their outage issues (TS-107).",
 	},
 	cloudflareDpa: {
 		href: "https://www.cloudflare.com/cloudflare-customer-dpa/",
