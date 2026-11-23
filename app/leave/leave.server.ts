@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { leaveRefusersOf } from "~/approvals/refusals.server";
 import { among, type OrganisationScope, type ScopedAccessor, users, uuidv7 } from "~/db";
+import type { LockReason } from "~/locks/locks";
 import { lockDateOf, lockReachFor, lockReasonsOn } from "~/locks/locks.server";
 import {
 	type Access,
@@ -27,6 +28,7 @@ import {
 	type DayStatus,
 	dayStatuses,
 	expectedMinutes,
+	halfDaysByDay,
 	halfDaysByYear,
 	halfDaysTaken,
 	isWorkingDay,
@@ -594,11 +596,10 @@ async function leaveBlockedBy(
 		lockReasonsOn(scope, userId, days),
 		daysOf(scope, userId, span.startsOn, span.endsOn),
 	]);
-	const takes = new Set(statuses.filter((s) => s.is.kind === "working").map((s) => s.day));
-	const inWeek = days.find((day) => {
-		const reason = locks.get(day);
-		return takes.has(day) && (reason === "submitted" || reason === "approved");
-	});
+	const inWeek = firstInClosedWeek(
+		locks,
+		statuses.filter((s) => s.is.kind === "working").map((s) => s.day),
+	);
 	if (inWeek) {
 		return `${formatDay(inWeek, "short")} is in a submitted or approved week, so leave cannot be taken on it until the week is withdrawn or reopened.`;
 	}
@@ -610,20 +611,61 @@ async function leaveBlockedBy(
 		: `${who} has ${trackedWords(inTheWay)}. Leave and time cannot share ${share}: the time is removed first, or the request refused.`;
 }
 
-/** Records a step on a request that has been taken. */
+/** The first of `days` in a submitted or approved week, by `locks`: locked for leave, as a day on or before the lock date is (TR-04). */
+function firstInClosedWeek(
+	locks: ReadonlyMap<Day, LockReason>,
+	days: readonly Day[],
+): Day | undefined {
+	return days.find((day) => {
+		const reason = locks.get(day);
+		return reason === "submitted" || reason === "approved";
+	});
+}
+
+/**
+ * Why approved leave `row` cannot be cancelled, or null when it can: its days
+ * reach the lock date, or a day it takes is in a submitted or approved week of
+ * its person's (TR-04), the days approving it would be refused on.
+ */
+async function cancelBlockedBy(
+	scope: OrganisationScope,
+	row: { userId: string; startsOn: Day; endsOn: Day },
+): Promise<"locked" | Refused | null> {
+	if (await reachesLockDate(scope, row)) return "locked";
+	const [locks, statuses] = await Promise.all([
+		lockReasonsOn(scope, row.userId, daysFrom(row.startsOn, row.endsOn)),
+		daysOf(scope, row.userId, row.startsOn, row.endsOn),
+	]);
+	const inWeek = firstInClosedWeek(
+		locks,
+		statuses.filter((s) => s.is.kind === "leave").map((s) => s.day),
+	);
+	if (!inWeek) return null;
+	return {
+		problem: `${formatDay(inWeek, "short")} is in a submitted or approved week, so this leave cannot be cancelled until the week is withdrawn or reopened.`,
+	};
+}
+
+/**
+ * Records a step on a request that has been taken. `reason`: why an owner or
+ * admin cancelled approved leave that had begun, their account of taking back
+ * days already reached, kept with the step as the lock date's reason is (TR-04).
+ */
 function recordStep(
 	scope: OrganisationScope,
 	actorId: string,
 	action: "leave.withdrawn" | "leave.approved" | "leave.declined" | "leave.cancelled",
 	row: { id: string; userId: string; status: string },
 	status: string,
+	reason?: string,
 ) {
+	const summary = changes({ status: row.status }, { status }, ["status"]);
 	return record(
 		scope,
 		actorId,
 		action,
 		{ type: "leave", id: row.id, ownerId: row.userId },
-		changes({ status: row.status }, { status }, ["status"]),
+		reason ? { ...summary, after: { ...summary.after, reason } } : summary,
 	);
 }
 
@@ -768,8 +810,11 @@ export async function decideLeave(
 }
 
 /**
- * Cancels an approved request that has not begun, as an owner or admin, with
- * the reason. `today` is the day in the zone of the person whose leave it is.
+ * Cancels an approved request, as an owner or admin, with the reason, while
+ * its days are not locked: leave that has begun too, the days it took then
+ * theirs to work again (TR-04), with the reason in the activity log. The
+ * person never cancels their own, and is told so once it has begun (TR-18f).
+ * `todayOf` is the day in the zone of the person whose leave it is.
  */
 export async function cancelLeave(
 	scope: OrganisationScope,
@@ -778,19 +823,33 @@ export async function cancelLeave(
 	reason: string,
 	todayOf: (userId: string) => Promise<Day>,
 	now = new Date(),
-): Promise<Stepped> {
+): Promise<Stepped | Refused> {
 	const row = await requestRow(scope, requestId);
 	if (!row) return "missing";
-	if (!mayCancelLeaveOf(access, row.userId)) return "not-allowed";
+	const begun = row.startsOn <= (await todayOf(row.userId));
+	if (!mayCancelLeaveOf(access, row.userId)) {
+		return row.userId === access.userId && row.status === "approved" && begun
+			? "begun"
+			: "not-allowed";
+	}
 	if (row.status !== "approved") return "stale";
-	if (row.startsOn <= (await todayOf(row.userId))) return "begun";
-	if (await reachesLockDate(scope, row)) return "locked";
+	const blocked = await cancelBlockedBy(scope, row);
+	if (blocked) return blocked;
 	const changed = await scope.leaveRequests.update(
 		{ status: "cancelled", decidedBy: access.userId, decidedAt: now, comment: reason },
 		(r) => and(eq(r.id, row.id), eq(r.status, "approved")),
 	);
 	if (changed.length !== 1) return "stale";
-	await recordStep(scope, access.userId, "leave.cancelled", row, "cancelled");
+	// Taking back days already reached is the administrator's to account for,
+	// as moving the lock date back is: only then is the reason in the log.
+	await recordStep(
+		scope,
+		access.userId,
+		"leave.cancelled",
+		row,
+		"cancelled",
+		begun ? reason : undefined,
+	);
 	return "done";
 }
 
@@ -818,18 +877,21 @@ export interface RequestToDecide extends LeaveRequest {
 }
 
 /**
- * The requests of `people` waiting for a decision, oldest first, and their
- * approved requests that have not begun, soonest first: what the Requests tab
- * of Time off lists.
+ * The requests of `people` waiting for a decision, oldest first; their
+ * approved requests that have not begun, soonest first; and with `withBegun`,
+ * for an owner or admin, their approved leave that has begun on days still
+ * open, latest first, which may yet be cancelled (TR-04): what the Requests
+ * tab of Time off lists.
  */
 export async function requestsToDecide(
 	scope: OrganisationScope,
 	access: Access,
 	people: readonly Person[],
 	todayOf: (person: Person) => Day,
-): Promise<{ pending: RequestToDecide[]; upcoming: RequestToDecide[] }> {
+	withBegun = false,
+): Promise<{ pending: RequestToDecide[]; upcoming: RequestToDecide[]; begun: RequestToDecide[] }> {
 	const ids = people.map((p) => p.id);
-	if (ids.length === 0) return { pending: [], upcoming: [] };
+	if (ids.length === 0) return { pending: [], upcoming: [], begun: [] };
 	const earliestToday = people.map(todayOf).sort()[0] ?? "0000-01-01";
 	const [kinds, timetables, rows] = await Promise.all([
 		leaveKindsOf(scope),
@@ -856,6 +918,7 @@ export async function requestsToDecide(
 	const deciders = await namesOf(rows.flatMap((r) => (r.decidedBy ? [r.decidedBy] : [])));
 	const pending: RequestToDecide[] = [];
 	const upcoming: RequestToDecide[] = [];
+	const begun: RequestToDecide[] = [];
 	for (const row of rows) {
 		const person = byId.get(row.userId);
 		if (!person) continue;
@@ -875,16 +938,63 @@ export async function requestsToDecide(
 			if (mayDecideLeaveOf(access, person.id)) pending.push(listed);
 		} else if (request.startsOn > todayOf(person)) {
 			upcoming.push({ ...listed, cancellable: mayCancelLeaveOf(access, person.id) });
+		} else if (withBegun && mayCancelLeaveOf(access, person.id)) {
+			begun.unshift({ ...listed, cancellable: true });
 		}
 	}
 	const now = Date.now();
-	await Promise.all(
-		pending.map(async (request) => {
-			const inTheWay = await timeInTheWay(scope, request.userId, request, now);
-			if (inTheWay.length > 0) request.inTheWay = trackedWords(inTheWay);
-		}),
+	const takes = (request: RequestToDecide) => [
+		...halfDaysByDay(request, {
+			timetable: timetables(request.userId),
+			holidays: holidaysByDay,
+		}).keys(),
+	];
+	const [, open] = await Promise.all([
+		Promise.all(
+			pending.map(async (request) => {
+				const inTheWay = await timeInTheWay(scope, request.userId, request, now);
+				if (inTheWay.length > 0) request.inTheWay = trackedWords(inTheWay);
+			}),
+		),
+		openToCancel(scope, begun, takes),
+	]);
+	return { pending, upcoming, begun: open };
+}
+
+/**
+ * Of approved leave that has begun, what may still be cancelled: leave that
+ * does not reach the lock date, and takes no day of a submitted or approved
+ * week, `takes` naming the days each takes. Two reads for all of it; the
+ * action judges one request again with `cancelBlockedBy`.
+ */
+async function openToCancel<T extends { userId: string; startsOn: Day; endsOn: Day }>(
+	scope: OrganisationScope,
+	requests: readonly T[],
+	takes: (request: T) => readonly Day[],
+): Promise<T[]> {
+	if (requests.length === 0) return [];
+	const lockedThrough = await lockDateOf(scope.organisationId);
+	const unlocked = requests.filter((r) => lockedThrough === null || r.startsOn > lockedThrough);
+	if (unlocked.length === 0) return [];
+	const first = unlocked.map((r) => r.startsOn).sort()[0] as Day;
+	const last = unlocked
+		.map((r) => r.endsOn)
+		.sort()
+		.at(-1) as Day;
+	const weeks = await scope.periods.select((p) =>
+		and(
+			among(p.userId, [...new Set(unlocked.map((r) => r.userId))]),
+			inArray(p.status, ["submitted", "approved"]),
+			lte(p.startsOn, last),
+			gte(p.endsOn, first),
+		),
 	);
-	return { pending, upcoming };
+	return unlocked.filter(
+		(r) =>
+			!takes(r).some((day) =>
+				weeks.some((w) => w.userId === r.userId && w.startsOn <= day && day <= w.endsOn),
+			),
+	);
 }
 
 async function namesOf(ids: readonly string[]): Promise<Map<string, string>> {

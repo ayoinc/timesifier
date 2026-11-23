@@ -265,7 +265,7 @@ describe("the pages record", () => {
 
 	it("leave asked for, approved, refused, withdrawn and cancelled, by who took each step", async () => {
 		const timeOff = `/app/${acme.slug}/time-off`;
-		// Counted from the real today: leave is cancelled only before it begins.
+		// Counted from the real today, ahead of it: leave not begun, so the reason for cancelling it stays out of the log.
 		let monday = addDays(dayOf(Date.now(), "UTC"), 14);
 		while (isoWeekday(monday) !== 1) monday = addDays(monday, 1);
 		const a = await seedLeave(acme.id, grace.user.id, "annual", monday, monday, {

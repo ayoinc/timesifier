@@ -147,7 +147,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		const people = await leaveDecidablePeople(scope, organisation, access);
 		const todayOf = (person: { timeZone: string }) => dayOf(Date.now(), person.timeZone);
 		const [listed, workListed] = await Promise.all([
-			requestsToDecide(scope, access, people, todayOf),
+			requestsToDecide(scope, access, people, todayOf, show === "requests"),
 			workToDecide(scope, access, people, todayOf),
 		]);
 		waiting = listed.pending.length + workListed.pending.length;
@@ -179,6 +179,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			requests = {
 				pending: listed.pending.map(shape),
 				upcoming: listed.upcoming.map(shape),
+				begun: listed.begun.map(shape),
 				work: {
 					pending: workListed.pending.map(shapeWork),
 					upcoming: workListed.upcoming.map(shapeWork),
@@ -881,7 +882,7 @@ function Notice({ request }: { request: LeaveToDecide }) {
 }
 
 function Requests({ decisions, open }: { decisions: Decisions; open: Open }) {
-	const { pending, upcoming, work } = decisions;
+	const { pending, upcoming, begun, work } = decisions;
 	return (
 		<>
 			<Section id="waiting" heading="Waiting for you" className="max-w-200">
@@ -942,43 +943,71 @@ function Requests({ decisions, open }: { decisions: Decisions; open: Open }) {
 					<p className="text-body-large text-on-surface-variant">No approved leave is to come.</p>
 				) : (
 					<Ledger heading="Approved" note={`${upcoming.length}`}>
-						<LedgerRows label="Approved leave to come">
-							{upcoming.map((r) => {
-								const on = { id: r.id, name: `${r.person}'s ${r.kind.toLowerCase()}` };
-								return (
-									<LedgerRow
-										key={r.id}
-										title={
-											<span className="wrap-anywhere">
-												{r.person} <span className="text-on-surface-variant">· {r.kind}</span>
-											</span>
-										}
-										detail={
-											<>
-												{r.days} · {r.takes}
-												<Notice request={r} />
-											</>
-										}
-										action={
-											r.cancellable && (
-												<Button
-													variant="text"
-													aria-label={`Cancel ${on.name}`}
-													onPress={() => open("cancel", on)}
-												>
-													Cancel
-												</Button>
-											)
-										}
-									/>
-								);
-							})}
-						</LedgerRows>
+						<ApprovedRows label="Approved leave to come" requests={upcoming} open={open} />
 					</Ledger>
 				)}
 			</Section>
 
+			{begun.length > 0 && (
+				<Section
+					id="begun"
+					heading="Approved, begun"
+					lead="Leave that has begun, on days not yet locked. Cancelling it gives the days back to work, with your reason in the Activity log."
+					className="max-w-200"
+				>
+					<Ledger heading="Begun" note={`${begun.length}`}>
+						<ApprovedRows label="Approved leave that has begun" requests={begun} open={open} />
+					</Ledger>
+				</Section>
+			)}
+
 			<WorkToDecideSection pending={work.pending} upcoming={work.upcoming} open={open} />
 		</>
+	);
+}
+
+/** Approved leave, each with Cancel where the viewer may cancel it. */
+function ApprovedRows({
+	label,
+	requests,
+	open,
+}: {
+	label: string;
+	requests: readonly LeaveToDecide[];
+	open: Open;
+}) {
+	return (
+		<LedgerRows label={label}>
+			{requests.map((r) => {
+				const on = { id: r.id, name: `${r.person}'s ${r.kind.toLowerCase()}` };
+				return (
+					<LedgerRow
+						key={r.id}
+						title={
+							<span className="wrap-anywhere">
+								{r.person} <span className="text-on-surface-variant">· {r.kind}</span>
+							</span>
+						}
+						detail={
+							<>
+								{r.days} · {r.takes}
+								<Notice request={r} />
+							</>
+						}
+						action={
+							r.cancellable && (
+								<Button
+									variant="text"
+									aria-label={`Cancel ${on.name}`}
+									onPress={() => open("cancel", on)}
+								>
+									Cancel
+								</Button>
+							)
+						}
+					/>
+				);
+			})}
+		</LedgerRows>
 	);
 }

@@ -263,10 +263,34 @@ for (const viewport of [
 				page,
 			}) => {
 				const { slug } = await ownerWithWeek(page);
+				// A past weekday, whose hours fit on it at any hour of the run (W08).
+				const day = await pastWeekday(page);
 
+				// Overtime allowed from that day: its 7:30 and 3:45 of overtime fit.
 				await openShell(page, destinationPath(slug, "settings"));
 				await page.getByRole("button", { name: "Change timesheet rules" }).click();
 				const rules = page.getByRole("dialog", { name: "Change the timesheet rules" });
+				await rules
+					.getByRole("radiogroup", { name: "Overtime" })
+					.getByText("Allowed", { exact: true })
+					.click();
+				await rules.getByRole("textbox", { name: "From" }).fill(day);
+				await rules.getByRole("button", { name: "Save" }).click();
+				await expect(rules).toBeHidden();
+				await openShell(page, dayPath(slug, day));
+				for (const [field, hours] of [
+					["Hours", "7:30"],
+					["Overtime", "3:45"],
+				]) {
+					await trackTime(page).click();
+					await trackSheet(page).getByRole("textbox", { name: field, exact: true }).fill(hours);
+					await trackSheet(page).getByRole("button", { name: "Save entry" }).click();
+					await expect(trackSheet(page)).toBeHidden();
+				}
+				await expect(page.getByRole("main")).toContainText("7:30 + 3:45 overtime");
+
+				await openShell(page, destinationPath(slug, "settings"));
+				await page.getByRole("button", { name: "Change timesheet rules" }).click();
 				await expectNoProblemsInSheet(
 					page,
 					rules,
@@ -277,10 +301,13 @@ for (const viewport of [
 					.getByRole("radiogroup", { name: "Overtime" })
 					.getByText("Only with pre-approval", { exact: true })
 					.click();
-				// From today, so Time off offers overtime now rather than from next Monday (TR-10).
-				await rules.getByRole("textbox", { name: "From" }).fill(dayFromToday(0));
+				// From that day, a dated version of the rules (TR-10): Time off offers
+				// overtime now rather than from next Monday, and the day's 3:45 of
+				// overtime, never approved, is over its limit.
+				await rules.getByRole("textbox", { name: "From" }).fill(day);
 				await rules.getByRole("button", { name: "Save" }).click();
 				await expect(rules).toBeHidden();
+				await expect(status(page)).toContainText("This puts 1 day of 1 person over their limit.");
 				await expectNoProblems(page, "Workspace settings");
 
 				await openShell(page, destinationPath(slug, "time-off"));
@@ -304,15 +331,6 @@ for (const viewport of [
 				);
 				await expectNoProblems(page, "Time off", [EMPTY_INPUT]);
 
-				// Track 7:30 on a past weekday, whose hours fit on it at any hour of the run
-				// (W08), then record half a day of sick leave: the day is over by 3:45.
-				const day = await pastWeekday(page);
-				await openShell(page, dayPath(slug, day));
-				await trackTime(page).click();
-				await trackSheet(page).getByRole("textbox", { name: "Hours" }).fill("7:30");
-				await trackSheet(page).getByRole("button", { name: "Save entry" }).click();
-				await expect(trackSheet(page)).toBeHidden();
-				await recordSickLeave(page, slug, day, day, true);
 				await openShell(page, dayPath(slug, day));
 				await expect(page.getByRole("main")).toContainText("Over by 3:45");
 				await expect(page.getByRole("button", { name: "Submit week" })).toBeDisabled();

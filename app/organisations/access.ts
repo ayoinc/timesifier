@@ -136,8 +136,9 @@ export function mayApproveAfterRefusals(access: Access, refusedBy: readonly stri
 }
 
 /**
- * Whether `access` may cancel an approved request of `personId` that has not
- * started: an owner or admin alone, and never on their own leave.
+ * Whether `access` may cancel an approved request of `personId`: an owner or
+ * admin alone, and never on their own leave. When is the request's own rule:
+ * leave that has begun may be cancelled while its days are open (TR-04).
  */
 export function mayCancelLeaveOf(access: Access, personId: string): boolean {
 	return personId !== access.userId && isAdministrator(access.role);
