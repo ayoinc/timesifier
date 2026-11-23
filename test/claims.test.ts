@@ -972,7 +972,13 @@ it("the sub-processors on /security and /dpa are the ones the notice names, and 
 	]);
 	const keys = [...(wrangler ?? "").matchAll(/^\t"([$\w]+)":/gm)].map(([, key]) => key);
 	const bindings = keys.filter((key) => !NOT_DATA.has(key));
-	expect(bindings.sort()).toEqual(["d1_databases", "observability", "r2_buckets", "send_email"]);
+	expect(bindings.sort()).toEqual([
+		"d1_databases",
+		"observability",
+		"r2_buckets",
+		"ratelimits",
+		"send_email",
+	]);
 	const covered = new Set(SUB_PROCESSORS.flatMap(({ bindings }) => bindings));
 	for (const binding of bindings) expect(covered, binding).toContain(binding);
 
