@@ -1,8 +1,8 @@
 {
 	"version": "6",
 	"dialect": "sqlite",
-	"id": "d56594ef-dc0a-40f0-949f-0ffc1c5b3ab8",
-	"prevId": "9edabe47-66f9-4385-8639-5b3f624d887d",
+	"id": "dc955c68-71e7-46a0-b491-069d8a14a466",
+	"prevId": "d33e0c46-0aba-4359-8bca-c1260609c768",
 	"tables": {
 		"accounts": {
 			"name": "accounts",
@@ -1786,6 +1786,11 @@
 				"expenses_organisation_id_project_id_spent_on_idx": {
 					"name": "expenses_organisation_id_project_id_spent_on_idx",
 					"columns": ["organisation_id", "project_id", "spent_on"],
+					"isUnique": false
+				},
+				"expenses_organisation_id_spent_on_id_idx": {
+					"name": "expenses_organisation_id_spent_on_id_idx",
+					"columns": ["organisation_id", "spent_on", "id"],
 					"isUnique": false
 				},
 				"expenses_organisation_id_category_id_idx": {
@@ -4670,6 +4675,14 @@
 					"autoincrement": false,
 					"default": false
 				},
+				"overtime_rate_milli": {
+					"name": "overtime_rate_milli",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 1000
+				},
 				"created_at": {
 					"name": "created_at",
 					"type": "integer",
@@ -4755,6 +4768,13 @@
 					"type": "text",
 					"primaryKey": false,
 					"notNull": true,
+					"autoincrement": false
+				},
+				"worked_by": {
+					"name": "worked_by",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
 					"autoincrement": false
 				},
 				"created_at": {
@@ -6725,6 +6745,16 @@
 					"columns": ["organisation_id", "spent_on"],
 					"isUnique": false
 				},
+				"time_entries_organisation_id_spent_on_started_at_id_idx": {
+					"name": "time_entries_organisation_id_spent_on_started_at_id_idx",
+					"columns": ["organisation_id", "spent_on", "started_at", "id"],
+					"isUnique": false
+				},
+				"time_entries_organisation_id_started_at_id_idx": {
+					"name": "time_entries_organisation_id_started_at_id_idx",
+					"columns": ["organisation_id", "started_at", "id"],
+					"isUnique": false
+				},
 				"time_entries_organisation_id_user_id_spent_on_idx": {
 					"name": "time_entries_organisation_id_user_id_spent_on_idx",
 					"columns": ["organisation_id", "user_id", "spent_on"],
@@ -6781,6 +6811,109 @@
 				"time_entries_ends_after_start": {
 					"name": "time_entries_ends_after_start",
 					"value": "\"time_entries\".\"ended_at\" IS NULL OR \"time_entries\".\"ended_at\" >= \"time_entries\".\"started_at\""
+				}
+			}
+		},
+		"timesheet_rule_versions": {
+			"name": "timesheet_rule_versions",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"organisation_id": {
+					"name": "organisation_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"effective_from": {
+					"name": "effective_from",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"overtime_policy": {
+					"name": "overtime_policy",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"non_working_days": {
+					"name": "non_working_days",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"overtime_day_cap_minutes": {
+					"name": "overtime_day_cap_minutes",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"overtime_week_cap_minutes": {
+					"name": "overtime_week_cap_minutes",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"timesheet_rule_versions_organisation_id_id_unique": {
+					"name": "timesheet_rule_versions_organisation_id_id_unique",
+					"columns": ["organisation_id", "id"],
+					"isUnique": true
+				},
+				"timesheet_rule_versions_organisation_id_effective_from_unique": {
+					"name": "timesheet_rule_versions_organisation_id_effective_from_unique",
+					"columns": ["organisation_id", "effective_from"],
+					"isUnique": true
+				}
+			},
+			"foreignKeys": {
+				"timesheet_rule_versions_organisation_id_organisations_id_fk": {
+					"name": "timesheet_rule_versions_organisation_id_organisations_id_fk",
+					"tableFrom": "timesheet_rule_versions",
+					"tableTo": "organisations",
+					"columnsFrom": ["organisation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {
+				"timesheet_rule_versions_overtime_policy_known": {
+					"name": "timesheet_rule_versions_overtime_policy_known",
+					"value": "\"timesheet_rule_versions\".\"overtime_policy\" IN ('none', 'allowed', 'approval')"
+				},
+				"timesheet_rule_versions_non_working_days_known": {
+					"name": "timesheet_rule_versions_non_working_days_known",
+					"value": "\"timesheet_rule_versions\".\"non_working_days\" IN ('overtime', 'none')"
 				}
 			}
 		},
@@ -7403,7 +7536,7 @@
 			"checkConstraints": {
 				"work_requests_kind_known": {
 					"name": "work_requests_kind_known",
-					"value": "\"work_requests\".\"kind\" IN ('overtime', 'weekend')"
+					"value": "\"work_requests\".\"kind\" IN ('overtime', 'weekend', 'holiday')"
 				},
 				"work_requests_status_known": {
 					"name": "work_requests_status_known",

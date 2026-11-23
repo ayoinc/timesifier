@@ -109,22 +109,33 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const now = new Date();
 	const today = dayOf(now.getTime(), organisation.timeZone);
 	const isOwner = role === "owner";
-	const [book, kinds, holidays, rules, next, categories, terms, locking, standing, grant, dpaToSign] =
-		await Promise.all([
-			scheduleBookOf(scope),
-			leaveKindsOf(scope),
-			publicHolidaysOf(scope),
-			timesheetRulesOf(organisation.id, today),
-			nextRulesOf(organisation.id, today),
-			listCategories(scope),
-			termsOf(organisation.id),
-			lockingData(organisation, now.getTime()),
-			planStanding(organisation.id, now),
-			// Support access is the owners' alone, so nobody else is told whether it is granted.
-			isOwner ? activeGrant(scope, now) : null,
-			// So is accepting the data processing agreement (TS-105).
-			isOwner ? dpaToAccept(organisation.id) : false,
-		]);
+	const [
+		book,
+		kinds,
+		holidays,
+		rules,
+		next,
+		categories,
+		terms,
+		locking,
+		standing,
+		grant,
+		dpaToSign,
+	] = await Promise.all([
+		scheduleBookOf(scope),
+		leaveKindsOf(scope),
+		publicHolidaysOf(scope),
+		timesheetRulesOf(organisation.id, today),
+		nextRulesOf(organisation.id, today),
+		listCategories(scope),
+		termsOf(organisation.id),
+		lockingData(organisation, now.getTime()),
+		planStanding(organisation.id, now),
+		// Support access is the owners' alone, so nobody else is told whether it is granted.
+		isOwner ? activeGrant(scope, now) : null,
+		// So is accepting the data processing agreement (TS-105).
+		isOwner ? dpaToAccept(organisation.id) : false,
+	]);
 	return {
 		organisation: {
 			name: organisation.name,
