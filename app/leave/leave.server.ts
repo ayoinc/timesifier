@@ -752,7 +752,8 @@ export type LeaveDecision = { action: "approved" | "refused"; comment: string | 
  * Approves or refuses a pending request, as `access`. A decided request is
  * never decided again. Refusing changes no day, so the lock date never stands
  * in its way (TR-08); approving is refused while a day of the request is on or
- * before the lock date, or holds time leave cannot share (TR-04), with why.
+ * before the lock date as it reaches the person's days (`lockReachFor`, D7,
+ * decision 49), or holds time leave cannot share (TR-04), with why.
  */
 export async function decideLeave(
 	scope: OrganisationScope,
@@ -772,7 +773,7 @@ export async function decideLeave(
 		return "refused-before";
 	}
 	if (decision.action === "approved") {
-		const lockedThrough = await lockDateOf(scope.organisationId);
+		const lockedThrough = await lockReachFor(scope.organisationId, row.userId, now.getTime());
 		if (lockedThrough !== null && row.startsOn <= lockedThrough) {
 			return {
 				problem: `${formatDay(row.startsOn, "short")} is on or before the lock date, so this leave cannot be approved. It can be withdrawn, and the days from ${formatDay(addDays(lockedThrough, 1), "short")}, the first open day, asked for again.`,
