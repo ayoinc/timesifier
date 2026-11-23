@@ -164,8 +164,11 @@ export default function Security({
 						<Row key={each.id} term={each.name}>
 							<p id={each.id}>{each.based}. It receives:</p>
 							<ul className="mt-2 list-disc ps-6">
-								{each.receives.map((what) => (
-									<li key={what}>{what};</li>
+								{each.receives.map((what, at) => (
+									<li key={what}>
+										{what}
+										{at === each.receives.length - 1 ? "." : ";"}
+									</li>
 								))}
 							</ul>
 							<p className="mt-2">
@@ -252,11 +255,11 @@ export default function Security({
 					.
 				</p>
 				<p>
-					Whether Timesifier is up is shown at{" "}
+					Whether Timesifier is up, checked from outside it, is shown in{" "}
 					<a href={OUTSIDE_LINKS.status.href} className={LINK}>
-						status.timesifier.com
+						its status checks
 					</a>
-					.
+					, where every outage is recorded.
 				</p>
 			</DocumentSection>
 		</Document>

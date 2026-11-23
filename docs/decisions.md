@@ -856,7 +856,7 @@ Decided on 2026-11-23, on card TS-105, from the owner's answers of that day (`re
 | The ICO reference written in the code                 | The repository belongs to no deployment (entry 46); a fork deployed by another company would show ours.   |
 | A signed `security.txt`                               | Recommended by the RFC; needs a key the owner holds and a way to sign again on renewal. Left for "Later". |
 
-**What it costs.** `security.txt` must be renewed every year, and the test fails a month ahead to say so. The status link is dead until the owner points `status.timesifier.com` at the status page (TS-107). `security@timesifier.com` receives mail only once the owner has created the alias. Each new outside link is a change to `OUTSIDE_LINKS` with its reason.
+**What it costs.** `security.txt` must be renewed every year, and the test fails a month ahead to say so. The status link goes to the status repository, `github.com/ayoinc/timesifier-status`, whose README carries the checks' table and whose issues record each outage: `status.timesifier.com` has no DNS record yet, and because GitHub Pages has that custom domain set, it redirects `ayoinc.github.io/timesifier-status/` to it as well, so both are dead until the owner adds the record (TS-107). Once it resolves, the link changes to `https://status.timesifier.com/`. `security@timesifier.com` receives mail only once the owner has created the alias. Each new outside link is a change to `OUTSIDE_LINKS` with its reason.
 
 ### 64. The buyer pages: one source for each claim, prices before payment, and company sign-in said as not yet built
 

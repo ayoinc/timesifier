@@ -67,8 +67,12 @@ export interface OutsideLink {
  */
 export const OUTSIDE_LINKS = {
 	status: {
-		href: "https://status.timesifier.com/",
-		reason: "Whether Timesifier is up, from outside it (TS-107).",
+		// status.timesifier.com has no DNS record yet, and with the custom domain set,
+		// GitHub Pages sends ayoinc.github.io/timesifier-status/ there too. The
+		// repository's README carries the same table of checks, and every outage is
+		// an issue in it. Switch to https://status.timesifier.com/ once it resolves.
+		href: "https://github.com/ayoinc/timesifier-status",
+		reason: "Whether Timesifier is up, from outside it: the status checks and their outage issues (TS-107).",
 	},
 	cloudflareDpa: {
 		href: "https://www.cloudflare.com/cloudflare-customer-dpa/",
