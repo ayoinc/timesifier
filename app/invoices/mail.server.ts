@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { recordStatement } from "~/activity/activity.server";
 import { sendEmail } from "~/auth/email.server";
@@ -30,10 +30,14 @@ export const TOO_MANY_EMAILS =
 /** One address, as a form carries it and as the email adapter accepts it. */
 export const EMAIL_ADDRESS = /^[^\s@<>",;:]+@[^\s@<>",;:]+\.[^\s@<>",;:]+$/;
 
-/** A client's billing contacts, oldest first. */
+/**
+ * A client's billing contacts, oldest first. Two added in the same millisecond
+ * keep the order they were added in: SQLite's rowid grows as rows are written,
+ * where an id's order within a millisecond is random.
+ */
 export function contactsOf(scope: OrganisationScope, clientId: string) {
 	return scope.clientContacts.select((c) => eq(c.clientId, clientId), {
-		orderBy: (c) => [asc(c.createdAt)],
+		orderBy: (c) => [asc(c.createdAt), asc(sql`${c}.rowid`)],
 	});
 }
 

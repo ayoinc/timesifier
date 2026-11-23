@@ -11,10 +11,19 @@ import { MAIN_ID } from "~/landing/Site";
 /** How long a wait lasts before it is shown: a quicker answer shows nothing, so nothing flickers. */
 const PENDING_BAR_DELAY_MS = 150;
 
+/**
+ * The start of the key of a fetcher that reads ahead behind the page, such as
+ * the Timesheet's neighbours (TS-114): nobody is waiting for it, so the page
+ * shows no wait for it.
+ */
+export const READ_AHEAD = "read-ahead:";
+
 /** Whether React Router is waiting for the server: a move to another page, or a fetcher's form or load. */
 function usePending(): boolean {
 	const moving = useNavigation().state !== "idle";
-	const fetching = useFetchers().some(({ state }) => state !== "idle");
+	const fetching = useFetchers().some(
+		({ state, key }) => state !== "idle" && !key.startsWith(READ_AHEAD),
+	);
 	return moving || fetching;
 }
 

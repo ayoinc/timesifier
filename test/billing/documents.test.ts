@@ -340,6 +340,27 @@ describe("the PDF", () => {
 	});
 });
 
+describe("billing contacts", () => {
+	it("added in the same millisecond, are listed in the order they were added", async () => {
+		const actor = owner.user.id;
+		vi.useFakeTimers({ toFake: ["Date"] });
+		vi.setSystemTime(new Date("2026-11-11T12:00:00.000Z"));
+		try {
+			for (const email of ["c@initech.example", "a@initech.example", "b@initech.example"]) {
+				await addContact(scope, actor, clientId, { name: null, email });
+			}
+		} finally {
+			vi.useRealTimers();
+		}
+		const contacts = await contactsOf(scope, clientId);
+		expect(contacts.map((c) => c.email)).toEqual([
+			"c@initech.example",
+			"a@initech.example",
+			"b@initech.example",
+		]);
+	});
+});
+
 describe("sending", () => {
 	it("goes to each billing contact with the PDF, and is logged on the invoice's history", async () => {
 		const actor = owner.user.id;

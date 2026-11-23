@@ -38,6 +38,7 @@ export function WeekDays({
 	today,
 	running,
 	slug,
+	awaiting,
 }: {
 	week: DayData["week"];
 	away: DayData["away"];
@@ -46,12 +47,19 @@ export function WeekDays({
 	today: Day;
 	running: SheetEntry | null;
 	slug: string;
+	/** Whether another week is on its way, so this one dims. */
+	awaiting: boolean;
 }) {
 	const formatShort = useDayFormat("short");
 	const formatLong = useDayFormat();
 	const runningOn = running?.day ?? null;
 	return (
-		<div className="mt-6 flex max-w-200 flex-col gap-2 medium:flex-row medium:items-stretch">
+		<div
+			className={cx(
+				"mt-6 flex max-w-200 flex-col gap-2 medium:flex-row medium:items-stretch",
+				awaiting && "awaiting",
+			)}
+		>
 			{/* A group, not a landmark: the shell's one navigation landmark is the main one. */}
 			<fieldset className="min-w-0 flex-1">
 				<legend className="sr-only">Days of the week</legend>

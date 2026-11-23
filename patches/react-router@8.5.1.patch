@@ -1,0 +1,66 @@
+diff --git a/dist/development/lib/dom/ssr/single-fetch.js b/dist/development/lib/dom/ssr/single-fetch.js
+index 6c30ddf3a2159629a8158f03d8dd3733baa4b44c..23535d82fde65346c1765aabfdbf2256a5292b8b 100644
+--- a/dist/development/lib/dom/ssr/single-fetch.js
++++ b/dist/development/lib/dom/ssr/single-fetch.js
+@@ -269,6 +269,7 @@ function fetchAndDecodeViaTurboStream(fetchImplementation, serverOrigin) {
+ 		invariant(res.body, "No response body to decode");
+ 		try {
+ 			let decoded = await decodeViaTurboStream(res.body, window);
++			decoded.done.catch(() => {});
+ 			let data;
+ 			if (request.method === "GET") {
+ 				let typed = decoded.value;
+diff --git a/dist/development/vendor/turbo-stream-v2/turbo-stream.js b/dist/development/vendor/turbo-stream-v2/turbo-stream.js
+index 917a6e58e7175f579256ff201ee8f1ec9a1f554b..a578f89774d2bc79930cffda3659a76bc511b427 100644
+--- a/dist/development/vendor/turbo-stream-v2/turbo-stream.js
++++ b/dist/development/vendor/turbo-stream-v2/turbo-stream.js
+@@ -24,14 +24,13 @@ async function decode(readable, options) {
+ 		plugins
+ 	};
+ 	const decoded = await decodeInitial.call(decoder, reader);
+-	let donePromise = done.promise;
+ 	if (decoded.done) done.resolve();
+-	else donePromise = decodeDeferred.call(decoder, reader).then(done.resolve).catch((reason) => {
++	else decodeDeferred.call(decoder, reader).then(done.resolve, (reason) => {
+ 		for (const deferred of Object.values(decoder.deferred)) deferred.reject(reason);
+ 		done.reject(reason);
+ 	});
+ 	return {
+-		done: donePromise.then(() => reader.closed),
++		done: done.promise.then(() => reader.closed),
+ 		value: decoded.value
+ 	};
+ }
+diff --git a/dist/production/lib/dom/ssr/single-fetch.js b/dist/production/lib/dom/ssr/single-fetch.js
+index 6c30ddf3a2159629a8158f03d8dd3733baa4b44c..23535d82fde65346c1765aabfdbf2256a5292b8b 100644
+--- a/dist/production/lib/dom/ssr/single-fetch.js
++++ b/dist/production/lib/dom/ssr/single-fetch.js
+@@ -269,6 +269,7 @@ function fetchAndDecodeViaTurboStream(fetchImplementation, serverOrigin) {
+ 		invariant(res.body, "No response body to decode");
+ 		try {
+ 			let decoded = await decodeViaTurboStream(res.body, window);
++			decoded.done.catch(() => {});
+ 			let data;
+ 			if (request.method === "GET") {
+ 				let typed = decoded.value;
+diff --git a/dist/production/vendor/turbo-stream-v2/turbo-stream.js b/dist/production/vendor/turbo-stream-v2/turbo-stream.js
+index 917a6e58e7175f579256ff201ee8f1ec9a1f554b..a578f89774d2bc79930cffda3659a76bc511b427 100644
+--- a/dist/production/vendor/turbo-stream-v2/turbo-stream.js
++++ b/dist/production/vendor/turbo-stream-v2/turbo-stream.js
+@@ -24,14 +24,13 @@ async function decode(readable, options) {
+ 		plugins
+ 	};
+ 	const decoded = await decodeInitial.call(decoder, reader);
+-	let donePromise = done.promise;
+ 	if (decoded.done) done.resolve();
+-	else donePromise = decodeDeferred.call(decoder, reader).then(done.resolve).catch((reason) => {
++	else decodeDeferred.call(decoder, reader).then(done.resolve, (reason) => {
+ 		for (const deferred of Object.values(decoder.deferred)) deferred.reject(reason);
+ 		done.reject(reason);
+ 	});
+ 	return {
+-		done: donePromise.then(() => reader.closed),
++		done: done.promise.then(() => reader.closed),
+ 		value: decoded.value
+ 	};
+ }
