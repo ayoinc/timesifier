@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { changes, recordStatement } from "~/activity/activity.server";
@@ -480,7 +480,13 @@ export async function managersAwayOf(
 	const places = await scope.teamMembers.select((t) => among(t.userId, ids));
 	if (places.length === 0) return found;
 	const managers = await scope.teamMembers.select((t) =>
-		and(inArray(t.teamId, [...new Set(places.map((p) => p.teamId))]), eq(t.isManager, true)),
+		and(
+			among(
+				t.teamId,
+				places.map((p) => p.teamId),
+			),
+			eq(t.isManager, true),
+		),
 	);
 	const away = await onLeaveToday(
 		scope,

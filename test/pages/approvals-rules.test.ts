@@ -393,6 +393,12 @@ describe("who approves (D5)", () => {
 				"select count(*) from period_events where action = 'approved' and actor_id is null",
 			),
 		).toBe(1);
+		// The log says the system approved it, about Ada, with no actor.
+		expect(
+			await row(
+				"select actor_id as actorId, source, owner_id as ownerId from activity_records where action = 'period.approved'",
+			),
+		).toEqual({ actorId: null, source: "system", ownerId: ada.user.id });
 	});
 
 	async function inTwoTeams() {

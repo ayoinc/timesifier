@@ -14,7 +14,7 @@ import {
 import { type OrganisationScope, organisationScope, organisations, users, uuidv7 } from "~/db";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { createOrganisation } from "../organisations/harness";
+import { createOrganisation, seedMember } from "../organisations/harness";
 import { type Person, person, submit } from "../pages/harness";
 
 // The activity log (TS-064): one row for each change, saying who made it, to
@@ -356,6 +356,10 @@ describe("the pages record", () => {
 	});
 
 	it("a week submitted, by and about the person", async () => {
+		// Grace, an admin, may approve Ada's week, so it is submitted and waits for
+		// her: a sole owner's week would also be approved by the system (D5,
+		// decision 47), which test/pages/approvals-rules.test.ts records.
+		await seedMember(acme.id, "admin", "grace@example.com");
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
 		const period = await env.DB.prepare("select id from periods").first<{ id: string }>();
 
