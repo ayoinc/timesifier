@@ -4,22 +4,48 @@ import {
 	waitOnExecutionContext,
 } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
+import { routes as builtRoutes } from "virtual:react-router/server-build";
 import { getTableColumns, is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { expect, it } from "vitest";
+import { ActivitySource } from "~/activity/actions";
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
 import { signInCodeEmail } from "~/auth/sign-in-code-email";
 import { builtInPlatformBrand } from "~/brand/platform-brand.server";
 import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
+import { MILEAGE_RATE_CURRENCY, USUAL_CATEGORIES } from "~/expenses/starter";
+import { IMPORT_MAX_ROWS } from "~/import/import.server";
+import { API_RATE_LIMIT } from "~/integrations/api-tokens.server";
 import { ENTRY_DAYS_BACK, LEAVE_DAYS_BACK } from "~/integrations/feeds.server";
-import { EVENT_LABELS } from "~/integrations/scopes";
-import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
+import { OPENAPI_PATH } from "~/integrations/paths";
+import { API_SCOPES, EVENT_LABELS, SCOPE_LABELS } from "~/integrations/scopes";
+import { BACKOFF_MINUTES, SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
 import { DOCUMENT_EMAILS } from "~/invoices/mail.server";
+import { XERO_COLUMNS } from "~/invoices/xero";
+import { CAPABILITIES, inWords } from "~/landing/capabilities";
+import { parseMarkdown } from "~/landing/markdown";
+import { deploymentOperator } from "~/landing/operator";
 import { PHOTOS } from "~/landing/photos";
-import { PRIMARY_ACTION, PRIVACY_PATH, PUBLIC_PAGES, TERMS_PATH } from "~/landing/Site";
+import {
+	API_DOCS_PATH,
+	CONTACT_PATH,
+	FEATURES_PATH,
+	HELLO_EMAIL,
+	INTEGRATIONS_PATH,
+	PRICING_PATH,
+	PRIMARY_ACTION,
+	PRIVACY_EMAIL,
+	PRIVACY_PATH,
+	PUBLIC_FILES,
+	PUBLIC_PAGES,
+	SECURITY_EMAIL,
+	TERMS_PATH,
+} from "~/landing/Site";
 import { homeStructuredData } from "~/landing/structured-data";
+import { DEFAULT_KINDS, KIND_KEYS } from "~/leave/kinds";
+import { LOCK_LABELS } from "~/locks/locks";
 import {
 	type Access,
 	mayChangeExpensesOf,
@@ -34,8 +60,11 @@ import {
 	maySeeTimeOf,
 } from "~/organisations/access";
 import { Role } from "~/organisations/roles";
+import { NOTICE_DAYS, PLAN_DETAILS, PLANS, PRICE_CURRENCY, PRICES, pounds } from "~/plans/plans";
+import { REPORT_VIEWS } from "~/reports/views";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
+import { destination, destinations } from "~/shell/destinations";
 import { GETTING_STARTED_COOKIE } from "~/timesheet/getting-started.server";
 import worker from "../workers/app";
 import { DAILY } from "../workers/scheduled";
@@ -461,7 +490,10 @@ it("the sitemap lists exactly the public pages, which link to one another and no
 	expect(listed).toEqual(PUBLIC_PAGES.map((path) => `${ORIGIN}${path}`));
 
 	// Every page the home page leads to, through every link on every page reached.
+	// A file a page offers for download (`PUBLIC_FILES`) is not a page: it is
+	// answered, and not followed.
 	const reached = new Set<string>();
+	const files = new Set<string>();
 	const queue = [`${ORIGIN}/`];
 	for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
 		if (reached.has(next)) continue;
@@ -473,10 +505,15 @@ it("the sitemap lists exactly the public pages, which link to one another and no
 			const url = new URL(href, next);
 			// A public page links to the public pages only: no other site, and not the application.
 			expect(url.origin, `${next}: ${href}`).toBe(ORIGIN);
-			queue.push(`${url.origin}${url.pathname}`);
+			if ((PUBLIC_FILES as readonly string[]).includes(url.pathname)) files.add(url.pathname);
+			else queue.push(`${url.origin}${url.pathname}`);
 		}
 	}
 	expect([...reached].sort()).toEqual([...listed].sort());
+	expect([...files].sort()).toEqual([...PUBLIC_FILES].sort());
+	for (const file of files) {
+		expect((await exports.default.fetch(`${ORIGIN}${file}`)).status, file).toBe(200);
+	}
 
 	// And every page that describes itself to search engines is one of them.
 	const routes = import.meta.glob<string>("../app/routes/**/*.tsx", {
@@ -576,4 +613,188 @@ it("the structured data parses, and says no more than who and what Timesifier is
 	expect(
 		keys.filter((key) => /^(offers?|price\w*|aggregateRating|reviews?|award)$/.test(key)),
 	).toEqual([]);
+});
+
+// The buyer pages (TS-106): what Timesifier does, what it costs, what it
+// connects to, its API reference and how to reach the company. Each sentence
+// that names a capability, a number or a price is held to the code it is about.
+
+it("every capability on the features page is a destination of the application", async () => {
+	const html = await page(FEATURES_PATH);
+	const text = words(html);
+	// Each destination is a route below an organisation (app/routes.ts makes one a destination).
+	const organisationRoutes = Object.values(builtRoutes).filter(
+		(route) => route?.parentId === "routes/app/organisation",
+	);
+	for (const capability of CAPABILITIES) {
+		expect(html, capability.id).toContain(`id="${capability.id}"`);
+		expect(text, capability.id).toContain(capability.title);
+		expect(capability.places.length, capability.id).toBeGreaterThan(0);
+		for (const place of capability.places) {
+			const { label, segment } = destination(place);
+			expect(destinations.map(({ id }) => id)).toContain(place);
+			expect(
+				organisationRoutes.some((route) =>
+					segment === "" ? route?.index === true : route?.path === segment,
+				),
+				`${capability.id}: ${place}`,
+			).toBe(true);
+			expect(text, capability.id).toContain(label);
+		}
+		for (const point of capability.points) expect(text, capability.id).toContain(point);
+	}
+});
+
+it("the features page counts and lists what the application holds", async () => {
+	const text = words(await page(FEATURES_PATH));
+	// The leave an organisation starts with, the expense categories, the roles and the reports.
+	expect(text).toContain(
+		`starts with ${KIND_KEYS.length} kinds of leave: ${inWords(KIND_KEYS.map((key) => DEFAULT_KINDS[key].name))}.`,
+	);
+	expect(text).toContain(`starts with ${USUAL_CATEGORIES.length} categories: Travel,`);
+	expect(text).toContain(`${Role.options.length} roles: Owner, Admin, Finance and Member.`);
+	expect(Role.options).toEqual(["owner", "admin", "finance", "member"]);
+	for (const { id, label } of REPORT_VIEWS) {
+		if (id !== "saved") expect(text).toContain(label.toLowerCase());
+	}
+	// What locks an entry, as the locks name it.
+	expect(text).toContain(
+		"while it is submitted, approved and invoiced, or before the organisation's lock date",
+	);
+	expect(Object.keys(LOCK_LABELS).sort()).toEqual([
+		"approved",
+		"invoiced",
+		"locked-through",
+		"submitted",
+	]);
+	// The API's scopes and the webhooks' events.
+	expect(text).toContain(`${API_SCOPES.length} scopes`);
+	expect(text).toContain(inWords(Object.values(EVENT_LABELS).map((label) => label.toLowerCase())));
+	// Mileage at HMRC's rate, in pounds.
+	expect(MILEAGE_RATE_CURRENCY).toBe("GBP");
+	expect(text).toContain("at HMRC's approved rate for an organisation that works in pounds");
+	// The activity log keeps where each change came from.
+	expect(ActivitySource.options).toEqual(expect.arrayContaining(["web", "api", "import"]));
+});
+
+it("the pricing page's seats are the plans' seats, and its prices the plans' prices", async () => {
+	const text = words(await page(PRICING_PATH));
+	for (const plan of PLANS) {
+		const { label, seats } = PLAN_DETAILS[plan];
+		const { monthly, billedYearly } = PRICES[plan];
+		expect(text, plan).toContain(`${label} Up to ${seats} people ${pounds(monthly)}`);
+		if (monthly > 0) expect(text, plan).toContain(`or ${pounds(billedYearly)} billed yearly`);
+	}
+	// The owner's answer 9: £0, £6 or £5, £10 or £8, in pounds, before VAT.
+	expect(PRICES).toEqual({
+		free: { monthly: 0, billedYearly: 0 },
+		team: { monthly: 600, billedYearly: 500 },
+		business: { monthly: 1000, billedYearly: 800 },
+	});
+	expect(PRICE_CURRENCY).toBe("GBP");
+	expect(text).toContain("Prices are in pounds sterling and exclude VAT.");
+	expect(text).toContain(`told at least ${NOTICE_DAYS} days before its first charge`);
+	// A person, as a seat counts them (app/plans/plans.ts).
+	expect(text).toContain("its members, and the people invited who have not yet joined");
+	// No badge and no discount theatre.
+	expect(text).not.toMatch(/popular|recommended|best value|save \d|% off/i);
+});
+
+it("each line on the pricing page names a built capability, and what is not built says so", async () => {
+	const html = await page(PRICING_PATH);
+	const features = await page(FEATURES_PATH);
+	for (const { id, title } of CAPABILITIES) {
+		expect(html).toContain(`href="${FEATURES_PATH}#${id}"`);
+		expect(words(html)).toContain(title);
+		expect(features).toContain(`id="${id}"`);
+	}
+	// Sign-in for companies is not built: the page says so where it names it.
+	const text = words(html);
+	const section = text.slice(text.indexOf("Company sign-in, being built."));
+	expect(section).toContain("SAML single sign-on, on request");
+	expect(text.indexOf("SAML")).toBe(text.indexOf("SAML single sign-on, on request"));
+	expect(text.indexOf("Google")).toBeGreaterThan(text.indexOf("Company sign-in, being built."));
+});
+
+it("the integrations page states the limits the code enforces", async () => {
+	const text = words(await page(INTEGRATIONS_PATH));
+	for (const label of Object.values(SCOPE_LABELS)) expect(text).toContain(label);
+	expect(text).toContain(
+		`A token may make ${API_RATE_LIMIT.max} requests in any ${API_RATE_LIMIT.seconds} seconds.`,
+	);
+	expect(BACKOFF_MINUTES.length + 1).toBe(7);
+	expect(text).toContain(
+		`tried seven times in all, over ${Math.round(BACKOFF_MINUTES.reduce((sum, minutes) => sum + minutes, 0) / 60)} hours`,
+	);
+	expect(SWITCH_OFF_AFTER).toBe(3);
+	expect(text).toContain("After three failed deliveries in a row the webhook is switched off");
+	expect(text).toContain(`their entries of the last ${ENTRY_DAYS_BACK} days`);
+	expect(text).toContain(`up to ${IMPORT_MAX_ROWS.toLocaleString("en-GB")} rows at a time`);
+	expect(text).toContain(`in Xero's ${XERO_COLUMNS.length} columns`);
+	expect(text).toContain("There is no live connection to Xero.");
+	// The API and webhooks are an owner's or an admin's to set up.
+	for (const role of Role.options) {
+		expect(mayManageIntegrations(role), role).toBe(role === "owner" || role === "admin");
+	}
+});
+
+const apiReference = import.meta.glob<string>("../docs/api.md", {
+	eager: true,
+	query: "?raw",
+	import: "default",
+})["../docs/api.md"];
+
+it("the published API reference is docs/api.md", async () => {
+	const html = await page(API_DOCS_PATH);
+	// The page's words with no spaces at all, its entities read: the marks of a
+	// line put tags inside it, and a tag leaves a space where the file has none.
+	const text = words(html)
+		.replace(/&quot;/g, '"')
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/\s/g, "");
+	const blocks = parseMarkdown(apiReference ?? "");
+	expect(blocks.length).toBeGreaterThan(20);
+	/** A line of Markdown as the page reads it, its marks and spaces gone. */
+	const plain = (line: string) =>
+		line
+			.replace(/\[(.+?)\]\([^)]+\)/g, "$1")
+			.replace(/[`*]/g, "")
+			.replace(/\s/g, "");
+	for (const block of blocks) {
+		if (block.kind === "heading") {
+			if (block.level > 1) expect(html).toContain(`id="${block.id}"`);
+			expect(text).toContain(plain(block.text));
+		} else if (block.kind === "paragraph") {
+			expect(text).toContain(plain(block.text));
+		} else if (block.kind === "list") {
+			for (const item of block.items) expect(text).toContain(plain(item));
+		} else if (block.kind === "table") {
+			for (const cell of [...block.head, ...block.rows.flat()]) expect(text).toContain(plain(cell));
+		} else {
+			// A block of code as React writes text into the markup.
+			expect(html).toContain(
+				block.text.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"),
+			);
+		}
+	}
+	// What the file keeps for the repository is not on the page.
+	expect(apiReference).toContain("<!--");
+	expect(text).not.toContain("TS-081");
+	// Its link to the description leads to the one the application serves.
+	expect(html).toContain(`href="${OPENAPI_PATH}"`);
+});
+
+it("the contact page gives the company's details and its addresses, with no form and no promised time", async () => {
+	const html = await page(CONTACT_PATH);
+	const text = words(html);
+	for (const email of [HELLO_EMAIL, PRIVACY_EMAIL, SECURITY_EMAIL]) {
+		expect(html).toContain(`href="mailto:${email}"`);
+	}
+	const { name, companyNumber, registeredIn, registeredOffice } = deploymentOperator(env);
+	expect(text).toContain(
+		`Timesifier is operated by ${name}, a company registered in ${registeredIn} with company number ${companyNumber}. Its registered office is ${registeredOffice}.`,
+	);
+	expect(html).not.toContain("<form");
+	expect(text).not.toMatch(/within \d|working days?|hours? to (answer|reply)|respond/i);
 });

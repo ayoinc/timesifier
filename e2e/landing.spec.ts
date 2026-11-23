@@ -108,8 +108,9 @@ for (const viewport of [COMPACT, WIDE]) {
 			await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
 			await expect(page.getByRole("link", { name: "Skip to main content" })).toBeInViewport();
 
-			// However many links the header has at this width, the action comes soon after.
-			for (let presses = 0; presses < 8; presses += 1) {
+			// However many links the header has at this width (the name, Features, Pricing,
+			// the page's four places and Sign in at the widest), the action comes soon after.
+			for (let presses = 0; presses < 10; presses += 1) {
 				if (await primaryAction(page).evaluate((link) => link === document.activeElement)) break;
 				await page.keyboard.press(next);
 			}
