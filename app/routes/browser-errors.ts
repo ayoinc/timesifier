@@ -17,10 +17,13 @@ import type { Route } from "./+types/browser-errors";
 // counts (docs/operations.md); nothing is stored and nothing leaves Cloudflare.
 //
 // It never reads the session: the browser sends the site's cookies with a
-// beacon on its own, and they are ignored. It answers 204 whatever happens, so
-// probing it teaches nothing. Decision 61.
+// beacon on its own, and they are ignored. A report it cannot read is answered
+// 400, as every action's malformed input is (decision 18); anything else 204,
+// whether logged or over the limit, so probing the limit teaches nothing.
+// Decision 61.
 
 const NOTHING = () => new Response(null, { status: 204 });
+const MALFORMED = () => new Response(null, { status: 400 });
 
 /** The body as text, or `null` when it is longer than `max` bytes, which is not read any further. */
 async function bodyOf(request: Request, max: number): Promise<string | null> {
@@ -74,7 +77,7 @@ export async function action({ request }: Route.ActionArgs) {
 		request,
 		fromReportingApi ? REPORT_MAX_BYTES.reports : REPORT_MAX_BYTES.script,
 	);
-	if (text === null) return NOTHING();
+	if (text === null) return MALFORMED();
 	const device = deviceOf(request.headers.get("User-Agent"));
 
 	if (fromReportingApi) {
@@ -85,8 +88,7 @@ export async function action({ request }: Route.ActionArgs) {
 	}
 
 	const report = BrowserErrorReportSchema.safeParse(parsed(text));
-	if (report.success && (await isKnownRoute(report.data.route))) {
-		console.error(scriptLine(report.data, device));
-	}
+	if (!report.success || !(await isKnownRoute(report.data.route))) return MALFORMED();
+	console.error(scriptLine(report.data, device));
 	return NOTHING();
 }

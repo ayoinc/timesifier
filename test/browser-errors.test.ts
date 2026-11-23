@@ -106,12 +106,12 @@ describe("a report from the page's script", () => {
 		["another site's script for a frame", { ...REPORT, frame: "https://evil.example/x.js:1:1" }],
 		["an id", { ...REPORT, organisationId: "0193a1b2-c3d4" }],
 		["a field missing", { ...REPORT, time: undefined }],
-	])("is dropped whole when it carries %s", async (_, report) => {
+	])("is dropped whole, and answered 400, when it carries %s", async (_, report) => {
 		const lines = logLines();
 
 		const response = await send(JSON.stringify(report));
 
-		expect(response.status).toBe(204);
+		expect(response.status).toBe(400);
 		expect(lines).toEqual([]);
 	});
 
@@ -121,7 +121,7 @@ describe("a report from the page's script", () => {
 
 		const response = await send(padded);
 
-		expect(response.status).toBe(204);
+		expect(response.status).toBe(400);
 		expect(lines).toEqual([]);
 	});
 

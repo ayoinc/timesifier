@@ -197,6 +197,20 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 		formFromAMember("/app/acme/settings/support", "intent=grant&hours=48"),
 	// An unsubscribe post is empty or a mail client's one-click; this is neither.
 	// The link is a real one, so only the input is wrong.
+	// A browser error report (TS-107d) whose route is an address, not a pattern.
+	"routes/browser-errors": () =>
+		new Request("https://timesifier.example/browser-errors", {
+			method: "POST",
+			headers: { Origin: "https://timesifier.example", "Content-Type": "text/plain" },
+			body: JSON.stringify({
+				kind: "error",
+				name: "TypeError",
+				route: "/app/acme",
+				frame: null,
+				release: "4f2a9c1e",
+				time: "2026-11-23T07:00:00.000Z",
+			}),
+		}),
 	"routes/unsubscribe": async () => {
 		await freshDatabase();
 		const { user } = await signIn(captureEmail(), "ada@example.com");
