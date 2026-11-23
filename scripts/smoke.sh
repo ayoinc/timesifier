@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test run after every deploy. Exits non-zero unless the home page at the
-# given origin answers 200 with the product name in the body.
+# given origin answers 200 with the product name in the body, and /health
+# answers 200 ok: the deployment reaches its database and its files (TS-107a).
 # Usage: scripts/smoke.sh <origin> [--production [version-host]]
 #   <origin> is where the deployment is served, such as https://app.example.org.
 #   --production also requires: https://www.<host> redirects to the origin;
@@ -28,7 +29,15 @@ if ! grep --quiet "Timesifier" /tmp/smoke-body; then
 	echo "FAIL: $ORIGIN/ answered 200 but the page does not contain \"Timesifier\"" >&2
 	exit 1
 fi
+
 echo "ok: $ORIGIN/ answered 200"
+
+status="$(curl --silent --output /tmp/smoke-health --write-out '%{http_code}' --max-time 15 "$ORIGIN/health" || true)"
+if [ "$status" != "200" ] || ! grep --quiet '"status":"ok"' /tmp/smoke-health; then
+	echo "FAIL: $ORIGIN/health answered ${status:-nothing}: $(head -c 200 /tmp/smoke-health 2>/dev/null)" >&2
+	exit 1
+fi
+echo "ok: $ORIGIN/health answered 200 ok"
 
 # Fails unless a request for $1 is redirected to $2.
 expect_redirect() {
