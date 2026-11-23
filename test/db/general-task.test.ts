@@ -1,8 +1,9 @@
 import { applyD1Migrations, type D1Migration, reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { uuidv7 } from "~/db";
 import { row, seedOrganisation, value } from "../organisations/harness";
-import { seedEntry, seedProject } from "../pages/periods-seed";
+import { seedProject } from "../pages/periods-seed";
 
 // Migration 0014 (TS-066): the entries made before tasks get a task called
 // "General", put on every project of their organisation, billable unless the
@@ -25,6 +26,23 @@ async function seedUser(email: string) {
 		"insert into users (id, name, email, email_verified, created_at, updated_at) values (?, '', ?, 1, 0, 0)",
 	)
 		.bind(id, email)
+		.run();
+	return id;
+}
+
+/** An entry as it was written before tasks, and before days were stored (TS-111). */
+async function seedEntry(
+	organisationId: string,
+	userId: string,
+	projectId: string,
+	from: string,
+	to: string,
+) {
+	const id = uuidv7();
+	await env.DB.prepare(
+		"insert into time_entries (id, organisation_id, user_id, project_id, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, 0, 0)",
+	)
+		.bind(id, organisationId, userId, projectId, Date.parse(from), Date.parse(to))
 		.run();
 	return id;
 }

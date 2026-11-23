@@ -10,6 +10,10 @@ import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLA
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 
+// The day an entry is stored with: the one it starts on in the browser's zone,
+// which the person's becomes (TS-111).
+const dayIn = (instant: number) => new Date(instant).toLocaleDateString("en-CA");
+
 // Team and Approvals (TS-038, TS-045, TS-047), in an organisation of the
 // test's own so nothing here changes what the other tests see: a new person
 // signs in and creates it, and a second new person, written straight to the
@@ -54,7 +58,7 @@ function memberSubmitsWeek(slug: string) {
 			`insert into users (id, name, email, email_verified, created_at, updated_at) values (${user}, '${member.name}', 'grace-${userId}@example.com', 1, ${now}, ${now})`,
 			`insert into memberships (id, organisation_id, user_id, role, created_at, updated_at) values ('${randomUUID()}', ${organisation}, ${user}, 'member', ${now}, ${now})`,
 			`insert into projects (id, organisation_id, name, name_key, created_at, updated_at) values ('${project}', ${organisation}, 'Website', 'website', ${now}, ${now})`,
-			`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values ('${randomUUID()}', ${organisation}, ${user}, '${project}', 'Copy', ${Date.parse("2026-01-06T10:00:00Z")}, ${Date.parse("2026-01-06T17:30:00Z")}, ${now}, ${now})`,
+			`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values ('${randomUUID()}', ${organisation}, ${user}, '${project}', 'Copy', ${Date.parse("2026-01-06T10:00:00Z")}, '${dayIn(Date.parse("2026-01-06T10:00:00Z"))}', ${Date.parse("2026-01-06T17:30:00Z")}, ${now}, ${now})`,
 			`insert into periods (id, organisation_id, user_id, starts_on, ends_on, status, submitted_at, created_at, updated_at) values ('${randomUUID()}', ${organisation}, ${user}, '${WEEK}', '2026-01-11', 'submitted', ${now}, ${now}, ${now})`,
 		].join("; "),
 	);

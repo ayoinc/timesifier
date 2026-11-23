@@ -12,6 +12,10 @@ import { problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 
+// The day an entry is stored with: the one it starts on in the browser's zone,
+// which the person's becomes (TS-111).
+const dayIn = (instant: number) => new Date(instant).toLocaleDateString("en-CA");
+
 // Reports (TS-014a) and the export as CSV (TS-014b) in the browser: a report
 // chosen with the keyboard alone, its filters applied as they change, a
 // custom range it cannot report on, the file it downloads, the stepper moving
@@ -59,7 +63,7 @@ test.beforeAll(async ({ browser, baseURL }) => {
 	const user = `(select id from users where email = '${email}')`;
 	const at = (instant: string) => Date.parse(instant);
 	const entry = (project: string, description: string, from: string, to: string) =>
-		`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values ('${randomUUID()}', ${org}, ${user}, '${project}', '${description}', ${at(from)}, ${at(to)}, 0, 0);`;
+		`insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values ('${randomUUID()}', ${org}, ${user}, '${project}', '${description}', ${at(from)}, '${dayIn(at(from))}', ${at(to)}, 0, 0);`;
 	execute(
 		[
 			`insert into clients (id, organisation_id, name, name_key, created_at, updated_at) values ('${client}', ${org}, 'Initech', 'initech', 0, 0);`,

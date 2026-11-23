@@ -68,6 +68,7 @@ function row(
 			project: projectId,
 			clientId: null,
 			client: null,
+			day,
 			description: null,
 			startedAt: start,
 			endedAt: start + minutes * 60_000,

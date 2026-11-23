@@ -7,6 +7,7 @@ import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, value } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
+import { entryDay } from "./periods-seed";
 
 // The Timesheet as Harvest makes it feel (TS-093, research/harvest-taste.md):
 // a deletion answered with Undo (HT-A), "Start again" on a finished entry
@@ -61,9 +62,18 @@ async function seedEntry(
 ) {
 	const id = uuidv7();
 	await env.DB.prepare(
-		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, 0, 0)",
+		"insert into time_entries (id, organisation_id, user_id, project_id, description, started_at, spent_on, ended_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)",
 	)
-		.bind(id, acme.id, who.user.id, site, description, startedAt, endedAt)
+		.bind(
+			id,
+			acme.id,
+			who.user.id,
+			site,
+			description,
+			startedAt,
+			await entryDay(acme.id, who.user.id, startedAt),
+			endedAt,
+		)
 		.run();
 	return id;
 }

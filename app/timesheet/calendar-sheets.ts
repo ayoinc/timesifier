@@ -90,13 +90,12 @@ export function monthSheet(
 	entries: readonly SheetEntry[],
 	days: readonly Day[],
 	month: Day,
-	zone: string,
 	now: number,
 ): MonthSheet {
 	const prefix = month.slice(0, 7);
 	const weeks: MonthSheet["weeks"] = [];
 	for (let at = 0; at < days.length; at += 7) {
-		const sheet = weekSheet(entries, days.slice(at, at + 7), zone, now);
+		const sheet = weekSheet(entries, days.slice(at, at + 7), now);
 		weeks.push({
 			days: sheet.days.map((each) => ({ ...each, inMonth: each.day.startsWith(prefix) })),
 			total: sheet.total,
