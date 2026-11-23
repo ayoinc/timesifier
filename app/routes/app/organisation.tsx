@@ -47,10 +47,15 @@ import type { Route } from "./+types/organisation";
  * organisation and the role from `membershipContext` and passes that
  * organisation's id to the server. A route added under this layout is covered
  * by being here.
+ *
+ * The same check holds the organisation's sign-in policy (TS-104 slice 104b):
+ * a member whose session it does not take, owners apart, gets the page that
+ * asks them to sign in with the organisation's provider, with a 403, and no
+ * loader or action below runs.
  */
 const requireOrganisation: Route.MiddlewareFunction = async ({ params, context }) => {
-	const { user } = context.get(signedInContext);
-	context.set(membershipContext, await requireMembershipOf(user, params.organisation));
+	const signedIn = context.get(signedInContext);
+	context.set(membershipContext, await requireMembershipOf(signedIn, params.organisation));
 };
 
 /** The address every route's pattern starts with under this layout. */

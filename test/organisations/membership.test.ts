@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findMembership, requireMembership } from "~/organisations/membership.server";
+import { getSession } from "~/auth/auth.server";
+import { type Membership, requireMembershipOf } from "~/organisations/membership.server";
 import { captureEmail, type Mailbox, ORIGIN, post, signIn } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -29,14 +30,23 @@ function pageRequest(slug: string, cookie?: string, origin = ORIGIN): Request {
 	});
 }
 
-/** What `requireMembership` throws, or `undefined` when it returns. */
-async function refusal(request: Request, slug: string): Promise<unknown> {
+/**
+ * What the organisation layout reaches for a request: the session guard reads
+ * the person, then `requireMembershipOf` returns their membership or throws.
+ * `"signed out"` where the guard finds nobody, so no membership is looked up.
+ */
+async function outcome(request: Request, slug: string): Promise<Membership | unknown> {
+	const signedIn = await getSession(request);
+	if (!signedIn) return "signed out";
 	try {
-		await requireMembership(request, slug);
+		return await requireMembershipOf(signedIn, slug);
 	} catch (thrown) {
 		return thrown;
 	}
 }
+
+/** React Router answers a thrown `data(…, { status: 404 })` with its 404. */
+const NOT_FOUND = { data: "Not Found", init: { status: 404 } };
 
 /** Ada owns Acme and Grace owns Globex; neither belongs to the other's. */
 async function twoOrganisations() {
@@ -54,7 +64,7 @@ describe("the membership function", () => {
 			const organisation = await seedOrganisation("Acme", "acme");
 			const person = await signInAs(mailbox, organisation.id, role, "ada@example.com");
 
-			const membership = await requireMembership(pageRequest("acme", person.cookie), "acme");
+			const membership = await outcome(pageRequest("acme", person.cookie), "acme");
 
 			expect(membership).toMatchObject({
 				organisation: { id: organisation.id, name: "Acme", slug: "acme" },
@@ -67,7 +77,7 @@ describe("the membership function", () => {
 	it("returns the owner of an organisation made through the Worker", async () => {
 		const { ada, acme } = await twoOrganisations();
 
-		const membership = await findMembership(pageRequest("acme", ada.cookie), "acme");
+		const membership = await outcome(pageRequest("acme", ada.cookie), "acme");
 
 		expect(membership).toMatchObject({
 			organisation: { id: acme.id, slug: "acme" },
@@ -78,31 +88,25 @@ describe("the membership function", () => {
 	it("says the same 'not found' for somebody else's organisation as for one that does not exist", async () => {
 		const { ada } = await twoOrganisations();
 
-		const someoneElses = await refusal(pageRequest("globex", ada.cookie), "globex");
-		const nobodys = await refusal(pageRequest("initech", ada.cookie), "initech");
+		const someoneElses = await outcome(pageRequest("globex", ada.cookie), "globex");
+		const nobodys = await outcome(pageRequest("initech", ada.cookie), "initech");
 
-		// React Router answers a thrown `data(…, { status: 404 })` with its 404.
-		expect(someoneElses).toMatchObject({ data: "Not Found", init: { status: 404 } });
+		expect(someoneElses).toMatchObject(NOT_FOUND);
 		expect(someoneElses).toEqual(nobodys);
-		expect(await findMembership(pageRequest("globex", ada.cookie), "globex")).toBeNull();
-		expect(await findMembership(pageRequest("initech", ada.cookie), "initech")).toBeNull();
 	});
 
-	it("says it to a request without a session, whether or not the organisation exists", async () => {
+	it("looks nothing up for a request without a session, whether or not the organisation exists", async () => {
 		await twoOrganisations();
 
-		const exists = await refusal(pageRequest("acme"), "acme");
-		const doesNot = await refusal(pageRequest("initech"), "initech");
-
-		expect(exists).toMatchObject({ init: { status: 404 } });
-		expect(exists).toEqual(doesNot);
+		expect(await outcome(pageRequest("acme"), "acme")).toBe("signed out");
+		expect(await outcome(pageRequest("initech"), "initech")).toBe("signed out");
 	});
 
 	it("matches the slug exactly", async () => {
 		const { ada } = await twoOrganisations();
 
 		for (const slug of ["ACME", "acme ", "acm", "a_me", "acm%", "%", ""]) {
-			expect(await findMembership(pageRequest("acme", ada.cookie), slug), slug).toBeNull();
+			expect(await outcome(pageRequest("acme", ada.cookie), slug), slug).toMatchObject(NOT_FOUND);
 		}
 	});
 
@@ -110,7 +114,7 @@ describe("the membership function", () => {
 		const { ada, acme } = await twoOrganisations();
 		const grace = await signInAs(mailbox, acme.id, "admin", "heidi@example.com");
 		const request = () => pageRequest("acme", grace.cookie);
-		const before = await findMembership(request(), "acme");
+		const before = await outcome(request(), "acme");
 
 		const removed = await post(
 			"/organization/remove-member",
@@ -120,7 +124,7 @@ describe("the membership function", () => {
 
 		expect(before).toMatchObject({ role: "admin" });
 		expect(removed.status).toBe(200);
-		expect(await findMembership(request(), "acme")).toBeNull();
+		expect(await outcome(request(), "acme")).toMatchObject(NOT_FOUND);
 	});
 
 	it("reads the role from the database on every request", async () => {
@@ -134,7 +138,7 @@ describe("the membership function", () => {
 		);
 
 		expect(promoted.status).toBe(200);
-		expect(await findMembership(pageRequest("acme", heidi.cookie), "acme")).toMatchObject({
+		expect(await outcome(pageRequest("acme", heidi.cookie), "acme")).toMatchObject({
 			role: "admin",
 		});
 	});
@@ -148,7 +152,7 @@ describe("the membership function", () => {
 			.bind(ada.user.id)
 			.run();
 
-		expect(await findMembership(pageRequest("acme", ada.cookie), "acme")).toBeNull();
+		expect(await outcome(pageRequest("acme", ada.cookie), "acme")).toMatchObject(NOT_FOUND);
 	});
 
 	it("does not answer for a host that is not ours", async () => {
@@ -156,6 +160,6 @@ describe("the membership function", () => {
 
 		const elsewhere = pageRequest("acme", ada.cookie, "https://timesifier.example.evil.example");
 
-		expect(await findMembership(elsewhere, "acme")).toBeNull();
+		expect(await outcome(elsewhere, "acme")).toBe("signed out");
 	});
 });

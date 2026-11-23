@@ -92,7 +92,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports and a report's people, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access and Wellbeing, My account and its data, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports and a report's people, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access, Wellbeing and Sign-in, My account and its data, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -155,6 +155,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/settings/support",
 				"/app/acme/settings/wellbeing",
 				"/app/acme/account/data",
+				// Settings › Sign-in: company sign-in and verified domains (TS-104).
+				"/app/acme/settings/sign-in",
 				"/app/acme/account",
 				"/app/acme/account/calendar",
 				"/app/acme/settings/members",
@@ -193,6 +195,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/reports.utilisation",
 			"routes/app/schedules",
 			"routes/app/settings",
+			"routes/app/sign-in-settings",
 			"routes/app/support-access",
 			"routes/app/tasks",
 			"routes/app/team",
@@ -325,6 +328,7 @@ describe("a member of one organisation asking for another organisation's address
 		},
 		// Support access a stranger would grant themselves; no grant is made.
 		"routes/app/support-access": { intent: "grant", hours: "72" },
+		"routes/app/sign-in-settings": { intent: "add-domain", domain: "acme-works.com" },
 	};
 
 	it.each(withAction)(
@@ -360,6 +364,7 @@ describe("a member of one organisation asking for another organisation's address
 				2 * USUAL_CATEGORIES.length,
 			);
 			expect(await value("select count(*) from support_grants")).toBe(0);
+			expect(await value("select count(*) from organisation_domains")).toBe(0);
 		},
 	);
 
@@ -396,6 +401,12 @@ describe("a member of one organisation asking for another organisation's address
 				shortNotice: "refused",
 			},
 		},
+		{ id: "routes/app/sign-in-settings", fields: { intent: "policy", policy: "google" } },
+		{ id: "routes/app/sign-in-settings", fields: { intent: "check-domain", domainId: "d-1" } },
+		{
+			id: "routes/app/sign-in-settings",
+			fields: { intent: "self-join", domainId: "d-1", selfJoin: "on" },
+		},
 	];
 
 	it.each(MORE_FORMS)(
@@ -416,6 +427,9 @@ describe("a member of one organisation asking for another organisation's address
 			expect(await value("select count(*) from work_requests")).toBe(0);
 			expect(await value("select overtime_policy from organisations where slug = ?", THEIRS)).toBe(
 				"none",
+			);
+			expect(await value("select sign_in_policy from organisations where slug = ?", THEIRS)).toBe(
+				"any",
 			);
 		},
 	);

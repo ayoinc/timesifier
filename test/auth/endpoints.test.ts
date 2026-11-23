@@ -35,8 +35,10 @@ beforeEach(async () => {
 });
 
 describe("the endpoints under /api/auth", () => {
-	it("are these 18 and no other", () => {
+	it("are these 21 and no other", () => {
 		expect([...offered].sort()).toEqual([
+			"GET /callback/google",
+			"GET /callback/microsoft",
 			"GET /get-session",
 			"GET /organization/get-invitation",
 			"GET /organization/list",
@@ -54,6 +56,7 @@ describe("the endpoints under /api/auth", () => {
 			"POST /organization/update-member-role",
 			"POST /revoke-sessions",
 			"POST /sign-in/email-otp",
+			"POST /sign-in/social",
 			"POST /sign-out",
 		]);
 	});
@@ -61,7 +64,14 @@ describe("the endpoints under /api/auth", () => {
 	it("are all endpoints the installed library has", () => {
 		const registered = registeredEndpoints();
 
-		expect(offered.filter((endpoint) => !registered.includes(endpoint))).toEqual([]);
+		// A registered `/callback/:id` covers each provider's own callback.
+		const covers = (endpoint: string) =>
+			registered.some(
+				(pattern) =>
+					pattern === endpoint ||
+					new RegExp(`^${pattern.replace(/:\w+/g, "[^/]+")}$`).test(endpoint),
+			);
+		expect(offered.filter((endpoint) => !covers(endpoint))).toEqual([]);
 	});
 
 	it.each(offered)("%s is answered by the library, not refused by the mount", async (endpoint) => {

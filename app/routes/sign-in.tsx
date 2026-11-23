@@ -11,6 +11,7 @@ import { AuthPage, changeStep, StepHeading, StepLead } from "./auth/AuthPage";
 import { CodeStep } from "./auth/CodeStep";
 import { leaveFor } from "./auth/client";
 import { NeedsScript } from "./auth/links";
+import { ProviderButtons } from "./auth/ProviderButtons";
 import { SIGN_IN_PATH } from "./auth/paths";
 import { forgetCode, pendingCode, rememberCode } from "./auth/pending-code";
 import { SendCodeForm } from "./auth/SendCodeForm";
@@ -46,7 +47,7 @@ const STEPS = ["email", "code"] as const;
 type Step = (typeof STEPS)[number];
 
 export default function SignIn({ loaderData }: Route.ComponentProps) {
-	const { next, turnstileSiteKey, operator } = loaderData;
+	const { next, turnstileSiteKey, operator, providers, refusal } = loaderData;
 	const [step, setStep] = useState<Step>("email");
 	const [email, setEmail] = useState("");
 	// When the code this tab is waiting for runs out, as a time on its clock.
@@ -119,6 +120,7 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
 							New here? Send me the Timesifier newsletter. You can stop it at any time.
 						</Checkbox>
 					</SendCodeForm>
+					<ProviderButtons providers={providers} next={next} refusal={refusal} />
 				</>
 			)}
 			{step === "code" && (

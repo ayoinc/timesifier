@@ -737,6 +737,22 @@ const ROLE_TABLE: Record<string, Row> = {
 		},
 	},
 	"routes/app/wellbeing": { page: by(200, 404, 404, 404, 404) },
+	// Settings › Sign-in (TS-104): owners and admins open it and choose the
+	// policy; its domains are the owners' alone, so an admin who posts one is
+	// answered 404 too (test/organisations/company-sign-in.test.ts and
+	// domains.test.ts hold the policy's own cases).
+	"routes/app/sign-in-settings": {
+		page: by(200, 200, 404, 404, 404),
+		form: {
+			fields: () => ({ intent: "add-domain", domain: "acme-works.com" }),
+			made: async (w) =>
+				(await count(
+					"select count(*) from organisation_domains where organisation_id = ? and domain = 'acme-works.com'",
+					w.acme.id,
+				)) === 1,
+			post: by<Post>("done", 404, 404, 404, 404),
+		},
+	},
 };
 
 /** Every route of one organisation: the layout that checks membership, and all it holds. */

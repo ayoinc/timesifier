@@ -7,7 +7,7 @@ import { env, exports } from "cloudflare:workers";
 import { routes as builtRoutes } from "virtual:react-router/server-build";
 import { getTableColumns, is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ActivitySource } from "~/activity/actions";
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
 import { signInCodeEmail } from "~/auth/sign-in-code-email";
@@ -100,6 +100,14 @@ import {
 	setBinding,
 	signIn,
 } from "./auth/harness";
+import {
+	askProvider,
+	configureProviders,
+	googleClaims,
+	microsoftClaims,
+	STATE_COOKIE,
+	signInWith,
+} from "./auth/social-harness";
 import { freshDatabase } from "./db/database";
 import { createOrganisation } from "./organisations/harness";
 
@@ -141,6 +149,7 @@ const COOKIES = [
 	KNOWN_COOKIE,
 	COLOR_SCHEME_COOKIE,
 	GETTING_STARTED_COOKIE,
+	STATE_COOKIE,
 ];
 const COUNT = ["no", "one", "two", "three", "four", "five", "six"];
 
@@ -152,6 +161,65 @@ it("the privacy notice lists every cookie the application sets, and counts them"
 	const named = new Set(html.match(/__Host-[\w.-]+/g));
 	expect([...named].sort()).toEqual([...COOKIES].sort());
 	expect(words(html)).toContain(`sets ${COUNT[COOKIES.length]} cookies and no others`);
+});
+
+it("signing in with Google or Microsoft sets no cookie the notice does not list", async () => {
+	await freshDatabase();
+	configureProviders("google", "microsoft");
+	const named = (response: Response) =>
+		response.headers.getSetCookie().map((line) => line.slice(0, line.indexOf("=")));
+	const set = new Set<string>();
+	for (const provider of ["google", "microsoft"] as const) {
+		for (const name of named(await askProvider(provider))) set.add(name);
+		const claims =
+			provider === "google" ? googleClaims("ada@acme.com") : microsoftClaims("ada@acme.com");
+		const { response } = await signInWith(provider, claims);
+		for (const name of named(response)) set.add(name);
+	}
+	expect(set).toContain(STATE_COOKIE);
+	for (const name of set) expect(COOKIES, name).toContain(name);
+	vi.restoreAllMocks();
+});
+
+it("the notice names Google and Microsoft under who else handles it only where this deployment offers them", async () => {
+	const none = words(await page(PRIVACY_PATH));
+	expect(none).not.toContain("Signing in with Google");
+	expect(none).not.toContain("Signing in with Microsoft");
+
+	configureProviders("microsoft");
+	const microsoft = words(await page(PRIVACY_PATH));
+	expect(microsoft).toContain(
+		"If you choose Continue with Microsoft, with a work or school account, Microsoft learns that you are signing in to Timesifier",
+	);
+	expect(microsoft).not.toContain("Signing in with Google");
+
+	configureProviders("google");
+	const both = words(await page(PRIVACY_PATH));
+	expect(both).toContain(
+		"If you choose Continue with Google, Google learns that you are signing in to Timesifier",
+	);
+	expect(both).toContain("Timesifier asks for nothing else and keeps no token from Google.");
+});
+
+it("the notice says no token from Google or Microsoft is kept, as the account hooks make sure", async () => {
+	const text = words(await page(PRIVACY_PATH));
+	expect(text).toContain(
+		"No token from either is kept, so Timesifier cannot act for you at Google or Microsoft.",
+	);
+	// The columns that would hold one are emptied on every write (test/auth/social.test.ts).
+	await freshDatabase();
+	configureProviders("microsoft");
+	await signInWith("microsoft", microsoftClaims("ada@acme.com"));
+	vi.restoreAllMocks();
+	const account = await env.DB.prepare(
+		"select provider_id, access_token, refresh_token, id_token from accounts where provider_id = 'microsoft'",
+	).first();
+	expect(account).toEqual({
+		provider_id: "microsoft",
+		access_token: null,
+		refresh_token: null,
+		id_token: null,
+	});
 });
 
 /** The pages that say where the data is kept and handled: each says it the same way. */
@@ -346,6 +414,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 		],
 		"../app/integrations/webhooks.server.ts": [
 			"a notice that a webhook was switched off, to the person who added it",
+		],
+		"../app/organisations/domains.server.ts": [
+			"a notice that a verified domain's DNS record is missing, to the organisation's owners, once each time it has been missing for 7 days; after 14 days the domain stops being verified",
 		],
 		"../app/invoices/mail.server.ts": [
 			"an invoice or an estimate, as a PDF, to the billing contacts of a client",
@@ -760,12 +831,48 @@ it("each line on the pricing page names a built capability, and what is not buil
 		expect(words(html)).toContain(title);
 		expect(features).toContain(`id="${id}"`);
 	}
-	// Sign-in for companies is not built: the page says so where it names it.
+	// SAML is not built: the page names it once, on request, under company sign-in.
 	const text = words(html);
-	const section = text.slice(text.indexOf("Company sign-in, being built."));
-	expect(section).toContain("SAML single sign-on, on request");
+	const section = text.slice(text.indexOf("Company sign-in, available soon."));
+	expect(section).toContain("On Business SAML single sign-on, on request");
 	expect(text.indexOf("SAML")).toBe(text.indexOf("SAML single sign-on, on request"));
-	expect(text.indexOf("Google")).toBeGreaterThan(text.indexOf("Company sign-in, being built."));
+});
+
+it("the pricing page's company sign-in is what this deployment offers, and available soon where it offers none", async () => {
+	const SOON = "Company sign-in, available soon.";
+	const OFFERED = "Company sign-in.";
+	const EVERY_PLAN = "Require company sign-in for an organisation Verified email domains";
+	const BUSINESS = "On Business SAML single sign-on, on request";
+
+	// No provider configured, as in production until one is (decision 64).
+	const none = words(await page(PRICING_PATH));
+	expect(none).not.toContain(OFFERED);
+	expect(none).not.toContain("being built");
+	const soon = none.slice(none.indexOf(SOON));
+	expect(soon).toContain("Today a person signs in with a code sent to their email address.");
+	expect(soon).toContain(
+		`On every plan Sign in with Google or with a Microsoft work or school account ${EVERY_PLAN} ${BUSINESS}`,
+	);
+	expect(none.indexOf("Google")).toBeGreaterThan(none.indexOf(SOON));
+
+	// One provider: the section names it, and only it.
+	configureProviders("microsoft");
+	const microsoft = words(await page(PRICING_PATH));
+	expect(microsoft).not.toContain(SOON);
+	const offered = microsoft.slice(microsoft.indexOf(OFFERED));
+	expect(offered).toContain("or with their company's account");
+	expect(offered).toContain(
+		`On every plan Sign in with a Microsoft work or school account ${EVERY_PLAN} ${BUSINESS}`,
+	);
+	expect(microsoft).not.toContain("Google");
+
+	// Both.
+	configureProviders("google");
+	const both = words(await page(PRICING_PATH));
+	expect(both).not.toContain(SOON);
+	expect(both.slice(both.indexOf(OFFERED))).toContain(
+		`On every plan Sign in with Google or with a Microsoft work or school account ${EVERY_PLAN} ${BUSINESS}`,
+	);
 });
 
 it("the integrations page states the limits the code enforces", async () => {

@@ -41,6 +41,11 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 		formFromAMember("/app/acme/settings/schedules", "intent=delete&scheduleId=s1"),
 	// The colour scheme is one of three words; this is none of them.
 	"routes/app/account": () => formFromAMember("/app/acme/account", "scheme=sepia"),
+	// A policy requires Google or Microsoft, or neither (TS-104); this names another provider.
+	"routes/app/sign-in-settings": () =>
+		formFromAMember("/app/acme/settings/sign-in", "intent=policy&policy=okta"),
+	// `/app` takes one form, "join" (TS-104); this asks to leave.
+	"routes/app/index": () => formFromAMember("/app?index", "intent=leave&organisationId=o1"),
 	// A description is at most 500 characters; this is 501.
 	"routes/app/timesheet": () =>
 		formFromAMember(

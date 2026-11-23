@@ -1,12 +1,12 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { membershipOf } from "~/organisations/membership.server";
 import { periodContaining } from "~/periods/periods";
 import { zoneOfMember } from "~/time/zones.server";
 import { captureEmail, type Mailbox, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
 	createOrganisation,
+	membershipIn,
 	type Role,
 	row,
 	seedMembership,
@@ -470,11 +470,11 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 		await submit(SETTINGS, { intent: "time-zone", timeZone: "Asia/Tokyo" }, ada, {
 			byScript: true,
 		});
-		const membership = await membershipOf(
-			{ id: ada.user.id } as Parameters<typeof membershipOf>[0],
+		const membership = await membershipIn(
+			{ id: ada.user.id } as Parameters<typeof membershipIn>[0],
 			"acme",
 		);
-		expect(membership && (await zoneOfMember(membership))).toBe("Asia/Tokyo");
+		expect(await zoneOfMember(membership)).toBe("Asia/Tokyo");
 	});
 
 	it("Clients off hides the link and 404s the page for everyone, and deletes nothing; on brings them back", async () => {

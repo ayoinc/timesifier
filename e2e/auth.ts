@@ -40,12 +40,16 @@ export async function ownAddress(context: BrowserContext, baseURL: string | unde
 	return address;
 }
 
-// The server under test is `vite preview`, whose EMAIL binding is Wrangler's
-// local simulator: it sends nothing and writes each message's text to a file
-// under this directory. That is the only place a code can be read. The file
-// does not say who the message was for, so only one test at a time may cause a
-// message: the one holding the lock sees exactly one new file, and it is its own.
+// The servers under test are `vite preview` and, for the tests of company
+// sign-in, `wrangler dev` (playwright.config.ts). The EMAIL binding of each is
+// Wrangler's local simulator: it sends nothing and writes each message's text
+// to a file under its project's `.wrangler/tmp/email`, which for the second is
+// the build's server directory, where its configuration is. That is the only
+// place a code can be read. The file does not say who the message was for, so
+// only one test at a time, on either server, may cause a message: the one
+// holding the lock sees exactly one new file, and it is its own.
 const EMAILS = ".wrangler/tmp/email";
+const EMAIL_FOLDERS = [EMAILS, "build/server/.wrangler/tmp/email"];
 const LOCK = join(EMAILS, "one-message-at-a-time.lock");
 /** A lock older than this was left behind by a run that was stopped. */
 const STALE_AFTER_MS = 30_000;
@@ -56,11 +60,13 @@ const STALE_AFTER_MS = 30_000;
 export const TIME_WITH_TURNS = 90_000;
 
 async function messages(): Promise<string[]> {
-	const simulators = await readdir(EMAILS, { withFileTypes: true }).catch(() => []);
 	const found: string[] = [];
-	for (const simulator of simulators.filter((entry) => entry.isDirectory())) {
-		const folder = join(EMAILS, simulator.name, "email-text");
-		for (const file of await readdir(folder).catch(() => [])) found.push(join(folder, file));
+	for (const emails of EMAIL_FOLDERS) {
+		const simulators = await readdir(emails, { withFileTypes: true }).catch(() => []);
+		for (const simulator of simulators.filter((entry) => entry.isDirectory())) {
+			const folder = join(emails, simulator.name, "email-text");
+			for (const file of await readdir(folder).catch(() => [])) found.push(join(folder, file));
+		}
 	}
 	return found;
 }

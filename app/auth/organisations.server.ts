@@ -13,6 +13,9 @@
  * - takes the organisation from the request, never from the session, and
  *   answers the same 404 whether that organisation does not exist or the
  *   person asking is not a member of it;
+ * - answers a member 403 `COMPANY_SIGN_IN_REQUIRED` when the organisation
+ *   requires company sign-in and their session is not one it takes, owners
+ *   apart (TS-104, `app/organisations/sign-in-policy.ts`);
  * - answers the same 404 for every invitation that is not there for the
  *   person asking to take, one whose sender may no longer invite included;
  * - lets a person own at most five organisations;
@@ -26,7 +29,7 @@
  * See docs/security.md, "Organisations and roles".
  */
 import { env, waitUntil } from "cloudflare:workers";
-import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { organization } from "better-auth/plugins/organization";
 import type { BetterAuthPlugin, DBAdapter } from "better-auth/types";
 import { and, eq, like } from "drizzle-orm";
@@ -41,11 +44,13 @@ import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
 import { DPA_VERSION } from "~/landing/trust";
 import { acceptDpa } from "~/organisations/dpa.server";
 import {
+	COMPANY_SIGN_IN_REQUIRED,
 	DPA_NOT_ACCEPTED,
 	LOGOS_NOT_DELETED,
 	RECEIPTS_NOT_DELETED,
 } from "~/organisations/problems";
 import { accessControl, InvitedRole, Role, roles } from "~/organisations/roles";
+import { admits, policyOf, type SessionMethod } from "~/organisations/sign-in-policy";
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
 import { SEATS_FULL } from "~/plans/plans";
 import { seatForOneMore } from "~/plans/plans.server";
@@ -93,6 +98,12 @@ const organisationNotFound = () =>
 	new APIError("NOT_FOUND", { code: "ORGANIZATION_NOT_FOUND", message: "Organization not found" });
 const invitationNotFound = () =>
 	new APIError("NOT_FOUND", { code: "INVITATION_NOT_FOUND", message: "Invitation not found" });
+/** A member of an organisation that requires company sign-in, asking with a session it does not take. */
+const companySignInRequired = () =>
+	new APIError("FORBIDDEN", {
+		code: COMPANY_SIGN_IN_REQUIRED,
+		message: "This organisation requires company sign-in",
+	});
 
 /**
  * Deletes the organisation's receipts in R2 before its row, which no foreign
@@ -161,6 +172,8 @@ const nothing = z.strictObject({});
 /** Who is asking, and Better Auth's own access to its tables. */
 type Asking = {
 	user: { id: string; email: string; emailVerified: boolean };
+	/** How the asking session was made (TS-104): what an organisation's sign-in policy reads. */
+	session: SessionMethod;
 	adapter: Pick<DBAdapter, "findOne" | "count">;
 };
 
@@ -191,11 +204,29 @@ function member(
 ): Endpoint {
 	return {
 		from,
-		async admit(raw, { user }) {
+		async admit(raw, { user, session }) {
 			const input = await valid(schema, raw);
 			const scope = organisationScope(env.DB, input.organizationId);
-			const [membership] = await scope.memberships.select((m) => eq(m.userId, user.id));
-			if (!membership) throw organisationNotFound();
+			const [[membership], [organisation]] = await Promise.all([
+				scope.memberships.select((m) => eq(m.userId, user.id)),
+				drizzle(env.DB)
+					.select({
+						signInPolicy: organisations.signInPolicy,
+						signInProvider: organisations.signInProvider,
+						signInTenant: organisations.signInTenant,
+					})
+					.from(organisations)
+					.where(eq(organisations.id, input.organizationId))
+					.limit(1),
+			]);
+			if (!membership || !organisation) throw organisationNotFound();
+			// The organisation's sign-in policy (TS-104 slice 104b), as its pages hold
+			// it: told to members alone, owners exempt. A role this application does
+			// not know is held to it.
+			const role = Role.safeParse(membership.role);
+			if (!admits(policyOf(organisation), role.success ? role.data : "member", session)) {
+				throw companySignInRequired();
+			}
 
 			const { invitationId } = input;
 			if (invitationId) {
@@ -360,15 +391,44 @@ const gate = createAuthMiddleware(async (ctx) => {
 
 	const input = await endpoint.admit(ctx[endpoint.from], {
 		user: signedIn.user,
+		session: {
+			signInMethod: signedIn.session.signInMethod,
+			signInTenant: signedIn.session.signInTenant,
+		},
 		adapter: ctx.context.adapter,
 	});
 	if (endpoint.from === "body") return { context: { body: input } };
+});
+
+/** What `/organization/remove-member` answers once it has removed a member. */
+const Removed = z.object({ member: z.object({ organizationId: z.string(), userId: z.string() }) });
+
+/**
+ * Who removed whom, kept once Better Auth has removed a member, whichever
+ * page or request asked (TS-104, the security review of #89): a person
+ * removed may not join again by the organisation's verified domain until it
+ * invites them (`joinableOrganisations`).
+ */
+const recordRemoval = createAuthMiddleware(async (ctx) => {
+	const returned = ctx.context.returned;
+	if (isAPIError(returned)) return;
+	const removed = Removed.safeParse(returned);
+	if (!removed.success) return;
+	const { organizationId, userId } = removed.data.member;
+	const remover = await getSessionFromCtx(ctx);
+	await organisationScope(env.DB, organizationId).membershipRemovals.insert({
+		userId,
+		removedBy: remover?.user.id ?? null,
+	});
 });
 
 const organisationRules: BetterAuthPlugin = {
 	id: "organisation-rules",
 	hooks: {
 		before: [{ matcher: (ctx) => ctx.path?.startsWith("/organization/") ?? false, handler: gate }],
+		after: [
+			{ matcher: (ctx) => ctx.path === "/organization/remove-member", handler: recordRemoval },
+		],
 	},
 };
 

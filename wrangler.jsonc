@@ -52,6 +52,12 @@
 	// OPERATOR_ICO_REFERENCE, optional and absent here: that company's
 	//   registration with the ICO, which /privacy and /security show when it is
 	//   set and say nothing of when it is not.
+	// GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID,
+	//   MICROSOFT_CLIENT_SECRET: the deployment's clients at Google and Microsoft
+	//   (TS-104). Empty, so no provider is offered until `.dev.vars` names one;
+	//   the secrets are variables here for the reason PLATFORM_OWNERS is.
+	//   Production sets the IDs from its own variables and the secrets with
+	//   `wrangler secret put` (scripts/deploy-config.ts); a preview has neither.
 	"vars": {
 		"ENVIRONMENT": "development",
 		"APP_HOST": "",
@@ -62,7 +68,11 @@
 		"OPERATOR_NAME": "Example Operator Limited",
 		"OPERATOR_COMPANY_NUMBER": "00000000",
 		"OPERATOR_REGISTERED_IN": "England and Wales",
-		"OPERATOR_REGISTERED_OFFICE": "1 Example Street, Example Town, EX0 0EX"
+		"OPERATOR_REGISTERED_OFFICE": "1 Example Street, Example Town, EX0 0EX",
+		"GOOGLE_CLIENT_ID": "",
+		"GOOGLE_CLIENT_SECRET": "",
+		"MICROSOFT_CLIENT_ID": "",
+		"MICROSOFT_CLIENT_SECRET": ""
 	},
 	// Each pull request gets a preview on workers.dev. Without this line a preview
 	// has no URL, because turning workers_dev off turns preview URLs off too. It

@@ -2,13 +2,15 @@
  * What a deployment tells the Worker about itself: where it is served, which
  * Turnstile widget is its own, which address its mail comes from, its
  * secrets, who the platform's owners are (TS-099), which company runs it
- * (TS-121), and that company's registration with the ICO (TS-105).
+ * (TS-121), that company's registration with the ICO (TS-105), and its
+ * clients at Google and Microsoft (TS-104).
  * docs/security.md, "Secrets", lists every one and where it is set.
  *
  * None has a default in the code. A value that is missing is never guessed:
  * the code that needs it fails, and the log names what was missing. A missing
- * `PLATFORM_OWNERS` closes the platform console to everyone. One setting is
- * optional: without `OPERATOR_ICO_REFERENCE` the pages say nothing of the ICO.
+ * `PLATFORM_OWNERS` closes the platform console to everyone; a provider whose
+ * client ID or secret is missing is not offered. Without the optional
+ * `OPERATOR_ICO_REFERENCE` the pages say nothing of the ICO.
  */
 export type Setting =
 	| "ENVIRONMENT"
@@ -23,7 +25,11 @@ export type Setting =
 	| "OPERATOR_COMPANY_NUMBER"
 	| "OPERATOR_REGISTERED_IN"
 	| "OPERATOR_REGISTERED_OFFICE"
-	| "OPERATOR_ICO_REFERENCE";
+	| "OPERATOR_ICO_REFERENCE"
+	| "GOOGLE_CLIENT_ID"
+	| "GOOGLE_CLIENT_SECRET"
+	| "MICROSOFT_CLIENT_ID"
+	| "MICROSOFT_CLIENT_SECRET";
 
 /** Anything that may carry the settings: the Worker's `env`, or a part of it. */
 export type Settings = { readonly [Name in Setting]?: unknown };

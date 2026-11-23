@@ -21,8 +21,9 @@ export const CONSOLE_COLUMNS: Readonly<Record<string, readonly string[]>> = {
 	invitations: ["id", "organisation_id", "email", "role", "status", "expires_at", "inviter_id"],
 	// When a person last used a session, and how many are live.
 	sessions: ["user_id", "updated_at", "expires_at"],
-	// An account's sign-in history: when, and the browser's kind.
-	sign_ins: ["id", "user_id", "device", "created_at"],
+	// An account's sign-in history: when, the browser's kind, and how it was made
+	// (`code`, `google` or `microsoft`, TS-104).
+	sign_ins: ["id", "user_id", "device", "method", "created_at"],
 	// Counted by organisation, never read.
 	time_entries: ["organisation_id"],
 	projects: ["organisation_id"],

@@ -34,6 +34,7 @@ export const ActivityAction = z.enum([
 	"membership.role_changed",
 	"membership.contractor_changed",
 	"membership.removed",
+	"membership.joined",
 	"invitation.created",
 	"invitation.cancelled",
 	"team.created",
@@ -116,6 +117,13 @@ export const ActivityAction = z.enum([
 	"support_access.used",
 	// An owner accepted the data processing agreement for the organisation (TS-105).
 	"dpa.accepted",
+	// TS-104: the organisation's sign-in policy and its verified domains.
+	"sign_in_policy.changed",
+	"organisation_domain.added",
+	"organisation_domain.verified",
+	"organisation_domain.unverified",
+	"organisation_domain.changed",
+	"organisation_domain.removed",
 ]);
 export type ActivityAction = z.infer<typeof ActivityAction>;
 

@@ -18,6 +18,13 @@ export const OFFERED_ENDPOINTS: Record<string, true> = {
 	"POST /email-otp/send-verification-otp": true,
 	"POST /sign-in/email-otp": true,
 
+	// Google or Microsoft (TS-104): asking for the provider's address, and the
+	// provider sending the browser back. A provider the deployment has no
+	// client for is refused by `socialSignInRules` (social.server.ts).
+	"POST /sign-in/social": true,
+	"GET /callback/google": true,
+	"GET /callback/microsoft": true,
+
 	// The session.
 	"GET /get-session": true,
 	"POST /sign-out": true,

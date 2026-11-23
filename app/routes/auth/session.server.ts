@@ -6,6 +6,7 @@ import { env } from "cloudflare:workers";
 import { createContext, type MiddlewareFunction, redirectDocument } from "react-router";
 
 import { getSession, type SignedIn } from "~/auth/auth.server";
+import { configuredProviders, refusalWords } from "~/auth/providers";
 import { deploymentOperator } from "~/landing/operator";
 import { required } from "~/lib/deployment";
 import { APP_PATH } from "~/shell/destinations";
@@ -58,9 +59,14 @@ export const requireSignedOut: MiddlewareFunction<Response> = async ({ request }
 export async function loadAuthPage(request: Request, url: URL) {
 	const next = safeNext(url.searchParams.get(NEXT_PARAM));
 	if (await getSession(request)) throw redirectDocument(next);
+	const error = url.searchParams.get("error");
 	return {
 		next,
 		turnstileSiteKey: required(env, "TURNSTILE_SITE_KEY"),
 		operator: deploymentOperator(env),
+		// The providers this deployment has a client for (TS-104); none on a preview.
+		providers: configuredProviders(env),
+		// Why a provider's sign-in sent the browser back, in the page's own words.
+		refusal: error ? refusalWords(error) : null,
 	};
 }

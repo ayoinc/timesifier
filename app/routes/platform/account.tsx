@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import * as z from "zod";
 import { sendEmail } from "~/auth/email.server";
 import { invitationEmail } from "~/auth/invitation-email";
+import { methodWords } from "~/auth/providers";
 import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
@@ -101,7 +102,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 		})),
 		signIns: account.signIns.map((signIn) => ({
 			id: signIn.id,
-			device: signIn.device,
+			device: [signIn.device, methodWords(signIn.method)].filter(Boolean).join(" "),
 			when: consoleMoment(signIn.createdAt),
 		})),
 		invitations: account.invitations.map((invitation) => ({

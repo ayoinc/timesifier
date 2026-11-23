@@ -2,12 +2,11 @@ import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type OrganisationScope, organisationScope, organisations, users } from "~/db";
-import { membershipOf } from "~/organisations/membership.server";
 import { recentProjectIds } from "~/projects/recent.server";
 import { trackChoices } from "~/tasks/track.server";
 import { dayOf } from "~/time/calendar";
 import { freshDatabase } from "../db/database";
-import { seedMembership } from "../organisations/harness";
+import { membershipIn, seedMembership } from "../organisations/harness";
 
 // What the project picker is given beside the projects: the person's recent
 // projects, from their own latest time entries, most recent first, distinct,
@@ -94,8 +93,7 @@ describe("trackChoices for the project picker", () => {
 		await entry(ada.id, withClient, 2);
 		await entry(bola.id, alone, 3);
 
-		const membership = await membershipOf(ada, "acme");
-		if (!membership) throw new Error("No membership.");
+		const membership = await membershipIn(ada, "acme");
 		const choices = await trackChoices(scope, membership, [], T0 + 5 * HOUR);
 		expect(choices.recent).toEqual([withClient, alone]);
 		expect(choices.clients).toEqual({ [withClient]: "Globex" });

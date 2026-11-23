@@ -115,6 +115,31 @@ export function signOutEverywhere(): Promise<Outcome> {
 }
 
 /**
+ * The address of `provider`'s sign-in page for this browser (TS-104), from
+ * `POST /api/auth/sign-in/social`. The browser comes back to `next`, or to
+ * `errorPath` with `?error=` when the provider's sign-in is refused.
+ */
+export function providerAddress(
+	provider: string,
+	next: string,
+	errorPath?: string,
+): Promise<{ ok: true; url: string } | { ok: false; problem: Problem }> {
+	const failed = { ok: false, problem: "failed" } as const;
+	return auth()
+		.signIn.social({
+			provider,
+			callbackURL: next,
+			...(errorPath ? { errorCallbackURL: errorPath } : {}),
+		})
+		.then(({ data, error }) => {
+			if (error?.status === 429) return { ok: false, problem: "too-many" } as const;
+			const url = !error && data && "url" in data ? data.url : undefined;
+			return typeof url === "string" ? ({ ok: true, url } as const) : failed;
+		})
+		.catch(() => failed);
+}
+
+/**
  * Leaves for another page with a whole page load. Going between the pages
  * that need a session and the pages that give one always loads the page: the
  * two have different policies (docs/security.md), and a new document starts

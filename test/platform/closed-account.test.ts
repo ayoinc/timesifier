@@ -121,8 +121,14 @@ describe("the sign-in history", () => {
 			"created_at",
 			"device",
 			"id",
+			"method",
 			"user_id",
 		]);
+		// How each was made (TS-104): a code, Google or Microsoft, and nothing more.
+		const methods = await env.DB.prepare("select method from sign_ins where user_id = ?")
+			.bind(ada.user.id)
+			.all<{ method: string }>();
+		expect(methods.results.map((r) => r.method)).toEqual(["code", "code"]);
 	});
 
 	it("keeps sign-ins for 90 days: the daily cron deletes older ones", async () => {

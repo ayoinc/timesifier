@@ -42,7 +42,9 @@ import {
 	invoices,
 	leaveKinds,
 	leaveRequests,
+	membershipRemovals,
 	memberships,
+	organisationDomains,
 	payments,
 	periodEvents,
 	periods,
@@ -402,6 +404,8 @@ export const tenantTables = {
 	calendarFeeds,
 	workRequests,
 	timesheetRuleVersions,
+	organisationDomains,
+	membershipRemovals,
 	supportGrants,
 } as const;
 

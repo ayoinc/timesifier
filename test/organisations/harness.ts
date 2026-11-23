@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
 import * as z from "zod";
+import type { SignedIn } from "~/auth/auth.server";
 import { uuidv7 } from "~/db";
 import { DPA_VERSION } from "~/landing/trust";
+import { requireMembershipOf } from "~/organisations/membership.server";
 import { type Mailbox, post, signIn } from "../auth/harness";
 
 export type Role = "owner" | "admin" | "finance" | "member";
@@ -203,4 +205,16 @@ export async function signInAs(
 
 export function roleOf(memberId: string): Promise<Role | null> {
 	return value<Role>("select role from memberships where id = ?", memberId);
+}
+
+/**
+ * What the organisation layout hands every page under `/app/<slug>/`: the
+ * membership of `user` there, read through the sign-in policy as for a session
+ * made with an emailed code. It throws where the layout would.
+ */
+export function membershipIn(user: SignedIn["user"], slug: string) {
+	return requireMembershipOf(
+		{ user, session: { signInMethod: "code", signInTenant: null } as SignedIn["session"] },
+		slug,
+	);
 }

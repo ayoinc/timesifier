@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 
+import { configuredProviders, PROVIDERS, type Provider } from "~/auth/providers";
 import { BuyerPage } from "~/landing/BuyerPage";
 import { CAPABILITIES } from "~/landing/capabilities";
 import { deploymentOperator } from "~/landing/operator";
@@ -32,22 +33,45 @@ export function meta({ matches }: Route.MetaArgs) {
 	});
 }
 
-/** The company that runs this deployment, which the foot names. */
+/** The company that runs this deployment, which the foot names, and the providers it offers. */
 export function loader() {
-	return { operator: deploymentOperator(env) };
+	return { operator: deploymentOperator(env), providers: configuredProviders(env) };
 }
 
-/** Sign-in for companies (TS-104), as the owner decided it is to be offered on the plans (answer 8). */
-const COMPANY_SIGN_IN = {
-	everyPlan: [
-		"Sign in with Google or with a Microsoft work or school account",
-		"Require company sign-in for an organisation",
-		"Verified email domains",
-	],
-	business: "SAML single sign-on, on request",
-} as const;
+/** How the list names each provider a person may sign in with. */
+const PROVIDER_LINES: Record<Provider, string> = {
+	google: "Google",
+	microsoft: "a Microsoft work or school account",
+};
 
-export default function Pricing({ loaderData: { operator } }: Route.ComponentProps) {
+/**
+ * Sign-in for companies (TS-104), as the owner decided it comes on the plans
+ * (answer 8), said as this deployment offers it (decision 64). Where no
+ * provider is configured, as on a preview, none of it can be used yet, so the
+ * section says it is available soon and lists all of it. Where one is, it says
+ * what is offered, naming only the providers configured. SAML is not built:
+ * Business has it on request.
+ */
+function companySignIn(providers: readonly Provider[]) {
+	const offered = providers.length > 0;
+	const named = offered ? providers : PROVIDERS;
+	return {
+		title: offered ? "Company sign-in." : "Company sign-in, available soon.",
+		lead: offered
+			? "A person signs in with a code sent to their email address, or with their company's account. It comes on the plans as follows."
+			: "Today a person signs in with a code sent to their email address. When sign-in for companies arrives, it comes to the plans as follows.",
+		everyPlan: [
+			`Sign in with ${named.map((provider) => PROVIDER_LINES[provider]).join(" or with ")}`,
+			"Require company sign-in for an organisation",
+			"Verified email domains",
+		],
+		business: "SAML single sign-on, on request",
+	};
+}
+
+export default function Pricing({ loaderData: { operator, providers } }: Route.ComponentProps) {
+	const companySignInWords = companySignIn(providers);
+
 	return (
 		<BuyerPage
 			path={PRICING_PATH}
@@ -136,16 +160,15 @@ export default function Pricing({ loaderData: { operator } }: Route.ComponentPro
 				className="border-t border-outline-variant"
 			>
 				<div className={SECTION}>
-					<SectionHead id="company-sign-in-heading" title="Company sign-in, being built.">
-						Today a person signs in with a code sent to their email address. When sign-in for
-						companies arrives, it comes to the plans as follows.
+					<SectionHead id="company-sign-in-heading" title={companySignInWords.title}>
+						{companySignInWords.lead}
 					</SectionHead>
 					<dl className="mt-10 grid gap-x-8 expanded:grid-cols-2">
 						<div className="border-t border-outline-variant py-4">
 							<dt className="text-title-medium">On every plan</dt>
 							<dd className="mt-1 text-body-large text-on-surface-variant">
 								<ul className="flex flex-col gap-1">
-									{COMPANY_SIGN_IN.everyPlan.map((line) => (
+									{companySignInWords.everyPlan.map((line) => (
 										<li key={line}>{line}</li>
 									))}
 								</ul>
@@ -154,7 +177,7 @@ export default function Pricing({ loaderData: { operator } }: Route.ComponentPro
 						<div className="border-t border-outline-variant py-4">
 							<dt className="text-title-medium">On Business</dt>
 							<dd className="mt-1 text-body-large text-on-surface-variant">
-								{COMPANY_SIGN_IN.business}
+								{companySignInWords.business}
 							</dd>
 						</div>
 					</dl>

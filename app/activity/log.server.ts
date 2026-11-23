@@ -23,6 +23,7 @@ import { activityScopeOf, type TimeScope } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import type { Membership } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
+import { SIGN_IN_POLICY_LABELS } from "~/organisations/sign-in-policy";
 import { addDays, bounds, Day, dayOf, daysFrom } from "~/time/calendar";
 import { formatDayWithYear, formatDuration, formatRange, formatTime } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
@@ -223,6 +224,9 @@ const STEPS: Record<string, string> = {
 	added: "Added",
 	settings_changed: "Changed",
 	time_zone_changed: "Changed the time zone of",
+	verified: "Verified",
+	unverified: "Stopped verifying",
+	joined: "Joined",
 };
 
 /** What each kind of thing an action names is called in a sentence. */
@@ -258,6 +262,8 @@ const NOUNS: Record<string, string> = {
 	public_holiday: "public holiday",
 	organisation: "the organisation's settings",
 	dpa: "the data processing agreement",
+	sign_in_policy: "the sign-in policy",
+	organisation_domain: "domain",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */
@@ -327,6 +333,9 @@ const FIELD_LABELS: Record<string, string> = {
 	kind: "Kind",
 	minutesPerDay: "Hours a day",
 	dpaVersion: "Version",
+	signInPolicy: "Sign-in",
+	signInTenant: "Workspace domain or Microsoft tenant",
+	selfJoin: "People at the domain may join on their own",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */
@@ -335,6 +344,7 @@ const RULE_VALUES: Record<string, Record<string, string>> = {
 	weekend: NON_WORKING_RULE_LABELS,
 	shortNotice: SHORT_NOTICE_LABELS,
 	kind: WORK_KIND_LABELS,
+	signInPolicy: SIGN_IN_POLICY_LABELS,
 };
 
 /** The names a page shows for the ids its records hold. */
@@ -525,6 +535,9 @@ function whatOf(r: RecordRow, names: Names): string {
 		return `${verb} ${what}`;
 	}
 	if (action === "dpa.accepted") return "Accepted the data processing agreement";
+	if (action === "membership.joined" && r.ownerId) {
+		return `${names.people.get(r.ownerId) ?? "A former member"} joined by their verified domain`;
+	}
 	if ((prefix === "membership" || prefix === "user") && r.ownerId) {
 		return `${verb} ${names.people.get(r.ownerId) ?? "a former member"}`;
 	}

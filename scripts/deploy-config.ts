@@ -86,9 +86,14 @@ type Variable = keyof typeof VARIABLES;
 
 /**
  * The GitHub variables a deployment may leave unset. One that is set must be
- * valid, and is written in beside the company's other details, for production
- * and the previews alike; one that is not set is left out, and the pages say
- * nothing of it.
+ * valid; one that is not set is left out.
+ *
+ * - The company's registration with the ICO (TS-105) is written in beside the
+ *   company's other details, for production and the previews alike; when it is
+ *   not set, the pages say nothing of it.
+ * - The deployment's client IDs at Google and Microsoft (TS-104) go to
+ *   production alone; each secret is set with `wrangler secret put`, and the
+ *   provider is offered once both are there. A preview gets neither.
  */
 const OPTIONAL_VARIABLES = {
 	// The company's registration with the ICO (TS-105): app/landing/operator.tsx
@@ -96,6 +101,14 @@ const OPTIONAL_VARIABLES = {
 	OPERATOR_ICO_REFERENCE: {
 		is: "the registration number the ICO gave that company, such as ZA123456",
 		valid: (value: string) => /^Z[A-Z0-9]{7}$/.test(value),
+	},
+	GOOGLE_CLIENT_ID: {
+		is: "the client ID of production's Google OAuth client, ending .apps.googleusercontent.com",
+		valid: (value: string) => /^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(value),
+	},
+	MICROSOFT_CLIENT_ID: {
+		is: "the Application (client) ID of production's Entra app registration",
+		valid: (value: string) => UUID.test(value),
 	},
 };
 type OptionalVariable = keyof typeof OPTIONAL_VARIABLES;
@@ -196,12 +209,16 @@ function deploymentConfig(base: z.infer<typeof Config>, values: Values) {
 		}),
 	};
 	// The whole list is replaced: no value of a developer's machine is deployed.
+	// A provider's client ID goes to production alone, and only where it is set;
+	// its secret is never a variable here (TS-104).
 	config.vars = {
 		ENVIRONMENT: "production",
 		APP_HOST: values.APP_HOST,
 		TURNSTILE_SITE_KEY: values.TURNSTILE_SITE_KEY,
 		EMAIL_FROM: values.EMAIL_FROM,
 		...operator,
+		...(values.GOOGLE_CLIENT_ID && { GOOGLE_CLIENT_ID: values.GOOGLE_CLIENT_ID }),
+		...(values.MICROSOFT_CLIENT_ID && { MICROSOFT_CLIENT_ID: values.MICROSOFT_CLIENT_ID }),
 	};
 	database.database_id = values.D1_DATABASE_ID;
 	email.allowed_sender_addresses = [values.EMAIL_FROM];

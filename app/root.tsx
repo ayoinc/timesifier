@@ -17,6 +17,8 @@ import { settleOnEscape } from "./components/motion";
 import condensedFont from "./fonts/sofia-sans-condensed-latin-wght-normal.woff2?url";
 import plainFont from "./fonts/sofia-sans-latin-wght-normal.woff2?url";
 import { MAIN_ID, SiteHeader } from "./landing/Site";
+import { companySignInOf } from "./organisations/sign-in-policy";
+import { CompanySignInAction } from "./routes/auth/CompanySignInAction";
 import { readColorScheme } from "./shell/color-scheme.server";
 import { APP_PATH } from "./shell/destinations";
 import { errorWords } from "./shell/error-words";
@@ -149,6 +151,7 @@ export default function App() {
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 	const { pathname } = useLocation();
 	const { heading, details } = errorWords(error, "outside");
+	const companySignIn = companySignInOf(error);
 	const stack = import.meta.env.DEV && error instanceof Error ? error.stack : undefined;
 	// Under /app the way on is the person's own organisation: `/app` sends them
 	// to it, or lets them choose between theirs. Anywhere else it is the home page.
@@ -163,9 +166,15 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
 				<div className={OUTSIDE_COLUMN}>
 					<h1 className="text-headline-large text-balance medium:text-display-small">{heading}</h1>
 					<p className="mt-4 text-body-large text-on-surface-variant">{details}</p>
+					{/* An organisation that requires company sign-in shows its one button (TS-104). */}
+					{companySignIn && <CompanySignInAction needed={companySignIn} />}
 					<p className="mt-10">
 						<a href={inApp ? APP_PATH : "/"} className={TEXT_LINK}>
-							{inApp ? "Go to your timesheet" : "Go to the home page"}
+							{companySignIn
+								? "Go to your organisations"
+								: inApp
+									? "Go to your timesheet"
+									: "Go to the home page"}
 						</a>
 					</p>
 					{stack && (
