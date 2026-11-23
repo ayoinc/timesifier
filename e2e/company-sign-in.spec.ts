@@ -103,7 +103,8 @@ async function expectNoProblems(page: Page, what: string, unmeasurable: string[]
 /**
  * Each provider's button in the colours its guidelines fix for the scheme
  * (decision 62), with its mark: one picture, hidden from assistive technology,
- * so the button's name is its words alone.
+ * so the button's name is its words alone. Microsoft's is described by
+ * "Work or school account", shown beside it, as Microsoft's guidance asks.
  */
 const PROVIDER_LOOKS = {
 	Google: {
@@ -139,6 +140,9 @@ async function expectProviderButton(
 	await expect(button.locator("svg")).toHaveCount(1);
 	await expect(button.locator("svg")).toHaveAttribute("aria-hidden", "true");
 	await expect(button.locator("svg")).toBeVisible();
+	const description = provider === "Microsoft" ? "Work or school account" : "";
+	await expect(button).toHaveAccessibleDescription(description);
+	if (description) await expect(page.getByText(description, { exact: true })).toBeVisible();
 	const shown = await button.evaluate((element) => {
 		const style = getComputedStyle(element);
 		return { fill: style.backgroundColor, text: style.color, stroke: style.borderTopColor };
