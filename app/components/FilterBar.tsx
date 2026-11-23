@@ -19,8 +19,9 @@ import { TextField } from "./TextField";
 // A list's filters: a search form that applies itself. There is no Apply button
 // for anyone with JavaScript: a field applies 300ms after typing stops and at
 // once on Enter, a Select as soon as it changes; a field over a list the page
-// already holds applies with each key (`live`). Without JavaScript the form is
-// a plain GET form with an Apply button in <noscript>.
+// already holds applies with each key (`live`). Applying what the address
+// already holds asks for nothing. Without JavaScript the form is a plain GET
+// form with an Apply button in <noscript>.
 
 /** How long a field waits after the last keystroke before it applies. */
 const DEBOUNCE_MS = 300;
@@ -50,21 +51,58 @@ export interface FilterBarProps {
 }
 
 /**
+ * Whether two queries ask for the same thing: the same parameters with the
+ * same values, in whatever order (the tabs write `show` after `q`, the form
+ * before it).
+ */
+export function sameQuery(a: URLSearchParams, b: URLSearchParams): boolean {
+	const sorted = (params: URLSearchParams) => {
+		const copy = new URLSearchParams(params);
+		copy.sort();
+		return copy.toString();
+	};
+	return sorted(a) === sorted(b);
+}
+
+/**
  * The row of a list's filters, as a search landmark. The field and the controls
  * share one row and one baseline, and wrap under 600px. Submitting replaces the
  * address rather than adding to history, keeps the scroll position, and leaves
  * out every empty field, so a cleared search drops its parameter.
+ *
+ * Applying what the address already holds sends nothing: React Router reads
+ * every loader again for a move to the address it is at, so Enter after a
+ * `live` field or a debounced one has applied would ask the server again for
+ * the list on screen, and Projects would take that list, read for the words,
+ * as the one it filters (main run 45137788218). The address compared is the
+ * one in the window, which is the router's once a move has landed; while this
+ * bar's own move is on its way, what it asked for is compared too, so words
+ * typed back to the address's own still apply.
  */
 export function FilterBar({ name, keep, children }: FilterBarProps) {
 	const form = useRef<HTMLFormElement>(null);
 	const submit = useSubmit();
 	const bar = useId();
+	// What this bar last asked for, until the address holds it: while its move is
+	// on its way, the window still holds the address before it.
+	const asked = useRef<URLSearchParams | null>(null);
+	const { search } = useLocation();
+	useEffect(() => {
+		if (asked.current && sameQuery(asked.current, new URLSearchParams(search))) {
+			asked.current = null;
+		}
+	}, [search]);
 	const apply = useCallback(() => {
 		if (!form.current) return;
 		const params = new URLSearchParams();
 		for (const [key, value] of new FormData(form.current)) {
 			if (typeof value === "string" && value.trim() !== "") params.append(key, value);
 		}
+		const held = new URLSearchParams(window.location.search);
+		if (sameQuery(params, held) && (asked.current === null || sameQuery(params, asked.current))) {
+			return;
+		}
+		asked.current = params;
 		submit(params, {
 			method: "get",
 			replace: true,

@@ -76,9 +76,12 @@ export function keptTab(search: URLSearchParams): Record<string, string> | undef
  * Whether a route's data must be read again for a move from `current` to
  * `next`: not when only the tab in the address changed, because the loader
  * already sent both lists. A form sent to the page always reads it again.
+ * An address that did not change at all is no move between tabs: it is a page
+ * asking for its data again (`useRevalidator`, the 30-second refresh), and
+ * gets it.
  */
 export function onlyTabChanged(current: URL, next: URL): boolean {
-	if (current.pathname !== next.pathname) return false;
+	if (current.pathname !== next.pathname || current.search === next.search) return false;
 	const a = new URLSearchParams(current.search);
 	const b = new URLSearchParams(next.search);
 	a.delete(SHOW_PARAM);
