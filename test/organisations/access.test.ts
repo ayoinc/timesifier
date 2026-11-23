@@ -67,9 +67,9 @@ describe("changing a person's entries", () => {
 });
 
 describe("deciding a person's period", () => {
-	it("an owner or admin decides everyone's, their own included", () => {
-		expect(whom(owner, mayDecidePeriodOf)).toEqual(PEOPLE);
-		expect(whom(admin, mayDecidePeriodOf)).toEqual(PEOPLE);
+	it("an owner or admin decides everyone's but their own (D5, decision 47)", () => {
+		expect(whom(owner, mayDecidePeriodOf)).toEqual(PEOPLE.filter((id) => id !== "ada"));
+		expect(whom(admin, mayDecidePeriodOf)).toEqual(PEOPLE.filter((id) => id !== "grace"));
 	});
 
 	it("a manager decides their team's, never their own", () => {

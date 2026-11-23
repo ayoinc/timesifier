@@ -9,7 +9,13 @@ import { dayRulesOf } from "~/leave/rules.server";
 import type { LockNotice, LockReason } from "~/locks/locks";
 import { lockNoticeOf, lockReasonsOn } from "~/locks/locks.server";
 import type { Membership } from "~/organisations/membership.server";
-import { type PeriodDays, PeriodStatus, periodAfter, periodContaining } from "~/periods/periods";
+import {
+	type PeriodDays,
+	PeriodStatus,
+	periodAfter,
+	periodContaining,
+	periodOfWeek,
+} from "~/periods/periods";
 import { hoursLabel } from "~/schedules/schedules";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { runningEntry } from "~/time/entries.server";
@@ -93,10 +99,12 @@ async function projectsOf(scope: OrganisationScope): Promise<ProjectName[]> {
 
 /** The period of `userId` that starts on `startsOn`, once it has been submitted; null before. */
 export async function periodOf(scope: OrganisationScope, userId: string, startsOn: Day) {
-	const [period] = await scope.periods.select(
-		(p) => and(eq(p.userId, userId), eq(p.startsOn, startsOn)),
-		{ limit: 1 },
+	// Found by range, so a week drawn after the day weeks start on changed finds its period (TR-12).
+	const week = { startsOn, endsOn: addDays(startsOn, 6) };
+	const rows = await scope.periods.select((p) =>
+		and(eq(p.userId, userId), lte(p.startsOn, week.endsOn), gte(p.endsOn, week.startsOn)),
 	);
+	const { row: period } = periodOfWeek(rows, week);
 	if (!period) return null;
 	return { ...period, status: PeriodStatus.parse(period.status) };
 }
@@ -142,6 +150,8 @@ export interface PeriodSubmission {
 	started: boolean;
 	/** The days of the week over their limit: the week cannot be submitted until each is corrected (TS-090). */
 	over: DayRule[];
+	/** Whether the lock date has reached a day of a returned week, which holds it until the date moves back (TR-07). */
+	heldByLock?: boolean;
 }
 
 /** One day of the person's week as leave sees it (TS-061). */
@@ -374,12 +384,16 @@ async function periodWithEntries(
 	now: number,
 ): Promise<{ entries: SheetEntry[]; rules: DayRule[]; submission: PeriodSubmission }> {
 	const days = daysFrom(period.startsOn, period.endsOn);
-	const [entries, row] = await Promise.all([
+	const [entries, row, locks] = await Promise.all([
 		entriesOn(scope, userId, period.startsOn, period.endsOn),
 		periodOf(scope, userId, period.startsOn),
+		lockReasonsOn(scope, userId, days, now),
 	]);
 	const rules = await dayRulesOf(scope, userId, days, entries, now);
-	return { entries, rules, submission: submissionOf(period, row, entries, rules, zone, now) };
+	const submission = submissionOf(period, row, entries, rules, zone, now);
+	submission.heldByLock =
+		submission.state === "returned" && [...locks.values()].includes("locked-through");
+	return { entries, rules, submission };
 }
 
 /** Where `period` stands, given its row of `periods` (null before it is submitted), the entries read around it and its days' limits. */

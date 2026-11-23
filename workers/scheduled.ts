@@ -2,7 +2,7 @@ import { deleteExpiredActivity } from "~/activity/activity.server";
 import { platformData } from "~/db";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
 import { runBillingSchedule } from "~/invoices/schedule.server";
-import { runAutoLock } from "~/locks/locks.server";
+import { runAutoLock, runLockReach } from "~/locks/locks.server";
 import { sendWaitingMail } from "~/platform/mail.server";
 
 /**
@@ -11,7 +11,8 @@ import { sendWaitingMail } from "~/platform/mail.server";
  *
  * - Every minute: the webhooks' deliveries that are due are sent (TS-087), and
  *   the next mailings to account holders, within the day's cap (TS-099).
- * - Every hour: auto-lock (TS-065); recurring invoices that are due are issued
+ * - Every hour: auto-lock (TS-065), then the lock date reaching the days that
+ *   have ended since (D7: timers on them stopped, weeks auto-submitted); recurring invoices that are due are issued
  *   and overdue invoices are reminded (TS-074, TS-078).
  * - Every day at 03:17 UTC: rows past their retention are deleted: activity
  *   records after 730 days (TS-072), sign-ins after 90 (TS-099). TS-033 adds
@@ -31,6 +32,7 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 	}
 	if (controller.cron === HOURLY) {
 		await runAutoLock(now);
+		await runLockReach(now);
 		await runBillingSchedule(now);
 	}
 	if (controller.cron === DAILY) {

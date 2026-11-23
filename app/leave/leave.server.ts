@@ -3,11 +3,13 @@ import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record } from "~/activity/activity.server";
+import { leaveRefusersOf } from "~/approvals/refusals.server";
 import { among, type OrganisationScope, type ScopedAccessor, users } from "~/db";
-import { lockDateOf } from "~/locks/locks.server";
+import { lockDateOf, lockReachFor } from "~/locks/locks.server";
 import {
 	type Access,
 	isAdministrator,
+	mayApproveAfterRefusals,
 	mayCancelLeaveOf,
 	mayChangeTimeOf,
 	mayDecideLeaveOf,
@@ -325,7 +327,7 @@ export async function requestLeave(
 			problem: { field: "endsOn", message: "The last day comes before the first." },
 		};
 	}
-	const lockedThrough = await lockDateOf(scope.organisationId);
+	const lockedThrough = await lockReachFor(scope.organisationId, userId, now.getTime());
 	if (lockedThrough !== null && span.startsOn <= lockedThrough) {
 		return {
 			ok: false,
@@ -510,8 +512,12 @@ export async function someoneElseDecides(
 	return managers.length > 0;
 }
 
-/** What a step on a request came to. `locked`: its days reach the lock date (TS-065). */
-export type Stepped = "done" | "missing" | "not-allowed" | "stale" | "locked";
+/**
+ * What a step on a request came to. `locked`: its days reach the lock date
+ * (TS-065). `refused-before`: someone else refused these days, so only they,
+ * an owner or an admin may approve them (D5, decision 47).
+ */
+export type Stepped = "done" | "missing" | "not-allowed" | "stale" | "locked" | "refused-before";
 
 async function requestRow(scope: OrganisationScope, id: string) {
 	const [row] = await scope.leaveRequests.select((r) => eq(r.id, id), { limit: 1 });
@@ -552,6 +558,12 @@ export async function decideLeave(
 	if (!row) return "missing";
 	if (!mayDecideLeaveOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "pending") return "stale";
+	if (
+		decision.action === "approved" &&
+		!mayApproveAfterRefusals(access, await leaveRefusersOf(scope, row))
+	) {
+		return "refused-before";
+	}
 	if (await reachesLockDate(scope, row)) return "locked";
 	const changed = await scope.leaveRequests.update(
 		{

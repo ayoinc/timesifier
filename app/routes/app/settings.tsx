@@ -51,6 +51,7 @@ import { AS_ROLE } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows } from "~/organisations/roles";
 import { WeekStart } from "~/periods/periods";
+import { weekStartRefusal } from "~/periods/submission.server";
 import { planStanding } from "~/plans/plans.server";
 import { SUPPORT_ACCESS_SEGMENT, WELLBEING_SEGMENT } from "~/platform/paths";
 import { activeGrant } from "~/platform/support.server";
@@ -293,6 +294,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 				return done(`The default time zone is now ${zoneLabel(input.timeZone)}.`);
 			}
 			if (input.intent === "week-start") {
+				const waiting =
+					input.weekStartsOn === organisation.weekStartsOn
+						? null
+						: await weekStartRefusal(organisationScope(env.DB, organisation.id));
+				if (waiting) return declined(waiting, 409);
 				await changeGeneral(env.DB, organisation.id, { weekStartsOn: input.weekStartsOn });
 				return done(`Weeks now start on ${weekdayName(input.weekStartsOn)}.`);
 			}

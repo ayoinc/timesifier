@@ -1,16 +1,11 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gte, isNull, lte } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
+import { someoneElseDecides } from "~/leave/leave.server";
 import type { DayRule } from "~/leave/rules";
 import { daysOver } from "~/leave/rules.server";
-import {
-	type PeriodDays,
-	PeriodStatus,
-	periodBounds,
-	periodContaining,
-	statusAfter,
-} from "./periods";
+import { PeriodStatus, periodBounds, periodContaining, periodOfWeek, statusAfter } from "./periods";
 
 /**
  * A person submitting their own period, and withdrawing it before anybody has
@@ -33,23 +28,67 @@ export interface Step {
 	now: number;
 }
 
-async function current(scope: OrganisationScope, userId: string, startsOn: string) {
-	const [row] = await scope.periods.select(
-		(p) => and(eq(p.userId, userId), eq(p.startsOn, startsOn)),
-		{ limit: 1 },
+/**
+ * The period of `userId` for the week that starts on `startsOn` as the
+ * organisation now draws it, found among their periods on record by range
+ * (`periodOfWeek`, TR-12), with its row when it has one.
+ */
+async function current(
+	scope: OrganisationScope,
+	userId: string,
+	startsOn: string,
+	weekStartsOn: number,
+) {
+	const week = periodContaining(startsOn, weekStartsOn);
+	const rows = await scope.periods.select((p) =>
+		and(eq(p.userId, userId), lte(p.startsOn, week.endsOn), gte(p.endsOn, week.startsOn)),
 	);
-	return row ? { ...row, status: PeriodStatus.parse(row.status) } : null;
+	const { period, row } = periodOfWeek(rows, week);
+	return { period, row: row ? { ...row, status: PeriodStatus.parse(row.status) } : null };
+}
+
+/** What a week approved as it is submitted says, because nobody else may approve it (D5, decision 47). */
+export const WEEK_APPROVED_ALONE = "Approved automatically: nobody else can approve it";
+
+/**
+ * The writes that approve the period `id` of `userId` as the system, at
+ * `at`, in the batch that submits it: nobody but its person may approve it
+ * (D5, decision 47), as `someoneElseDecides` says.
+ */
+export function approvedAlone(scope: OrganisationScope, id: string, userId: string, at: Date) {
+	return [
+		scope.periods.statements.update(
+			{ status: "approved", decidedBy: null, decidedAt: at, comment: WEEK_APPROVED_ALONE },
+			(p) => and(eq(p.id, id), eq(p.status, "submitted")),
+		),
+		scope.periodEvents.statements.insert({
+			periodId: id,
+			action: "approved",
+			actorId: null,
+			comment: WEEK_APPROVED_ALONE,
+		}),
+		recordStatement(
+			scope,
+			null,
+			"period.approved",
+			{ type: "period", id, ownerId: userId },
+			changes({ status: "submitted" }, { status: "approved" }, ["status"]),
+			"system",
+		),
+	] as const;
 }
 
 /**
  * Submits the period of `userId` that starts on `startsOn`. Refused for a
  * week that has not begun, while a timer of theirs runs in it, while a day of
  * it holds more time than the day takes (TS-090: `over` names those days),
- * and when the period is already submitted or approved.
+ * and when the period is already submitted or approved. A person nobody else
+ * may approve for has the week approved by the system as it is submitted
+ * (D5, decision 47): `alone` says so.
  */
 export async function submitPeriod(scope: OrganisationScope, step: Step) {
 	const { userId, startsOn, zone, weekStartsOn, now } = step;
-	const period: PeriodDays = periodContaining(startsOn, weekStartsOn);
+	const { period, row } = await current(scope, userId, startsOn, weekStartsOn);
 	if (periodBounds(period, zone).from > now) {
 		return { ok: false as const, reason: "not-yet" as NotMoved };
 	}
@@ -65,7 +104,6 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 		return { ok: false as const, reason: "running" as NotMoved };
 	}
 
-	const row = await current(scope, userId, period.startsOn);
 	const status = row?.status ?? null;
 	if (statusAfter(status, "submitted") === null) {
 		return { ok: false as const, reason: "not-from-here" as NotMoved };
@@ -76,6 +114,8 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 
 	const at = new Date(now);
 	const id = row?.id ?? uuidv7();
+	const alone = !(await someoneElseDecides(scope, userId));
+	const approval = alone ? approvedAlone(scope, id, userId, at) : [];
 	const event = scope.periodEvents.statements.insert({
 		periodId: id,
 		action: "submitted",
@@ -97,6 +137,7 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 			),
 			event,
 			recorded,
+			...approval,
 		]);
 	} else {
 		await scope.batch([
@@ -110,17 +151,18 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 			}),
 			event,
 			recorded,
+			...approval,
 		]);
 	}
-	return { ok: true as const, period };
+	return { ok: true as const, period, alone };
 }
 
 /** Withdraws the submitted, undecided period of `userId` that starts on `startsOn`. */
 export async function withdrawPeriod(
 	scope: OrganisationScope,
-	{ userId, startsOn }: Pick<Step, "userId" | "startsOn">,
+	{ userId, startsOn, weekStartsOn }: Pick<Step, "userId" | "startsOn" | "weekStartsOn">,
 ) {
-	const row = await current(scope, userId, startsOn);
+	const { row } = await current(scope, userId, startsOn, weekStartsOn);
 	if (!row || statusAfter(row.status, "withdrawn") === null) {
 		return { ok: false as const, reason: "not-from-here" as NotMoved };
 	}
@@ -143,4 +185,18 @@ export async function withdrawPeriod(
 		),
 	]);
 	return { ok: true as const };
+}
+
+/**
+ * Why the day weeks start on cannot change now, or null when it can (TR-12):
+ * while any week of the organisation is submitted and undecided, it would be
+ * stranded under weeks drawn another way. Once it may change, a new week
+ * begins after every period on record (`periodOfWeek`), so none overlaps.
+ */
+export async function weekStartRefusal(scope: OrganisationScope): Promise<string | null> {
+	const waiting = (await scope.periods.select((p) => eq(p.status, "submitted"))).length;
+	if (waiting === 0) return null;
+	return waiting === 1
+		? "1 week is waiting for a decision. Approve or return it before weeks start on another day."
+		: `${waiting} weeks are waiting for a decision. Approve or return them before weeks start on another day.`;
 }

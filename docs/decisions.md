@@ -637,3 +637,51 @@ The four details belong to one deployment, so none of them is in the code (TS-03
 **Not decided, and nothing is said about them on any page:** a registration with the Information Commissioner's Office, a VAT number, and a representative in the European Union. The emails name no company: the owner decided that they carry no company name or address until they say otherwise.
 
 **Structured data (decided by the owner on 2026-11-22).** Entry 43 left the legal name out of the home page's structured data because no page named the company yet. Now the pages do, and the owner chose to give the legal name and company number there too. The `Organization` keeps the brand as `name` and adds `legalName`, which is in [Google's Organization structured-data documentation](https://developers.google.com/search/docs/appearance/structured-data/organization) ("The registered, legal name of your `Organization`, if applicable and different from the `name` property"). That page has no property for a national company number. Its one general identifier, `iso6523Code`, needs an ISO 6523 scheme code (its examples are DUNS `0060`, GLN `0088` and LEI `0199`). The ICD list published for Peppol has no Companies House scheme, and the deployment's settings hold no DUNS number or LEI. So the number goes in schema.org's general [`identifier`](https://schema.org/identifier) as a `PropertyValue` with `propertyID` "Company number". It is valid schema.org, but Google does not list it and may not use it. Both values come from `OPERATOR_NAME` and `OPERATOR_COMPANY_NUMBER`, the settings that the foot of the page reads, and `app/landing/structured-data.ts` writes them. Where no company is named (the page's loader gave none), the data is the brand alone. The registered office is not added: the owner asked for the name and number.
+
+### 47. Who approves: nobody their own, the system where nobody else may, and a refusal holds
+
+Decided by the owner on 2026-11-13 (OQ6 of `research/time-rules-scenarios.md`), on card TS-111d. Amends the rule for periods in TS-047 and `docs/security.md` ("Whose time"), and extends to weeks what TS-061 and TS-090 already did for leave and work requests.
+
+- **Nobody approves their own week.** `mayDecidePeriodOf` refuses a person their own period whatever their role, owners and admins included (U2 and O1e no longer hold). Approvals no longer offers it, Approve all leaves it, and the number on the Approvals link no longer counts it.
+- **The system approves where nobody else may.** A week whose person has no other owner or admin and no manager of a team they are in (`someoneElseDecides`) is approved by the system in the batch that submits it, whoever submits it: the person, or auto-submit at the lock date. The period records no decider, the comment "Approved automatically: nobody else can approve it", an `approved` step with no actor, and `period.approved` from the system; Submit says "Week submitted and approved automatically: nobody else can approve it.", and Approvals reads "Approved by the system". Leave and work requests already did this (TS-061, TS-090).
+- **A refusal holds.** Once a request for leave, or for overtime or weekend work, is refused, a request of the same person for any of the same days (of the same kind, for work) can be approved only by whoever refused the earlier one, or by an owner or admin (`mayApproveAfterRefusals`). Any other manager is told why on Approvals, beside the request, and in the answer to Approve: "Nils refused these days before, so only they, an owner or an admin can approve this." They may still refuse it. This closes M1b, where a person asked a second manager what the first had refused.
+
+| Option                                                      | Evidence                                                                                                               |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Nobody their own, the system where nobody else may (chosen) | One rule for weeks, leave and work; the sole owner is not stuck, and what the system approved says so in three places. |
+| Owners and admins approve their own (before)                | The person who pays approves what they are paid for; nothing in the log tells it apart from anyone else's approval.    |
+| A sole owner's week waits for ever                          | Nobody could ever approve it.                                                                                          |
+| Any manager may approve what another refused (before)       | Asking each manager in turn until one says yes (M1b).                                                                  |
+
+**What it costs.** An owner or admin who works alongside another must ask them to approve their week. A refused request can no longer be approved by the other manager of a person in two teams, only refused, unless the first changes their mind or an owner or admin decides.
+
+### 48. A manager on leave is skipped
+
+Decided by the owner on 2026-11-13 (OQ10), on card TS-111d.
+
+A manager on leave all of today where they are (approved leave covering both halves of their day) is skipped: nothing waits on them while they are away, so the number on their Approvals link is 0 (`pendingApprovalsOf`). They can still open Approvals and decide; skipping only stops it waiting on them. Whatever waits on a manager who is away waits on the organisation's owners and admins, who already see and count every week and request: where every manager of a person, other than the person, is away, Approvals tells owners and admins so beside the week or the request ("Mona is on leave, so this waits for an owner or admin.", `managersAwayOf`). Half a day of leave does not skip a manager.
+
+| Option                                                                | Evidence                                                                                                           |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Skip a manager away all day, and say so to owners and admins (chosen) | Nothing waits on someone who is not there, and the people who can decide in their place are told why it is theirs. |
+| Refuse a manager on leave any decision                                | A manager who looks in while away could not clear what waits; nothing is gained.                                   |
+| Approve automatically while the manager is away                       | Approval would depend on someone's holiday, not on anyone's judgement.                                             |
+
+**What it costs.** One query of today's leave on every page a manager opens, to give them nothing waiting while away; owners and admins pay one more on Approvals.
+
+### 49. The lock date reaches a person's day once that day has ended where they are
+
+Decided by the owner on 2026-11-13 (OQ7), on card TS-111d. Amends TS-065's "the lock date is the organisation's day" and entry 39's readers of the lock.
+
+The lock date is still a day of the organisation's, set by owners and admins or by auto-lock in the organisation's zone. It reaches a person's day only once that day has ended in their zone: `lockReachOf` (`app/locks/locks.ts`) gives, for a zone and an instant, the lock date or the last day that has ended there, whichever is earlier. Every reader of the lock asks it: the writers of time and expenses (`lockReasonsOn`, and so the timer, Track time, edits, the Week grid's cells, copy, the API), the Day view and the Week grid, the import and its revert (each row's person's zone), the leave a person asks for, submission and auto-submit, auto-lock, returning and reopening a week, and the timers the lock stops. Workspace settings says so beside the field.
+
+- **Today can be locked.** A lock date of today, or auto-lock with no days' wait, takes nobody's day from them before it is over; in Los Angeles Linus keeps his Friday until his midnight (K3, P1).
+- **The hour after.** Every hour, after auto-lock, `runLockReach` looks at organisations whose lock date is two days old or newer: a timer on a day the date has now reached is stopped by the system at the end of that day (TR-02), and, where auto-submit is on, a week whose deadline has now passed is submitted (TR-15).
+
+| Option                                                      | Evidence                                                                               |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Reach each person's day once it has ended for them (chosen) | Nobody loses part of a day they are working; the date stays one date, set in one zone. |
+| Keep the organisation's day and say so beside the field     | Settles nothing for the person to the west, who still loses their afternoon.           |
+| Lock only days before today                                 | Still takes the end of yesterday from anyone behind the organisation's zone.           |
+
+**What it costs.** For up to a day after the date moves, a person behind the organisation's zone can still change the date's last day, and auto-submit reaches their week up to an hour after their day ends. A timer is stopped at the end of its day, so time worked past that midnight is not recorded by it.

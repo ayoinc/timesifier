@@ -641,6 +641,24 @@ What follows from the decisions, and is not a defect: a change to the working we
 
 Not in this card: leave accrued month by month, carry-over, hours of leave rather than half days, a working week or holiday calendar per person or team, and the team calendar (TS-041).
 
+### TS-111d · The rules hold together, part 2: locks, approvals and who decides
+
+Builder: an AI session on branch `ts-111d-locks`, stacked on #68 (with #66, #67, #70 and #72 under it). The time-rules review (`research/time-rules-scenarios.md`), TR-01, TR-02, TR-07, TR-12 and TR-15, and the owner's decisions D5, D6 and D7 (OQ6, OQ10, OQ7): decisions 47, 48 and 49. No migration.
+
+- [x] TR-01: Approvals shows on each waiting week what Submit would have refused, "Over by 7:30 on Tue 10", and "Submitted by the system" when the system submitted it; Approve all leaves weeks with a day over and says how many; approving one alone asks first and its record says it was over (`test/pages/lock-date.test.ts`, "a week the system submits with a day over its limit says so to its approver").
+- [x] TR-02: a timer running on a day the lock date reaches is stopped by the system at the move, recorded with no actor, and cut at the limit, by the Cron Trigger and by hand; one after the locked days runs on (`test/pages/lock-date.test.ts`, "a timer running on a day the lock date reaches is stopped by the system at that moment", "moving the lock date by hand stops a timer on the days it locks, and one after them runs on").
+- [x] TR-02: neither Approve nor Approve all approves a week in which its person's timer runs (`test/pages/lock-date.test.ts`, "a week with a running timer is not approved").
+- [x] TR-07: returning or reopening a week on locked days is refused with what to do (`test/pages/approvals-rules.test.ts`, "a week on locked days is not returned as if it could be changed").
+- [x] TR-07: auto-submit leaves a returned week returned, with its reason, and its Day view says only that the lock date holds it (`test/pages/lock-date.test.ts`, "auto-submit leaves a returned week as it is, with its reason").
+- [x] TR-12: the day weeks start on does not change while a week waits, and a week drawn after the change begins after every period on record; periods are found by range (`test/pages/settings.test.ts`, "the week's first day does not change under a week that is waiting"; `test/periods/periods.test.ts`, "a person's period found by range").
+- [x] TR-15: a week is auto-submitted once its days with expected hours are all locked: a Friday deadline submits the week it closes (`test/pages/lock-date.test.ts`, "a Friday deadline submits the week it closes").
+- [x] D5: nobody approves their own week, owners and admins included (`test/pages/approvals-rules.test.ts`, "nobody approves their own week, owners and admins included").
+- [x] D5: a week nobody else may approve is approved by the system as it is submitted, and says so (`test/pages/approvals-rules.test.ts`, "the system approves a week nobody else may approve, and says so").
+- [x] D5: after a refusal, only whoever refused, an owner or an admin approves a request for the same days, and the others are told why (`test/pages/approvals-rules.test.ts`, "after a manager refuses, only they or an owner or admin approve a request for the same days").
+- [x] D6: a manager on leave all day is skipped, and owners and admins are told what waits on them (`test/pages/approvals-rules.test.ts`, "is skipped: what waits on them is shown to owners and admins as theirs").
+- [x] D7: the lock date reaches a person's day once it has ended where they are, for the writers, the Week grid's cells, the Day view and the timers it stops; Workspace settings says so (`test/pages/lock-date.test.ts`, "locks today for each person only at their midnight", "stops a timer once its day has ended where its person is", "says so in Workspace settings beside the field"; `test/locks/locks.test.ts`, "lockReachOf (D7)"; `test/integrations/import.test.ts`, "reads the lock date in each row's person's zone").
+- [x] `docs/security.md` (Locks, Whose time) and decisions 47, 48 and 49.
+
 ## Ready (limit 3)
 
 The next cards, in the order they are pulled. A card is pulled only when every card on its "Depends on" line is Done. Ready holds four cards until TS-036 is pulled: the owner added it on 2026-11-11, ahead of the three that were here.

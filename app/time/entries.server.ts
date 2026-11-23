@@ -173,16 +173,45 @@ export async function stopTimer(
 }
 
 /**
+ * Stops the running entry `entryId` of `userId` at `at`, as the system: the
+ * lock date has reached its day (TR-02). It is recorded as stopped with no
+ * actor and source `system`, and cut at its day's limit as any timer is
+ * (`splitStopped`). Returns the entry as it ends; null when it no longer ran.
+ */
+export async function stopBySystem(
+	scope: OrganisationScope,
+	userId: string,
+	entryId: string,
+	at: number,
+) {
+	const [stopped] = await scope.timeEntries.update({ endedAt: new Date(at) }, (e) =>
+		and(eq(e.id, entryId), eq(e.userId, userId), isNull(e.endedAt)),
+	);
+	if (!stopped) return null;
+	await record(
+		scope,
+		null,
+		"time_entry.stopped",
+		{ type: "time_entry", id: stopped.id, ownerId: userId },
+		changes({ endedAt: null }, { endedAt: stopped.endedAt }, ["endedAt"]),
+		"system",
+	);
+	return (await splitStopped(scope, stopped, "system", null)) ?? stopped;
+}
+
+/**
  * Cuts an entry of regular time, just stopped, at its day's limit (TS-095,
  * `stopSplitOf`): it ends where the day's expected hours were used, and an
  * entry of overtime, of the same project, task, description and tags, runs
  * from there to its end. One wholly past the limit becomes overtime. Returns
- * the entry as it now is, or null when nothing changed.
+ * the entry as it now is, or null when nothing changed. `actor` is who the
+ * cut is recorded as made by: the person, or null for the system.
  */
 async function splitStopped(
 	scope: OrganisationScope,
 	stopped: Entry,
 	source: ActivitySource,
+	actor: string | null = stopped.userId,
 ): Promise<Entry | null> {
 	if (stopped.overtime || stopped.endedAt === null) return null;
 	const { userId, endedAt } = stopped;
@@ -201,7 +230,7 @@ async function splitStopped(
 			),
 			recordStatement(
 				scope,
-				userId,
+				actor,
 				"time_entry.split",
 				subject,
 				changes({ overtime: false }, { overtime: true }, ["overtime"]),
@@ -232,7 +261,7 @@ async function splitStopped(
 		...entryTagStatements(scope, rest.id, [], tags),
 		recordStatement(
 			scope,
-			userId,
+			actor,
 			"time_entry.split",
 			subject,
 			changes({ endedAt }, { endedAt: from }, ["endedAt"]),
@@ -240,7 +269,7 @@ async function splitStopped(
 		),
 		recordStatement(
 			scope,
-			userId,
+			actor,
 			"time_entry.created",
 			{ ...subject, id: rest.id },
 			changes(null, rest, [

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { useState } from "react";
 import * as z from "zod";
 
+import { REFUSED_BEFORE } from "~/approvals/words";
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
@@ -284,6 +285,7 @@ const STEPPED: Record<Exclude<Stepped, "done">, [string, number]> = {
 	"not-allowed": [NOT_ALLOWED, 403],
 	stale: ["That request has changed since this page was opened. Look at it again.", 409],
 	locked: ["Those days are on or before the lock date, so the request can no longer change.", 409],
+	"refused-before": [REFUSED_BEFORE, 403],
 };
 
 function outcome(result: Stepped, said: string) {

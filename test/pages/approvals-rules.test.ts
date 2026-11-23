@@ -17,6 +17,7 @@ import {
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedLeave } from "./leave-seed";
+import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Approvals and Reports with the timesheet rules (TS-090): requests for
 // overtime and weekend work wait on Approvals beside leave and are decided the
@@ -272,5 +273,192 @@ describe("short notice on Reports", () => {
 		const own = await peopleOf(bob);
 		expect(own).not.toContain("grace@example.com");
 		expect(own).not.toContain("Short-notice requests");
+	});
+});
+
+describe("weeks on locked days (TR-07)", () => {
+	it("a week on locked days is not returned as if it could be changed", async () => {
+		// L1: Grace's week 2–8 November is submitted, then the lock date reaches it.
+		const grace = await memberOfAcme("member", "grace@example.com");
+		const site = await seedProject(acme.id, "Site");
+		const entry = await seedEntry(
+			acme.id,
+			grace.user.id,
+			site,
+			"2026-11-03T09:00:00Z",
+			"2026-11-03T16:30:00Z",
+		);
+		const periodId = await seedPeriod(acme.id, grace.user.id, "2026-11-02");
+		const settings = "/app/acme/settings";
+		await submit(settings, { intent: "lock-date", lockedThrough: "2026-11-08" }, ada, {
+			byScript: true,
+		});
+		const week = `${APPROVALS}?week=2026-11-02`;
+		const say = async (fields: Record<string, string>) => {
+			const response = await submit(week, fields, ada, { byScript: true });
+			return { status: response.status, said: await response.text() };
+		};
+
+		const returned = await say({
+			intent: "return",
+			periodId,
+			comment: "Tuesday is on the wrong project.",
+		});
+		expect(returned.status).toBe(409);
+		expect(returned.said).toContain(
+			"This week is on or before the lock date, Sunday 8 November. Move the lock date back first, or approve it as it is.",
+		);
+		expect(await value("select status from periods where id = ?", periodId)).toBe("submitted");
+		expect((await say({ intent: "approve", periodId })).status).toBe(200);
+		const reopened = await say({ intent: "reopen", periodId, comment: "Wrong project." });
+		expect(reopened.status).toBe(409);
+		expect(reopened.said).toContain("Move the lock date back first");
+		expect(await value("select status from periods where id = ?", periodId)).toBe("approved");
+
+		// Moved back, with a reason, the week is reopened and she can change it.
+		await submit(
+			settings,
+			{ intent: "lock-date", lockedThrough: "2026-11-01", reason: "Corrections" },
+			ada,
+			{
+				byScript: true,
+			},
+		);
+		expect((await say({ intent: "reopen", periodId, comment: "Wrong project." })).status).toBe(200);
+		const edit = await submit(
+			"/app/acme?index",
+			{
+				intent: "edit",
+				entryId: entry,
+				projectId: site,
+				date: "2026-11-03",
+				start: "09:00",
+				end: "16:00",
+			},
+			grace,
+			{ byScript: true },
+		);
+		expect(edit.status).toBe(200);
+	});
+});
+
+describe("who approves (D5)", () => {
+	const ADA_WEEK = `${APPROVALS}?week=2026-11-02`;
+
+	it("nobody approves their own week, owners and admins included", async () => {
+		const hedy = await memberOfAcme("admin", "hedy@example.com");
+		const mine = await seedPeriod(acme.id, ada.user.id, "2026-11-02");
+		const theirs = await seedPeriod(acme.id, hedy.user.id, "2026-11-02");
+		const approve = (who: Person, periodId: string) =>
+			submit(ADA_WEEK, { intent: "approve", periodId }, who, { byScript: true });
+		expect((await approve(ada, mine)).status).toBe(403);
+		expect((await approve(hedy, theirs)).status).toBe(403);
+		// Nor in Approve all, and their own does not wait for them.
+		await submit(ADA_WEEK, { intent: "approve-all", startsOn: "2026-11-02" }, ada, {
+			byScript: true,
+		});
+		expect(await value("select status from periods where id = ?", mine)).toBe("submitted");
+		expect(await value("select status from periods where id = ?", theirs)).toBe("approved");
+		expect(textOf(await pageBody(await open("/app/acme/projects", ada)))).not.toMatch(
+			/Approvals 1 pending/,
+		);
+		expect((await approve(hedy, mine)).status).toBe(200);
+	});
+
+	it("the system approves a week nobody else may approve, and says so", async () => {
+		const site = await seedProject(acme.id, "Site");
+		await seedEntry(acme.id, ada.user.id, site, "2026-11-03T09:00:00Z", "2026-11-03T10:00:00Z");
+		const response = await submit(
+			"/app/acme?index",
+			{ intent: "submit", startsOn: "2026-11-02" },
+			ada,
+			{
+				byScript: true,
+			},
+		);
+		expect(response.status).toBe(200);
+		expect(await response.text()).toContain("approved automatically: nobody else can approve it");
+		expect(
+			await row(
+				"select status, decided_by as decidedBy, comment from periods where user_id = ?",
+				ada.user.id,
+			),
+		).toEqual({
+			status: "approved",
+			decidedBy: null,
+			comment: "Approved automatically: nobody else can approve it",
+		});
+		expect(
+			await value(
+				"select count(*) from period_events where action = 'approved' and actor_id is null",
+			),
+		).toBe(1);
+		// The log says the system approved it, about Ada, with no actor.
+		expect(
+			await row(
+				"select actor_id as actorId, source, owner_id as ownerId from activity_records where action = 'period.approved'",
+			),
+		).toEqual({ actorId: null, source: "system", ownerId: ada.user.id });
+	});
+
+	async function inTwoTeams() {
+		const { grace, mona, nils } = await seedPeople();
+		const ops = await value<string>("select id from teams where name = 'Ops'");
+		await env.DB.prepare(
+			"insert into team_members (id, organisation_id, team_id, user_id, is_manager, created_at, updated_at) values (?, ?, ?, ?, 0, 0, 0)",
+		)
+			.bind(uuidv7(), acme.id, ops, grace.user.id)
+			.run();
+		return { grace, mona, nils };
+	}
+
+	it("after a manager refuses, only they or an owner or admin approve a request for the same days", async () => {
+		const { grace, mona, nils } = await inTwoTeams();
+		const first = await seedWork(grace.user.id, "overtime", "2099-11-10", "2099-11-10");
+		expect((await ask(nils, { intent: "refuse-work", requestId: first })).status).toBe(200);
+		const again = await seedWork(grace.user.id, "overtime", "2099-11-09", "2099-11-10");
+		const blocked = await ask(mona, { intent: "approve-work", requestId: again });
+		expect(blocked.status).toBe(403);
+		expect(blocked.said).toContain(
+			"nils@example.com refused these days before, so only they, an owner or an admin can approve this.",
+		);
+		expect(await workStatusOf(again)).toBe("pending");
+		expect(textOf(await pageBody(await open(APPROVALS, mona)))).toContain(
+			"nils@example.com refused these days before",
+		);
+		expect((await ask(nils, { intent: "approve-work", requestId: again })).status).toBe(200);
+
+		// Leave the same: refused by Mona, asked again, approved by the owner.
+		const leave = await seedLeave(acme.id, grace.user.id, "annual", "2099-12-14", "2099-12-15", {
+			status: "pending",
+		});
+		expect((await ask(mona, { intent: "refuse-leave", requestId: leave })).status).toBe(200);
+		const asked = await seedLeave(acme.id, grace.user.id, "annual", "2099-12-15", "2099-12-15", {
+			status: "pending",
+		});
+		expect((await ask(nils, { intent: "approve-leave", requestId: asked })).status).toBe(403);
+		expect((await ask(ada, { intent: "approve-leave", requestId: asked })).status).toBe(200);
+	});
+});
+
+describe("a manager on leave (D6)", () => {
+	it("is skipped: what waits on them is shown to owners and admins as theirs", async () => {
+		const { grace, mona } = await seedPeople();
+		// Mona is on annual leave all of this week and next.
+		const today = new Date().toISOString().slice(0, 10);
+		const until = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+		await seedLeave(acme.id, mona.user.id, "annual", today, until);
+		await seedLeave(acme.id, grace.user.id, "annual", "2099-12-14", "2099-12-15", {
+			status: "pending",
+		});
+		const owners = textOf(await pageBody(await open(APPROVALS, ada)));
+		expect(owners).toContain("mona@example.com is on leave, so this waits for an owner or admin.");
+		expect(textOf(await pageBody(await open("/app/acme/projects", ada)))).toMatch(
+			/Approvals 1 pending/,
+		);
+		// Nothing waits on Mona while she is away.
+		expect(textOf(await pageBody(await open("/app/acme/projects", mona)))).not.toMatch(
+			/Approvals 1 pending/,
+		);
 	});
 });

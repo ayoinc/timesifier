@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { uuidv7 } from "~/db";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { createOrganisation, seedMembership, value } from "../organisations/harness";
+import { createOrganisation, seedMember, seedMembership, value } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
 import { entryDay } from "./periods-seed";
@@ -238,6 +238,8 @@ describe("Track time's own data for any date (HT-C) and the picker's month (HT-D
 		expect(day.rule?.closedReason).toMatch(/leave/i);
 		expect(day.lockReason).toBeNull();
 
+		// Someone else approves Ada's week, so it waits for them (D5).
+		await seedMember(acme.id, "admin", "hedy@example.com");
 		expect(await post({ intent: "submit", startsOn: "2026-11-09" })).toBe(200);
 		const locked = await (await open("/app/acme/timesheet/day?day=2026-11-10", ada)).json<{
 			lockReason: string | null;

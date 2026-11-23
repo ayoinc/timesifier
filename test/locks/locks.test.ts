@@ -4,6 +4,7 @@ import {
 	type LockReason,
 	lockOf,
 	lockOfChange,
+	lockReachOf,
 	mayChangeItem,
 } from "~/locks/locks";
 import { locksEntries, PeriodStatus } from "~/periods/periods";
@@ -126,5 +127,21 @@ describe("a change to an item", () => {
 		expect(mayChangeItem(null, free)).toBe(true);
 		expect(mayChangeItem(free, null)).toBe(true);
 		expect(mayChangeItem(null, null)).toBe(true);
+	});
+});
+
+describe("lockReachOf (D7)", () => {
+	// Wednesday 11 November 2026 at 10:00 in London is 02:00 in Los Angeles.
+	const now = Date.parse("2026-11-11T10:00:00Z");
+
+	it("reaches a day only once it has ended where the person is", () => {
+		expect(lockReachOf("2026-11-11", "Europe/London", now)).toBe("2026-11-10");
+		expect(lockReachOf("2026-11-11", "America/Los_Angeles", now)).toBe("2026-11-10");
+		expect(lockReachOf("2026-11-10", "America/Los_Angeles", now)).toBe("2026-11-10");
+		expect(
+			lockReachOf("2026-11-10", "America/Los_Angeles", Date.parse("2026-11-11T07:00:00Z")),
+		).toBe("2026-11-09");
+		expect(lockReachOf("2026-11-09", "Pacific/Auckland", now)).toBe("2026-11-09");
+		expect(lockReachOf(null, "Europe/London", now)).toBeNull();
 	});
 });

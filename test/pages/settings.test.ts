@@ -14,6 +14,7 @@ import {
 	value,
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
+import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Workspace settings of an organisation, /app/<slug>/settings: the
 // organisation's name and its deletion, which the server allows by role, and
@@ -408,6 +409,61 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 			startsOn: "2026-11-08",
 			endsOn: "2026-11-14",
 		});
+	});
+
+	it("the week's first day does not change under a week that is waiting", async () => {
+		// J5: Grace's week 2–8 November is submitted when weeks are made to start on Sunday.
+		const grace = await memberOfAcme("member", "grace@example.com");
+		const site = await seedProject(acme.id, "Site");
+		await seedEntry(acme.id, grace.user.id, site, "2026-11-03T09:00:00Z", "2026-11-03T16:30:00Z");
+		const periodId = await seedPeriod(acme.id, grace.user.id, "2026-11-02");
+		const refused = await submit(SETTINGS, { intent: "week-start", weekStartsOn: "7" }, ada, {
+			byScript: true,
+		});
+		expect(refused.status).toBe(409);
+		expect(await refused.text()).toContain(
+			"1 week is waiting for a decision. Approve or return it before weeks start on another day.",
+		);
+		expect((await organisationRow())?.week_starts_on).toBe(1);
+		const approvals = textOf(
+			await pageBody(await open("/app/acme/approvals?week=2026-11-02&status=pending", ada)),
+		);
+		expect(approvals).toContain("grace@example.com Submitted");
+		expect(approvals).toContain("Approve Return");
+
+		// Decided, the change is made, and a week drawn over hers begins after it.
+		await env.DB.prepare("update periods set status = 'approved' where id = ?")
+			.bind(periodId)
+			.run();
+		expect(
+			(await submit(SETTINGS, { intent: "week-start", weekStartsOn: "7" }, ada, { byScript: true }))
+				.status,
+		).toBe(200);
+		await seedEntry(acme.id, grace.user.id, site, "2026-11-10T09:00:00Z", "2026-11-10T16:30:00Z");
+		const submitted = await submit(
+			"/app/acme?index",
+			{ intent: "submit", startsOn: "2026-11-08" },
+			grace,
+			{ byScript: true },
+		);
+		expect(submitted.status).toBe(200);
+		const { results } = await env.DB.prepare(
+			"select starts_on as startsOn, ends_on as endsOn, status from periods where user_id = ? order by starts_on",
+		)
+			.bind(grace.user.id)
+			.all();
+		expect(results).toEqual([
+			{ startsOn: "2026-11-02", endsOn: "2026-11-08", status: "approved" },
+			{ startsOn: "2026-11-09", endsOn: "2026-11-14", status: "submitted" },
+		]);
+		// Withdrawn from the week as the page now draws it.
+		expect(
+			(
+				await submit("/app/acme?index", { intent: "withdraw", startsOn: "2026-11-08" }, grace, {
+					byScript: true,
+				})
+			).status,
+		).toBe(200);
 	});
 
 	it("the default time zone is the zone of a person who has not chosen one", async () => {

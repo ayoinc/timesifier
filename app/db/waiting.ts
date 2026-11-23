@@ -8,8 +8,10 @@
  *
  * The rules are `mayDecidePeriodOf` and `mayDecideLeaveOf` in
  * `app/organisations/access.ts`: an owner or admin decides every member's
- * periods, their own included, and every member's requests but their own; any
- * other decides those of the members of the teams they manage, never their own.
+ * periods and requests but their own (D5, decision 47); any other decides
+ * those of the members of the teams they manage, never their own. A manager
+ * on leave all day is not asked (D6, decision 48): `pendingApprovalsOf` gives
+ * them nothing waiting without running this.
  */
 const WAITING = `
 with deciding (user_id) as (
@@ -25,7 +27,7 @@ with deciding (user_id) as (
 select
 	(select count(*) from periods
 		where organisation_id = ?1 and status = 'submitted'
-			and user_id in (select user_id from deciding) and (?3 = 1 or user_id <> ?2))
+			and user_id <> ?2 and user_id in (select user_id from deciding))
 	+ (select count(*) from leave_requests
 		where organisation_id = ?1 and status = 'pending'
 			and user_id <> ?2 and user_id in (select user_id from deciding))

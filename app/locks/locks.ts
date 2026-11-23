@@ -1,5 +1,5 @@
 import { locksEntries, type PeriodStatus } from "~/periods/periods";
-import type { Day } from "~/time/calendar";
+import { addDays, type Day, dayOf } from "~/time/calendar";
 
 /**
  * Why a time entry, an expense or a day of leave cannot change (TS-064, B22).
@@ -56,6 +56,19 @@ export function lockOfChange(before: LockInput | null, after: LockInput | null):
 /** Whether a change from `before` to `after` may be made: see `lockOfChange`. */
 export function mayChangeItem(before: LockInput | null, after: LockInput | null): boolean {
 	return lockOfChange(before, after) === null;
+}
+
+/**
+ * The last day the lock date reaches for a person in `zone` at `now` (D7,
+ * decision 49): the lock date, but never a day that has not yet ended where
+ * they are. Null when there is no lock date. Every reader of the lock date
+ * for a person's day asks this, so a lock date of today, or auto-lock in the
+ * organisation's zone, takes nobody's day from them before it is over.
+ */
+export function lockReachOf(lockedThrough: Day | null, zone: string, now: number): Day | null {
+	if (lockedThrough === null) return null;
+	const lastEnded = addDays(dayOf(now, zone), -1);
+	return lockedThrough < lastEnded ? lockedThrough : lastEnded;
 }
 
 /** The lock date as the people it binds are told it: the date, and the owner's or admin's reason when one was given. */

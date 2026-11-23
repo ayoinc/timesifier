@@ -355,7 +355,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 				now: Date.now(),
 			});
 			if (submitted.ok) {
-				return done("Week submitted. Its time and expenses are locked until it is decided.");
+				return done(
+					submitted.alone
+						? "Week submitted and approved automatically: nobody else can approve it."
+						: "Week submitted. Its time and expenses are locked until it is decided.",
+				);
 			}
 			const over = (("over" in submitted && submitted.over) || [])
 				.map((d) => `${formatDay(d.day, "short")} ${overLabel(d.overMinutes).toLowerCase()}`)
@@ -369,7 +373,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return declined(problem[submitted.reason], 409);
 		}
 		case "withdraw": {
-			const withdrawn = await withdrawPeriod(scope, { userId: user.id, startsOn: input.startsOn });
+			const withdrawn = await withdrawPeriod(scope, {
+				userId: user.id,
+				startsOn: input.startsOn,
+				weekStartsOn: organisation.weekStartsOn,
+			});
 			return withdrawn.ok
 				? done("Submission withdrawn. You can change the week's time and expenses again.")
 				: declined("Only a submission nobody has decided yet can be withdrawn.", 409);

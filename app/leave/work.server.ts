@@ -1,8 +1,10 @@
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
+import { workRefusersOf } from "~/approvals/refusals.server";
 import { among, type OrganisationScope, type ScopedAccessor } from "~/db";
 import {
 	type Access,
+	mayApproveAfterRefusals,
 	mayCancelLeaveOf,
 	mayChangeTimeOf,
 	mayDecideLeaveOf,
@@ -217,6 +219,12 @@ export async function decideWork(
 	if (!row) return "missing";
 	if (!mayDecideLeaveOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "pending") return "stale";
+	if (
+		decision.action === "approved" &&
+		!mayApproveAfterRefusals(access, await workRefusersOf(scope, row))
+	) {
+		return "refused-before";
+	}
 	const changed = await scope.workRequests.update(
 		{
 			status: decision.action,

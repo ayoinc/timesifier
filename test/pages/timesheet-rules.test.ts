@@ -5,7 +5,13 @@ import { uuidv7 } from "~/db";
 import type { NonWorkingRule, OvertimeRule } from "~/leave/rules";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { createOrganisation, type Role, seedMembership, value } from "../organisations/harness";
+import {
+	createOrganisation,
+	type Role,
+	seedMember,
+	seedMembership,
+	value,
+} from "../organisations/harness";
 import { type Person, person, submit } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
 import { seedEntry, seedProject } from "./periods-seed";
@@ -612,6 +618,8 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 				at(MONDAY, "17:00"),
 			);
 			await seedLeave(acme.id, me.user.id, "annual", MONDAY, MONDAY, { startsHalf: true });
+			// Someone else approves the week, so it waits for them (D5).
+			await seedMember(acme.id, "admin", "hedy@example.com");
 
 			const refused = await ask(me, { intent: "submit", startsOn: MONDAY });
 			expect(refused.status).toBe(409);

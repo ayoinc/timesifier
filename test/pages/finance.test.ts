@@ -866,7 +866,8 @@ describe("the rules inside the destinations", () => {
 		["changes a team member's expenses", (a) => mayChangeExpensesOf(a, TEAM), of(F, F, F, F, F, F)],
 		["decides a team member's period", (a) => mayDecidePeriodOf(a, TEAM), of(T, T, F, T, T, F)],
 		["decides anybody's period", (a) => mayDecidePeriodOf(a, OUTSIDER), of(T, T, F, F, F, F)],
-		["decides their own period", (a) => mayDecidePeriodOf(a, ME), of(T, T, F, F, F, F)],
+		// Nobody decides their own, owners and admins included (D5, decision 47).
+		["decides their own period", (a) => mayDecidePeriodOf(a, ME), of(F, F, F, F, F, F)],
 		["reopens an approved period", (a) => mayReopenPeriods(a), of(T, T, F, F, F, F)],
 		["decides a team member's leave", (a) => mayDecideLeaveOf(a, TEAM), of(T, T, F, T, T, F)],
 		["decides anybody's leave", (a) => mayDecideLeaveOf(a, OUTSIDER), of(T, T, F, F, F, F)],

@@ -264,6 +264,7 @@ const FIELD_LABELS: Record<string, string> = {
 	isManager: "Manager",
 	archived: "Archived",
 	lockedThrough: "Lock date",
+	overLimit: "Approved over its limit",
 	reason: "Reason",
 	startsOn: "First day",
 	endsOn: "Last day",
