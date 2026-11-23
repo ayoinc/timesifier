@@ -2,7 +2,7 @@ import { applyD1Migrations, type D1Migration, reset } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 
-// Migration 0029_work_on_holidays (TS-111e, decision 52) rebuilds
+// Migration 0026_work_on_holidays (TS-111e, decision 52) rebuilds
 // work_requests so its kind may be `holiday`. It ships alone, ahead of the
 // code that writes that kind, so the Worker already running must find the
 // table as it was: the same columns, indexes and triggers, and every row. The
@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 // status are written, then the rebuild runs and the table is compared.
 
 const MIGRATIONS = (env as Cloudflare.Env & { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
-const REBUILD = "0029_work_on_holidays.sql";
+const REBUILD = "0026_work_on_holidays.sql";
 
 const indexOfRebuild = () => MIGRATIONS.findIndex((m) => m.name === REBUILD);
 
