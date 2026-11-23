@@ -96,7 +96,7 @@ Builder: AI sessions on branch `ts-105-trust`, pull request #86 (slices 105a–1
 - [x] What is not done, and where to report a vulnerability (`test/claims.test.ts`, "the security page says what is not done, and where to report a vulnerability").
 - [x] The ICO registration shows only from `OPERATOR_ICO_REFERENCE` (`test/documents.test.ts`, "the ICO reference is the setting's" and "without the setting, no page says anything of the ICO"; `scripts/deploy-config.test.ts`; `test/deployment.test.ts`).
 - [x] The foot's notices gain Security and Accessibility; the sitemap lists both; a public page links only to public pages and to `OUTSIDE_LINKS`, each matched whole (`test/claims.test.ts`, "the sitemap lists exactly the public pages…"; `e2e/public-links.spec.ts`; `e2e/one-way-in.spec.ts`).
-- [ ] The owner accepts the screenshots of `/security` and `/accessibility` at 390px and 1280px, in both schemes (`cmux-assets/browser/timesifier/TS-105/`).
+- [x] The owner accepts the screenshots of `/security` and `/accessibility` at 390px and 1280px, in both schemes (`cmux-assets/browser/timesifier/TS-105/`). _Accepted: the owner's form answer, 23 Nov 2026._
 - [ ] Slice 105d: `/dpa`, accepted by an organisation's owner, on `ts-105-dpa`.
 - [ ] typecheck, lint and tests pass in the pipeline.
 
