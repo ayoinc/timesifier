@@ -29,11 +29,13 @@ import { parseMarkdown } from "~/landing/markdown";
 import { deploymentOperator } from "~/landing/operator";
 import { PHOTOS } from "~/landing/photos";
 import {
+	ACCESSIBILITY_PATH,
 	API_DOCS_PATH,
 	CONTACT_PATH,
 	FEATURES_PATH,
 	HELLO_EMAIL,
 	INTEGRATIONS_PATH,
+	OUTSIDE_LINKS,
 	PRICING_PATH,
 	PRIMARY_ACTION,
 	PRIVACY_EMAIL,
@@ -41,9 +43,11 @@ import {
 	PUBLIC_FILES,
 	PUBLIC_PAGES,
 	SECURITY_EMAIL,
+	SECURITY_PATH,
 	TERMS_PATH,
 } from "~/landing/Site";
 import { homeStructuredData } from "~/landing/structured-data";
+import { SUB_PROCESSORS, TIME_TRAVEL_DAYS, WORKERS_LOGS_DAYS } from "~/landing/trust";
 import { DEFAULT_KINDS, KIND_KEYS } from "~/leave/kinds";
 import { LOCK_LABELS } from "~/locks/locks";
 import {
@@ -61,11 +65,14 @@ import {
 } from "~/organisations/access";
 import { Role } from "~/organisations/roles";
 import { NOTICE_DAYS, PLAN_DETAILS, PLANS, PRICE_CURRENCY, PRICES, pounds } from "~/plans/plans";
+import { SIGN_IN_DAYS, SUPPORT_HOURS } from "~/platform/limits";
 import { REPORT_VIEWS } from "~/reports/views";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
 import { destination, destinations } from "~/shell/destinations";
 import { GETTING_STARTED_COOKIE } from "~/timesheet/getting-started.server";
+// The pipeline, read as text: a directory whose name starts with a dot is not globbed.
+import ci from "../.github/workflows/ci.yml?raw";
 import worker from "../workers/app";
 import { DAILY } from "../workers/scheduled";
 
@@ -152,13 +159,13 @@ it("the pages say the database is in the EU because that is how the databases ar
 	]);
 	for (const command of buckets) expect(command).toContain("--jurisdiction eu");
 
-	for (const path of ["/", PRIVACY_PATH]) {
+	for (const path of ["/", PRIVACY_PATH, SECURITY_PATH]) {
 		expect(words(await page(path)), path).toContain("runs and stores its data only inside the EU");
 	}
 });
 
 it("wherever a page says the database is in the EU, it says what is not", async () => {
-	for (const path of ["/", PRIVACY_PATH]) {
+	for (const path of ["/", PRIVACY_PATH, SECURITY_PATH]) {
 		const text = words(await page(path));
 		expect(text, path).toContain("data centre nearest to you");
 		expect(text, path).toContain("not restricted to the EU");
@@ -170,7 +177,7 @@ it("the pages say requests are handled in Frankfurt because the Worker is placed
 	// to the cloud region it names; aws:eu-central-1 is Frankfurt
 	// (docs/decisions.md 34). A commented-out line does not count.
 	expect(wrangler).toMatch(/^\t"placement": \{ "region": "aws:eu-central-1" \},$/m);
-	for (const path of ["/", PRIVACY_PATH]) {
+	for (const path of ["/", PRIVACY_PATH, SECURITY_PATH]) {
 		expect(words(await page(path)), path).toContain("is passed to Frankfurt");
 	}
 });
@@ -287,6 +294,13 @@ it("the notice says activity records are deleted after the retention the daily j
 	expect(words(await page(PRIVACY_PATH))).toContain(
 		`Each record is deleted ${ACTIVITY_RETENTION_DAYS} days after it was made, by a job that runs every day.`,
 	);
+	const security = words(await page(SECURITY_PATH));
+	expect(security).toContain(
+		`the only deletion is the daily job's: each record is deleted ${ACTIVITY_RETENTION_DAYS} days after it was made.`,
+	);
+	expect(security).toContain(
+		`The activity log Each record is deleted ${ACTIVITY_RETENTION_DAYS} days after it was made.`,
+	);
 });
 
 it("the notice names every email the application sends, and whom it goes to", async () => {
@@ -372,9 +386,15 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 		member: "Members",
 	};
 	expect(Object.keys(rows).sort()).toEqual([...Role.options].sort());
-	const html = await page(PRIVACY_PATH);
-	for (const term of [...Object.values(rows), "Managers", "Contractors"]) {
-		expect(html, term).toContain(`<dt class="text-title-medium wrap-anywhere">${term}</dt>`);
+	// The notice and the security page say it in the same words (app/landing/WhoSees.tsx).
+	const pages = [PRIVACY_PATH, SECURITY_PATH];
+	for (const path of pages) {
+		const html = await page(path);
+		for (const term of [...Object.values(rows), "Managers", "Contractors"]) {
+			expect(html, `${path}: ${term}`).toContain(
+				`<dt class="text-title-medium wrap-anywhere">${term}</dt>`,
+			);
+		}
 	}
 
 	const me = "me";
@@ -428,14 +448,18 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 		expect(mayChangeExpensesOf(as(role, [colleague]), colleague), role).toBe(false);
 	}
 
-	const text = words(html);
-	expect(text).toContain("Nobody changes another person's time entries or expenses");
-	expect(text).toContain(
-		"That a colleague is on leave, but not which kind, unless Finance manages their team",
-	);
-	expect(text).toContain("never their own. A manager sees no rate, invoice or estimate.");
-	expect(text).toContain("An owner or admin can give Timesifier an address");
-	expect(text).toContain("An owner or admin can make a token");
+	for (const path of pages) {
+		const text = words(await page(path));
+		expect(text, path).toContain("Nobody changes another person's time entries or expenses");
+		expect(text, path).toContain(
+			"That a colleague is on leave, but not which kind, unless Finance manages their team",
+		);
+		expect(text, path).toContain("never their own. A manager sees no rate, invoice or estimate.");
+		expect(text, path).toContain(`grants support access, for ${SUPPORT_HOURS.join(" or ")} hours`);
+	}
+	const notice = words(await page(PRIVACY_PATH));
+	expect(notice).toContain("An owner or admin can give Timesifier an address");
+	expect(notice).toContain("An owner or admin can make a token");
 	expect(words(await page("/"))).toContain(
 		"owners, admins and Finance see everyone's time; a manager sees their own and their teams'; everyone else sees their own.",
 	);
@@ -490,10 +514,13 @@ it("the sitemap lists exactly the public pages, which link to one another and no
 	expect(listed).toEqual(PUBLIC_PAGES.map((path) => `${ORIGIN}${path}`));
 
 	// Every page the home page leads to, through every link on every page reached.
+	// A link to another site is allowed only to an address in OUTSIDE_LINKS, and is not followed.
 	// A file a page offers for download (`PUBLIC_FILES`) is not a page: it is
 	// answered, and not followed.
+	const outside = new Set<string>(Object.values(OUTSIDE_LINKS).map(({ href }) => href));
 	const reached = new Set<string>();
 	const files = new Set<string>();
+	const outsideReached = new Set<string>();
 	const queue = [`${ORIGIN}/`];
 	for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
 		if (reached.has(next)) continue;
@@ -503,8 +530,13 @@ it("the sitemap lists exactly the public pages, which link to one another and no
 			const href = attribute(tag, "href") ?? "";
 			if (href.startsWith("mailto:")) continue;
 			const url = new URL(href, next);
-			// A public page links to the public pages only: no other site, and not the application.
-			expect(url.origin, `${next}: ${href}`).toBe(ORIGIN);
+			if (url.origin !== ORIGIN) {
+				// Another site: one of the named few, by its whole address.
+				expect(outside.has(url.href), `${next}: ${href} is not in OUTSIDE_LINKS`).toBe(true);
+				outsideReached.add(url.href);
+				continue;
+			}
+			// Of our own pages, only the public ones and the files they offer: not the application.
 			if ((PUBLIC_FILES as readonly string[]).includes(url.pathname)) files.add(url.pathname);
 			else queue.push(`${url.origin}${url.pathname}`);
 		}
@@ -514,6 +546,8 @@ it("the sitemap lists exactly the public pages, which link to one another and no
 	for (const file of files) {
 		expect((await exports.default.fetch(`${ORIGIN}${file}`)).status, file).toBe(200);
 	}
+	// Every outside link that is allowed is used: none is left in the list for later.
+	expect([...outsideReached].sort()).toEqual([...outside].sort());
 
 	// And every page that describes itself to search engines is one of them.
 	const routes = import.meta.glob<string>("../app/routes/**/*.tsx", {
@@ -797,4 +831,207 @@ it("the contact page gives the company's details and its addresses, with no form
 	);
 	expect(html).not.toContain("<form");
 	expect(text).not.toMatch(/within \d|working days?|hours? to (answer|reply)|respond/i);
+});
+
+// The trust pages (TS-105): /security and /accessibility. Each statement is read
+// against the code, the configuration or the test that makes it so.
+
+/** Files read as text, for what they say: nothing in them is run. */
+const sources = import.meta.glob<string>(
+	[
+		"../BOARD.md",
+		"../docs/security.md",
+		"../playwright.config.ts",
+		"../e2e/axe.ts",
+		"../e2e/*-keyboard.spec.ts",
+		"../e2e/landing.spec.ts",
+		"../app/db/platform.ts",
+		"../app/**/*.server.ts",
+		"../workers/security-headers.ts",
+	],
+	{ eager: true, query: "?raw", import: "default" },
+);
+const source = (path: string) => {
+	const text = sources[path];
+	expect(text, path).toBeDefined();
+	return text ?? "";
+};
+
+/** One part of a page, by its id, as a person reads it. */
+async function part(path: string, id: string): Promise<string> {
+	const html = await page(path);
+	const section = html.match(new RegExp(`<section id="${id}"[\\s\\S]*?</section>`))?.[0];
+	expect(section, `${path}#${id}`).toBeDefined();
+	return words(section ?? "");
+}
+
+it("both pages state the restore window from one constant, and no restore is claimed until one is rehearsed", async () => {
+	expect(TIME_TRAVEL_DAYS).toBe(30);
+	for (const path of [PRIVACY_PATH, SECURITY_PATH]) {
+		const text = words(await page(path));
+		expect(text, path).toContain(`any minute of the last ${TIME_TRAVEL_DAYS} days`);
+		// No other window is stated.
+		expect(text.match(/any minute of the last \d+ days/g), path).toEqual([
+			`any minute of the last ${TIME_TRAVEL_DAYS} days`,
+		]);
+	}
+	// TS-022a rehearses the restore. Until its line is ticked, /security says none has been.
+	const rehearsal = source("../BOARD.md")
+		.split("\n")
+		.find((line) => line.includes("Time Travel restore has been rehearsed"));
+	expect(rehearsal).toBeDefined();
+	const security = words(await page(SECURITY_PATH));
+	if (rehearsal?.startsWith("- [ ]")) {
+		expect(security).toContain("A restore has not been rehearsed yet.");
+		expect(security).toContain("No restore of the database has been rehearsed.");
+	}
+	expect(security).not.toMatch(/restore (has been|was) (tested|rehearsed)/i);
+});
+
+it("the security page says how long each thing is kept from the constant that keeps it", async () => {
+	// Sign-ins: the daily job deletes by SIGN_IN_DAYS, and both pages say it.
+	expect(source("../app/db/platform.ts")).toContain("SIGN_IN_DAYS * DAY");
+	expect(words(await page(PRIVACY_PATH))).toContain(
+		`Each is deleted ${SIGN_IN_DAYS} days after it was made, by a job that runs every day.`,
+	);
+	const retention = await part(SECURITY_PATH, "retention");
+	expect(retention).toContain(`Sign-ins Each is deleted ${SIGN_IN_DAYS} days after it was made.`);
+	// Logs and traces: kept by Cloudflare for WORKERS_LOGS_DAYS, and both are on.
+	expect(wrangler).toMatch(/"logs": \{ "enabled": true/);
+	expect(wrangler).toMatch(/"traces": \{ "enabled": true/);
+	expect(retention).toContain(`Cloudflare's logs and traces At most ${WORKERS_LOGS_DAYS} days.`);
+	expect(retention).toContain(`gone for good ${TIME_TRAVEL_DAYS} days later`);
+});
+
+it("the security page's hashed secrets are the ones docs/security.md lists, and the code hashes them so", async () => {
+	const code = Object.entries(sources)
+		.filter(([path]) => path.startsWith("../app/"))
+		.map(([, text]) => text)
+		.join("\n");
+	// Each is stored as `keyedHash` under its purpose, never as itself.
+	for (const purpose of ["sign-in-code", "api-token", "calendar-feed", "webhook-secret-hash"]) {
+		expect(code, purpose).toMatch(new RegExp(`keyedHash\\(.*"${purpose}"`));
+	}
+	const documented = source("../docs/security.md");
+	expect(documented).toContain("It is stored as an HMAC-SHA-256 under `BETTER_AUTH_SECRET`");
+	expect(documented).toContain(
+		"the database holds a keyed hash of it under `BETTER_AUTH_SECRET` with the purpose `api-token`",
+	);
+	expect(documented).toContain(
+		"the database keeps a keyed hash of it with the purpose `calendar-feed`",
+	);
+	expect(documented).toMatch(/A webhook's secret .*never stored/);
+
+	const encryption = await part(SECURITY_PATH, "encryption");
+	expect(encryption).toContain(
+		"Sign-in codes, API tokens and calendar feed addresses are kept only as keyed hashes: HMAC-SHA-256",
+	);
+	expect(encryption).toContain("A webhook's signing secret is never stored");
+	// HTTPS for two years: the header every answer carries (test/browser-policy.test.ts).
+	expect(source("../workers/security-headers.ts")).toContain(
+		`const STRICT_TRANSPORT_SECURITY = "max-age=${2 * 365 * 24 * 60 * 60}";`,
+	);
+	expect(encryption).toContain("to use nothing but HTTPS on this host for two years");
+	expect(encryption).toContain("with AES-256");
+});
+
+it("the sub-processors on /security are the ones the notice names, and every binding in wrangler.jsonc belongs to one of them", async () => {
+	// Every part of the configuration that sends data to a provider is one sub-processor's.
+	const NOT_DATA = new Set([
+		"$schema",
+		"name",
+		"main",
+		"compatibility_date",
+		"compatibility_flags",
+		"placement",
+		"workers_dev",
+		"vars",
+		"preview_urls",
+		"previews",
+		"upload_source_maps",
+		"secrets",
+		"triggers",
+	]);
+	const keys = [...(wrangler ?? "").matchAll(/^\t"([$\w]+)":/gm)].map(([, key]) => key);
+	const bindings = keys.filter((key) => !NOT_DATA.has(key));
+	expect(bindings.sort()).toEqual(["d1_databases", "observability", "r2_buckets", "send_email"]);
+	const covered = new Set(SUB_PROCESSORS.flatMap(({ bindings }) => bindings));
+	for (const binding of bindings) expect(covered, binding).toContain(binding);
+
+	// /security lists exactly them, each with its agreement.
+	const html = await page(SECURITY_PATH);
+	const section = html.match(/<section id="sub-processors"[\s\S]*?<\/section>/)?.[0] ?? "";
+	const terms = [...section.matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map(([, term]) => term);
+	expect(terms).toEqual(SUB_PROCESSORS.map(({ name }) => name));
+	for (const each of SUB_PROCESSORS) {
+		expect(section, each.name).toContain(`href="${each.dpa.href}"`);
+		if (each.list) expect(section, each.name).toContain(`href="${each.list.href}"`);
+	}
+	// And the notice names each, under "Who else handles it", and the mailbox's addresses.
+	const who = await part(PRIVACY_PATH, "who");
+	for (const { name } of SUB_PROCESSORS) expect(who, name).toContain(name);
+	expect(who).toContain(`${SECURITY_EMAIL} is received by Microsoft`);
+});
+
+it("the security page says what is not done, and where to report a vulnerability", async () => {
+	const notDone = await part(SECURITY_PATH, "not-done");
+	for (const gap of [
+		"No independent penetration test has been done.",
+		"Timesifier holds no certification of its own, such as SOC 2 or ISO 27001.",
+		"Cloudflare's logs are not restricted to the EU.",
+		"there is no second factor yet",
+	]) {
+		expect(notDone).toContain(gap);
+	}
+	// Two-factor is still a gap in docs/security.md, so the page may not claim it.
+	expect(source("../docs/security.md")).toContain("Optional two-factor is not built yet.");
+	expect(await part(SECURITY_PATH, "reporting")).toContain(`Write to ${SECURITY_EMAIL}`);
+});
+
+it("the accessibility statement names the browsers and the standard the tests use", async () => {
+	const text = words(await page(ACCESSIBILITY_PATH));
+
+	// The rules axe is run with, and none turned off (e2e/axe.ts).
+	const axe = source("../e2e/axe.ts");
+	expect(axe).toContain(
+		'const WCAG_22_AA = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];',
+	);
+	expect(axe).not.toContain("disableRules");
+	expect(text).toContain("Web Content Accessibility Guidelines (WCAG) 2.2 at level AA");
+	expect(text).toContain(
+		"against its rules for WCAG 2.0, 2.1 and 2.2 at levels A and AA, with no rule turned off",
+	);
+
+	// The browsers are the projects' (playwright.config.ts): Chromium for every test,
+	// WebKit again for the public pages and the components.
+	const config = source("../playwright.config.ts");
+	expect(config).toContain('devices["Desktop Chrome"]');
+	expect(config).toMatch(
+		/testMatch: IN_WEBKIT_TOO,\s*use: \{ \.\.\.devices\["Desktop Safari"\] \}/,
+	);
+	const webkit = config.match(/const IN_WEBKIT_TOO =\s*\/(.*)\/;/)?.[1] ?? "";
+	for (const spec of ["landing", "documents", "components"]) expect(webkit, spec).toContain(spec);
+	expect(text).toContain("The tests run in Chromium.");
+	expect(text).toContain("The public pages and the components are tested again in WebKit");
+
+	// The browser tests gate every deploy.
+	expect(ci).toMatch(/deploy:[\s\S]*?needs: \[[^\]]*browser-tests/);
+	expect(text).toContain("is deployed only when they pass");
+
+	// The keyboard walks, and reduced motion.
+	expect(source("../e2e/auth-keyboard.spec.ts")).toContain("with the keyboard alone");
+	expect(source("../e2e/organisations-keyboard.spec.ts")).toContain(
+		"the members and invitations: every control, the menu and every sheet, with the keyboard alone",
+	);
+	expect(text).toContain(
+		"Keyboard tests sign in and out, and manage an organisation's members and invitations, with the keyboard alone",
+	);
+	expect(source("../e2e/landing.spec.ts")).toContain(
+		'test.describe("with reduced motion asked for"',
+	);
+
+	// What is not done, whom to ask, and when it was last reviewed.
+	expect(text).toContain("No audit by an independent auditor, and no testing by disabled people");
+	expect(await page(ACCESSIBILITY_PATH)).toContain(`href="mailto:${SECURITY_EMAIL}"`);
+	expect(text).toMatch(/It was last reviewed on \d{1,2} \w+ \d{4} ?\./);
 });

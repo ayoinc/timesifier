@@ -83,7 +83,23 @@ const VARIABLES = {
 	},
 };
 type Variable = keyof typeof VARIABLES;
-type Values = Record<Variable, string>;
+
+/**
+ * The GitHub variables a deployment may leave unset. One that is set must be
+ * valid, and is written in beside the company's other details, for production
+ * and the previews alike; one that is not set is left out, and the pages say
+ * nothing of it.
+ */
+const OPTIONAL_VARIABLES = {
+	// The company's registration with the ICO (TS-105): app/landing/operator.tsx
+	// holds the same shape, ICO_REFERENCE, and shows it on /privacy and /security.
+	OPERATOR_ICO_REFERENCE: {
+		is: "the registration number the ICO gave that company, such as ZA123456",
+		valid: (value: string) => /^Z[A-Z0-9]{7}$/.test(value),
+	},
+};
+type OptionalVariable = keyof typeof OPTIONAL_VARIABLES;
+type Values = Record<Variable, string> & Partial<Record<OptionalVariable, string>>;
 
 /**
  * The GitHub secrets the steps after this one need. This script is never given
@@ -100,6 +116,12 @@ function readSettings(env: NodeJS.ProcessEnv): { values: Values } | { problems: 
 		if (value === "") problems.push(`${name}: the variable is not set. It is ${is}.`);
 		else if (!valid(value)) problems.push(`${name}: the variable is not valid. It is ${is}.`);
 		else values[name as Variable] = value;
+	}
+	for (const [name, { is, valid }] of Object.entries(OPTIONAL_VARIABLES)) {
+		const value = env[name] ?? "";
+		if (value === "") continue;
+		if (!valid(value)) problems.push(`${name}: the variable is not valid. It is ${is}.`);
+		else values[name as OptionalVariable] = value;
 	}
 	for (const name of SECRETS) {
 		if (env[`${name}_IS_SET`] !== "true") problems.push(`${name}: the secret is not set.`);
@@ -169,6 +191,9 @@ function deploymentConfig(base: z.infer<typeof Config>, values: Values) {
 		OPERATOR_COMPANY_NUMBER: values.OPERATOR_COMPANY_NUMBER,
 		OPERATOR_REGISTERED_IN: values.OPERATOR_REGISTERED_IN,
 		OPERATOR_REGISTERED_OFFICE: values.OPERATOR_REGISTERED_OFFICE,
+		...(values.OPERATOR_ICO_REFERENCE && {
+			OPERATOR_ICO_REFERENCE: values.OPERATOR_ICO_REFERENCE,
+		}),
 	};
 	// The whole list is replaced: no value of a developer's machine is deployed.
 	config.vars = {

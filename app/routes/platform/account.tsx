@@ -18,6 +18,7 @@ import { consoleDay, consoleMoment, REASON_MISSING, reasonOf } from "~/platform/
 import { dataExportEmail } from "~/platform/emails";
 import { platformLog } from "~/platform/events.server";
 import { notFound, platformOwnerContext } from "~/platform/guard.server";
+import { SIGN_IN_DAYS } from "~/platform/limits";
 import { mailOrigin } from "~/platform/mail.server";
 import { organisationConsolePath } from "~/platform/paths";
 import { FormSheet } from "~/routes/app/FormSheet";
@@ -38,9 +39,6 @@ import { EventLedger, ReasonField } from "./ConsoleParts";
 // restore the account, send an invitation again, send the link to their own
 // data, or delete the account on their request. Each is confirmed in its
 // sheet, needs a reason, and is recorded in the platform log with it.
-
-/** How long sign-ins are kept: app/db/platform.ts deletes older ones. */
-const SIGN_INS_KEPT_DAYS = 90;
 
 /** What may be typed to confirm a deletion: an address, compared and never used as one. */
 const Confirmation = z.string().max(254);
@@ -384,12 +382,12 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 			<Section
 				id="sign-ins"
 				heading="Sign-ins"
-				lead={`The latest 20, kept for ${SIGN_INS_KEPT_DAYS} days. Only the kind of browser is kept, never where the sign-in came from.`}
+				lead={`The latest 20, kept for ${SIGN_IN_DAYS} days. Only the kind of browser is kept, never where the sign-in came from.`}
 				className="max-w-200"
 			>
 				{signIns.length === 0 ? (
 					<p className="text-body-large text-on-surface-variant">
-						No sign-in in the last {SIGN_INS_KEPT_DAYS} days.
+						No sign-in in the last {SIGN_IN_DAYS} days.
 					</p>
 				) : (
 					<Ledger heading="Signed in" note={signIns.length}>

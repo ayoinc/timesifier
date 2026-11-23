@@ -1,16 +1,19 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { deploymentOperator } from "~/landing/operator";
+import { deploymentOperator, icoReference } from "~/landing/operator";
 import {
+	ACCESSIBILITY_PATH,
+	OUTSIDE_LINKS,
 	PRICING_PATH,
 	PRIVACY_EMAIL,
 	PRIVACY_PATH,
 	PUBLIC_PAGES,
+	SECURITY_PATH,
 	TERMS_PATH,
 } from "~/landing/Site";
 import { NOTICE_DAYS, PLAN_DETAILS, PLANS, priceInWords } from "~/plans/plans";
 
-import { ORIGIN } from "./auth/harness";
+import { ORIGIN, setBinding } from "./auth/harness";
 
 // The privacy notice and the terms, as the server sends them to anybody: no
 // session, no script. What they claim is held to the facts in test/claims.test.ts.
@@ -100,4 +103,42 @@ it("the terms' Price section says what the pricing page says, from the same pric
 	for (const text of [terms, pricing]) {
 		expect(text).toContain(`told at least ${NOTICE_DAYS} days before its first charge`);
 	}
+});
+
+it.each([SECURITY_PATH, ACCESSIBILITY_PATH])(
+	"%s is answered whole by the server, with its date, and says which company runs Timesifier",
+	async (path) => {
+		const html = await page(path);
+
+		expect(html).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
+		expect(html).toMatch(/<time datetime="\d{4}-\d{2}-\d{2}"/i);
+		expect(html).toContain('href="mailto:security@timesifier.com"');
+	},
+);
+
+// The company's registration with the ICO (TS-105) is optional: shown from its
+// setting when the deployment has one, and nothing said of the ICO when not.
+describe("the ICO reference", () => {
+	it("the ICO reference is the setting's", async () => {
+		const reference = icoReference(env);
+		expect(reference).toBe("ZA000000");
+
+		for (const path of [PRIVACY_PATH, SECURITY_PATH]) {
+			const main = wordsOf(await page(path), "main").replace(/&#x27;/g, "'");
+			expect(main, path).toContain(
+				`registered with the Information Commissioner's Office, the UK's data protection authority, under the reference ${reference}`,
+			);
+			expect(await page(path), path).toContain(`href="${OUTSIDE_LINKS.icoRegister.href}"`);
+		}
+	});
+
+	it("without the setting, no page says anything of the ICO", async () => {
+		setBinding("OPERATOR_ICO_REFERENCE", undefined);
+
+		for (const path of ["/", PRIVACY_PATH, TERMS_PATH, SECURITY_PATH, ACCESSIBILITY_PATH]) {
+			const html = await page(path);
+			expect(html, path).not.toMatch(/Information Commissioner|\bICO\b/);
+			expect(html, path).not.toContain(OUTSIDE_LINKS.icoRegister.href);
+		}
+	});
 });

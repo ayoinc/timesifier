@@ -78,6 +78,28 @@ Builder: AI session on branch `ts-106-buyer-pages`. In review: the pull request 
 - [x] The owner accepts the screenshots (`cmux-assets/browser/timesifier/TS-106/`). _Accepted: the owner's form answer, 23 Nov 2026._
 - [ ] **Owner (106a):** the Search Console Domain property verified by DNS TXT, the sitemap submitted, Bing imported from Search Console (steps in the pull request).
 
+### TS-105 · Trust centre
+
+Builder: AI sessions on branch `ts-105-trust`, pull request #86 (slices 105a–105c); slice 105d, the data processing agreement, follows on `ts-105-dpa`, stacked on it. The owner's answers of 23 November 2026 (`research/corporate/cards.md`, TS-105). No migration in #86. Decision 59.
+
+- [x] `/.well-known/security.txt` answers in plain text with one `Contact`, `Expires`, `Canonical`, `Policy` and `Preferred-Languages` (`test/trust.test.ts`, "security.txt has the fields RFC 9116 requires, once each").
+- [x] Its `Expires` is within a year, and the test fails 30 days before it passes (`test/trust.test.ts`, "security.txt expires within a year and is renewed a month before").
+- [x] Its `Policy` reaches `/security#reporting`, which names the same address (`test/trust.test.ts`, "its Policy is the security page's part on reporting…").
+- [x] `/accessibility` states WCAG 2.2 AA, the browsers the tests use, read from `playwright.config.ts`, that no independent audit has been done, how to ask for help, and its date (`test/claims.test.ts`, "the accessibility statement names the browsers and the standard the tests use"); it passes axe at 390px and 1280px in both schemes (`e2e/documents.spec.ts`).
+- [x] `/security` says where data lives in the same words as `/` and `/privacy` (`test/claims.test.ts`, the three location claims, now over `/security` as well).
+- [x] Encryption at rest and in transit, and the secrets kept only as keyed hashes (`test/claims.test.ts`, "the security page's hashed secrets are the ones docs/security.md lists, and the code hashes them so").
+- [x] Who sees what, through the notice's own component (`test/claims.test.ts`, "Who sees what names every role…", over both pages).
+- [x] The activity log is only added to, and kept 730 days (`test/claims.test.ts`, "the notice says activity records are deleted after the retention the daily job applies", over both pages).
+- [x] Backups: any minute of the last 30 days, from `TIME_TRAVEL_DAYS`, and no restore claimed (`test/claims.test.ts`, "both pages state the restore window from one constant, and no restore is claimed until one is rehearsed").
+- [x] How long each thing is kept, each from its constant, `SIGN_IN_DAYS` now one (`test/claims.test.ts`, "the security page says how long each thing is kept from the constant that keeps it").
+- [x] Sub-processors from `SUB_PROCESSORS`, each with its agreement, the notice naming the same, and every binding in `wrangler.jsonc` belonging to one (`test/claims.test.ts`, "the sub-processors on /security are the ones the notice names…").
+- [x] What is not done, and where to report a vulnerability (`test/claims.test.ts`, "the security page says what is not done, and where to report a vulnerability").
+- [x] The ICO registration shows only from `OPERATOR_ICO_REFERENCE` (`test/documents.test.ts`, "the ICO reference is the setting's" and "without the setting, no page says anything of the ICO"; `scripts/deploy-config.test.ts`; `test/deployment.test.ts`).
+- [x] The foot's notices gain Security and Accessibility; the sitemap lists both; a public page links only to public pages and to `OUTSIDE_LINKS`, each matched whole (`test/claims.test.ts`, "the sitemap lists exactly the public pages…"; `e2e/public-links.spec.ts`; `e2e/one-way-in.spec.ts`).
+- [x] The owner accepts the screenshots of `/security` and `/accessibility` at 390px and 1280px, in both schemes (`cmux-assets/browser/timesifier/TS-105/`). _Accepted: the owner's form answer, 23 Nov 2026._
+- [ ] Slice 105d: `/dpa`, accepted by an organisation's owner, on `ts-105-dpa`.
+- [ ] typecheck, lint and tests pass in the pipeline.
+
 ### TS-103 · The public pages at their best
 
 Builder: AI sessions on branch `ts-103-marketing`. The owner: "marketing on the side we'll beautify it". In review: the pull request against `main`; verifying the site in Google Search Console and Bing Webmaster Tools needs the owner (steps in the pull request). No migration. `docs/design-system.md` ("Pages outside the shell"), decision 43.

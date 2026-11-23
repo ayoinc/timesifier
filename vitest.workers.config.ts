@@ -33,6 +33,9 @@ export default defineConfig({
 					OPERATOR_COMPANY_NUMBER: "00000001",
 					OPERATOR_REGISTERED_IN: "Scotland",
 					OPERATOR_REGISTERED_OFFICE: "1 Example Row, Exampleton, EX1 1EX",
+					// Optional (TS-105): with it the notices name the ICO's register; a
+					// test removes it to see that they then say nothing of the ICO.
+					OPERATOR_ICO_REFERENCE: "ZA000000",
 				},
 			},
 		})),

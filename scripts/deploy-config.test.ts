@@ -125,6 +125,8 @@ describe("scripts/deploy-config.ts, the check before every deploy", () => {
 		["OPERATOR_COMPANY_NUMBER", "company number SC000001", "the number alone"],
 		["OPERATOR_REGISTERED_IN", "Scotland\n", "one line"],
 		["OPERATOR_REGISTERED_OFFICE", "1 Example Row\nExampleton\nEX1 1EX", "on one line"],
+		["OPERATOR_ICO_REFERENCE", "ICO ZA123456", "the reference alone"],
+		["OPERATOR_ICO_REFERENCE", "za123456", "in capitals, as the register gives it"],
 	])("refuses %s = %j (%s)", (name, value) => {
 		const directory = checkout();
 
@@ -218,6 +220,21 @@ describe("scripts/deploy-config.ts --write", () => {
 			required: ["BETTER_AUTH_SECRET", "TURNSTILE_SECRET_KEY", "PLATFORM_OWNERS"],
 		});
 		expect(written.workers_dev).toBe(false);
+	});
+
+	it("writes the company's ICO reference beside its other details only when it is set", () => {
+		const without = checkout();
+		const withIt = checkout();
+
+		deployConfig(SETTINGS, "--write", without);
+		deployConfig({ ...SETTINGS, OPERATOR_ICO_REFERENCE: "ZA123456" }, "--write", withIt);
+
+		const unset = readJsonc(join(without, "wrangler.jsonc"));
+		expect(unset.vars).not.toHaveProperty("OPERATOR_ICO_REFERENCE");
+		expect(unset.previews.vars).not.toHaveProperty("OPERATOR_ICO_REFERENCE");
+		const set = readJsonc(join(withIt, "wrangler.jsonc"));
+		expect(set.vars.OPERATOR_ICO_REFERENCE).toBe("ZA123456");
+		expect(set.previews.vars.OPERATOR_ICO_REFERENCE).toBe("ZA123456");
 	});
 
 	it("writes the file that migrates the previews' database, and it names that database alone", () => {

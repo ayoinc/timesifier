@@ -155,10 +155,19 @@ describe("a Worker without the company that runs it names nobody", () => {
 	])("without %s the pages that name the company are not served", async (name) => {
 		setBinding(name, undefined);
 
-		for (const path of ["/", "/sign-in", "/privacy", "/terms"]) {
+		for (const path of ["/", "/sign-in", "/privacy", "/terms", "/security", "/accessibility"]) {
 			expect((await worker.fetch(`${ORIGIN}${path}`)).status, path).toBe(500);
 		}
 		expect(logged).toContain(`deployment: ${name} is not set`);
+	});
+
+	it("with an ICO reference that is not one, the pages that would show it are not served", async () => {
+		setBinding("OPERATOR_ICO_REFERENCE", "ICO ZA000000");
+
+		for (const path of ["/privacy", "/security"]) {
+			expect((await worker.fetch(`${ORIGIN}${path}`)).status, path).toBe(500);
+		}
+		expect(logged).toContain("deployment: OPERATOR_ICO_REFERENCE is not valid");
 	});
 });
 

@@ -11,7 +11,7 @@ import { LINK, MAIN_ID, PAGE, SiteFooter, SiteHeader, SkipLink } from "./Site";
 // its heading in the margin where there is one, where it stays while the part
 // is read. Nothing on these pages moves.
 
-/** The date the notices were first written. Each says so under its title. */
+/** The date the first notices were written. Each says so under its title, unless it began later. */
 const FIRST_VERSION = { date: "2026-11-11", inWords: "11 November 2026" };
 
 /** A date, as the page shows it and as `<time>` gives it to machines. */
@@ -26,6 +26,8 @@ export interface DocumentProps {
 	title: string;
 	/** When the words of this version were written, when it is not the first. */
 	version?: DocumentDate;
+	/** When the page's first version was written, where that was not with the first notices. */
+	first?: DocumentDate;
 	/** What the page is and what it covers, in a sentence or two. */
 	lead: ReactNode;
 	/** The company that runs this deployment, which the foot of the page names. */
@@ -34,7 +36,15 @@ export interface DocumentProps {
 	children: ReactNode;
 }
 
-export function Document({ path, title, version, lead, operator, children }: DocumentProps) {
+export function Document({
+	path,
+	title,
+	version,
+	first = FIRST_VERSION,
+	lead,
+	operator,
+	children,
+}: DocumentProps) {
 	// The parts are the children that are `DocumentSection`s, in their order.
 	const parts = Children.toArray(children).flatMap((child) =>
 		isValidElement<DocumentSectionProps>(child) && child.type === DocumentSection
@@ -54,11 +64,11 @@ export function Document({ path, title, version, lead, operator, children }: Doc
 							{version ? (
 								<>
 									This version <time dateTime={version.date}>{version.inWords}</time>; first version{" "}
-									<time dateTime={FIRST_VERSION.date}>{FIRST_VERSION.inWords}</time>
+									<time dateTime={first.date}>{first.inWords}</time>
 								</>
 							) : (
 								<>
-									First version, <time dateTime={FIRST_VERSION.date}>{FIRST_VERSION.inWords}</time>
+									First version, <time dateTime={first.date}>{first.inWords}</time>
 								</>
 							)}
 						</p>
