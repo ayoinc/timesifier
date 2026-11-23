@@ -2,10 +2,11 @@ import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { type ReactNode, useState } from "react";
 import { useLocale } from "react-aria";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import * as z from "zod";
 
 import { BillingType } from "~/billing/billable";
+import { BudgetBar, budgetFigure } from "~/budgets/BudgetBar";
 import { BudgetKind, isHoursBudget } from "~/budgets/budget";
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
@@ -19,9 +20,14 @@ import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { quantityText } from "~/invoices/lines";
 import { parseRequest } from "~/lib/validate";
-import { formatMoney, isCurrencyCode } from "~/money/money";
+import { isCurrencyCode } from "~/money/money";
 import { moneyText, parseBudgetHours, parseMoney } from "~/money/typed";
-import { mayManageRates, mayManageTasks, timeScopeOf } from "~/organisations/access";
+import {
+	mayDuplicateProjects,
+	mayManageRates,
+	mayManageTasks,
+	timeScopeOf,
+} from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -40,6 +46,7 @@ import {
 	RATE_MODE_LABELS,
 	RATE_MODES,
 } from "~/projects/billing";
+import { DuplicateSheet } from "~/projects/DuplicateSheet";
 import { projectCurrencies, projectPage, projectProfit } from "~/projects/project.server";
 import {
 	defaultRatesPath,
@@ -49,10 +56,11 @@ import {
 	projectPath,
 	projectTabIn,
 } from "~/projects/projects";
+import { offeredCopyName } from "~/projects/projects.server";
 import { changeBilling, changeBudget, changeOvertimeRate } from "~/projects/settings.server";
 import { resolveRate } from "~/rates/rates";
 import { ratesForProject, setRate } from "~/rates/rates.server";
-import { dayLabel, hoursAndMinutes } from "~/reports/format";
+import { dayLabel } from "~/reports/format";
 import { destination, destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { negotiateLocale } from "~/shell/locale";
@@ -120,6 +128,13 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 		managesRates,
 		managesTasks,
 		showsClients: membership.organisation.clientsEnabled,
+		/**
+		 * The name a copy of the project is offered (TS-122, S2-06), to the owners
+		 * and admins who may duplicate it (decision 65); null to anyone else.
+		 */
+		copyName: mayDuplicateProjects(membership.role)
+			? await offeredCopyName(scope, page.project.name)
+			: null,
 		// Read only for Overview, where it is shown, and only for those who see rates.
 		profit: tab === "overview" ? await projectProfit(membership, page.project.id, url, now) : null,
 	};
@@ -403,6 +418,8 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 	const { page, tab, tabs } = loaderData;
 	const organisation = useOrganisation();
 	const [said, setSaid] = useState<string | null>(null);
+	const [duplicating, setDuplicating] = useState(false);
+	const navigate = useNavigate();
 	const { project } = page;
 
 	return (
@@ -422,6 +439,37 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 					.filter(Boolean)
 					.join(" · ")}
 			</PageLead>
+			{loaderData.copyName !== null && (
+				<div className="mt-4">
+					<MenuTrigger>
+						<Button variant="outlined" aria-label={`Actions for ${project.name}`}>
+							Actions
+						</Button>
+						<Menu
+							onAction={(chosen) => {
+								if (chosen === "duplicate") setDuplicating(true);
+							}}
+						>
+							<MenuItem id="duplicate">Duplicate</MenuItem>
+						</Menu>
+					</MenuTrigger>
+				</div>
+			)}
+			{/* The copy is made by Projects' action; its page opens once it is made. */}
+			{loaderData.copyName !== null && (
+				<DuplicateSheet
+					project={project}
+					offered={loaderData.copyName}
+					isOpen={duplicating}
+					onClose={() => setDuplicating(false)}
+					onDone={(done, answer) => {
+						setSaid(done);
+						const copy = answer.changed?.[0];
+						if (copy) navigate(projectPath(organisation.slug, copy));
+					}}
+					action={destinationPath(organisation.slug, "projects")}
+				/>
+			)}
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
@@ -444,53 +492,6 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 				{tab === "settings" && <Settings data={loaderData} onSaid={setSaid} />}
 			</div>
 		</>
-	);
-}
-
-/** Hours or money of a budget, as the page writes them. */
-function budgetFigure(page: Page, value: number, locale: string) {
-	if (!page.budget) return "";
-	return page.budget.hours
-		? hoursAndMinutes(value * 60)
-		: formatMoney(value, page.budget.currency, locale);
-}
-
-/**
- * How much of a budget is spent, as a bar: the spent part in primary, the
- * part over the budget in error. Drawn in SVG, so no `style` attribute is
- * written (docs/security.md); the figures are read out by its role.
- */
-function BudgetBar({
-	label,
-	percent,
-	over,
-}: {
-	label: string;
-	percent: number | null;
-	over: boolean;
-}) {
-	const shown = Math.min(100, percent ?? 100);
-	return (
-		// biome-ignore lint/a11y/useSemanticElements: drawn in SVG from the tokens, which a native meter cannot take.
-		<div
-			role="meter"
-			aria-label={label}
-			aria-valuemin={0}
-			aria-valuemax={100}
-			aria-valuenow={Math.min(100, percent ?? 100)}
-			aria-valuetext={percent === null ? "Over a budget of nothing" : `${percent}% spent`}
-			className="mt-2"
-		>
-			<svg
-				viewBox="0 0 100 4"
-				preserveAspectRatio="none"
-				className="block h-2 w-full"
-				aria-hidden="true"
-			>
-				<rect width="100" height="4" rx="2" className="fill-surface-container-highest" />
-				<rect width={shown} height="4" rx="2" className={over ? "fill-error" : "fill-primary"} />
-			</svg>
-		</div>
 	);
 }
 
@@ -529,13 +530,13 @@ function Overview({ data }: { data: Data }) {
 						<div>
 							<p className="flex flex-wrap justify-between gap-x-6 text-body-large">
 								<span>
-									{budgetFigure(page, budget.whole.spent, locale)} spent of{" "}
-									{budgetFigure(page, budget.whole.amount, locale)}
+									{budgetFigure(budget, budget.whole.spent, locale)} spent of{" "}
+									{budgetFigure(budget, budget.whole.amount, locale)}
 								</span>
 								<span className={budget.whole.over ? "text-error" : undefined}>
 									{budget.whole.over
-										? `${budgetFigure(page, -budget.whole.remaining, locale)} over`
-										: `${budgetFigure(page, budget.whole.remaining, locale)} remaining`}
+										? `${budgetFigure(budget, -budget.whole.remaining, locale)} over`
+										: `${budgetFigure(budget, budget.whole.remaining, locale)} remaining`}
 									{budget.whole.percent !== null && ` · ${budget.whole.percent}%`}
 								</span>
 							</p>
@@ -576,7 +577,7 @@ function Overview({ data }: { data: Data }) {
 													over={line.over}
 												/>
 											}
-											value={`${budgetFigure(page, line.spent, locale)} of ${budgetFigure(page, line.amount, locale)}`}
+											value={`${budgetFigure(budget, line.spent, locale)} of ${budgetFigure(budget, line.amount, locale)}`}
 										/>
 									))}
 								</LedgerRows>

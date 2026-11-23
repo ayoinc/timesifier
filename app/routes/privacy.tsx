@@ -222,6 +222,9 @@ export default function Privacy({
 		"Saved reports": (
 			<>A report a member saves: its name, what it shows, and who it is shared with.</>
 		),
+		"Pinned projects and people": (
+			<>The projects and people a member pins to the top of their own lists, which only they see.</>
+		),
 		"API tokens": (
 			<>
 				Each token's name, what it may do, who made it, when it was last used, when it expires and

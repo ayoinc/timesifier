@@ -6,6 +6,7 @@ import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import type { TimeScope } from "~/organisations/access";
 
+import { copyName } from "./projects";
 import { nameHas } from "./search.server";
 
 /**
@@ -227,4 +228,110 @@ export async function setProjectArchived(
 		id,
 	});
 	return { ok: true, name: changed.name };
+}
+
+/**
+ * The name a copy of the project `name` is offered (`copyName`), against the
+ * projects of the organisation that have its copy's name in theirs.
+ */
+export async function offeredCopyName(scope: OrganisationScope, name: string): Promise<string> {
+	const near = await scope.projects.select((p) => nameHas(p.nameKey, `${name} (copy`));
+	return copyName(name, new Set(near.map((p) => p.nameKey)));
+}
+
+/**
+ * Makes a project of the shape of `sourceId` under the name typed (TS-122,
+ * S2-06): its client, how it bills, its currency, overtime rate and budget
+ * with its lines and alert, its tasks with their billable flags, its tags,
+ * and its rates with their dates. Never its time, expenses, invoices or
+ * dates. The copy is active, whatever the source is, and the log records the
+ * project it was duplicated from. One batch: the copy is whole or not there.
+ * Null for no such project here.
+ */
+export async function duplicateProject(
+	scope: OrganisationScope,
+	actor: string,
+	sourceId: string,
+	typed: string,
+): Promise<{ ok: true; name: string; id: string } | { ok: false; problem: string } | null> {
+	const [source] = await scope.projects.select((p) => eq(p.id, sourceId), { limit: 1 });
+	if (!source) return null;
+	const name = recordName(typed);
+	if (name === null) return { ok: false, problem: RECORD_NAME_PROBLEM };
+	const key = nameKey(name);
+	if (await nameTaken(scope, key)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+	const [tasks, tags, rates, lines] = await Promise.all([
+		scope.projectTasks.select((t) => eq(t.projectId, sourceId)),
+		scope.projectTags.select((t) => eq(t.projectId, sourceId)),
+		scope.rates.select((r) => eq(r.projectId, sourceId)),
+		scope.budgetLines.select((l) => eq(l.projectId, sourceId)),
+	]);
+	const id = uuidv7();
+	try {
+		await scope.batch([
+			scope.projects.statements.insert({
+				id,
+				name,
+				nameKey: key,
+				clientId: source.clientId,
+				billingType: source.billingType,
+				rateMode: source.rateMode,
+				feeMinor: source.feeMinor,
+				currency: source.currency,
+				budgetKind: source.budgetKind,
+				budgetAmount: source.budgetAmount,
+				budgetResetsMonthly: source.budgetResetsMonthly,
+				budgetAlertPercent: source.budgetAlertPercent,
+				budgetWarnMembers: source.budgetWarnMembers,
+				budgetIncludesExpenses: source.budgetIncludesExpenses,
+				overtimeRateMilli: source.overtimeRateMilli,
+			}),
+			// The new project is given the common tasks as it is made (migration
+			// 0014's trigger); the copy has the source's tasks instead, and only them.
+			scope.projectTasks.statements.delete((t) => eq(t.projectId, id)),
+			// A row a statement: D1 binds at most 100 values to one.
+			...tasks.map((t) =>
+				scope.projectTasks.statements.insert({
+					projectId: id,
+					taskId: t.taskId,
+					billable: t.billable,
+				}),
+			),
+			...tags.map((t) => scope.projectTags.statements.insert({ projectId: id, tagId: t.tagId })),
+			...rates.map((r) =>
+				scope.rates.statements.insert({
+					kind: r.kind,
+					userId: r.userId,
+					projectId: id,
+					taskId: r.taskId,
+					amountMinor: r.amountMinor,
+					currency: r.currency,
+					effectiveFrom: r.effectiveFrom,
+				}),
+			),
+			...lines.map((l) =>
+				scope.budgetLines.statements.insert({
+					projectId: id,
+					taskId: l.taskId,
+					userId: l.userId,
+					amount: l.amount,
+				}),
+			),
+			recordStatement(
+				scope,
+				actor,
+				"project.created",
+				{ type: "project", id },
+				changes(null, { name, clientId: source.clientId, duplicatedFromId: sourceId }, [
+					"name",
+					"clientId",
+					"duplicatedFromId",
+				]),
+			),
+		]);
+	} catch (error) {
+		if (isNameClash(error)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+		throw error;
+	}
+	return { ok: true, name, id };
 }

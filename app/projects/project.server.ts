@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { billableMinuteMinor } from "~/billing/billable";
-import { type BudgetFigures, projectBudget } from "~/budgets/budget.server";
+import { crossedThreshold } from "~/budgets/budget";
+import { type BudgetFigures, projectBudget, projectBudgets } from "~/budgets/budget.server";
 import { among, type OrganisationScope, users } from "~/db";
 import { formatMoney, roundHalfUp } from "~/money/money";
 import { maySeeRates, type TimeScope } from "~/organisations/access";
@@ -168,11 +169,7 @@ export async function projectPage(
 		money,
 		pricing,
 	});
-	// A budget is shown to those who oversee the work: in hours to a manager
-	// too, in fees only to those who see rates. A member is only warned (TS-069).
-	const seesBudget = seesRates || membership.managesTeams;
-	const shownBudget: BudgetFigures | null =
-		budget && seesBudget && (budget.hours || seesRates) ? budget : null;
+	const shownBudget = budgetShownTo(membership, budget);
 
 	const memberIds = members.map((m) => m.userId);
 	const names = await namesOf([...new Set([...memberIds, ...byPerson.keys()])]);
@@ -386,4 +383,83 @@ export async function projectCurrencies(scope: OrganisationScope, projectId: str
 		clientCurrency,
 		organisationCurrency: money.currency,
 	};
+}
+
+/**
+ * The budget as `membership` is shown it, or null. A budget is shown to those
+ * who oversee the work: in hours to a manager too, in fees only to those who
+ * see rates. A member is only warned (TS-069). The project page and Projects
+ * (TS-122) both ask here.
+ */
+export function budgetShownTo(
+	membership: Membership,
+	budget: BudgetFigures | null,
+): BudgetFigures | null {
+	const seesRates = maySeeRates(membership.role);
+	if (!budget || !(seesRates || membership.managesTeams)) return null;
+	return budget.hours || seesRates ? budget : null;
+}
+
+/** A project's budget as a row of Projects shows it. Amounts are minutes for hours, minor units of `currency` for fees. */
+export interface ListedBudget {
+	hours: boolean;
+	currency: string;
+	amount: number;
+	spent: number;
+	remaining: number;
+	percent: number | null;
+	over: boolean;
+	/** The project's alert percentage, once the budget has reached it; null before, or with no alert. */
+	alertReached: number | null;
+}
+
+/**
+ * The budgets of the active projects `projectIds` that `membership` is shown,
+ * for their current period, by project id: the project page's own figures
+ * (`projectBudgets`, `budgetShownTo`), so a row's percentage is the page's
+ * (TS-122, S2-07). A per-line budget with no line has no whole, and no row.
+ */
+export async function listedBudgets(
+	scope: OrganisationScope,
+	membership: Membership,
+	projectIds: readonly string[],
+	now: number,
+): Promise<Map<string, ListedBudget>> {
+	const listed = new Map<string, ListedBudget>();
+	if (projectIds.length === 0 || !(maySeeRates(membership.role) || membership.managesTeams)) {
+		return listed;
+	}
+	const projects = (
+		await scope.projects.select((p) => and(among(p.id, projectIds), ne(p.budgetKind, "none")))
+	).filter((p) => p.archivedAt === null);
+	if (projects.length === 0) return listed;
+	const money = await organisationMoney(scope.organisationId);
+	const figures = await projectBudgets(scope, projects, {
+		zone: membership.organisation.timeZone,
+		now,
+		money,
+		pricing: await pricingOf(scope, money.currency),
+	});
+	for (const project of projects) {
+		const budget = budgetShownTo(membership, figures.get(project.id) ?? null);
+		if (!budget?.total || budget.amount === null) continue;
+		const { amount } = budget;
+		const alert = project.budgetAlertPercent;
+		listed.set(project.id, {
+			hours: budget.hours,
+			currency: budget.currency,
+			amount,
+			spent: budget.total.spent,
+			remaining: budget.total.remaining,
+			percent: budget.total.percent,
+			over: budget.total.over,
+			alertReached:
+				alert !== null &&
+				alert > 0 &&
+				crossedThreshold({ amount, spent: 0 }, { amount, spent: budget.total.spent }, alert)
+					? alert
+					: null,
+		});
+	}
+	return listed;
 }

@@ -56,6 +56,7 @@ export function EntryChoices({
 					clientName: choices?.clients[p.id] ?? null,
 				}))}
 				recent={choices?.recent}
+				pinned={choices?.pinned}
 				value={projectId}
 				onChange={setProjectId}
 				autoFocus={autoFocusProject}

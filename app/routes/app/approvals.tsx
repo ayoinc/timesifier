@@ -24,7 +24,11 @@ import {
 	withoutTab,
 } from "~/approvals/choices";
 import { namesOf, refusersNamed, refusersOfAll } from "~/approvals/refusals.server";
-import { managersAwaySentence, refusedBeforeSentence } from "~/approvals/words";
+import {
+	managersAwaySentence,
+	notSubmittedSentence,
+	refusedBeforeSentence,
+} from "~/approvals/words";
 import { Button } from "~/components/Button";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
@@ -314,6 +318,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			returned: returned.length,
 			"not-submitted": notSubmitted?.length ?? null,
 		},
+		/**
+		 * The names of those counted in Not submitted, the people the viewer
+		 * decides, which the empty Pending says (TS-122, S2-12). Null while the
+		 * week is open: who has not submitted it is known once it has closed.
+		 */
+		notSubmitted:
+			notSubmitted?.map((p) => (p.address ? shownName({ email: p.address }) : p.name)) ?? null,
 		/** The requests for leave waiting for this person's decision, whatever their days (TS-061). */
 		leaveWaiting: leaveRequests.pending.map((r) => ({
 			id: r.id,
@@ -646,7 +657,23 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 						This week has not ended yet. Who has not submitted it is listed once it has.
 					</EmptySheet>
 				) : rows.length === 0 ? (
-					<EmptySheet heading={status}>{NOTHING[query.status]}</EmptySheet>
+					<EmptySheet heading={status}>
+						{NOTHING[query.status]}
+						{query.status === "pending" &&
+							loaderData.notSubmitted !== null &&
+							loaderData.notSubmitted.length > 0 && (
+								<>
+									{" "}
+									{notSubmittedSentence(loaderData.notSubmitted)}{" "}
+									<Link
+										to={`${here}?${WEEK_PARAM}=${week.period.startsOn}&status=not-submitted${grouped}`}
+										className={TEXT_LINK}
+									>
+										Show them
+									</Link>
+								</>
+							)}
+					</EmptySheet>
 				) : (
 					<Ledger heading={status} note={`By ${query.group}`}>
 						{query.group === "person" ? (

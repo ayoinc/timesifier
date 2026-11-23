@@ -25,14 +25,16 @@ import {
 } from "~/components/field";
 import { ArrowDropDownIcon } from "~/components/icons/ArrowDropDownIcon";
 import { POPOVER_MOTION } from "~/components/motion";
+import { PINNED_TITLE } from "~/pins/pins";
 
 // The project of an entry or an expense, chosen by typing part of its name or
 // its client's (Harvest's project picker, research/harvest-taste.md item 5).
-// The list opens with the person's recent projects, then the rest under their
-// clients, A to Z. It is the Material 3 filled field of Select and TextField
-// (see components/field.ts) over React Aria's ComboBox, whose server HTML has
-// no `style` attribute; the form receives the project's id from a hidden input
-// (`formValue="key"`), never the text typed.
+// The list opens with the projects the person pinned (TS-122, S2-09), then
+// their recent projects, then the rest under their clients, A to Z. It is the
+// Material 3 filled field of Select and TextField (see components/field.ts)
+// over React Aria's ComboBox, whose server HTML has no `style` attribute; the
+// form receives the project's id from a hidden input (`formValue="key"`),
+// never the text typed.
 
 /** A project the picker offers. The caller leaves archived projects out. */
 export interface PickerProject {
@@ -49,6 +51,8 @@ export interface ProjectPickerProps {
 	projects: readonly PickerProject[];
 	/** The ids of the person's recent projects, most recent first; at most five are shown. */
 	recent?: readonly string[];
+	/** The ids of the projects the person pinned; all are shown, first, A to Z. */
+	pinned?: readonly string[];
 	/** The chosen project's id. */
 	value: string | null;
 	/** Called with the id of the project the person chose. */
@@ -73,17 +77,19 @@ export const NO_CLIENT_TITLE = "No client";
 export const NO_MATCH = "No project matches";
 
 /**
- * The list as shown for what is typed: up to five recent projects first, then
- * each client's projects, clients A to Z and projects A to Z within them, and
- * the projects without a client last. A recent project is not repeated under
- * its client. What is typed keeps the projects whose name or client's name
- * holds it, in any case; an empty query keeps every one. Sections left empty
- * are dropped.
+ * The list as shown for what is typed: the pinned projects first, A to Z,
+ * then up to five recent projects, then each client's projects, clients A to
+ * Z and projects A to Z within them, and the projects without a client last. A
+ * project is listed once: a pinned one is not repeated as recent, nor either
+ * under its client. What is typed keeps the projects whose name or client's
+ * name holds it, in any case; an empty query keeps every one. Sections left
+ * empty are dropped.
  */
 export function projectSections(
 	projects: readonly PickerProject[],
 	recent: readonly string[],
 	query: string,
+	pinned: readonly string[] = [],
 ): ProjectSection[] {
 	const needle = query.trim().toLocaleLowerCase();
 	const matches = (project: PickerProject) =>
@@ -92,19 +98,23 @@ export function projectSections(
 		(project.clientName?.toLocaleLowerCase().includes(needle) ?? false);
 
 	const byId = new Map(projects.map((project) => [project.id, project]));
+	const isPinned = new Set(pinned);
+	const pinnedProjects = projects
+		.filter((project) => isPinned.has(project.id))
+		.sort((a, b) => a.name.localeCompare(b.name));
 	const recentProjects: PickerProject[] = [];
 	for (const id of recent) {
 		const project = byId.get(id);
-		if (!project || recentProjects.includes(project)) continue;
+		if (!project || recentProjects.includes(project) || isPinned.has(id)) continue;
 		recentProjects.push(project);
 		if (recentProjects.length === RECENT_LIMIT) break;
 	}
-	const isRecent = new Set(recentProjects.map((project) => project.id));
+	const isAbove = new Set([...pinnedProjects, ...recentProjects].map((project) => project.id));
 
 	const groups = new Map<string, PickerProject[]>();
 	const noClient: PickerProject[] = [];
 	for (const project of projects) {
-		if (isRecent.has(project.id) || !matches(project)) continue;
+		if (isAbove.has(project.id) || !matches(project)) continue;
 		if (project.clientName === null) {
 			noClient.push(project);
 			continue;
@@ -115,6 +125,7 @@ export function projectSections(
 	}
 
 	const sections: ProjectSection[] = [
+		{ id: "pinned", title: PINNED_TITLE, projects: pinnedProjects.filter(matches) },
 		{ id: "recent", title: RECENT_TITLE, projects: recentProjects.filter(matches) },
 		...[...groups]
 			.sort(([a], [b]) => a.localeCompare(b))
@@ -142,6 +153,7 @@ export function ProjectPicker({
 	name,
 	projects,
 	recent = [],
+	pinned = [],
 	value,
 	onChange,
 	isRequired,
@@ -151,7 +163,7 @@ export function ProjectPicker({
 	// What the person has typed since they last chose; null shows the chosen project's name.
 	const [query, setQuery] = useState<string | null>(null);
 	const chosen = projects.find((project) => project.id === value) ?? null;
-	const sections = projectSections(projects, recent, query ?? "");
+	const sections = projectSections(projects, recent, query ?? "", pinned);
 
 	return (
 		<ComboBox

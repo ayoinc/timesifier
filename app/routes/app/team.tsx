@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import * as z from "zod";
 
@@ -33,6 +33,7 @@ import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { shownName } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
+import { pinnedPeopleIds, pinPerson } from "~/pins/pins.server";
 import { type ScheduleView, scheduleView } from "~/schedules/schedules";
 import { formerPlace, placesOf, scheduleBookOf } from "~/schedules/schedules.server";
 import { destination, destinationPath } from "~/shell/destinations";
@@ -129,7 +130,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 	const now = Date.now();
 	const viewed = await viewedPeriod(membership, url, 0, now);
-	const people = await teamPeopleOf(scope, organisation, access);
+	const [people, pinned] = await Promise.all([
+		teamPeopleOf(scope, organisation, access),
+		pinnedPeopleIds(scope, access.userId),
+	]);
+	const isPinned = new Set(pinned);
 	const personId = url.searchParams.get(PERSON_PARAM);
 	const week = { label: periodLabel(viewed.period), ...viewed };
 
@@ -177,7 +182,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	// anybody's time is read (TS-113): only theirs is, and past one page the
 	// total of all of them is one sum.
 	const filter = filterOf(url.searchParams);
-	const matching = matchingPeople(people, filter);
+	// The people the viewer pinned head This week (TS-122, S2-09), each part in
+	// the list's order by name, so the pins are on page 1 (TS-113).
+	const byName = matchingPeople(people, filter);
+	const matching = [
+		...byName.filter((p) => isPinned.has(p.id)),
+		...byName.filter((p) => !isPinned.has(p.id)),
+	];
 	const page = pageOf(matching, pageNumberOf(url.searchParams));
 	const shown = page.items;
 	const [listed, schedules, sum] = await Promise.all([
@@ -215,6 +226,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			const address = addresses.get(p.id) ?? null;
 			return {
 				...p,
+				pinned: isPinned.has(p.id),
 				split: regularAndOvertime(p.seconds, p.overtimeSeconds),
 				// The name, or the start of the address with the whole of it under (harvest-taste item 9).
 				name: address ? shownName({ email: address }) : p.name,
@@ -276,6 +288,7 @@ const form = z.discriminatedUnion("intent", [
 	}),
 	z.object({ intent: z.literal("remove"), teamId: Id, userId: Id }),
 	z.object({ intent: z.literal("manager"), teamId: Id, userId: Id, isManager: Flag }),
+	z.object({ intent: z.literal("pin"), userId: Id, pinned: Flag }),
 ]);
 
 const NAME_PROBLEM = `Give the team a name of 1 to ${RECORD_NAME_MAX_LENGTH} characters, on one line.`;
@@ -294,13 +307,23 @@ function outcome(change: TeamChange, said: string) {
 
 /**
  * Changes to the teams: owners and admins alone (TS-038). A manager or a
- * member who posts the same form is refused, and nothing is written.
+ * member who posts the same form is refused, and nothing is written. Anyone
+ * shown Team pins a person they see there to the top of their own This week
+ * (TS-122, S2-09); somebody they do not see is as absent as nobody.
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation, role, user } = context.get(membershipContext);
-	if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
+	const membership = context.get(membershipContext);
+	const { organisation, role, user } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
+	if (input.intent === "pin") {
+		const seen = await teamPeopleOf(scope, organisation, await accessOf(membership));
+		if (!seen.some((p) => p.id === input.userId)) throw notFound();
+		const change = await pinPerson(scope, user.id, input.userId, input.pinned);
+		if (change === "missing") throw notFound();
+		return done(input.pinned ? "Pinned to the top of This week." : "Unpinned.");
+	}
+	if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
 
 	switch (input.intent) {
 		case "create":
@@ -388,11 +411,27 @@ function ThisWeek({ data }: { data: WeekData }) {
 			[PAGE_PARAM]: number > 1 ? number : null,
 		});
 	const totalLabel = filter === "" ? "Week's total" : `Total for “${filter}”`;
+	// Pin and Unpin (TS-122, S2-09) need no sheet; what the server says goes
+	// to the status line. The row moves to or from the top, so its Actions
+	// button is given the focus back once the list is read again.
+	const [said, setSaid] = useState<string | null>(null);
+	const pin = useFetcher<Outcome>();
+	const pinning = useRef<string | null>(null);
+	const pinAnswer = pin.state === "idle" ? pin.data : undefined;
+	useEffect(() => {
+		if (!pinAnswer) return;
+		setSaid(pinAnswer.ok ? pinAnswer.said : pinAnswer.problem);
+		if (pinning.current) document.getElementById(`person-actions-${pinning.current}`)?.focus();
+		pinning.current = null;
+	}, [pinAnswer]);
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>Each person's time for the week of {week.label}.</PageLead>
 			<TeamTabs slug={organisation.slug} current="week" />
+			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
+				{said}
+			</p>
 			<WeekStepper
 				week={week}
 				extra={`${filter === "" ? "" : `&${FILTER_PARAM}=${encodeURIComponent(filter)}`}${
@@ -442,6 +481,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 											}
 											detail={
 												<>
+													{p.pinned && <span className="block text-on-surface">Pinned</span>}
 													{p.address && <span className="block wrap-anywhere">{p.address}</span>}
 													{p.now && <span className="block text-on-surface">{p.now}</span>}
 													{statusLabel(p.status)}
@@ -470,6 +510,33 @@ function ThisWeek({ data }: { data: WeekData }) {
 														</span>
 													)}
 												</>
+											}
+											action={
+												<MenuTrigger>
+													<Button
+														variant="text"
+														id={`person-actions-${p.id}`}
+														aria-label={`Actions for ${p.name}`}
+													>
+														Actions
+													</Button>
+													<Menu
+														align="end"
+														onAction={(chosen) => {
+															pinning.current = p.id;
+															pin.submit(
+																{ intent: "pin", userId: p.id, pinned: String(chosen === "pin") },
+																{ method: "post" },
+															);
+														}}
+													>
+														{p.pinned ? (
+															<MenuItem id="unpin">Unpin</MenuItem>
+														) : (
+															<MenuItem id="pin">Pin</MenuItem>
+														)}
+													</Menu>
+												</MenuTrigger>
 											}
 										/>
 									))}

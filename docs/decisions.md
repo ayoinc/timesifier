@@ -985,3 +985,21 @@ TS-106, 2026-11-23, from the owner's answers 8, 9 and 10 of the same day.
 **Contact by email only.** `/contact` gives `hello@` (answer 10), `privacy@` and `security@` as `mailto:` links, and the company's details from the deployment's settings (entry 46). No form and no script, and no time to answer is promised, since the owner has given none.
 
 **The band and the foot.** The band at the top of a public page with the way in leads to Features and Pricing from 600px; a page's own places (the home page's four) show from 1200px, so the band fits between. The foot groups its links under Notices, Product and Company.
+
+### 65. Pins are kept per person in a table; owners and admins duplicate a project; a budget past its alert is said in words
+
+Decided by the owner on 2026-11-23 for TS-122 (research/harvest-sweep-2.md, S2-06, S2-07 and S2-09).
+
+**Pins (S2-09).** A member pins a project to the top of Projects and of Track time's picker, and a person they see on Team to the top of This week. A pin is a row of the table `pins` (migration `0033_pins`), keyed to the pinner and the organisation, holding one project or one person, never both. It is the pinner's alone and no other list moves. It goes, by the table's references, when the pinner's membership goes, when the project goes, and when the pinned person's membership goes. Pinned items head their list in that list's own order (A to Z, or nearest the limit), under "Pinned".
+
+| Option                            | Evidence                                                                                                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A table of its own (chosen)       | One row per pin, removed by the database with the membership, the project or the person: nothing to clean up by hand, and every device shows the same pins. |
+| A column of ids on the membership | No join, but a list in a column has no reference, so a project or person gone would stay pinned until something noticed.                                    |
+| The browser's storage             | No server change, but pins would differ between a person's laptop and phone, and the server could not put them first in the page it sends.                  |
+
+**Duplicating a project (S2-06).** Owners and admins duplicate a project, from its page's Actions and the Actions of its row on Projects. Nobody else is offered it, and the server refuses anyone else with 403. A copy holds the project's rates and budget, which a member or contractor may not see; Finance and managers see some of them but do not set them. TS-115 will narrow who creates projects; this rule does not wait for it.
+
+**A budget past its alert (S2-07).** Projects says it in words on the budget's line, "62% of 40:00 · 15:12 left · past the 60% alert". No new warning colour: the line turns to the error colour only once the budget is over, as the project's page does.
+
+**What it costs.** One more table, read once per page by Projects, Team and the Timesheet. A person who may no longer see someone on Team keeps the pin, unused, until either of them leaves. A member who used to be able to duplicate a project no longer can.

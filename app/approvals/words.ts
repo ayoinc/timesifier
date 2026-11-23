@@ -23,6 +23,24 @@ export function managersAwaySentence(names: readonly string[]): string {
 	return `${who} ${names.length === 1 ? "is" : "are"} on leave, so this waits for an owner or admin.`;
 }
 
+/** How many people the sentence on who has not submitted names before it counts the rest. */
+const NAMED_AT_MOST = 5;
+
+/**
+ * Who has not submitted a week that has closed, said on Approvals' empty
+ * Pending (TS-122, S2-12): "3 people have not submitted: Ann, Bob and Cy."
+ * Past five, the first four are named and the rest counted.
+ */
+export function notSubmittedSentence(names: readonly string[]): string {
+	const count = names.length === 1 ? "1 person has" : `${names.length} people have`;
+	const named =
+		names.length > NAMED_AT_MOST
+			? [...names.slice(0, NAMED_AT_MOST - 1), `${names.length - NAMED_AT_MOST + 1} others`]
+			: names;
+	const who = new Intl.ListFormat("en-GB", { type: "conjunction" }).format(named);
+	return `${count} not submitted: ${who}.`;
+}
+
 /**
  * The days of a week over their limit, as Submit would have refused it (TR-01),
  * in the Timesheet's words (`overLabel`): "Over by 7:30 on Tue 10", or "Over 24

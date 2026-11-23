@@ -39,6 +39,52 @@ export function searchIn(search: URLSearchParams): string {
 }
 
 /**
+ * The name a copy of the project `name` is first offered (TS-122, S2-06):
+ * "Site (copy)", then "Site (copy 2)" and on while another project, whose
+ * keys are `taken`, has it.
+ */
+export function copyName(name: string, taken: ReadonlySet<string>): string {
+	for (let n = 1; ; n++) {
+		const offered = `${name} (copy${n === 1 ? "" : ` ${n}`})`;
+		if (!taken.has(nameKey(offered))) return offered;
+	}
+}
+
+/**
+ * The query that orders Projects by how much of each budget is spent, the most
+ * first (TS-122, S2-07): `?sort=limit`. Without it the list is by name.
+ */
+export const SORT_PARAM = "sort";
+export const NEAREST_LIMIT = "limit";
+export const BY_NAME = "name";
+export type ProjectSort = typeof BY_NAME | typeof NEAREST_LIMIT;
+
+/** The order an address asks for: nearest limit when it says so, by name otherwise. */
+export function sortIn(search: URLSearchParams): ProjectSort {
+	return search.get(SORT_PARAM) === NEAREST_LIMIT ? NEAREST_LIMIT : BY_NAME;
+}
+
+/**
+ * The projects nearest their budget's limit first: by the share of the budget
+ * spent, the most first, a budget of nothing spent past counted as over all
+ * others; the projects with no budget shown last, each group in the order it
+ * came in (by name). The sort is stable, so equal shares keep that order too.
+ */
+export function byNearestLimit<
+	P extends { budget: { amount: number; spent: number; over: boolean } | null },
+>(projects: readonly P[]): P[] {
+	const share = (p: P) => {
+		if (!p.budget) return Number.NEGATIVE_INFINITY;
+		if (p.budget.amount === 0) return p.budget.over ? Number.POSITIVE_INFINITY : 0;
+		return p.budget.spent / p.budget.amount;
+	};
+	return [...projects].sort((a, b) => {
+		const [x, y] = [share(a), share(b)];
+		return x === y ? 0 : x > y ? -1 : 1;
+	});
+}
+
+/**
  * Whether a project is one the words `query` find, as `listProjects` finds it:
  * by its name, or by its client's while the organisation shows clients.
  */

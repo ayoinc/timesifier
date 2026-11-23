@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PINNED_TITLE } from "~/pins/pins";
 import {
 	NO_CLIENT_TITLE,
 	type PickerProject,
@@ -69,5 +70,24 @@ describe("projectSections", () => {
 	it("shows nothing for a query nothing holds, and nothing for no projects", () => {
 		expect(shape("zzz")).toEqual([]);
 		expect(projectSections([], ["web"], "")).toEqual([]);
+	});
+
+	it("puts every pinned project first, A to Z, above Recent, and lists each project once (S2-09)", () => {
+		const pinnedShape = (query: string) =>
+			projectSections(PROJECTS, ["copy", "web", "admin"], query, ["web", "audit"]).map(
+				(section) => [section.title, section.projects.map((project) => project.id)],
+			);
+		expect(pinnedShape("")).toEqual([
+			[PINNED_TITLE, ["audit", "web"]],
+			[RECENT_TITLE, ["copy", "admin"]],
+			["Acme", ["site"]],
+			["Globex", ["app"]],
+			["Initech", ["brand"]],
+			[NO_CLIENT_TITLE, ["bench"]],
+		]);
+		expect(pinnedShape("glob")).toEqual([
+			[PINNED_TITLE, ["web"]],
+			["Globex", ["app"]],
+		]);
 	});
 });

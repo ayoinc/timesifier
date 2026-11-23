@@ -69,12 +69,12 @@ describe("My account: leaving (W26)", () => {
 });
 
 describe("Projects and Clients: a row opens its sheet (W24, W15)", () => {
-	it("Projects: the name opens the project's page, Edit opens the sheet, and there is no Actions menu or Search button", async () => {
+	it("Projects: the name opens the project's page, Edit opens the sheet, Actions holds Duplicate (TS-122), and there is no Search button", async () => {
 		await send(`${ACME}/projects`, { intent: "create", name: "Website" });
 		const html = await main(`${ACME}/projects`);
 		expect(html).toMatch(/<a[^>]*href="\/app\/acme\/projects\/[^"]+"[^>]*>Website<\/a>/);
 		expect(html).toMatch(/<button[^>]*aria-label="Edit Website"/);
-		expect(html).not.toContain("Actions for");
+		expect(html).toMatch(/<button[^>]*aria-label="Actions for Website"/);
 		// Only the Apply for a browser with no script, inside <noscript>, submits the filters.
 		const scripted = html.replace(/<noscript>[\s\S]*?<\/noscript>/g, "");
 		const buttons = [...scripted.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].map(
