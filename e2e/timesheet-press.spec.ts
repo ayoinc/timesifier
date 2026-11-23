@@ -53,6 +53,13 @@ function dayAfter(day: string): string {
 	return at.toISOString().slice(0, 10);
 }
 
+/** The day five weeks before `day`: the same weekday, outside any view that shows `day`. */
+function fiveWeeksBefore(day: string): string {
+	const at = new Date(`${day}T00:00:00Z`);
+	at.setUTCDate(at.getUTCDate() - 35);
+	return at.toISOString().slice(0, 10);
+}
+
 /** The data requests (`.data`) the page makes from now on, by address. */
 function dataRequests(page: Page): string[] {
 	const seen: string[] = [];
@@ -152,6 +159,27 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
 			await page.keyboard.press("Escape");
 			await expect(trackSheet(page)).toBeHidden();
 			expect(requests.filter((each) => each.includes("/timesheet/day"))).toEqual([]);
+
+			// A day the page does not show is read from the server, and while it
+			// is, what has been typed stays.
+			const far = fiveWeeksBefore(day);
+			await main(page).getByRole("button", { name: "Track time", exact: true }).click();
+			const sheet = trackSheet(page);
+			await sheet.getByRole("textbox", { name: "Description" }).fill("Plans");
+			await sheet.getByRole("textbox", { name: "Hours" }).fill("2");
+			const releaseDay = await holdRequests(page, /\/timesheet\/day\.data/);
+			await sheet.getByLabel("Date").fill(far);
+			await expect(sheet.getByRole("button", { name: "Save entry" })).toBeDisabled();
+			await expect(sheet.getByRole("textbox", { name: "Description" })).toHaveValue("Plans");
+			await releaseDay();
+			await expect(sheet.getByRole("button", { name: "Save entry" })).toBeEnabled();
+			await expect(sheet.getByRole("textbox", { name: "Description" })).toHaveValue("Plans");
+			await sheet.getByRole("button", { name: "Save entry" }).click();
+			await expect(sheet).toBeHidden();
+			await openShell(page, `${organisationPath(slug)}?day=${far}`);
+			await expect(main(page)).toContainText("Plans");
+			await openShell(page, `${organisationPath(slug)}?day=${day}`);
+			await page.waitForLoadState("networkidle");
 
 			// The month's totals are held; its days are not.
 			const release = await holdRequests(page, /\/timesheet\/month\.data/);

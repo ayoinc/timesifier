@@ -148,6 +148,17 @@ function heldDay(page: TimesheetAnswer | undefined, day: Day | undefined) {
 	};
 }
 
+/**
+ * What the sheet needs of the first day the Timesheet shows. Its projects and
+ * choices hold for every day, so while a day the page does not show is read
+ * the fields stay, with what has been typed in them; that day's rules wait
+ * for the server.
+ */
+function heldFirstDay(page: TimesheetAnswer | undefined) {
+	if (page === undefined || page.data.view === "history") return undefined;
+	return heldDay(page, page.data.rules[0]?.day);
+}
+
 function TrackTimeSheet({
 	slug,
 	request,
@@ -197,13 +208,16 @@ function TrackTimeSheet({
 	const fetched =
 		fetcher.data && (asked === undefined || fetcher.data.day === asked) ? fetcher.data : undefined;
 	const data = fetched ?? held ?? fetcher.data;
+	// What the fields are drawn from: the answer for the day, or, while a day
+	// the page does not show is read, what the page holds.
+	const shown = data ?? heldFirstDay(page);
 	// The date the data is for, once it has come: today when none was asked for.
 	useEffect(() => {
 		if (data && date === "") setDate(data.day);
 	}, [data, date]);
 	const current = data && (asked === undefined || data.day === asked) ? data : undefined;
 
-	const active = (data?.projects ?? []).filter((p) => !p.archived);
+	const active = (shown?.projects ?? []).filter((p) => !p.archived);
 	const isToday = current !== undefined && current.day === current.today;
 	const timerAllowed = isToday && request.start === undefined;
 	const startsTimer = timerAllowed && hours.trim() === "";
@@ -211,9 +225,9 @@ function TrackTimeSheet({
 	const lockReason = current?.lockReason ?? null;
 	const closed = lockReason ? null : refusalOfDay(rule);
 	const overtime = lockReason === null && takesOvertimeOnly(rule);
-	const recent = data?.track.recent ?? [];
+	const recent = shown?.track.recent ?? [];
 	const firstChoice = recent.find((id) => active.some((p) => p.id === id)) ?? active[0]?.id ?? null;
-	const loading = data === undefined;
+	const loading = shown === undefined;
 
 	return (
 		<FormSheet
@@ -245,7 +259,7 @@ function TrackTimeSheet({
 					</Link>
 				</p>
 			) : (
-				<TrackChoicesContext value={data.track}>
+				<TrackChoicesContext value={shown.track}>
 					<EntryChoices projects={active} defaultProjectId={firstChoice} autoFocusProject />
 					<TextField
 						label="Description"
