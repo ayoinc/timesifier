@@ -42,21 +42,27 @@ jobs:
       - name: Dependency audit
         run: pnpm audit --audit-level=moderate
 
-  # A job of its own, so that it runs beside `checks` and a slow or flaky browser
-  # run is told apart from a failed check at a glance.
-  browser-tests:
-    name: browser tests
+  # Jobs of their own, so that they run beside `checks` and a slow or flaky
+  # browser run is told apart from a failed check at a glance. About 700 tests in
+  # two engines took 33 to 44 minutes in one job on 2026-11-23, so they run in four
+  # shards side by side, each with its own build, server and database. Playwright
+  # splits them by count (`--shard`); the slowest quarter took about 13 minutes of
+  # tests in the runs measured.
+  browser-shards:
+    name: browser shard ${{ matrix.shard }}/4
     runs-on: ubuntu-24.04
     # Playwright's own image holds the browsers and every system library they
     # need, so the job never waits on Ubuntu's package mirrors. Its version is
     # @playwright/test's in package.json, and its digest is pinned.
     container:
       image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:6e3fb709361521eb27161606e6da6d2674e5e89fa16516cb37d6fdd91372273d
-    # About 700 tests in two engines: 33 to 44 minutes on the runner on
-    # 2026-11-23 (702 passed in 44.2m in #80's run 45195970329, which the old
-    # limit of 45 cancelled before the job could finish), so 60 leaves room
-    # without hiding a hang.
-    timeout-minutes: 60
+    # Twice the slowest shard measured, so a slow day passes and a hang does not.
+    timeout-minutes: 30
+    strategy:
+      # Every shard runs to its end, so the report holds every failure at once.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,19 +73,71 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The browser tests make their own build, which includes the component
-      # gallery, and delete it when they end.
-      - run: pnpm test:e2e
-      # A failed test's trace (the page at each step, its console and network)
-      # and the report, kept for a week, so a failure seen only here can be read.
-      - if: failure()
+      # Two passes, so the tests that seed the database run after every other test
+      # of this shard, one at a time (playwright.config.ts, E2E_PASS). The first
+      # makes the build, which includes the component gallery, and keeps it for
+      # the second, which deletes it when it ends. Each writes its report as a blob.
+      - name: Every test but the ones that seed the database
+        run: pnpm test:e2e --shard="$SHARD/4"
+        env:
+          SHARD: ${{ matrix.shard }}
+          E2E_PASS: first
+          PLAYWRIGHT_BLOB_OUTPUT_FILE: blob-report/${{ matrix.shard }}-first.zip
+      # Also after a failure in the first pass, so the report holds these too.
+      - name: The tests that seed the database, one at a time
+        if: ${{ !cancelled() }}
+        run: pnpm test:e2e --shard="$SHARD/4"
+        env:
+          SHARD: ${{ matrix.shard }}
+          E2E_PASS: seeded
+          PLAYWRIGHT_BLOB_OUTPUT_FILE: blob-report/${{ matrix.shard }}-seeded.zip
+      - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 1
+
+  # The one result branch protection asks for, and what `preview` and `deploy`
+  # wait on: it fails unless every shard passed, and it runs when one failed or
+  # was cancelled, because a required check that is skipped counts as passed.
+  browser-tests:
+    name: browser tests
+    if: ${{ always() }}
+    needs: [browser-shards]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: blob-report-*
+          path: blob-report
+          merge-multiple: true
+      # One report of every shard: each test's result and time, and a failed
+      # test's trace (the page at each step, its console and network), kept for a
+      # week, so a failure seen only here can be read.
+      - run: pnpm exec playwright merge-reports --reporter html blob-report
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
           name: browser-test-results
-          path: |
-            test-results/
-            playwright-report/
+          path: playwright-report/
           retention-days: 7
+      - name: Every shard passed
+        if: ${{ always() }}
+        env:
+          SHARDS: ${{ needs.browser-shards.result }}
+        run: |
+          [ "$SHARDS" = success ] || { echo "The browser shards ended: $SHARDS."; exit 1; }
+          echo "Every browser shard passed."
 
   # Migrations reach the database before the new code is live, so a migration
   # that removes or renames something breaks the code still running. Such a

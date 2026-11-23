@@ -56,20 +56,44 @@ const SERVER_ENV = {
 // 3. create the local D1 database from the migrations, where it does not exist;
 // 4. serve. Wrangler's local EMAIL binding sends nothing: it writes each message
 //    under .wrangler/tmp/email/, where e2e/auth.ts reads the sign-in codes.
-const START_SERVER = [
+// The second pass of a shard (below) skips 1 and 2: it serves the build its first
+// pass left.
+const BUILD = [
 	"pnpm exec react-router build",
 	`printf 'PLATFORM_OWNERS=%s\\n' "${SERVER_ENV.PLATFORM_OWNERS}" >> build/server/.dev.vars`,
-	"pnpm db:migrate:local",
-	`pnpm exec vite preview --port ${PORT} --strictPort`,
-].join(" && ");
+];
+const SERVE = ["pnpm db:migrate:local", `pnpm exec vite preview --port ${PORT} --strictPort`];
+
+// The pipeline splits the tests into shards, each a job with its own server and
+// database, and runs each shard in two passes (.github/workflows/ci.yml, "browser
+// shard"). One pass could not keep the tests that seed the database after the
+// others: Playwright leaves a project's dependencies out of the split and runs
+// them whole in every shard that needs them, so the seeding tests' dependency on
+// "chromium" would bring every Chromium test into each shard. So E2E_PASS=first
+// runs everything but the seeding tests, and keeps its build; E2E_PASS=seeded then
+// runs the seeding tests alone, one at a time, after a setup of their own, and
+// removes the build. Without E2E_PASS, as on a developer's machine, everything
+// runs in one pass, the seeding tests after every other Chromium test.
+const PASS = process.env.E2E_PASS;
+if (PASS !== undefined && PASS !== "first" && PASS !== "seeded") {
+	throw new Error(`E2E_PASS is "first", "seeded" or unset, not "${PASS}".`);
+}
+const SEEDED_PROJECT = "chromium-seeded";
+/** Whether a project runs in this pass. The setup runs in both. */
+function inThisPass(project: string): boolean {
+	if (PASS === undefined || project === "setup") return true;
+	return (project === SEEDED_PROJECT) === (PASS === "seeded");
+}
 
 export default defineConfig({
 	testDir: "./e2e",
-	globalTeardown: "./e2e/remove-build.ts",
+	...(PASS === "first" ? {} : { globalTeardown: "./e2e/remove-build.ts" }),
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: 0,
-	reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+	// In the pipeline each pass of each shard writes a blob, and the `browser tests`
+	// job merges them into one HTML report.
+	reporter: process.env.CI ? [["github"], ["blob"]] : "list",
 	use: {
 		baseURL: ORIGIN,
 		trace: "retain-on-failure",
@@ -90,9 +114,10 @@ export default defineConfig({
 			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
 		},
 		{
-			name: "chromium-seeded",
+			name: SEEDED_PROJECT,
 			testMatch: SEEDS_THE_DATABASE,
-			dependencies: ["chromium"],
+			// In their own pass the other Chromium tests have already run.
+			dependencies: [PASS === "seeded" ? "setup" : "chromium"],
 			workers: 1,
 			use: { ...devices["Desktop Chrome"], storageState: SIGNED_IN },
 		},
@@ -114,9 +139,9 @@ export default defineConfig({
 			testMatch: IN_WEBKIT_TOO,
 			use: { ...devices["Desktop Safari"] },
 		},
-	],
+	].filter((project) => inThisPass(project.name)),
 	webServer: {
-		command: START_SERVER,
+		command: [...(PASS === "seeded" ? [] : BUILD), ...SERVE].join(" && "),
 		url: ORIGIN,
 		env: SERVER_ENV,
 		reuseExistingServer: false,

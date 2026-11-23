@@ -80,7 +80,7 @@ A criterion is ticked only with its evidence beside it: the command and its resu
 Done means merged, deployed and the smoke test green, with all of these true:
 
 - every acceptance criterion is ticked with evidence;
-- the checks the pipeline runs pass: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:e2e` and `pnpm audit --audit-level=moderate`. The pipeline also scans for secrets;
+- the checks the pipeline runs pass: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, `pnpm test:e2e` and `pnpm audit --audit-level=moderate`. The pipeline also scans for secrets. It runs the browser tests in four shards (`docs/architecture.md`, "Delivery"); `pnpm test:e2e` on its own runs them all in one;
 - the change follows the rules in `docs/security.md`, "Rules for anyone changing the code", and the row of "Controls" for each area it touches;
 - new behaviour has a test that would fail without the change;
 - a change to a page has screenshots at 390px and 1280px in both colour schemes in the pull request, and the owner has accepted them. This is the usual case of a card waiting on the owner;
