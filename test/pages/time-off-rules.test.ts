@@ -14,6 +14,7 @@ import {
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 import { kindOf, seedLeave } from "./leave-seed";
+import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Time off with the timesheet rules of TS-090: notice for leave, requests for
 // overtime and weekend work, and the team's leave to come, through the page's
@@ -163,7 +164,7 @@ describe("notice for leave", () => {
 		const soon = weekdayFrom(addDays(today(), 3));
 		const bare = await requestLeave(grace, "annual", soon, soon);
 		expect(bare.status).toBe(400);
-		expect(bare.said).toMatch(/This is short notice \(\d+ days?\): say why in one line\./);
+		expect(bare.said).toMatch(/This is short notice \(\d+ working days?\): say why in one line\./);
 		expect(bare.id).toBeNull();
 
 		const tooLong = await requestLeave(grace, "annual", soon, soon, {
@@ -182,8 +183,9 @@ describe("notice for leave", () => {
 			told.id,
 		);
 		expect(stored).toMatchObject({ short_notice: 1, notice_reason: "Family emergency" });
-		expect(stored?.notice_days).toBeGreaterThanOrEqual(2);
-		expect(stored?.notice_days).toBeLessThanOrEqual(6);
+		// Three days ahead, moved to a weekday: one to three working days, counted from today (decision 51).
+		expect(stored?.notice_days).toBeGreaterThanOrEqual(1);
+		expect(stored?.notice_days).toBeLessThanOrEqual(3);
 	});
 
 	it("leave asked for in good time is not short, and keeps no reason", async () => {
@@ -195,7 +197,7 @@ describe("notice for leave", () => {
 		expect(made.status).toBe(200);
 		expect(
 			await row(
-				"select short_notice, notice_reason, notice_days >= 29 as enough from leave_requests where id = ?",
+				"select short_notice, notice_reason, notice_days >= 20 as enough from leave_requests where id = ?",
 				made.id,
 			),
 		).toEqual({ short_notice: 0, notice_reason: null, enough: 1 });
@@ -224,7 +226,7 @@ describe("notice for leave", () => {
 		});
 		expect(refused.status).toBe(400);
 		expect(refused.said).toContain(
-			"Annual leave needs 14 days' notice here: the earliest first day is",
+			"Annual leave needs 14 working days' notice here: the earliest first day is",
 		);
 		expect(refused.id).toBeNull();
 		const later = weekdayFrom(addDays(today(), 30));
@@ -240,9 +242,163 @@ describe("notice for leave", () => {
 		for (const approver of [mona, hedy]) {
 			const text = await textAt(REQUESTS, approver);
 			expect(text).toContain("grace@example.com · Annual leave");
-			expect(text).toMatch(/Short notice \(\d+ days?\) Why: “Family emergency”/);
-			expect(text).toMatch(/\d+ days' notice/);
+			expect(text).toMatch(/Short notice \(\d+ working days?\) Why: “Family emergency”/);
+			expect(text).toMatch(/\d+ working days' notice/);
 		}
+	});
+
+	it("notice runs to the first day taken (TR-16)", async () => {
+		const { grace, alan } = await seedPeople();
+		// A Saturday at least three days off, and the Monday after it: the same first day taken.
+		const saturday = onOrAfter(addDays(today(), 3), 6);
+		const monday = addDays(saturday, 2);
+		const fromSaturday = await requestLeave(grace, "annual", saturday, addDays(monday, 2));
+		const fromMonday = await requestLeave(alan, "annual", monday, addDays(monday, 2));
+		expect(fromSaturday.status).toBe(400);
+		// Both short of annual leave's 14 working days, by the same count.
+		expect(fromSaturday.said).toMatch(/This is short notice \(\d+ working days?\)/);
+		const given = (said: string) => said.match(/short notice \((\d+) working days?\)/)?.[1];
+		expect(given(fromSaturday.said)).toBe(given(fromMonday.said));
+
+		const asked = await requestLeave(grace, "annual", saturday, addDays(monday, 2), {
+			noticeReason: "Family",
+		});
+		const askedMonday = await requestLeave(alan, "annual", monday, addDays(monday, 2), {
+			noticeReason: "Family",
+		});
+		const noticeOf = (id: string | null) =>
+			value<number>("select notice_days from leave_requests where id = ?", id);
+		expect(await noticeOf(asked.id)).toBe(await noticeOf(askedMonday.id));
+	});
+});
+
+describe("leave on days that hold time (TR-04)", () => {
+	it("leave is not approved onto a day that holds time, and the approver sees the time", async () => {
+		const { grace, mona } = await seedPeople();
+		const site = await seedProject(acme.id, "Site");
+		const day = weekdayFrom(addDays(today(), 30));
+		const pending = await seedLeave(acme.id, grace.user.id, "annual", day, day, {
+			status: "pending",
+		});
+		await seedEntry(acme.id, grace.user.id, site, `${day}T09:00:00Z`, `${day}T16:30:00Z`);
+
+		const text = await textAt(REQUESTS, mona);
+		expect(text).toContain("grace@example.com · Annual leave");
+		expect(text).toContain("7:30 tracked on");
+		const approve = await ask(mona, { intent: "approve", requestId: pending });
+		expect(approve.status).toBe(409);
+		expect(approve.said).toContain("has 7:30 tracked on");
+		expect(approve.said).toContain(
+			"Leave and time cannot share that day: the time is removed first, or the request refused.",
+		);
+		expect(await value("select status from leave_requests where id = ?", pending)).toBe("pending");
+	});
+
+	it("sick leave is not recorded onto a day of an approved week", async () => {
+		const { grace } = await seedPeople();
+		// A Monday one or two weeks back: a week already approved.
+		const lastMonday = onOrAfter(addDays(today(), -13), 1);
+		await seedPeriod(acme.id, grace.user.id, lastMonday, "approved");
+		const tuesday = addDays(lastMonday, 1);
+		const sick = await requestLeave(grace, "sick", tuesday, tuesday);
+		expect(sick.status).not.toBe(200);
+		expect(sick.said).toContain(
+			"is in a submitted or approved week, so leave cannot be taken on it until the week is withdrawn or reopened.",
+		);
+		expect(sick.id).toBeNull();
+	});
+
+	it("an owner or admin cancels approved leave that has begun, with a reason, while its days are open", async () => {
+		const { hedy, mona, grace, alan, linus } = await seedPeople();
+		// Grace's leave began on a Monday this week; Alan's and Linus's are in
+		// the week one or two weeks back, which a lock date and an approved
+		// week close.
+		const thisMonday = onOrAfter(addDays(today(), -6), 1);
+		const earlier = addDays(thisMonday, -7);
+		const current = await seedLeave(
+			acme.id,
+			grace.user.id,
+			"annual",
+			thisMonday,
+			addDays(thisMonday, 4),
+		);
+		const pastLock = await seedLeave(
+			acme.id,
+			linus.user.id,
+			"annual",
+			earlier,
+			addDays(earlier, 1),
+		);
+		const inApprovedWeek = await seedLeave(
+			acme.id,
+			alan.user.id,
+			"annual",
+			addDays(earlier, 3),
+			addDays(earlier, 4),
+		);
+		await env.DB.prepare("update organisations set locked_through = ? where id = ?")
+			.bind(addDays(earlier, 2), acme.id)
+			.run();
+		await seedPeriod(acme.id, alan.user.id, earlier, "approved");
+
+		// Time off offers it to the admin on the open leave alone, and not to a manager.
+		const listed = await textAt(REQUESTS, hedy);
+		expect(listed).toContain("Approved, begun");
+		expect(listed).toContain("grace@example.com · Annual leave");
+		expect(listed).not.toContain("alan@example.com · Annual leave");
+		expect(listed).not.toContain("linus@example.com · Annual leave");
+		expect(await textAt(REQUESTS, mona)).not.toContain("Approved, begun");
+
+		const cancel = (who: Person, requestId: string) =>
+			ask(who, { intent: "cancel", requestId, comment: "Called back for the audit" });
+		// The person never cancels their own, and is told why.
+		const own = await cancel(grace, current);
+		expect(own.status).toBe(409);
+		expect(own.said).toContain("That leave has begun, so it can no longer be cancelled.");
+		expect((await cancel(mona, current)).status).toBe(403);
+		// A locked day refuses it, by the lock date or by an approved week.
+		const locked = await cancel(hedy, pastLock);
+		expect(locked.status).toBe(409);
+		expect(locked.said).toContain("Those days are on or before the lock date");
+		const closed = await cancel(hedy, inApprovedWeek);
+		expect(closed.status).toBe(409);
+		expect(closed.said).toContain(
+			"is in a submitted or approved week, so this leave cannot be cancelled until the week is withdrawn or reopened.",
+		);
+		expect(
+			await value(
+				"select count(*) from leave_requests where status = 'approved' and id in (?, ?, ?)",
+				current,
+				pastLock,
+				inApprovedWeek,
+			),
+		).toBe(3);
+
+		const cancelled = await cancel(hedy, current);
+		expect(cancelled.status).toBe(200);
+		expect(cancelled.said).toContain("Leave cancelled.");
+		expect(
+			await row("select status, decided_by, comment from leave_requests where id = ?", current),
+		).toEqual({
+			status: "cancelled",
+			decided_by: hedy.user.id,
+			comment: "Called back for the audit",
+		});
+		// The Activity log says who cancelled it, whose it was, and why.
+		const { results } = await env.DB.prepare(
+			"select actor_id as actor, owner_id as owner, summary from activity_records where action = 'leave.cancelled'",
+		).all<{ actor: string; owner: string; summary: string }>();
+		expect(results.map((r) => [r.actor, r.owner, JSON.parse(r.summary)])).toEqual([
+			[
+				hedy.user.id,
+				grace.user.id,
+				{
+					before: { status: "approved" },
+					after: { status: "cancelled", reason: "Called back for the audit" },
+				},
+			],
+		]);
+		expect(await textAt(TIME_OFF, grace)).toContain("Annual leave · Cancelled");
 	});
 });
 

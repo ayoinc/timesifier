@@ -70,7 +70,8 @@ export function WeekDays({
 						const [weekday, date] = formatShort(each.day).split(" ");
 						const marked = away.days[index];
 						const short = marked ? SHORT[marked.kind] : undefined;
-						const over = rules.find((rule) => rule.day === each.day)?.overMinutes ?? 0;
+						const dayRule = rules.find((rule) => rule.day === each.day);
+						const over = dayRule?.overMinutes ?? 0;
 						return (
 							<li key={each.day} className="min-w-0">
 								<Link
@@ -121,7 +122,7 @@ export function WeekDays({
 										<span className={cx("text-label-small", isToday ? undefined : "text-error")}>
 											<span className="sr-only">, </span>
 											<span aria-hidden="true">Over</span>
-											<span className="sr-only">{overLabel(over)}</span>
+											<span className="sr-only">{overLabel(over, dayRule?.moreThanADay)}</span>
 										</span>
 									)}
 								</Link>

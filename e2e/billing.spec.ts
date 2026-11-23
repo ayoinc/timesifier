@@ -231,7 +231,9 @@ test("a project bills overtime at its own rate, and New invoice puts it on a lin
 	await creating.getByRole("button", { name: "Create the project" }).click();
 	await expect(creating).toBeHidden();
 
-	// Overtime allowed, through Settings › Timesheet rules.
+	// Overtime allowed from today, through Settings › Timesheet rules: a change
+	// applies from next Monday unless another day is chosen (TR-10), and the hour
+	// of overtime below is tracked today, the browser's day and so the person's.
 	await openShell(page, destinationPath(slug, "settings"));
 	await page.getByRole("button", { name: "Change timesheet rules" }).click();
 	const rules = page.getByRole("dialog", { name: "Change the timesheet rules" });
@@ -239,6 +241,8 @@ test("a project bills overtime at its own rate, and New invoice puts it on a lin
 		.getByRole("radiogroup", { name: "Overtime" })
 		.getByText("Allowed", { exact: true })
 		.click();
+	const today = await page.evaluate(() => new Date().toLocaleDateString("en-CA"));
+	await rules.getByRole("textbox", { name: "From" }).fill(today);
 	await rules.getByRole("button", { name: "Save" }).click();
 	await expect(rules).toBeHidden();
 

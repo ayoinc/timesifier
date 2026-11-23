@@ -686,6 +686,47 @@ The lock date is still a day of the organisation's, set by owners and admins or 
 
 **What it costs.** For up to a day after the date moves, a person behind the organisation's zone can still change the date's last day, and auto-submit reaches their week up to an hour after their day ends. A timer is stopped at the end of its day, so time worked past that midnight is not recorded by it.
 
+### 50. A day of part-day leave takes the rest of its hours, then regular time to the full day, then overtime
+
+Decided by the owner for TS-111e (research/time-rules-scenarios.md, OQ1; the owner's D2), on 2026-11-22.
+
+A day of half-day leave first takes what is left of its expected hours: 7:30 less 3:45 is 3:45, whatever the overtime rule. Where the rule lets more be recorded (Allowed, or Only with pre-approval once approved), time past that is regular until the day's time worked reaches the full day's expected hours, and overtime only past them. With overtime allowed, half a day off and 4:00 worked is 4:00 regular; 8:00 worked is 7:30 regular and 0:30 overtime. With overtime not allowed the day still takes 3:45. With pre-approval, approved time fills the rest of the day as regular time first, and only what is past the full day is overtime. The day's and the week's caps count overtime only (`dayLimit` in `app/leave/rules.ts`; a timer is cut at the full day, `splitAtLimit`).
+
+| Option                                          | Evidence                                                                                                         |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Regular to the full day, then overtime (chosen) | The owner's answer. Half a day off does not turn the other half's ordinary hours into overtime.                  |
+| Everything past the half is overtime            | What the code did before. 4:00 worked after half a day off was 0:15 overtime, and refused where none is allowed. |
+
+### 51. Notice is counted in working days, to the first day a request takes
+
+Decided by the owner for TS-111e (OQ5, the owner's D4; TR-16), on 2026-11-22.
+
+Notice counts working days: the days the person's work schedule works, less public holidays, from today up to the first day the request takes (`noticeGiven`, `firstDayTaken`, `earliestNoticed` in `app/leave/rules.ts`). A request from a Saturday counts to the Monday it first takes, so Saturday to Wednesday gives the same notice as Monday to Wednesday. A kind's notice is set in working days, and every sentence says so: "14 working days' notice", "Short notice (3 working days)". Requests made before keep the days they stored.
+
+### 52. A day holds at most 24 hours; work on a public holiday is asked for, and is overtime
+
+Decided by the owner for TS-111e (OQ8 and OQ12, the owner's D8), on 2026-11-22.
+
+**24 hours.** A day holding more than 24 hours tracked is over its limit by what is past 24 hours, whatever the rules allow, and says so: "Over 24 hours by 3:30" (`dayRules`, `overLabel`). It blocks Submit, which adds "A day cannot hold more than 24 hours." (`overDaysRefusal`).
+
+**Public holidays.** Work on a public holiday is allowed with pre-approval, as weekend work is. It may be asked for wherever overtime is allowed at all (Allowed, or Only with pre-approval), as "Public holiday work" on Time off, and once approved the day takes the approved hours as overtime, held to the day's cap. Where overtime is not allowed it cannot be asked for, and the holiday stays closed. `work_requests.kind` takes `holiday`; the table is rebuilt by its own migration, which ships alone before the code (`0026_work_on_holidays`, #83).
+
+| Option                                                     | Evidence                                                                                                              |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Its own kind, wherever overtime is allowed at all (chosen) | Holiday work is overtime by nature; tying it to the weekend rule would let "weekend: not allowed" close holidays too. |
+| Reuse weekend work for holidays                            | No migration, but the request and the log would call holiday work "weekend work".                                     |
+
+### 53. The timesheet rules a day is judged by are dated
+
+Decided for TS-111e (TR-10), on 2026-11-22.
+
+A change of overtime, its caps, or weekend and non-working days is a row of `timesheet_rule_versions` with the day it applies from, as rates have `effective_from`. Each day is judged by the version in force on it; a day before the first version takes the organisation's own columns, which no longer change. The sheet's "From" is next Monday unless the admin chooses another day; saving from a day replaces any version from that day on. Short notice is about requests, not days, and changes at once. Saving says what it does: "The timesheet rules are saved. They apply from Monday 30 November 2026. This puts 2 days of 2 people over their limit." (`rulesEffectOf`, counting days not over before that the change puts over, at most a year of tracked time). A public holiday added on a day that holds time is refused with whose and how much, unless "Keep the time already tracked on it" is ticked; then those people's days stay working days (`public_holidays.worked_by`). The working week was already dated by work schedules (TS-097).
+
+| Option                  | Evidence                                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| Dated versions (chosen) | Overtime recorded while it was allowed stays right; nobody's approved week goes over after the fact. |
+| Warn and apply at once  | Keeps one row, but still makes recorded work a fault the person must delete.                         |
+
 ### 54. A row of a CSV import past its day's limit is cut as a timer is
 
 Decided by the owner on 2026-11-13 (OQ2 of research/time-rules-scenarios.md, D3), for TS-111f. It amends the last sentence of entry 33, under which a row was one kind or the other, never cut.

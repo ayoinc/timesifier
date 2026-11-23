@@ -736,6 +736,12 @@ export const publicHolidays = sqliteTable(
 		/** The local date, `YYYY-MM-DD`: the same day in every person's zone. */
 		day: text("day").notNull(),
 		name: text("name").notNull(),
+		/**
+		 * The people who had already tracked time on the day when it was made a
+		 * public holiday, and whose time was confirmed to stand (TR-10): for them
+		 * the day stays a working day. Null for nobody.
+		 */
+		workedBy: text("worked_by", { mode: "json" }).$type<string[]>(),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
@@ -2549,6 +2555,47 @@ export const workRequests = sqliteTable(
 		),
 		check("work_requests_ends_on_or_after_start", sql`${table.endsOn} >= ${table.startsOn}`),
 		check("work_requests_minutes_in_range", sql`${table.minutesPerDay} BETWEEN 1 AND 1440`),
+	],
+);
+
+/**
+ * The organisation's timesheet rules for days from `effective_from`, a local
+ * date, until its next version (TR-10, decision 53): a change of the rules
+ * applies from the day it names, never to the days before it. A day before
+ * the first version takes the rules the organisation's own columns hold.
+ */
+export const timesheetRuleVersions = sqliteTable(
+	"timesheet_rule_versions",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		effectiveFrom: text("effective_from").notNull(),
+		overtimePolicy: text("overtime_policy").notNull(),
+		nonWorkingDays: text("non_working_days").notNull(),
+		overtimeDayCapMinutes: integer("overtime_day_cap_minutes"),
+		overtimeWeekCapMinutes: integer("overtime_week_cap_minutes"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("timesheet_rule_versions_organisation_id_id_unique").on(
+			table.organisationId,
+			table.id,
+		),
+		uniqueIndex("timesheet_rule_versions_organisation_id_effective_from_unique").on(
+			table.organisationId,
+			table.effectiveFrom,
+		),
+		check(
+			"timesheet_rule_versions_overtime_policy_known",
+			sql`${table.overtimePolicy} IN ('none', 'allowed', 'approval')`,
+		),
+		check(
+			"timesheet_rule_versions_non_working_days_known",
+			sql`${table.nonWorkingDays} IN ('overtime', 'none')`,
+		),
 	],
 );
 

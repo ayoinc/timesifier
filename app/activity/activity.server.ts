@@ -14,7 +14,9 @@ import type { ActivityAction, ActivitySource, SubjectType } from "./actions";
  * `ACTIVITY_RETENTION_DAYS`.
  *
  * Free text a person typed is never copied into the log: a description, a
- * note or a comment that changed is recorded as the marker `"changed"`.
+ * note or a comment that changed is recorded as the marker `"changed"`. Two
+ * administrators' statements are kept as `after.reason`: why the lock date
+ * moved back, and why approved leave that had begun was cancelled (TR-04).
  */
 
 /** How long a row is kept: two years (owner decision, TS-064). */

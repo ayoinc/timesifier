@@ -14,7 +14,7 @@ import {
 } from "../organisations/harness";
 import { type Person, person, submit } from "./harness";
 import { seedHoliday, seedLeave } from "./leave-seed";
-import { seedEntry, seedProject } from "./periods-seed";
+import { markOvertime, seedEntry, seedProject } from "./periods-seed";
 
 // The Timesheet's action and the limits of a day (TS-090, TS-095): no time
 // on a public holiday or a day of whole-day leave, a day's expected hours as
@@ -368,21 +368,18 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 			expect(await minutesOn(me, TUESDAY)).toBe(285);
 		});
 
-		it("takes overtime beyond its half only as the rule allows", async () => {
+		it("takes time past its half as regular up to the full day, then overtime, where the rule lets it be recorded (decision 50)", async () => {
 			expect((await ask(me, trackHours(TUESDAY, "3:45"))).status).toBe(200);
 			const none = await ask(me, overtimeHours(TUESDAY, "1"));
 			expect(none.status).toBe(409);
 			expect(none.said).toContain("This organisation does not allow overtime.");
+			expect((await ask(me, trackHours(TUESDAY, "0:01"))).status).toBe(409);
 
-			await setRules({ overtime: "approval" });
-			await seedWork(me, "overtime", TUESDAY, TUESDAY, 60);
-			await seedWork(me, "overtime", TUESDAY, TUESDAY, 120, "pending");
-			expect((await ask(me, overtimeHours(TUESDAY, "1"))).status).toBe(200);
-			const refused = await ask(me, overtimeHours(TUESDAY, "0:01"));
-			expect(refused.status).toBe(409);
-			expect(refused.said).toContain("This day has 0:00 of overtime left.");
-			expect(await minutesOn(me, TUESDAY, "regular")).toBe(225);
-			expect(await minutesOn(me, TUESDAY, "overtime")).toBe(60);
+			await setRules({ overtime: "allowed" });
+			expect((await ask(me, trackHours(TUESDAY, "3:45", "13:00"))).status).toBe(200);
+			expect((await ask(me, overtimeHours(TUESDAY, "0:30"))).status).toBe(200);
+			expect(await minutesOn(me, TUESDAY, "regular")).toBe(450);
+			expect(await minutesOn(me, TUESDAY, "overtime")).toBe(30);
 		});
 	});
 
@@ -659,6 +656,20 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 		});
 	});
 
+	it("refuses a week with a day holding more than 24 hours, saying so, whatever the rules allow (decision 52)", async () => {
+		await setRules({ overtime: "allowed" });
+		await seedEntry(acme.id, me.user.id, site, at(TUESDAY, "00:00"), at(TUESDAY, "07:30"));
+		await markOvertime(
+			await seedEntry(acme.id, me.user.id, site, at(TUESDAY, "07:30"), at(WEDNESDAY, "03:30")),
+		);
+		const refused = await ask(me, { intent: "submit", startsOn: MONDAY });
+		expect(refused.status).toBe(409);
+		expect(refused.said).toContain(
+			"Correct the days over their limit before you submit the week: Tue 10 over 24 hours by 3:30. A day cannot hold more than 24 hours.",
+		);
+		expect(await periodStatus()).toBeNull();
+	});
+
 	it("stops a timer that ran past the limit, keeps the entry whole and says the day is over, where overtime is not allowed", async () => {
 		await seedLeave(acme.id, me.user.id, "annual", WEDNESDAY, WEDNESDAY, { startsHalf: true });
 		expect((await ask(me, { intent: "track", projectId: site, day: WEDNESDAY })).status).toBe(200);
@@ -684,20 +695,21 @@ describe.each(["owner", "admin", "member"] as const)("for an %s's own time", (ro
 
 	it("cuts a timer that ran past the limit where overtime is allowed: regular to the limit, overtime after", async () => {
 		await setRules({ overtime: "allowed" });
+		// Half a day off: the day takes regular time up to its full 7:30 (decision 50).
 		await seedLeave(acme.id, me.user.id, "annual", WEDNESDAY, WEDNESDAY, { startsHalf: true });
 		await ask(me, { intent: "track", projectId: site, day: WEDNESDAY });
 
-		clockAt(T0 + 4 * HOUR);
+		clockAt(T0 + 7.75 * HOUR);
 		const stopped = await ask(me, { intent: "stop" });
 		expect(stopped.status).toBe(200);
 		expect(stopped.said).toContain(
 			"Timer stopped. 0:15 past the day's expected hours is recorded as overtime.",
 		);
 		expect(stopped.said).not.toContain("over by");
-		const cut = T0 + 225 * 60_000;
+		const cut = T0 + 450 * 60_000;
 		expect(await entriesOf(me)).toEqual([
 			{ from: T0, to: cut, overtime: false },
-			{ from: cut, to: T0 + 4 * HOUR, overtime: true },
+			{ from: cut, to: T0 + 7.75 * HOUR, overtime: true },
 		]);
 		expect(
 			await value<number>(

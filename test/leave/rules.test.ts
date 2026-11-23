@@ -14,6 +14,7 @@ import {
 	dayLimit,
 	dayRules,
 	earliestNoticed,
+	firstDayTaken,
 	isShortNotice,
 	type KindsMs,
 	kindOfNewTime,
@@ -26,6 +27,7 @@ import {
 	minutesOver,
 	NON_WORKING_RULES,
 	type NonWorkingRule,
+	nextMondayAfter,
 	noticeGiven,
 	noticeLabel,
 	OVERTIME_RULES,
@@ -47,6 +49,8 @@ import { addDays, bounds, type Day, dayOf, instantAt } from "~/time/calendar";
 // limit, and whether leave was asked for in good time.
 
 const MINUTE = 60_000;
+/** Every day worked: notice counted as calendar days (decision 51). */
+const everyDay = () => true;
 const HOUR = 60 * MINUTE;
 const LONDON = "Europe/London";
 /** Every day of the week worked, 7.5 hours: Sundays are working days. */
@@ -242,18 +246,19 @@ describe("a working day", () => {
 describe("a day of half-day leave", () => {
 	const halfDay = [leave(TUESDAY, TUESDAY, { startsHalf: true })];
 
-	it.each(OVERTIME_RULES)(
-		"takes the other half, 3:45 of 7:30, as regular time (overtime %s)",
+	it.each(["none", "approval"] as const)(
+		"takes the other half, 3:45 of 7:30, as regular time until more is allowed (overtime %s)",
 		(overtime) => {
 			expect(dayLimit(calendar({ requests: halfDay, overtime }), TUESDAY).regularMinutes).toBe(225);
 		},
 	);
 
-	it("takes overtime as a working day does", () => {
+	it("takes time past the half as regular up to the full day, then overtime (decision 50)", () => {
 		expect(limitOf(calendar({ requests: halfDay }), TUESDAY).noOvertime).toBe("not-allowed");
-		expect(
-			limitOf(calendar({ requests: halfDay, overtime: "allowed" }), TUESDAY).overtimeMinutes,
-		).toBeNull();
+		expect(limitOf(calendar({ requests: halfDay, overtime: "allowed" }), TUESDAY)).toMatchObject({
+			regularMinutes: 450,
+			overtimeMinutes: null,
+		});
 		expect(
 			limitOf(
 				calendar({
@@ -262,8 +267,8 @@ describe("a day of half-day leave", () => {
 					approved: [work("overtime", TUESDAY, TUESDAY, 45)],
 				}),
 				TUESDAY,
-			).overtimeMinutes,
-		).toBe(45);
+			),
+		).toMatchObject({ regularMinutes: 270, overtimeMinutes: 0 });
 	});
 
 	it("is the half of the last day of a longer span, and an odd day's half is floored", () => {
@@ -298,18 +303,25 @@ describe("a closed day", () => {
 		});
 	});
 
-	it.each(NON_WORKING_RULES)("is a public holiday, by its name (weekend %s)", (weekend) => {
-		const theirs = calendar({
-			weekend,
-			overtime: "allowed",
-			holidays: { [CHRISTMAS]: "Christmas Day" },
-		});
-		expect(limitOf(theirs, CHRISTMAS)).toMatchObject({
-			regularMinutes: 0,
-			overtimeMinutes: 0,
-			closed: { why: "holiday", name: "Christmas Day" },
-		});
-	});
+	it.each(NON_WORKING_RULES)(
+		"is a public holiday, by its name, until holiday work is approved (weekend %s)",
+		(weekend) => {
+			const holidays = { [CHRISTMAS]: "Christmas Day" };
+			expect(limitOf(calendar({ weekend, holidays }), CHRISTMAS)).toMatchObject({
+				regularMinutes: 0,
+				overtimeMinutes: 0,
+				closed: { why: "holiday", name: "Christmas Day" },
+			});
+			// Where overtime is allowed at all, it may be asked for (decision 52).
+			expect(
+				limitOf(calendar({ weekend, overtime: "allowed", holidays }), CHRISTMAS),
+			).toMatchObject({
+				regularMinutes: 0,
+				overtimeMinutes: 0,
+				closed: { why: "holiday-needs-approval", name: "Christmas Day" },
+			});
+		},
+	);
 
 	it("is a day the week does not work, where the organisation allows no time on it", () => {
 		for (const overtime of OVERTIME_RULES) {
@@ -453,7 +465,8 @@ describe("the rules of each day as the Timesheet shows them", () => {
 			{
 				day: MONDAY,
 				limitMinutes: 0,
-				closedReason: "Company Day is a public holiday: no time can be tracked on it.",
+				closedReason:
+					"Company Day is a public holiday: time on it needs approved holiday work. Request it on Time off.",
 				trackedMinutes: 0,
 				regularMinutes: 0,
 				overtimeMinutes: 0,
@@ -464,6 +477,7 @@ describe("the rules of each day as the Timesheet shows them", () => {
 				fullReason: null,
 				overMinutes: 0,
 				approvedMinutes: 0,
+				moreThanADay: false,
 			},
 			{
 				day: TUESDAY,
@@ -479,6 +493,7 @@ describe("the rules of each day as the Timesheet shows them", () => {
 				fullReason: "This day has 0:00 left. Track more as overtime.",
 				overMinutes: 30,
 				approvedMinutes: 60,
+				moreThanADay: false,
 			},
 			{
 				day: WEDNESDAY,
@@ -495,6 +510,7 @@ describe("the rules of each day as the Timesheet shows them", () => {
 					"This day has 0:00 left. Overtime on this day needs pre-approval. Request it on Time off.",
 				overMinutes: 0,
 				approvedMinutes: 0,
+				moreThanADay: false,
 			},
 			{
 				day: SATURDAY,
@@ -512,6 +528,7 @@ describe("the rules of each day as the Timesheet shows them", () => {
 					"Saturday is not a working day: time on it needs approved weekend work. Request it on Time off.",
 				overMinutes: 30,
 				approvedMinutes: 0,
+				moreThanADay: false,
 			},
 		]);
 	});
@@ -769,15 +786,15 @@ describe("a timer cut at the day's limit", () => {
 		);
 	});
 
-	it("on a day of half-day leave, is cut after the other half", () => {
+	it("on a day of half-day leave, is cut at the full day's hours where overtime is allowed (decision 50)", () => {
 		const theirs = calendar({
 			overtime: "allowed",
 			requests: [leave(TUESDAY, TUESDAY, { endsHalf: true })],
 		});
 		const limit = dayLimit(theirs, TUESDAY);
-		const entry = { startedAt: at("2026-11-10T09:00:00Z"), endedAt: at("2026-11-10T14:00:00Z") };
+		const entry = { startedAt: at("2026-11-10T09:00:00Z"), endedAt: at("2026-11-10T17:00:00Z") };
 		expect(splitAtLimit(entry, limit.regularMinutes * MINUTE, true).overtimeFrom).toBe(
-			at("2026-11-10T12:45:00Z"),
+			at("2026-11-10T16:30:00Z"),
 		);
 	});
 });
@@ -852,13 +869,13 @@ describe("notice for leave", () => {
 	});
 
 	it("counts the days from the day asked to the first day, negative once it has begun", () => {
-		expect(noticeGiven(WEDNESDAY, WEDNESDAY)).toBe(0);
-		expect(noticeGiven(WEDNESDAY, "2026-11-25")).toBe(14);
-		expect(noticeGiven(WEDNESDAY, TUESDAY)).toBe(-1);
+		expect(noticeGiven(WEDNESDAY, WEDNESDAY, everyDay)).toBe(0);
+		expect(noticeGiven(WEDNESDAY, "2026-11-25", everyDay)).toBe(14);
+		expect(noticeGiven(WEDNESDAY, TUESDAY, everyDay)).toBe(-1);
 		// Across a clock change and a year's end, days are days.
-		expect(noticeGiven("2026-03-20", "2026-04-03")).toBe(14);
-		expect(noticeGiven("2026-10-20", "2026-11-03")).toBe(14);
-		expect(noticeGiven("2026-12-31", "2027-01-01")).toBe(1);
+		expect(noticeGiven("2026-03-20", "2026-04-03", everyDay)).toBe(14);
+		expect(noticeGiven("2026-10-20", "2026-11-03", everyDay)).toBe(14);
+		expect(noticeGiven("2026-12-31", "2027-01-01", everyDay)).toBe(1);
 	});
 
 	it.each([
@@ -867,11 +884,13 @@ describe("notice for leave", () => {
 		["study", 28],
 		["parental", 56],
 	] as const)("is short for %s leave a day under %i days, and not at it", (key, days) => {
-		expect(isShortNotice(kind(key), WEDNESDAY, addDays(WEDNESDAY, days - 1))).toBe(true);
-		expect(isShortNotice(kind(key), WEDNESDAY, addDays(WEDNESDAY, days))).toBe(false);
-		expect(isShortNotice(kind(key), WEDNESDAY, addDays(WEDNESDAY, days + 30))).toBe(false);
+		expect(isShortNotice(kind(key), WEDNESDAY, addDays(WEDNESDAY, days - 1), everyDay)).toBe(true);
+		expect(isShortNotice(kind(key), WEDNESDAY, addDays(WEDNESDAY, days), everyDay)).toBe(false);
+		expect(isShortNotice(kind(key), WEDNESDAY, addDays(WEDNESDAY, days + 30), everyDay)).toBe(
+			false,
+		);
 		// Leave already begun is short notice too.
-		expect(isShortNotice(kind(key), WEDNESDAY, TUESDAY)).toBe(true);
+		expect(isShortNotice(kind(key), WEDNESDAY, TUESDAY, everyDay)).toBe(true);
 	});
 
 	it.each(["sick", "holiday"] as const)(
@@ -879,38 +898,42 @@ describe("notice for leave", () => {
 		(key) => {
 			for (const noticeDays of [0, 14, 365]) {
 				for (const startsOn of [TUESDAY, WEDNESDAY, "2026-11-12"]) {
-					expect(isShortNotice(kind(key, noticeDays), WEDNESDAY, startsOn)).toBe(false);
+					expect(isShortNotice(kind(key, noticeDays), WEDNESDAY, startsOn, everyDay)).toBe(false);
 				}
-				expect(earliestNoticed(kind(key, noticeDays), WEDNESDAY)).toBe(WEDNESDAY);
+				expect(earliestNoticed(kind(key, noticeDays), WEDNESDAY, everyDay)).toBe(WEDNESDAY);
 			}
 		},
 	);
 
 	it("is never short for a kind that asks for none", () => {
-		expect(isShortNotice(kind("annual", 0), WEDNESDAY, WEDNESDAY)).toBe(false);
+		expect(isShortNotice(kind("annual", 0), WEDNESDAY, WEDNESDAY, everyDay)).toBe(false);
 	});
 
 	it("gives the earliest well-noticed first day", () => {
-		expect(earliestNoticed(kind("annual"), WEDNESDAY)).toBe("2026-11-25");
-		expect(earliestNoticed(kind("unpaid"), WEDNESDAY)).toBe("2026-11-25");
-		expect(earliestNoticed(kind("study"), WEDNESDAY)).toBe("2026-12-09");
-		expect(earliestNoticed(kind("parental"), WEDNESDAY)).toBe("2027-01-06");
+		expect(earliestNoticed(kind("annual"), WEDNESDAY, everyDay)).toBe("2026-11-25");
+		expect(earliestNoticed(kind("unpaid"), WEDNESDAY, everyDay)).toBe("2026-11-25");
+		expect(earliestNoticed(kind("study"), WEDNESDAY, everyDay)).toBe("2026-12-09");
+		expect(earliestNoticed(kind("parental"), WEDNESDAY, everyDay)).toBe("2027-01-06");
 		for (const key of KIND_KEYS) {
-			const earliest = earliestNoticed(kind(key), WEDNESDAY);
-			expect(isShortNotice(kind(key), WEDNESDAY, earliest), key).toBe(false);
+			const earliest = earliestNoticed(kind(key), WEDNESDAY, everyDay);
+			expect(isShortNotice(kind(key), WEDNESDAY, earliest, everyDay), key).toBe(false);
 			if (earliest > WEDNESDAY) {
-				expect(isShortNotice(kind(key), WEDNESDAY, addDays(earliest, -1)), key).toBe(true);
+				expect(isShortNotice(kind(key), WEDNESDAY, addDays(earliest, -1), everyDay), key).toBe(
+					true,
+				);
 			}
 		}
 	});
 
 	it("reads as an approver reads it", () => {
-		expect(noticeLabel({ noticeDays: 3, shortNotice: true })).toBe("Short notice (3 days)");
-		expect(noticeLabel({ noticeDays: 1, shortNotice: true })).toBe("Short notice (1 day)");
-		expect(noticeLabel({ noticeDays: -2, shortNotice: true })).toBe("Short notice (0 days)");
-		expect(noticeLabel({ noticeDays: 14, shortNotice: false })).toBe("14 days' notice");
-		expect(noticeLabel({ noticeDays: 1, shortNotice: false })).toBe("1 day's notice");
-		expect(noticeLabel({ noticeDays: 0, shortNotice: false })).toBe("0 days' notice");
+		expect(noticeLabel({ noticeDays: 3, shortNotice: true })).toBe("Short notice (3 working days)");
+		expect(noticeLabel({ noticeDays: 1, shortNotice: true })).toBe("Short notice (1 working day)");
+		expect(noticeLabel({ noticeDays: -2, shortNotice: true })).toBe(
+			"Short notice (0 working days)",
+		);
+		expect(noticeLabel({ noticeDays: 14, shortNotice: false })).toBe("14 working days' notice");
+		expect(noticeLabel({ noticeDays: 1, shortNotice: false })).toBe("1 working day's notice");
+		expect(noticeLabel({ noticeDays: 0, shortNotice: false })).toBe("0 working days' notice");
 	});
 });
 
@@ -1150,5 +1173,178 @@ describe("a property of every calendar, rule and day", () => {
 			});
 			expect(verdict).toEqual({ ok: true });
 		});
+	});
+});
+
+// TS-111e: the rules hold together, part 3.
+
+describe("a timer cut at the limit (TR-17)", () => {
+	const at = (iso: string) => Date.parse(iso);
+	it("leaves a remainder under a minute with the regular time", () => {
+		const entry = { startedAt: at("2026-11-10T09:00:00Z"), endedAt: at("2026-11-10T16:30:30Z") };
+		expect(splitAtLimit(entry, 450 * MINUTE, true)).toEqual({
+			overtime: false,
+			overtimeFrom: null,
+		});
+		const minuteMore = { ...entry, endedAt: at("2026-11-10T16:31:00Z") };
+		expect(splitAtLimit(minuteMore, 450 * MINUTE, true).overtimeFrom).toBe(
+			at("2026-11-10T16:30:00Z"),
+		);
+	});
+});
+
+describe("overtime on a day of half-day leave (decision 50, OQ1)", () => {
+	const halfDay = [leave(TUESDAY, TUESDAY, { startsHalf: true })];
+	const worked = (theirs: RulesCalendar, minutes: number) =>
+		kindOfNewTime(theirs, TUESDAY, minutes * MINUTE, () => kinds(0));
+
+	it("with overtime allowed, half a day off and 4:00 worked is 4:00 regular", () => {
+		const theirs = calendar({ requests: halfDay, overtime: "allowed" });
+		expect(dayLimit(theirs, TUESDAY).regularMinutes).toBe(450);
+		expect(worked(theirs, 240)).toEqual({ ok: true, overtime: false });
+	});
+
+	it("with overtime allowed, 8:00 worked is 7:30 regular and 0:30 overtime", () => {
+		const theirs = calendar({ requests: halfDay, overtime: "allowed" });
+		const [rule] = dayRules(theirs, [TUESDAY], () => kinds(450, 30));
+		expect(rule?.overMinutes).toBe(0);
+		const entry = {
+			startedAt: Date.parse("2026-11-10T09:00:00Z"),
+			endedAt: Date.parse("2026-11-10T17:00:00Z"),
+		};
+		const limit = dayLimit(theirs, TUESDAY);
+		expect(splitAtLimit(entry, limit.regularMinutes * MINUTE, true).overtimeFrom).toBe(
+			Date.parse("2026-11-10T16:30:00Z"),
+		);
+	});
+
+	it("with overtime not allowed, the day still takes 3:45", () => {
+		const theirs = calendar({ requests: halfDay, overtime: "none" });
+		expect(dayLimit(theirs, TUESDAY).regularMinutes).toBe(225);
+		expect(worked(theirs, 240).ok).toBe(false);
+	});
+
+	it("with pre-approval, approved time past the half is regular up to the full day, then overtime", () => {
+		const approved = (minutes: number) =>
+			calendar({
+				requests: halfDay,
+				overtime: "approval",
+				approved: [work("overtime", TUESDAY, TUESDAY, minutes)],
+			});
+		expect(limitOf(approved(60), TUESDAY)).toMatchObject({
+			regularMinutes: 285,
+			overtimeMinutes: 0,
+		});
+		expect(limitOf(approved(255), TUESDAY)).toMatchObject({
+			regularMinutes: 450,
+			overtimeMinutes: 30,
+		});
+		expect(
+			dayLimit(calendar({ requests: halfDay, overtime: "approval" }), TUESDAY).regularMinutes,
+		).toBe(225);
+	});
+
+	it("counts only overtime against the day's cap", () => {
+		const theirs = calendar({ requests: halfDay, overtime: "allowed", dayCap: 30 });
+		expect(limitOf(theirs, TUESDAY)).toMatchObject({ regularMinutes: 450, overtimeMinutes: 30 });
+	});
+});
+
+describe("notice in working days, to the first day taken (decision 51, TR-16)", () => {
+	// Monday to Friday, with Christmas, Boxing Day's substitute and 28 December off.
+	const holidays = new Set(["2026-12-25", "2026-12-28"]);
+	const worksOn = (day: Day) => {
+		const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+		return weekday !== 0 && weekday !== 6 && !holidays.has(day);
+	};
+	const annual = { key: "annual" as KindKey, noticeDays: 14 };
+
+	it("counts working days, not calendar dates", () => {
+		expect(noticeGiven(MONDAY, "2026-11-23", worksOn)).toBe(10);
+		expect(isShortNotice(annual, MONDAY, "2026-11-23", worksOn)).toBe(true);
+		expect(earliestNoticed(annual, MONDAY, worksOn)).toBe("2026-11-27");
+	});
+
+	it("notice runs to the first day taken", () => {
+		const today = "2026-12-15";
+		const fromSaturday = firstDayTaken({ startsOn: "2026-12-26", endsOn: "2026-12-31" }, worksOn);
+		expect(fromSaturday).toBe("2026-12-29");
+		expect(noticeGiven(today, fromSaturday, worksOn)).toBe(
+			noticeGiven(
+				today,
+				firstDayTaken({ startsOn: "2026-12-29", endsOn: "2026-12-31" }, worksOn),
+				worksOn,
+			),
+		);
+	});
+});
+
+describe("a day holding more than 24 hours (decision 52, OQ8)", () => {
+	it("is over its limit with its own words, whatever the rules allow", () => {
+		const [rule] = dayRules(calendar({ overtime: "allowed" }), [TUESDAY], () => kinds(450, 1200));
+		expect(rule?.moreThanADay).toBe(true);
+		expect(rule?.overMinutes).toBe(210);
+		expect(overLabel(210, true)).toBe("Over 24 hours by 3:30");
+	});
+});
+
+describe("work on a public holiday (decision 52, OQ12)", () => {
+	it("is closed until approved, then takes the approved time as overtime", () => {
+		const holiday = { [TUESDAY]: "Company Day" };
+		expect(limitOf(calendar({ holidays: holiday, overtime: "approval" }), TUESDAY).closed).toEqual({
+			why: "holiday-needs-approval",
+			name: "Company Day",
+		});
+		expect(limitOf(calendar({ holidays: holiday }), TUESDAY).closed).toEqual({
+			why: "holiday",
+			name: "Company Day",
+		});
+		const approved = calendar({
+			holidays: holiday,
+			overtime: "allowed",
+			approved: [work("holiday", TUESDAY, TUESDAY, 240)],
+		});
+		expect(limitOf(approved, TUESDAY)).toMatchObject({
+			regularMinutes: 0,
+			overtimeMinutes: 240,
+			closed: null,
+		});
+		expect(mayAskFor({ overtime: "allowed", weekend: "overtime" }, "holiday")).toBe(true);
+		expect(mayAskFor({ overtime: "none", weekend: "overtime" }, "holiday")).toBe(false);
+	});
+});
+
+describe("a timer's start once overtime is used up (TR-18a)", () => {
+	it("says the day's or the week's overtime is used, not to track more as overtime", () => {
+		const limit = dayLimit(calendar({ overtime: "allowed", dayCap: 60 }), TUESDAY);
+		expect(mayStart(limit, 450 * MINUTE, 0)).toEqual({
+			ok: false,
+			message: "This day has 0:00 of overtime left.",
+		});
+		expect(mayStart(limit, 450 * MINUTE, 0, true)).toEqual({
+			ok: false,
+			message: "This week has 0:00 of overtime left.",
+		});
+	});
+});
+
+describe("rules dated from a day (TR-10, decision 53)", () => {
+	it("judges each day by the version in force on it", () => {
+		const theirs: RulesCalendar = {
+			...calendar({ overtime: "allowed" }),
+			versions: [
+				{
+					effectiveFrom: WEDNESDAY,
+					overtime: "none",
+					weekend: "overtime",
+					overtimeDayCap: null,
+					overtimeWeekCap: null,
+				},
+			],
+		};
+		expect(dayLimit(theirs, TUESDAY).noOvertime).toBeNull();
+		expect(dayLimit(theirs, WEDNESDAY).noOvertime).toBe("not-allowed");
+		expect(nextMondayAfter(TUESDAY)).toBe("2026-11-16");
+		expect(nextMondayAfter(MONDAY)).toBe("2026-11-16");
 	});
 });

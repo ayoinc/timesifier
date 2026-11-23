@@ -3,7 +3,7 @@ import { data } from "react-router";
 import * as z from "zod";
 
 import { organisationScope } from "~/db";
-import { overLabel } from "~/leave/rules";
+import { overDaysRefusal, overLabel } from "~/leave/rules";
 import { daysOver } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
 import type { Membership } from "~/organisations/membership.server";
@@ -220,7 +220,10 @@ export async function timesheetAction(request: Request, membership: Membership) 
 					? " It is recorded as overtime."
 					: "";
 			const named = over
-				.map((d) => `${formatDay(d.day, "short")} is ${overLabel(d.overMinutes).toLowerCase()}`)
+				.map(
+					(d) =>
+						`${formatDay(d.day, "short")} is ${overLabel(d.overMinutes, d.moreThanADay).toLowerCase()}`,
+				)
 				.join(" and ");
 			return done(
 				over.length > 0
@@ -336,14 +339,11 @@ export async function timesheetAction(request: Request, membership: Membership) 
 						: "Week submitted. Its entries are locked until it is decided.",
 				);
 			}
-			const over = (("over" in submitted && submitted.over) || [])
-				.map((d) => `${formatDay(d.day, "short")} ${overLabel(d.overMinutes).toLowerCase()}`)
-				.join(", ");
 			const problem: Record<NotMoved, string> = {
 				"not-yet": "A week can be submitted once it has begun.",
 				running: "Stop the timer before you submit the week.",
 				"not-from-here": "This week is already submitted or approved.",
-				over: `Correct the days over their limit before you submit the week: ${over}.`,
+				over: overDaysRefusal(("over" in submitted && submitted.over) || []),
 			};
 			return declined(problem[submitted.reason], 409);
 		}

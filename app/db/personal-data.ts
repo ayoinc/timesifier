@@ -30,7 +30,14 @@ export const STORED = [
 			},
 			{
 				term: "Time and approvals",
-				tables: ["time_entries", "entry_tags", "periods", "period_events", "work_requests"],
+				tables: [
+					"time_entries",
+					"entry_tags",
+					"periods",
+					"period_events",
+					"work_requests",
+					"timesheet_rule_versions",
+				],
 			},
 			{
 				term: "Leave",

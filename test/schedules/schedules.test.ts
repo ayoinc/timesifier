@@ -51,6 +51,8 @@ import { addDays, bounds, type Day, daysFrom } from "~/time/calendar";
 const MONDAY = "2026-11-09";
 const WEDNESDAY = "2026-11-11";
 const SATURDAY = "2026-11-14";
+/** Every day worked: notice counted as calendar days (decision 51). */
+const everyDay = () => true;
 
 let made = 0;
 function schedule(
@@ -397,8 +399,8 @@ describe("leave, overtime and notice on a person's schedule", () => {
 
 	it("counts notice in calendar days, whatever the schedule", () => {
 		const kind = { key: "annual" as const, noticeDays: 14 };
-		expect(earliestNoticed(kind, MONDAY)).toBe(addDays(MONDAY, 14));
-		expect(isShortNotice(kind, MONDAY, addDays(MONDAY, 13))).toBe(true);
+		expect(earliestNoticed(kind, MONDAY, everyDay)).toBe(addDays(MONDAY, 14));
+		expect(isShortNotice(kind, MONDAY, addDays(MONDAY, 13), everyDay)).toBe(true);
 	});
 
 	const rulesCalendar = (timetable = weekly(STANDARD_WEEK)): RulesCalendar => ({

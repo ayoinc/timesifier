@@ -209,7 +209,13 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 					<div className={cx("mt-6 max-w-200", awaitingDay && "awaiting")}>
 						<Ledger
 							heading={day === today ? `Today, ${formatDay(day)}` : formatDay(day)}
-							note={lockReason ? LOCK_LABELS[lockReason] : over > 0 ? overLabel(over) : undefined}
+							note={
+								lockReason
+									? LOCK_LABELS[lockReason]
+									: over > 0
+										? overLabel(over, rule?.moreThanADay)
+										: undefined
+							}
 						>
 							{shownDay && (
 								<p className="px-4 pb-3 text-body-medium text-on-surface-variant @sm:px-5">
@@ -220,7 +226,7 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 							)}
 							{over > 0 && (
 								<p role="note" className="px-4 pb-3 text-body-medium text-error @sm:px-5">
-									{overLabel(over)}
+									{overLabel(over, rule?.moreThanADay)}
 									{rule?.limitMinutes != null
 										? ` of the ${formatDuration(rule.limitMinutes * 60_000)} this day takes`
 										: ""}

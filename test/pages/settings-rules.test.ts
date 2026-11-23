@@ -1,5 +1,9 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nextMondayAfter } from "~/leave/rules";
+import { periodContaining } from "~/periods/periods";
+import { dayOf } from "~/time/calendar";
+import { formatDayWithYear } from "~/time/format";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import {
@@ -11,6 +15,7 @@ import {
 	value,
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
+import { markOvertime, seedEntry, seedProject } from "./periods-seed";
 
 // Workspace settings, /app/<slug>/settings, for TS-090 and TS-095: the
 // timesheet rules (overtime and its caps, weekend and non-working days,
@@ -49,11 +54,21 @@ async function outcome(response: Response) {
 	return { status: response.status, said: await response.text() };
 }
 
-const rules = () =>
-	row(
+/** Today, as Acme counts it: in UTC. */
+const TODAY = dayOf(Date.now(), "UTC");
+/** The rules in force today (TR-10): the latest dated change from today or before, else the organisation's own. */
+async function rules() {
+	const own = await row(
 		"select overtime_policy, non_working_days, overtime_day_cap_minutes, overtime_week_cap_minutes, short_notice from organisations where id = ?",
 		acme.id,
 	);
+	const dated = await row(
+		"select overtime_policy, non_working_days, overtime_day_cap_minutes, overtime_week_cap_minutes from timesheet_rule_versions where organisation_id = ? and effective_from <= ? order by effective_from desc limit 1",
+		acme.id,
+		TODAY,
+	);
+	return { ...own, ...dated };
+}
 const DEFAULT_RULES = {
 	overtime_policy: "none",
 	non_working_days: "overtime",
@@ -61,7 +76,7 @@ const DEFAULT_RULES = {
 	overtime_week_cap_minutes: null,
 	short_notice: "with-reason",
 };
-/** The rules as the sheet sends them, every field given. */
+/** The rules as the sheet sends them, every field given, applying from today. */
 const SENT = {
 	intent: "timesheet-rules",
 	overtime: "none",
@@ -69,6 +84,7 @@ const SENT = {
 	overtimeDayCap: "",
 	overtimeWeekCap: "",
 	shortNotice: "with-reason",
+	from: TODAY,
 };
 const changesRecorded = () =>
 	value<number>(
@@ -156,6 +172,7 @@ describe("the timesheet rules (TS-090, TS-095)", () => {
 					overtimeDayCap: 120,
 					overtimeWeekCap: 450,
 					shortNotice: "refused",
+					appliesFrom: TODAY,
 				},
 			});
 			const log = textOf(await pageBody(await open("/app/acme/activity", ada)));
@@ -221,6 +238,64 @@ describe("the timesheet rules (TS-090, TS-095)", () => {
 		expect(await rules()).toEqual(DEFAULT_RULES);
 		expect(await changesRecorded()).toBe(0);
 	});
+
+	/** This week's Monday, on which Grace and Alan each tracked 7:30 and 2:00 of overtime while overtime was allowed. */
+	async function overtimeWorked() {
+		await env.DB.prepare("update organisations set overtime_policy = 'allowed' where id = ?")
+			.bind(acme.id)
+			.run();
+		const monday = periodContaining(TODAY, 1).startsOn;
+		const site = await seedProject(acme.id, "Site");
+		const people: Person[] = [];
+		for (const email of ["grace@example.com", "alan@example.com"]) {
+			const who = await memberOfAcme("member", email);
+			await seedEntry(acme.id, who.user.id, site, `${monday}T08:00:00Z`, `${monday}T15:30:00Z`);
+			await markOvertime(
+				await seedEntry(acme.id, who.user.id, site, `${monday}T15:30:00Z`, `${monday}T17:30:00Z`),
+			);
+			people.push(who);
+		}
+		return { monday, people };
+	}
+
+	it("overtime turned off applies from next Monday, and leaves the overtime already tracked alone (TR-10)", async () => {
+		const { monday, people } = await overtimeWorked();
+		const from = nextMondayAfter(TODAY);
+		const answer = await outcome(
+			await submit(SETTINGS, { ...SENT, from: "" }, ada, { byScript: true }),
+		);
+		expect(answer.status).toBe(200);
+		expect(answer.said).toContain(
+			`The timesheet rules are saved. They apply from ${formatDayWithYear(from)}.`,
+		);
+		expect(answer.said).not.toContain("over their limit");
+		const text = textOf(await pageBody(await open(SETTINGS, ada)));
+		// Today's rules stand; the change waits for its day.
+		expect(text).toContain("Allowed Overtime.");
+		expect(text).toContain(
+			`From ${formatDayWithYear(from)} Overtime: Not allowed. Weekend and non-working days: Counts as overtime.`,
+		);
+		// Grace's Monday, overtime and all, is not over: her week is submitted.
+		const [grace] = people;
+		const submitted = await submit(
+			"/app/acme?index",
+			{ intent: "submit", startsOn: monday },
+			grace ?? ada,
+			{ byScript: true },
+		);
+		expect(submitted.status).toBe(200);
+	});
+
+	it("says how many days of how many people a change from an earlier day puts over their limit (TR-10)", async () => {
+		const { monday } = await overtimeWorked();
+		const answer = await outcome(
+			await submit(SETTINGS, { ...SENT, from: monday }, ada, { byScript: true }),
+		);
+		expect(answer.status).toBe(200);
+		expect(answer.said).toContain(
+			`The timesheet rules are saved. They apply from ${formatDayWithYear(monday)}. This puts 2 days of 2 people over their limit.`,
+		);
+	});
 });
 
 describe("the notice each kind of leave asks for (TS-090)", () => {
@@ -255,9 +330,9 @@ describe("the notice each kind of leave asks for (TS-090)", () => {
 
 	it("are shown on each kind's row, and sick leave never needs notice", async () => {
 		const text = textOf(await pageBody(await open(SETTINGS, ada)));
-		expect(text).toMatch(/Annual leave On · Needs approval · [^·]+ · 14 days' notice/);
+		expect(text).toMatch(/Annual leave On · Needs approval · [^·]+ · 14 working days' notice/);
 		expect(text).toMatch(/Sick leave On · Needs no approval · No allowance · Never needs notice/);
-		expect(text).toContain("56 days' notice");
+		expect(text).toContain("56 working days' notice");
 	});
 
 	it.each(["owner", "admin"] as const)(
@@ -272,7 +347,9 @@ describe("the notice each kind of leave asks for (TS-090)", () => {
 			expect(answer.status).toBe(200);
 			expect(answer.said).toContain("Annual leave is saved.");
 			expect(await noticeOf("annual")).toBe(21);
-			expect(textOf(await pageBody(await open(SETTINGS, who)))).toContain("21 days' notice");
+			expect(textOf(await pageBody(await open(SETTINGS, who)))).toContain(
+				"21 working days' notice",
+			);
 
 			await submit(SETTINGS, await kindFields("annual", "Annual leave", ""), who, {
 				byScript: true,

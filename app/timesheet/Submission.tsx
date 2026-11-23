@@ -3,7 +3,7 @@ import { useFetcher } from "react-router";
 
 import { Button } from "~/components/Button";
 import { Dialog } from "~/components/Dialog";
-import { overLabel } from "~/leave/rules";
+import { MORE_THAN_A_DAY, overLabel } from "~/leave/rules";
 import type { Outcome } from "~/organisations/problems";
 import { formatDay } from "~/time/format";
 
@@ -67,9 +67,13 @@ export function PeriodHeader({
 		notes.push("Stop the timer before you submit the week.");
 	if (submittable && !held && over.length > 0) {
 		const days = new Intl.ListFormat("en-GB", { type: "conjunction" }).format(
-			over.map((d) => `${formatDay(d.day, "short")} (${overLabel(d.overMinutes).toLowerCase()})`),
+			over.map(
+				(d) =>
+					`${formatDay(d.day, "short")} (${overLabel(d.overMinutes, d.moreThanADay).toLowerCase()})`,
+			),
 		);
 		notes.push(`Correct ${days} before you submit.`);
+		if (over.some((d) => d.moreThanADay)) notes.push(MORE_THAN_A_DAY);
 	}
 	if (status === "submitted") notes.push("Submitted. Its entries are locked until it is decided.");
 	else if (status === "approved") notes.push("Approved. Its entries are locked.");

@@ -11,7 +11,7 @@ import { LinkTabs } from "~/components/LinkTabs";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { type OrganisationScope, organisationScope } from "~/db";
-import { halfDaysTaken } from "~/leave/days";
+import { halfDaysTaken, isWorkingDay } from "~/leave/days";
 import {
 	HOLIDAY_KIND,
 	halfDaysLabel,
@@ -25,6 +25,7 @@ import {
 	leaveDecidablePeople,
 	myLeave,
 	publicHolidaysOf,
+	type Refused,
 	requestLeave,
 	requestsToDecide,
 	type Stepped,
@@ -34,8 +35,8 @@ import {
 	withdrawLeave,
 } from "~/leave/leave.server";
 import {
-	daysLabel,
 	earliestNoticed,
+	firstDayTaken,
 	isShortNotice,
 	mayAskFor,
 	NOTICE_REASON_MAX_LENGTH,
@@ -45,6 +46,7 @@ import {
 	rulesOn,
 	WORK_KIND_LABELS,
 	WorkKind,
+	workingDaysLabel,
 } from "~/leave/rules";
 import { timesheetRulesOf } from "~/leave/rules.server";
 import {
@@ -72,7 +74,7 @@ import { NOT_ALLOWED } from "~/organisations/problems";
 import { timetableFor } from "~/schedules/schedules.server";
 import { canSee, destination, destinationPath } from "~/shell/destinations";
 import { EmptySheet, PageHeading, PageLead, Section } from "~/shell/PageHeading";
-import { Day, dayOf } from "~/time/calendar";
+import { addDays, Day, dayOf, daysFrom } from "~/time/calendar";
 import { formatDayWithYear, formatDuration, formatRange } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
 import { TypedHours } from "~/timesheet/durations";
@@ -125,7 +127,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			timetableFor(scope, user.id),
 			publicHolidaysOf(scope, { first: today, last: `${year + 1}-12-31` }),
 			someoneElseDecides(scope, user.id),
-			timesheetRulesOf(organisation.id),
+			timesheetRulesOf(organisation.id, today),
 			myWork(scope, user.id),
 			teamLeaveAhead(scope, organisation, access, today),
 		]);
@@ -134,6 +136,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		timetable,
 		holidays: new Map(holidayKind?.enabled === false ? [] : holidays.map((h) => [h.day, h.name])),
 	};
+	// Notice is counted in their working days (decision 51).
+	const worksOn = (day: Day) => isWorkingDay(calendar, day);
 	// Their schedule today may carry its own rules for overtime and weekend work (TS-097).
 	const rules = rulesOn({ timetable, rules: organisationRules }, today);
 
@@ -143,7 +147,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		const people = await leaveDecidablePeople(scope, organisation, access);
 		const todayOf = (person: { timeZone: string }) => dayOf(Date.now(), person.timeZone);
 		const [listed, workListed] = await Promise.all([
-			requestsToDecide(scope, access, people, todayOf),
+			requestsToDecide(scope, access, people, todayOf, show === "requests"),
 			workToDecide(scope, access, people, todayOf),
 		]);
 		waiting = listed.pending.length + workListed.pending.length;
@@ -158,6 +162,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				notice: noticeLabel(r),
 				shortNotice: r.shortNotice,
 				noticeReason: r.noticeReason,
+				/** Of a pending request, the time on its days leave cannot share (TR-04). */
+				inTheWay: r.inTheWay,
 				cancellable: r.cancellable,
 			});
 			const shapeWork = (w: WorkToDecide): WorkItemToDecide => ({
@@ -173,6 +179,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			requests = {
 				pending: listed.pending.map(shape),
 				upcoming: listed.upcoming.map(shape),
+				begun: listed.begun.map(shape),
 				work: {
 					pending: workListed.pending.map(shapeWork),
 					upcoming: workListed.upcoming.map(shapeWork),
@@ -192,8 +199,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			name: kind.name,
 			key: kind.key,
 			noticeDays: noticeAsked(kind),
-			earliest: earliestNoticed(kind, today),
+			earliest: earliestNoticed(kind, today, worksOn),
 		})),
+		/** Their working days up to the latest earliest well-noticed day, for the sheet's notice count. */
+		workingDays: daysFrom(
+			addDays(today, 1),
+			// The latest of them; days as YYYY-MM-DD sort as they fall.
+			[today, ...requestableKinds(mine.kinds).map((kind) => earliestNoticed(kind, today, worksOn))]
+				.sort()
+				.at(-1) ?? today,
+		).filter(worksOn),
 		shortNotice: rules.shortNotice,
 		workRules: { overtime: rules.overtime, weekend: rules.weekend },
 		balances: mine.balances.map(({ kind, balance }) => ({
@@ -286,10 +301,12 @@ const STEPPED: Record<Exclude<Stepped, "done">, [string, number]> = {
 	stale: ["That request has changed since this page was opened. Look at it again.", 409],
 	locked: ["Those days are on or before the lock date, so the request can no longer change.", 409],
 	"refused-before": [REFUSED_BEFORE, 403],
+	begun: ["That leave has begun, so it can no longer be cancelled.", 409],
 };
 
-function outcome(result: Stepped, said: string) {
+function outcome(result: Stepped | Refused, said: string) {
 	if (result === "done") return done(said);
+	if (typeof result === "object") return declined(result.problem, 409);
 	const [problem, status] = STEPPED[result];
 	return declined(problem, status);
 }
@@ -385,7 +402,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 					minutesPerDay: input.hours,
 					reason: input.reason || null,
 				},
-				await timesheetRulesOf(membership.organisation.id),
+				// Whether it may be asked for is the rules' of its first day (TR-10).
+				await timesheetRulesOf(membership.organisation.id, input.startsOn),
 			);
 			if (!made.ok) return declined(made.problem.message);
 			return done(
@@ -491,6 +509,7 @@ export default function TimeOff({ loaderData }: Route.ComponentProps) {
 					kinds={loaderData.kinds}
 					today={loaderData.today}
 					shortNotice={loaderData.shortNotice}
+					workingDays={loaderData.workingDays}
 				/>
 				{loaderData.alone && (
 					<p className="text-body-medium text-on-surface-variant">
@@ -596,15 +615,25 @@ function RequestFields({
 	kinds,
 	today,
 	shortNotice,
-}: Pick<Loaded, "kinds" | "today" | "shortNotice">) {
+	workingDays,
+}: Pick<Loaded, "kinds" | "today" | "shortNotice" | "workingDays">) {
 	const [kindId, setKindId] = useState<string | null>(kinds[0]?.id ?? null);
 	const [startsOn, setStartsOn] = useState(today);
 	const [endsOn, setEndsOn] = useState(today);
 	const oneDay = startsOn === endsOn || endsOn === "";
 	const kind = kinds.find((k) => k.id === kindId);
+	const works = new Set(workingDays);
+	const worksOn = (day: Day) => works.has(day);
+	const firstDay =
+		Day.safeParse(startsOn).success && Day.safeParse(endsOn).success
+			? // An end before the start takes no day: the start is then the first.
+				firstDayTaken({ startsOn, endsOn }, worksOn)
+			: startsOn;
 	const short =
-		kind !== undefined && Day.safeParse(startsOn).success && isShortNotice(kind, today, startsOn);
-	const given = short ? daysLabel(Math.max(0, noticeGiven(today, startsOn))) : "";
+		kind !== undefined &&
+		Day.safeParse(startsOn).success &&
+		isShortNotice(kind, today, firstDay, worksOn);
+	const given = short ? workingDaysLabel(Math.max(0, noticeGiven(today, firstDay, worksOn))) : "";
 	return (
 		<>
 			<Select
@@ -690,9 +719,11 @@ function Mine({
 	const { balances, requests, holidays, year, kinds, workRules, work, teamLeave } = data;
 	const asksOvertime = mayAskFor(workRules, "overtime");
 	const asksWeekend = mayAskFor(workRules, "weekend");
+	// Work on a public holiday, wherever overtime is allowed at all, once a holiday is set ahead (decision 52).
+	const asksHoliday = mayAskFor(workRules, "holiday") && holidays.length > 0;
 	return (
 		<>
-			{(kinds.length > 0 || asksOvertime || asksWeekend) && (
+			{(kinds.length > 0 || asksOvertime || asksWeekend || asksHoliday) && (
 				<div className="mt-6 flex flex-wrap gap-2">
 					{kinds.length > 0 && (
 						<Button onPress={() => open("request", null)}>Request time off</Button>
@@ -705,6 +736,11 @@ function Mine({
 					{asksWeekend && (
 						<Button variant="outlined" onPress={() => askForWork("weekend")}>
 							Request weekend work
+						</Button>
+					)}
+					{asksHoliday && (
+						<Button variant="outlined" onPress={() => askForWork("holiday")}>
+							Request public holiday work
 						</Button>
 					)}
 				</div>
@@ -835,12 +871,18 @@ function Notice({ request }: { request: LeaveToDecide }) {
 			{request.noticeReason && (
 				<span className="block wrap-anywhere">Why: “{request.noticeReason}”</span>
 			)}
+			{request.inTheWay && (
+				<span className="block text-error">
+					{request.inTheWay}: leave and time cannot share a day. Approving is refused until the time
+					is removed.
+				</span>
+			)}
 		</span>
 	);
 }
 
 function Requests({ decisions, open }: { decisions: Decisions; open: Open }) {
-	const { pending, upcoming, work } = decisions;
+	const { pending, upcoming, begun, work } = decisions;
 	return (
 		<>
 			<Section id="waiting" heading="Waiting for you" className="max-w-200">
@@ -901,43 +943,71 @@ function Requests({ decisions, open }: { decisions: Decisions; open: Open }) {
 					<p className="text-body-large text-on-surface-variant">No approved leave is to come.</p>
 				) : (
 					<Ledger heading="Approved" note={`${upcoming.length}`}>
-						<LedgerRows label="Approved leave to come">
-							{upcoming.map((r) => {
-								const on = { id: r.id, name: `${r.person}'s ${r.kind.toLowerCase()}` };
-								return (
-									<LedgerRow
-										key={r.id}
-										title={
-											<span className="wrap-anywhere">
-												{r.person} <span className="text-on-surface-variant">· {r.kind}</span>
-											</span>
-										}
-										detail={
-											<>
-												{r.days} · {r.takes}
-												<Notice request={r} />
-											</>
-										}
-										action={
-											r.cancellable && (
-												<Button
-													variant="text"
-													aria-label={`Cancel ${on.name}`}
-													onPress={() => open("cancel", on)}
-												>
-													Cancel
-												</Button>
-											)
-										}
-									/>
-								);
-							})}
-						</LedgerRows>
+						<ApprovedRows label="Approved leave to come" requests={upcoming} open={open} />
 					</Ledger>
 				)}
 			</Section>
 
+			{begun.length > 0 && (
+				<Section
+					id="begun"
+					heading="Approved, begun"
+					lead="Leave that has begun, on days not yet locked. Cancelling it gives the days back to work, with your reason in the Activity log."
+					className="max-w-200"
+				>
+					<Ledger heading="Begun" note={`${begun.length}`}>
+						<ApprovedRows label="Approved leave that has begun" requests={begun} open={open} />
+					</Ledger>
+				</Section>
+			)}
+
 			<WorkToDecideSection pending={work.pending} upcoming={work.upcoming} open={open} />
 		</>
+	);
+}
+
+/** Approved leave, each with Cancel where the viewer may cancel it. */
+function ApprovedRows({
+	label,
+	requests,
+	open,
+}: {
+	label: string;
+	requests: readonly LeaveToDecide[];
+	open: Open;
+}) {
+	return (
+		<LedgerRows label={label}>
+			{requests.map((r) => {
+				const on = { id: r.id, name: `${r.person}'s ${r.kind.toLowerCase()}` };
+				return (
+					<LedgerRow
+						key={r.id}
+						title={
+							<span className="wrap-anywhere">
+								{r.person} <span className="text-on-surface-variant">· {r.kind}</span>
+							</span>
+						}
+						detail={
+							<>
+								{r.days} · {r.takes}
+								<Notice request={r} />
+							</>
+						}
+						action={
+							r.cancellable && (
+								<Button
+									variant="text"
+									aria-label={`Cancel ${on.name}`}
+									onPress={() => open("cancel", on)}
+								>
+									Cancel
+								</Button>
+							)
+						}
+					/>
+				);
+			})}
+		</LedgerRows>
 	);
 }

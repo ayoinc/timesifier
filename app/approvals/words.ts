@@ -23,12 +23,18 @@ export function managersAwaySentence(names: readonly string[]): string {
 	return `${who} ${names.length === 1 ? "is" : "are"} on leave, so this waits for an owner or admin.`;
 }
 
-/** The days of a week over their limit, as Submit would have refused it (TR-01): "Over by 7:30 on Tue 10". */
-export function overLimitLabel(days: readonly { day: Day; overMinutes: number }[]): string {
+/**
+ * The days of a week over their limit, as Submit would have refused it (TR-01),
+ * in the Timesheet's words (`overLabel`): "Over by 7:30 on Tue 10", or "Over 24
+ * hours by 62:00 on Fri 13" for a day holding more than a day (decision 52).
+ */
+export function overLimitLabel(
+	days: readonly { day: Day; overMinutes: number; moreThanADay: boolean }[],
+): string {
 	return days
 		.map(
 			(d, at) =>
-				`${at === 0 ? "Over" : "over"} by ${formatDuration(d.overMinutes * 60)} on ${formatDay(d.day, "short")}`,
+				`${at === 0 ? "Over" : "over"}${d.moreThanADay ? " 24 hours" : ""} by ${formatDuration(d.overMinutes * 60)} on ${formatDay(d.day, "short")}`,
 		)
 		.join(" and ");
 }

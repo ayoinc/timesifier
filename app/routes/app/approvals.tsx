@@ -328,6 +328,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			noticeReason: r.noticeReason,
 			/** Why it waits on someone else, or on owners and admins (D5, D6). */
 			waits: refusedNote(leaveRefused.get(r.id)) ?? awayNote(r.person.id),
+			/** The time on its days leave cannot share: "7:30 tracked on Tue 10" (TR-04). */
+			inTheWay: r.inTheWay,
 		})),
 		/** The requests for overtime and weekend work waiting for this person's decision (TS-090). */
 		workWaiting: work.pending.map((w) => ({
@@ -441,6 +443,7 @@ const LEAVE_DECIDED: Record<Exclude<Stepped, "done">, [string, number]> = {
 	stale: ["That request has changed since this page was opened. Look at it again.", 409],
 	locked: ["Those days are on or before the lock date, so the request can no longer change.", 409],
 	"refused-before": ["", 403],
+	begun: ["That leave has begun, so it can no longer be cancelled.", 409],
 };
 
 export async function action({ request, context }: Route.ActionArgs) {
@@ -459,6 +462,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (result === "done") {
 				return done(input.intent === "approve-leave" ? "Leave approved." : "Leave refused.");
 			}
+			if (typeof result === "object") return declined(result.problem, 409);
 			if (result === "refused-before") {
 				return declined(
 					refusedBeforeSentence(await refusersNamed(scope, "leave", input.requestId)),
@@ -803,6 +807,12 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 													>
 														{r.noticeReason ? `${r.notice}: “${r.noticeReason}”` : r.notice}
 													</span>
+													{r.inTheWay && (
+														<span className="block text-error">
+															{r.inTheWay}: leave and time cannot share a day. Approving is refused
+															until the time is removed.
+														</span>
+													)}
 													{r.note && <span className="block wrap-anywhere">“{r.note}”</span>}
 													{r.waits && <span className="block">{r.waits}</span>}
 												</>

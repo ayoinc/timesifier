@@ -131,3 +131,15 @@ export async function organisationCountOf(database: D1Database, userId: string):
 		.where(eq(memberships.userId, userId));
 	return found?.count ?? 0;
 }
+
+/**
+ * The organisations a person belongs to, by id: a change to the person that
+ * every one of them records, as a new time zone is (TR-11).
+ */
+export async function organisationIdsOf(database: D1Database, userId: string): Promise<string[]> {
+	const rows = await drizzle(database)
+		.select({ id: memberships.organisationId })
+		.from(memberships)
+		.where(eq(memberships.userId, userId));
+	return rows.map((row) => row.id);
+}

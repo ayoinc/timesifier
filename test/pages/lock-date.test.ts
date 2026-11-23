@@ -6,7 +6,8 @@ import {
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { uuidv7 } from "~/db";
+import { organisationScope, uuidv7 } from "~/db";
+import { decideLeave } from "~/leave/leave.server";
 import worker from "../../workers/app";
 import { DAILY } from "../../workers/scheduled";
 import { captureEmail, type Mailbox } from "../auth/harness";
@@ -377,7 +378,7 @@ describe("the lock date binds everyone", () => {
 		expect(text).toContain("October payroll");
 	});
 
-	it("refuses leave asked for on or before it, and deciding or withdrawing leave that reaches it", async () => {
+	it("refuses leave asked for on or before it, and approving leave that reaches it", async () => {
 		const grace = await joined("grace@example.com", "member");
 		await post(settings, { intent: "lock-date", lockedThrough: "2026-11-05" }, ada);
 		const annual = await kindOf(acme.id, "annual");
@@ -393,7 +394,6 @@ describe("the lock date binds everyone", () => {
 			status: "pending",
 		});
 		expect(await post(timeOff, { intent: "approve", requestId: pending }, ada)).toBe(409);
-		expect(await post(timeOff, { intent: "withdraw", requestId: pending }, grace)).toBe(409);
 		expect(await value("select status from leave_requests where id = ?", pending)).toBe("pending");
 		expect(
 			await post(
@@ -405,6 +405,51 @@ describe("the lock date binds everyone", () => {
 					endsOn: "2026-11-16",
 					// Less than annual leave's notice (TS-090), so it says why.
 					noticeReason: "A family wedding",
+				},
+				grace,
+			),
+		).toBe(200);
+	});
+
+	it("a pending request the lock date has reached can be withdrawn or refused, and its later days asked for again", async () => {
+		const grace = await joined("grace@example.com", "member");
+		const annual = await kindOf(acme.id, "annual");
+		const timeOff = `/app/${acme.slug}/time-off`;
+		const asked = await seedLeave(acme.id, grace.user.id, "annual", "2026-11-05", "2026-11-20", {
+			status: "pending",
+		});
+		const other = await seedLeave(acme.id, grace.user.id, "annual", "2026-11-04", "2026-11-04", {
+			status: "pending",
+		});
+		await post(settings, { intent: "lock-date", lockedThrough: "2026-11-06" }, ada);
+		const statusOf = (id: string) =>
+			value<string>("select status from leave_requests where id = ?", id);
+
+		// Approving would put leave on a locked day: it says what can be done instead.
+		const approve = await submit(timeOff, { intent: "approve", requestId: asked }, ada, {
+			byScript: true,
+		});
+		expect(approve.status).toBe(409);
+		expect(await approve.text()).toContain(
+			"Thu 5 is on or before the lock date, so this leave cannot be approved. It can be withdrawn, and the days from Sat 7, the first open day, asked for again.",
+		);
+		expect(await statusOf(asked)).toBe("pending");
+
+		// Withdrawing and refusing change no day: the lock date does not stop them.
+		expect(await post(timeOff, { intent: "withdraw", requestId: asked }, grace)).toBe(200);
+		expect(await statusOf(asked)).toBe("withdrawn");
+		expect(await post(timeOff, { intent: "refuse", requestId: other }, ada)).toBe(200);
+		expect(await statusOf(other)).toBe("refused");
+
+		expect(
+			await post(
+				timeOff,
+				{
+					intent: "request",
+					kindId: annual,
+					startsOn: "2026-11-16",
+					endsOn: "2026-11-20",
+					noticeReason: "Asked again from the first open week",
 				},
 				grace,
 			),
@@ -583,14 +628,17 @@ describe("the lock date, timers and the weeks it submits (TS-111d)", () => {
 		const text = textOf(await (await open(approvals(), ada)).text());
 		expect(text).toContain("Over by 7:30 on Tue 10");
 		expect(text).toContain("Submitted by the system");
+		// Linus's timer ran from Friday 09:00 to the lock, Monday 23:00: Friday
+		// holds more than 24 hours, so his week is over its limit too (decision 52).
+		expect(text).toContain("Over 24 hours by 62:00 on Fri 13");
 
 		const all = await say(approvals(), { intent: "approve-all", startsOn: "2026-11-09" }, ada);
 		expect(all.status).toBe(200);
-		expect(all.said).toContain("1 timesheet approved.");
-		expect(all.said).toContain("1 was left: it has a day over its limit.");
+		expect(all.said).toContain("No timesheet approved.");
+		expect(all.said).toContain("2 were left: each has a day over its limit.");
 		const statusOf = (who: Person) =>
 			value<string>("select status from periods where user_id = ?", who.user.id);
-		expect(await statusOf(linus)).toBe("approved");
+		expect(await statusOf(linus)).toBe("submitted");
 		expect(await statusOf(grace)).toBe("submitted");
 
 		// Approving hers alone asks first, then says in the log that it was over.
@@ -652,10 +700,23 @@ describe("the lock date, timers and the weeks it submits (TS-111d)", () => {
 		const before = await total();
 		const stop = await say(sheet, { intent: "stop" }, linus);
 		expect(stop.said).toContain("No timer was running.");
+		// Friday holds more than 24 hours (decision 52): Approve all leaves the
+		// week, and approving it alone, confirmed, keeps every minute.
 		await say(approvals(), { intent: "approve-all", startsOn: "2026-11-09" }, ada);
-		expect(await value("select status from periods where user_id = ?", linus.user.id)).toBe(
-			"approved",
-		);
+		const statusOf = () =>
+			value<string>("select status from periods where user_id = ?", linus.user.id);
+		expect(await statusOf()).toBe("submitted");
+		const periodId = await value<string>("select id from periods where user_id = ?", linus.user.id);
+		expect(
+			(
+				await say(
+					approvals(),
+					{ intent: "approve", periodId: periodId ?? "", overLimit: "on" },
+					ada,
+				)
+			).status,
+		).toBe(200);
+		expect(await statusOf()).toBe("approved");
 		expect(await total()).toBe(before);
 	});
 
@@ -832,6 +893,48 @@ describe("the lock date reaches a person's day once it has ended where they are 
 		await runAt("2026-11-12T08:00:00Z");
 		expect(await value("select ended_at from time_entries where id = ?", timer)).toBe(
 			Date.parse("2026-11-12T08:00:00Z"),
+		);
+	});
+
+	it("approves leave on a locked day only while that day has not ended where its person is (TR-08)", async () => {
+		const linus = await joined("linus@example.com", "member");
+		await env.DB.prepare("update users set time_zone = ? where id = ?")
+			.bind(LOS_ANGELES, linus.user.id)
+			.run();
+		const grace = await joined("grace@example.com", "member");
+		expect(await post(settings, { intent: "lock-date", lockedThrough: "2026-11-11" }, ada)).toBe(
+			200,
+		);
+		const pending = { status: "pending" } as const;
+		const inLosAngeles = await seedLeave(
+			acme.id,
+			linus.user.id,
+			"annual",
+			"2026-11-11",
+			"2026-11-11",
+			pending,
+		);
+		const inLondon = await seedLeave(
+			acme.id,
+			grace.user.id,
+			"annual",
+			"2026-11-11",
+			"2026-11-11",
+			pending,
+		);
+		const scope = organisationScope(env.DB, acme.id);
+		const owner = { userId: ada.user.id, role: "owner" as const, managed: new Set<string>() };
+		const approve = { action: "approved" as const, comment: null };
+		// Thursday 01:00 in London, Wednesday 17:00 in Los Angeles.
+		const now = new Date("2026-11-12T01:00:00Z");
+
+		expect(await decideLeave(scope, owner, inLondon, approve, now)).toEqual({
+			problem:
+				"Wed 11 is on or before the lock date, so this leave cannot be approved. It can be withdrawn, and the days from Thu 12, the first open day, asked for again.",
+		});
+		expect(await decideLeave(scope, owner, inLosAngeles, approve, now)).toBe("done");
+		expect(await value("select status from leave_requests where id = ?", inLosAngeles)).toBe(
+			"approved",
 		);
 	});
 

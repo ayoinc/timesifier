@@ -750,4 +750,34 @@ describe("the working week, the kinds of leave and the public holidays (TS-061)"
 		expect((await kindRow("annual"))?.name).toBe("Annual leave");
 		expect(await holidays()).toEqual([{ day: "2026-12-25", name: "Christmas Day" }]);
 	});
+
+	it("a public holiday on a day that holds time is asked about, and the time kept stands (TR-10)", async () => {
+		const grace = await memberOfAcme("member", "grace@example.com");
+		await env.DB.prepare("update users set name = 'Grace Hopper' where id = ?")
+			.bind(grace.user.id)
+			.run();
+		const site = await seedProject(acme.id, "Site");
+		await seedEntry(acme.id, grace.user.id, site, "2099-12-15T09:00:00Z", "2099-12-15T16:30:00Z");
+		const fields = { intent: "add-holiday", day: "2099-12-15", name: "Founders' Day" };
+
+		const asked = await outcome(await submit(SETTINGS, fields, ada, { byScript: true }));
+		expect(asked.status).toBe(409);
+		expect(asked.said).toContain(
+			'Grace Hopper has 7:30 tracked on Tue 15. To make it a public holiday and keep that time, tick \\"Keep the time already tracked on it\\".',
+		);
+		expect(await holidays()).toEqual([]);
+
+		const kept = await outcome(
+			await submit(SETTINGS, { ...fields, keepTime: "on" }, ada, { byScript: true }),
+		);
+		expect(kept.status).toBe(200);
+		expect(kept.said).toContain(
+			"Founders' Day is a public holiday. The time already tracked on it stands: Grace Hopper's 7:30.",
+		);
+		expect(await holidays()).toEqual([{ day: "2099-12-15", name: "Founders' Day" }]);
+		// For Grace the day stays a working day: her 7:30 is not over.
+		const day = textOf(await pageBody(await open("/app/acme?day=2099-12-15", grace)));
+		expect(day).not.toContain("Over by");
+		expect(day).toContain("7:30 expected");
+	});
 });

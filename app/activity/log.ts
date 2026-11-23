@@ -37,4 +37,8 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	webhook: "Webhooks",
 	import: "Imports",
 	support_access: "Support access",
+	leave_kind: "Kinds of leave",
+	public_holiday: "Public holidays",
+	work_request: "Requests for work",
+	user: "People's time zones",
 };

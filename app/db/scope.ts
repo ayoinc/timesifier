@@ -65,6 +65,7 @@ import {
 	teamMembers,
 	teams,
 	timeEntries,
+	timesheetRuleVersions,
 	webhookDeliveries,
 	webhooks,
 	workingDays,
@@ -339,6 +340,7 @@ export const tenantTables = {
 	importJobs,
 	calendarFeeds,
 	workRequests,
+	timesheetRuleVersions,
 	supportGrants,
 } as const;
 

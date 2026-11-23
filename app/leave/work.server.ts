@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
+import { changes, recordStatement, recordStatementWhen } from "~/activity/activity.server";
 import { workRefusersOf } from "~/approvals/refusals.server";
-import { among, type OrganisationScope, type ScopedAccessor } from "~/db";
+import { among, type OrganisationScope, type ScopedAccessor, uuidv7 } from "~/db";
 import {
 	type Access,
 	mayApproveAfterRefusals,
@@ -144,10 +145,12 @@ export async function requestWork(
 			ok: false,
 			problem: {
 				field: "endsOn",
-				message:
-					request.kind === "overtime"
-						? "These days hold no working day to work over."
-						: "These days hold no day off: weekend work is for days the working week does not work.",
+				message: {
+					overtime: "These days hold no working day to work over.",
+					weekend:
+						"These days hold no day off: weekend work is for days the working week does not work.",
+					holiday: "These days hold no public holiday.",
+				}[request.kind],
 			},
 		};
 	}
@@ -173,7 +176,9 @@ export async function requestWork(
 	}
 	const alone = !(await someoneElseDecides(scope, userId));
 	const status: LeaveStatus = alone ? "approved" : "pending";
-	await scope.workRequests.insert({
+	const id = uuidv7();
+	const made = {
+		id,
 		userId,
 		kind: request.kind,
 		startsOn: request.startsOn,
@@ -182,8 +187,55 @@ export async function requestWork(
 		reason: request.reason,
 		status,
 		...(alone ? { decidedBy: userId, decidedAt: now, comment: APPROVED_ALONE } : {}),
-	});
+	};
+	await scope.batch([
+		scope.workRequests.statements.insert(made),
+		recordStatement(
+			scope,
+			userId,
+			"work_request.requested",
+			{ type: "work_request", id, ownerId: userId },
+			changes(null, made, WORK_FIELDS),
+		),
+	]);
 	return { ok: true, status, alone };
+}
+
+/** What the activity log records of a request for work (TR-11): never its reason's or comment's text. */
+const WORK_FIELDS = ["kind", "startsOn", "endsOn", "minutesPerDay", "status"] as const;
+
+/**
+ * Moves a request from `from` to the change's status, recorded as `action`
+ * with before and after in the same batch (TR-11): the record lands only when
+ * the request still stood at `from`. Answers whether it moved.
+ */
+async function stepWork(
+	scope: OrganisationScope,
+	actorId: string,
+	row: WorkRow,
+	from: LeaveStatus,
+	change: Partial<WorkRow> & { status: LeaveStatus },
+	action:
+		| "work_request.withdrawn"
+		| "work_request.approved"
+		| "work_request.declined"
+		| "work_request.cancelled",
+): Promise<Stepped> {
+	const [, changed] = await scope.batch([
+		recordStatementWhen(
+			scope,
+			scope.workRequests.exists((w) => and(eq(w.id, row.id), eq(w.status, from))),
+			actorId,
+			action,
+			{ type: "work_request", id: row.id, ownerId: row.userId },
+			changes({ kind: row.kind, status: row.status }, { kind: row.kind, status: change.status }, [
+				"kind",
+				"status",
+			]),
+		),
+		scope.workRequests.statements.update(change, (w) => and(eq(w.id, row.id), eq(w.status, from))),
+	]);
+	return changed.length === 1 ? "done" : "stale";
 }
 
 async function workRow(scope: OrganisationScope, id: string) {
@@ -201,10 +253,14 @@ export async function withdrawWork(
 	if (!row) return "missing";
 	if (!mayChangeTimeOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "pending") return "stale";
-	const changed = await scope.workRequests.update({ status: "withdrawn" }, (w) =>
-		and(eq(w.id, row.id), eq(w.status, "pending")),
+	return stepWork(
+		scope,
+		access.userId,
+		row,
+		"pending",
+		{ status: "withdrawn" },
+		"work_request.withdrawn",
 	);
-	return changed.length === 1 ? "done" : "stale";
 }
 
 /** Approves or refuses a pending request, as `access`: whoever decides the person's leave. */
@@ -225,16 +281,19 @@ export async function decideWork(
 	) {
 		return "refused-before";
 	}
-	const changed = await scope.workRequests.update(
+	return stepWork(
+		scope,
+		access.userId,
+		row,
+		"pending",
 		{
 			status: decision.action,
 			decidedBy: access.userId,
 			decidedAt: now,
 			comment: decision.comment,
 		},
-		(w) => and(eq(w.id, row.id), eq(w.status, "pending")),
+		decision.action === "approved" ? "work_request.approved" : "work_request.declined",
 	);
-	return changed.length === 1 ? "done" : "stale";
 }
 
 /** Cancels an approved request that has not begun, as an owner or admin, with the reason. */
@@ -250,11 +309,14 @@ export async function cancelWork(
 	if (!row) return "missing";
 	if (!mayCancelLeaveOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "approved" || row.startsOn <= (await todayOf(row.userId))) return "stale";
-	const changed = await scope.workRequests.update(
+	return stepWork(
+		scope,
+		access.userId,
+		row,
+		"approved",
 		{ status: "cancelled", decidedBy: access.userId, decidedAt: now, comment: reason },
-		(w) => and(eq(w.id, row.id), eq(w.status, "approved")),
+		"work_request.cancelled",
 	);
-	return changed.length === 1 ? "done" : "stale";
 }
 
 /** How many of a person's requests Time off lists. */

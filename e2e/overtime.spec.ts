@@ -59,8 +59,12 @@ async function owner(page: Page) {
 	return { slug, day: await pastWeekday(page) };
 }
 
-/** Allows overtime with no cap, through Settings › Timesheet rules, with a pointer. */
-async function allowOvertime(page: Page, slug: string) {
+/**
+ * Allows overtime with no cap from `from` on, through Settings › Timesheet
+ * rules, with a pointer: a change applies from next Monday unless another day
+ * is chosen (TR-10), and the time below is tracked on a day before today.
+ */
+async function allowOvertime(page: Page, slug: string, from: string) {
 	await openShell(page, destinationPath(slug, "settings"));
 	await page.getByRole("button", { name: "Change timesheet rules" }).click();
 	const sheet = page.getByRole("dialog", { name: "Change the timesheet rules" });
@@ -68,9 +72,25 @@ async function allowOvertime(page: Page, slug: string) {
 		.getByRole("radiogroup", { name: "Overtime" })
 		.getByText("Allowed", { exact: true })
 		.click();
+	await sheet.getByRole("textbox", { name: "From" }).fill(from);
 	await sheet.getByRole("button", { name: "Save" }).click();
 	await expect(sheet).toBeHidden();
-	await expect(status(page)).toHaveText("The timesheet rules are saved.");
+	await expect(status(page)).toHaveText(savedFrom(from));
+}
+
+/** What saving the rules says when they change from `from` and put no day over: "… They apply from Monday 30 November 2026." */
+function savedFrom(from: string) {
+	const parts = new Intl.DateTimeFormat("en-GB", {
+		timeZone: "UTC",
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	}).formatToParts(new Date(`${from}T00:00:00Z`));
+	const part = (type: Intl.DateTimeFormatPartTypes) =>
+		parts.find((p) => p.type === type)?.value ?? "";
+	const day = `${part("weekday")} ${part("day")} ${part("month")} ${part("year")}`;
+	return `The timesheet rules are saved. They apply from ${day}.`;
 }
 
 /** Tracks `hours` on `day` through Track time on its Day view, in the field named `field`. */
@@ -97,10 +117,14 @@ test("where overtime is allowed, a full day asks for Overtime, the keyboard alon
 	await tabTo(page, overtime.getByRole("radio", { checked: true }));
 	await page.keyboard.press("ArrowDown");
 	await expect(overtime.getByRole("radio", { name: "Allowed", exact: true })).toBeChecked();
+	// From the day the time is tracked on, not next Monday (TR-10).
+	const from = rules.getByRole("textbox", { name: "From" });
+	await tabTo(page, from);
+	await from.fill(day);
 	await tabTo(page, rules.getByRole("button", { name: "Save" }));
 	await page.keyboard.press("Enter");
 	await expect(rules).toBeHidden();
-	await expect(status(page)).toHaveText("The timesheet rules are saved.");
+	await expect(status(page)).toHaveText(savedFrom(day));
 
 	// The day's 7:30, then Track time asks for Overtime, and says why.
 	await openShell(page, dayPath(slug, day));
@@ -186,7 +210,7 @@ for (const viewport of [
 				page,
 			}) => {
 				const { slug, day } = await owner(page);
-				await allowOvertime(page, slug);
+				await allowOvertime(page, slug, day);
 				await track(page, slug, day, "Hours", "7:30");
 				await track(page, slug, day, "Overtime", "1");
 

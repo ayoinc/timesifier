@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import type { ActivitySource } from "~/activity/actions";
-import { record } from "~/activity/activity.server";
+import { recordStatement } from "~/activity/activity.server";
 import { among, type OrganisationScope, organisationScope, organisations } from "~/db";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
+import { formatDayWithYear } from "~/time/format";
 import { LeaveStatus } from "./kinds";
 import { calendarOf, leaveContext } from "./leave.server";
 import {
@@ -21,9 +22,12 @@ import {
 	OvertimeRule,
 	overtimeAllowance,
 	type RulesCalendar,
+	type RulesVersion,
+	rulesOn,
 	ShortNoticeRule,
 	splitAtLimit,
 	type TimesheetRules,
+	versionOn,
 	WorkKind,
 	type WorkRequestLike,
 	weekOf,
@@ -65,10 +69,38 @@ async function rulesRowOf(organisationId: string): Promise<TimesheetRules & DayR
 	};
 }
 
-/** The organisation's timesheet rules. */
-export async function timesheetRulesOf(organisationId: string): Promise<TimesheetRules> {
-	const { weekStartsOn: _week, ...rules } = await rulesRowOf(organisationId);
-	return rules;
+/** The organisation's dated changes of its rules (TR-10), earliest first. */
+export async function rulesVersionsOf(scope: OrganisationScope): Promise<RulesVersion[]> {
+	const rows = await scope.timesheetRuleVersions.select(undefined, {
+		orderBy: (v) => [asc(v.effectiveFrom)],
+	});
+	return rows.map((row) => ({
+		effectiveFrom: row.effectiveFrom,
+		overtime: OvertimeRule.catch(DEFAULT_RULES.overtime).parse(row.overtimePolicy),
+		weekend: NonWorkingRule.catch(DEFAULT_RULES.weekend).parse(row.nonWorkingDays),
+		overtimeDayCap: cap(row.overtimeDayCapMinutes),
+		overtimeWeekCap: cap(row.overtimeWeekCapMinutes),
+	}));
+}
+
+/**
+ * The organisation's timesheet rules: those in force on `day` (TR-10) where it
+ * is given, else those before any dated change. Short notice is not dated.
+ */
+export async function timesheetRulesOf(organisationId: string, day?: Day): Promise<TimesheetRules> {
+	const [{ weekStartsOn: _week, ...rules }, versions] = await Promise.all([
+		rulesRowOf(organisationId),
+		day === undefined
+			? Promise.resolve([])
+			: rulesVersionsOf(organisationScope(env.DB, organisationId)),
+	]);
+	return day === undefined ? rules : versionOn(rules, versions, day);
+}
+
+/** The organisation's next dated change of its rules after `day`, if one is waiting. */
+export async function nextRulesOf(organisationId: string, day: Day): Promise<RulesVersion | null> {
+	const versions = await rulesVersionsOf(organisationScope(env.DB, organisationId));
+	return versions.find((v) => v.effectiveFrom > day) ?? null;
 }
 
 /** The fields of the rules, as the activity log records them. */
@@ -80,18 +112,98 @@ const RULE_FIELDS = [
 	"shortNotice",
 ] as const satisfies readonly (keyof TimesheetRules)[];
 
+/** The fields of the rules a day's limits read, which are dated (TR-10). */
+const DATED_FIELDS = ["overtime", "weekend", "overtimeDayCap", "overtimeWeekCap"] as const;
+
+/** What a change of the rules does to time already tracked: the days it puts over their limit, and whose. */
+export interface RulesEffect {
+	days: number;
+	people: number;
+}
+
+/** The longest run of days a change of the rules is checked against tracked time. */
+const EFFECT_DAYS = 366;
+
 /**
- * Changes the organisation's timesheet rules, with a row in the activity log
- * naming what changed (TS-095). A cap given as null is taken away; one left
- * out stays. Who may is the caller's to decide.
+ * The days of time already tracked from `from` that `next`, the rules from
+ * that day on, would put over their limit that are not over now (TR-10).
+ */
+export async function rulesEffectOf(
+	scope: OrganisationScope,
+	from: Day,
+	next: Omit<RulesVersion, "effectiveFrom">,
+	now: number,
+): Promise<RulesEffect> {
+	const rows = await scope.timeEntries.select((e) =>
+		and(gte(e.spentOn, from), lte(e.spentOn, addDays(from, EFFECT_DAYS))),
+	);
+	const lastOf = new Map<string, Day>();
+	for (const row of rows) {
+		const last = lastOf.get(row.userId);
+		if (!last || row.spentOn > last) lastOf.set(row.userId, row.spentOn);
+	}
+	let days = 0;
+	let people = 0;
+	for (const [userId, last] of lastOf) {
+		const calendar = await rulesCalendarOf(scope, userId, from, last);
+		const entries = await entriesOfDays(scope, userId, weekOf(calendar.rules, from), last);
+		const tracked = (day: Day) => trackedOn(entries, day, now);
+		const span = daysFrom(from, last);
+		const overNow = new Set(
+			dayRules(calendar, span, tracked)
+				.filter((d) => d.overMinutes > 0)
+				.map((d) => d.day),
+		);
+		const changed: RulesCalendar = {
+			...calendar,
+			versions: [
+				...(calendar.versions ?? []).filter((v) => v.effectiveFrom < from),
+				{ ...next, effectiveFrom: from },
+			],
+		};
+		const newlyOver = dayRules(changed, span, tracked).filter(
+			(d) => d.overMinutes > 0 && !overNow.has(d.day),
+		).length;
+		if (newlyOver > 0) {
+			days += newlyOver;
+			people += 1;
+		}
+	}
+	return { days, people };
+}
+
+/**
+ * What saving the rules says (TR-10): from when they apply, and the days of
+ * time already tracked they put over their limit, "This puts 3 days of 2
+ * people over their limit." `effect` is null when no rule of a day changed.
+ */
+export function rulesSavedSentence(from: Day, effect: RulesEffect | null): string {
+	if (effect === null) return "The timesheet rules are saved.";
+	const applies = `The timesheet rules are saved. They apply from ${formatDayWithYear(from)}.`;
+	if (effect.days === 0) return applies;
+	const days = effect.days === 1 ? "1 day" : `${effect.days} days`;
+	const people = effect.people === 1 ? "1 person" : `${effect.people} people`;
+	return `${applies} This puts ${days} of ${people} over their limit.`;
+}
+
+/**
+ * Changes the organisation's timesheet rules from `from` on (TR-10): the rules
+ * a day's limits read apply to the days from `from`, as a dated version that
+ * replaces any later one, and never to the days before it; short notice, which
+ * is about requests rather than days, changes at once. One batch makes the
+ * change and its row in the activity log, with before and after (TS-095). A
+ * cap given as null is taken away; one left out stays. Who may is the
+ * caller's to decide. Answers whether anything changed.
  */
 export async function setTimesheetRules(
 	organisationId: string,
 	actorId: string,
 	rules: Partial<TimesheetRules>,
+	from: Day,
 	source: ActivitySource = "web",
-): Promise<void> {
-	const before = await timesheetRulesOf(organisationId);
+): Promise<boolean> {
+	const scope = organisationScope(env.DB, organisationId);
+	const before = await timesheetRulesOf(organisationId, from);
 	const after: TimesheetRules = { ...before, ...rules };
 	const was: Record<string, string | number | null> = {};
 	const is: Record<string, string | number | null> = {};
@@ -100,26 +212,37 @@ export async function setTimesheetRules(
 		was[field] = before[field];
 		is[field] = after[field];
 	}
-	if (Object.keys(is).length === 0) return;
-	await drizzle(env.DB)
-		.update(organisations)
-		.set({
-			overtimePolicy: after.overtime,
-			nonWorkingDays: after.weekend,
-			overtimeDayCapMinutes: after.overtimeDayCap,
-			overtimeWeekCapMinutes: after.overtimeWeekCap,
-			shortNotice: after.shortNotice,
-			updatedAt: new Date(),
-		})
-		.where(eq(organisations.id, organisationId));
-	await record(
-		organisationScope(env.DB, organisationId),
-		actorId,
-		"timesheet_rules.changed",
-		{ type: "organisation", id: organisationId, ownerId: null },
-		{ before: was, after: is },
-		source,
-	);
+	if (Object.keys(is).length === 0) return false;
+	const dated = DATED_FIELDS.some((field) => field in is);
+	if (dated) is.appliesFrom = from;
+	const statements = [
+		drizzle(env.DB)
+			.update(organisations)
+			.set({ shortNotice: after.shortNotice, updatedAt: new Date() })
+			.where(eq(organisations.id, organisationId)),
+		...(dated
+			? [
+					scope.timesheetRuleVersions.statements.delete((v) => gte(v.effectiveFrom, from)).query,
+					scope.timesheetRuleVersions.statements.insert({
+						effectiveFrom: from,
+						overtimePolicy: after.overtime,
+						nonWorkingDays: after.weekend,
+						overtimeDayCapMinutes: after.overtimeDayCap,
+						overtimeWeekCapMinutes: after.overtimeWeekCap,
+					}).query,
+				]
+			: []),
+		recordStatement(
+			scope,
+			actorId,
+			"timesheet_rules.changed",
+			{ type: "organisation", id: organisationId, ownerId: null },
+			{ before: was, after: is },
+			source,
+		).query,
+	] as const;
+	await drizzle(env.DB).batch([statements[0], ...statements.slice(1)]);
+	return true;
 }
 
 /** The approved requests for overtime and weekend work of `userIds` that touch `first` to `last`. */
@@ -156,12 +279,13 @@ export async function rulesCalendarOf(
 	first: Day,
 	last: Day,
 ): Promise<RulesCalendar> {
-	const [context, rules, work] = await Promise.all([
+	const [context, rules, versions, work] = await Promise.all([
 		leaveContext(scope, [userId], first, last),
 		rulesRowOf(scope.organisationId),
+		rulesVersionsOf(scope),
 		approvedWorkOf(scope, [userId], first, last),
 	]);
-	return { ...calendarOf(context, userId), rules, work };
+	return { ...calendarOf(context, userId), rules, versions, work };
 }
 
 /** An entry as the checks read it, with the day it belongs to (TS-111). */
@@ -224,10 +348,9 @@ export async function dayRulesOf(
 	const last = days.at(-1);
 	if (!first || !last) return [];
 	const calendar = await rulesCalendarOf(scope, userId, first, last);
-	const counted =
-		calendar.rules.overtimeWeekCap === null
-			? entries
-			: await entriesOfDays(scope, userId, weekOf(calendar.rules, first), last);
+	const counted = days.every((day) => rulesOn(calendar, day).overtimeWeekCap === null)
+		? entries
+		: await entriesOfDays(scope, userId, weekOf(calendar.rules, first), last);
 	return dayRules(calendar, days, (day) => trackedOn(counted, day, now));
 }
 
@@ -266,7 +389,7 @@ export async function refusalOf(
 	change: DayChange,
 ): Promise<string | null> {
 	const calendar = await rulesCalendarOf(scope, userId, change.day, change.day);
-	const { rules } = calendar;
+	const rules = rulesOn(calendar, change.day);
 	const limit = dayLimit(calendar, change.day);
 	const weekCapped = change.overtime && rules.overtimeWeekCap !== null;
 	const entries = weekCapped
@@ -303,7 +426,7 @@ export async function timerStartOf(
 ): Promise<{ ok: true; overtime: boolean } | { ok: false; message: string }> {
 	const day = dayOf(now, zone);
 	const calendar = await rulesCalendarOf(scope, userId, day, day);
-	const { rules } = calendar;
+	const rules = rulesOn(calendar, day);
 	const limit = dayLimit(calendar, day);
 	const first = weekOf(rules, day);
 	const last = addDays(first, 6);
@@ -311,15 +434,16 @@ export async function timerStartOf(
 	// The running entry is stopped as the new one starts: what it has run counts.
 	const tracked = trackedOn(entries, day, now);
 	const ofDay = wholeMinutes(tracked.overtimeMs);
-	const allowance = overtimeAllowance(
-		limit,
-		rules,
-		overtimeBetween(entries, first, last, now) - ofDay,
-	);
+	const weekBefore = overtimeBetween(entries, first, last, now) - ofDay;
+	const allowance = overtimeAllowance(limit, rules, weekBefore);
+	const dayLeft =
+		limit.overtimeMinutes === null ? null : Math.max(0, limit.overtimeMinutes - ofDay);
 	const verdict = mayStart(
 		limit,
 		tracked.regularMs,
 		allowance === null ? null : Math.max(0, allowance - ofDay),
+		rules.overtimeWeekCap !== null &&
+			(dayLeft === null || rules.overtimeWeekCap - weekBefore - ofDay < dayLeft),
 	);
 	if (!verdict.ok) return verdict;
 	return { ok: true, overtime: minutesLeft(limit, tracked.regularMs) === 0 };
@@ -365,13 +489,16 @@ export async function daysOver(
 	now: number,
 ): Promise<DayRule[]> {
 	const calendar = await rulesCalendarOf(scope, userId, first, last);
+	const days = daysFrom(first, last);
 	const entries = await entriesOfDays(
 		scope,
 		userId,
-		calendar.rules.overtimeWeekCap === null ? first : weekOf(calendar.rules, first),
+		days.every((day) => rulesOn(calendar, day).overtimeWeekCap === null)
+			? first
+			: weekOf(calendar.rules, first),
 		last,
 	);
-	return dayRules(calendar, daysFrom(first, last), (day) => trackedOn(entries, day, now)).filter(
+	return dayRules(calendar, days, (day) => trackedOn(entries, day, now)).filter(
 		(day) => day.overMinutes > 0,
 	);
 }

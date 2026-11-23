@@ -52,7 +52,8 @@ export function OvertimeTag({ onAmber = false }: { onAmber?: boolean }) {
  */
 export function ruleWords(rule: DayRule | undefined): { text: string; over: boolean } | null {
 	if (!rule) return null;
-	if (rule.overMinutes > 0) return { text: overLabel(rule.overMinutes), over: true };
+	if (rule.overMinutes > 0)
+		return { text: overLabel(rule.overMinutes, rule.moreThanADay), over: true };
 	if (rule.closedReason !== null) return { text: "Closed", over: false };
 	if (rule.limitMinutes === null) return null;
 	return { text: `${formatDuration((rule.leftMinutes ?? 0) * 60)} left`, over: false };

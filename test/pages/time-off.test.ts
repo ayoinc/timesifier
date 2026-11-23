@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { captureEmail, type Mailbox } from "../auth/harness";
@@ -501,21 +502,27 @@ describe("cancelling approved leave", () => {
 		expect(await statusOf(own.id)).toBe("approved");
 	});
 
-	it("is refused for leave that has begun or ended, and for leave not approved", async () => {
+	it("is refused for leave not approved, and for leave that has begun on a locked day; begun leave on open days is cancelled (TR-04)", async () => {
 		const { grace } = await seedPeople();
 		const started = await requestLeave(grace, "sick", "2026-11-11", "2026-11-12");
 		const past = await requestLeave(grace, "sick", "2026-11-02", "2026-11-03");
 		const pending = await requestLeave(grace, "annual", "2026-12-01", "2026-12-01");
-		for (const id of [started.id, past.id, pending.id]) {
+		await env.DB.prepare("update organisations set locked_through = ? where id = ?")
+			.bind("2026-11-05", acme.id)
+			.run();
+		for (const id of [past.id, pending.id]) {
 			expect(
 				(await ask(ada, { intent: "cancel", requestId: id ?? "", comment: "Why" })).status,
 			).toBe(409);
 		}
+		expect(
+			(await ask(ada, { intent: "cancel", requestId: started.id ?? "", comment: "Why" })).status,
+		).toBe(200);
 		expect([
 			await statusOf(started.id),
 			await statusOf(past.id),
 			await statusOf(pending.id),
-		]).toEqual(["approved", "approved", "pending"]);
+		]).toEqual(["cancelled", "approved", "pending"]);
 	});
 });
 
