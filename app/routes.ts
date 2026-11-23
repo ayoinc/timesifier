@@ -29,7 +29,7 @@ import {
 	WELLBEING_SEGMENT,
 } from "./platform/paths";
 import { DEFAULT_RATES_SEGMENT, PROJECT_PARAM } from "./projects/projects";
-import { REPORT_EXPORT_SEGMENT } from "./reports/paths";
+import { REPORT_EXPORT_SEGMENT, REPORT_PEOPLE_SEGMENT } from "./reports/paths";
 import { LEAVE_EXPORT_SEGMENT, REPORT_VIEW_ROUTES } from "./reports/views";
 import {
 	ACCOUNT_SEGMENT,
@@ -70,6 +70,7 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(INVITATIONS_SEGMENT, "routes/app/invitations.tsx"),
 	route(SCHEDULES_SEGMENT, "routes/app/schedules.tsx"),
 	route(REPORT_EXPORT_SEGMENT, "routes/app/reports.export.ts"),
+	route(REPORT_PEOPLE_SEGMENT, "routes/app/reports.people.ts"),
 	route(IMPORT_SEGMENT, "routes/app/integrations.import.tsx"),
 	route(EXPORT_SEGMENT, "routes/app/integrations.export.ts"),
 	route(INVOICES_EXPORT_SEGMENT, "routes/app/integrations.invoices-export.ts"),

@@ -1,20 +1,24 @@
 import { data } from "react-router";
 import { DownloadLink } from "~/components/DownloadLink";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
-import { halfDaysLabel } from "~/leave/kinds";
+import { maySeeRates } from "~/organisations/access";
 import { membershipContext } from "~/organisations/membership.server";
+import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { billableSplitOf } from "~/reports/amounts.server";
 import { BillableSplit } from "~/reports/BillableSplit";
 import { GROUP_LABELS, GROUPS } from "~/reports/choices";
-import { dayLabel, hoursAndMinutes } from "~/reports/format";
-import { reportExportPath } from "~/reports/paths";
+import { dayLabel, hoursAndMinutes, overtimeLabel } from "~/reports/format";
+import { reportExportPath, reportPeoplePath } from "~/reports/paths";
+import { groupPeopleOf, PEOPLE_SHOWN, personView } from "~/reports/people.server";
 import { reportSearch } from "~/reports/query";
 import { Headline, RangeSteps } from "~/reports/RangeSteps";
 import { ReportChoice } from "~/reports/ReportChoice";
+import { GroupRow, PeopleRows } from "~/reports/ReportPeople";
 import { ReportTabs } from "~/reports/ReportTabs";
-import { byStart, totalsOf } from "~/reports/report";
-import { peopleOfReport, reportRequest, rowsOfReport } from "~/reports/reports.server";
+import { totalsOf } from "~/reports/report";
+import { firstRowsOf, peopleOfReport, reportRequest } from "~/reports/reports.server";
 import { SaveReport } from "~/reports/SaveReport";
+import { pricedBy, sumsOf } from "~/reports/sums.server";
 import { timetableOf } from "~/reports/timetable";
 import { openedFrom, viewAction, viewFrame, viewsFor } from "~/reports/view.server";
 import { WeekTimetable as Timetable } from "~/reports/WeekTimetable";
@@ -43,16 +47,6 @@ const { label } = destination("reports");
 
 /** The most entries the page lists. The export holds all of them. */
 const ENTRIES_SHOWN = 200;
-
-/**
- * Time split into regular and overtime (TS-095), "6:00 regular · 1:30
- * overtime", or null when none of it is overtime: a line with no overtime says
- * nothing more.
- */
-function overtimeLabel(minutes: number, overtimeMinutes: number): string | null {
-	if (overtimeMinutes <= 0) return null;
-	return `${hoursAndMinutes((minutes - overtimeMinutes) * 60)} regular · ${hoursAndMinutes(overtimeMinutes * 60)} overtime`;
-}
 
 const WEEKDAYS = [
 	["Mon", "Monday"],
@@ -103,11 +97,34 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	}
 
 	const { days, today } = report;
-	const rows = (await rowsOfReport(report)).sort(byStart);
-	const totals = totalsOf(rows, grouping);
-	const [lines, opened] = await Promise.all([
-		peopleOfReport(report, rows),
+	// A week is drawn as a timetable of projects by days.
+	const isWeek = ["this-week", "last-week", "week"].includes(query.range);
+	const pricing = maySeeRates(membership.role)
+		? await organisationMoney(membership.organisation.id).then(({ currency }) =>
+				pricingOf(report.scope, currency),
+			)
+		: null;
+	// The time added up in SQL (decision 57): by person, project and how it
+	// bills, priced by span of rates for those who see them, and by day for a
+	// week's timetable or the day grouping. The page lists its first entries.
+	const [sums, listed] = await Promise.all([
+		sumsOf(report, {
+			money: pricing ? pricedBy(pricing) : undefined,
+			byDay: isWeek ? "day-and-project" : grouping === "day" ? "day" : undefined,
+		}),
+		firstRowsOf(report, ENTRIES_SHOWN),
+	]);
+	const totals = totalsOf(grouping === "day" ? sums.days : sums.sums, grouping);
+	// The page draws its groups; a group's people, or the People section of a
+	// report of many people, are read when opened (TS-113, D8). Without
+	// script, opening one asks for the page again with `show` in the address.
+	const show = url.searchParams.get("show");
+	const shownGroup =
+		show !== null && totals.groups.some((group) => group.key === show) ? show : null;
+	const [lines, opened, groupPeople] = await Promise.all([
+		peopleOfReport(report, sums.sums),
 		openedFrom(membership, url),
+		shownGroup === null ? null : groupPeopleOf(report, grouping, shownGroup),
 	]);
 	// The address of the export: the report as the page reads it, written out
 	// in full, so the file holds the rows on this page.
@@ -118,9 +135,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		range: query.range,
 		days,
 	});
-	// A week is drawn as a timetable of projects by days.
-	const isWeek = ["this-week", "last-week", "week"].includes(query.range);
-	const week = isWeek ? timetableOf(rows, daysFrom(days.first, days.last)) : null;
+	const week = isWeek ? timetableOf(sums.days, daysFrom(days.first, days.last)) : null;
 	const expected = lines.reduce((sum, line) => sum + line.expectedMinutes, 0);
 
 	return data(
@@ -134,7 +149,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					duration: hoursAndMinutes(group.minutes * 60),
 					/** Of its time, the overtime (TS-095); none says nothing. */
 					overtime: overtimeLabel(group.minutes, group.overtimeMinutes),
+					/** Who tracked it, when the address opens it; otherwise read when it is opened. */
+					people: group.key === shownGroup ? groupPeople : null,
 				})),
+				/** Where a group's people, and the People section, are read when opened. */
+				peoplePath: reportPeoplePath(membership.organisation.slug, `?${search}`),
+				/** The page asked for again with `show`: how a group opens without script. */
+				showSearch: search.toString(),
 				total: hoursAndMinutes(totals.minutes * 60),
 				expected:
 					[
@@ -160,7 +181,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					dayTotals: week.dayTotals.map(hoursAndMinutes),
 					total: hoursAndMinutes(week.total),
 				},
-				entries: rows.slice(0, ENTRIES_SHOWN).map((row) => {
+				entries: listed.map((row) => {
 					const { entry } = row;
 					return {
 						key: entry.id,
@@ -178,28 +199,19 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 						overtime: entry.overtime,
 					};
 				}),
-				entryCount: rows.length,
-				/** Each person's worked time beside the time expected of them and their leave (TS-061). */
-				people: lines.map((line) => ({
-					id: line.id,
-					name: line.name,
-					address: line.address,
-					worked: hoursAndMinutes(line.worked),
-					overtime: overtimeLabel(line.worked / 60, line.overtime / 60),
-					expected: formatDuration(line.expectedMinutes * 60),
-					leave:
-						line.leaveHalfDays === 0
-							? "No leave"
-							: `${formatDuration(line.leaveMinutes * 60)} leave (${halfDaysLabel(line.leaveHalfDays)})`,
-					/** Requests for leave starting in the range made at short notice (TS-090); none says nothing. */
-					shortNotice: line.shortNotice === 0 ? null : `Short-notice requests: ${line.shortNotice}`,
-				})),
+				entryCount: sums.entries,
+				/**
+				 * Each person's worked time beside the time expected of them and
+				 * their leave (TS-061); past `PEOPLE_SHOWN` people, null until the
+				 * section is opened.
+				 */
+				people: lines.length <= PEOPLE_SHOWN || show === "people" ? lines.map(personView) : null,
+				peopleCount: lines.length,
 				exportPath: reportExportPath(membership.organisation.slug, `?${search}`),
 				/** Billable and non-billable time, and for those who see rates its amount (TS-066, TS-067). */
-				split: await billableSplitOf(
-					report,
-					rows,
-					membership,
+				split: billableSplitOf(
+					sums.sums,
+					pricing,
 					negotiateLocale(request.headers.get("Accept-Language")),
 				),
 			},
@@ -247,11 +259,11 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 							{report.groups.length > 0 ? (
 								<LedgerRows label={`Time by ${GROUP_LABELS[query.group].toLowerCase()}`}>
 									{report.groups.map((group) => (
-										<LedgerRow
+										<GroupRow
 											key={group.key}
-											title={<span className="wrap-anywhere">{group.label}</span>}
-											detail={group.overtime ?? undefined}
-											value={group.duration}
+											group={group}
+											peoplePath={report.peoplePath}
+											showSearch={report.showSearch}
 										/>
 									))}
 								</LedgerRows>
@@ -271,34 +283,19 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 						</p>
 					</div>
 
-					{report.people.length > 0 && (
+					{report.peopleCount > 0 && (
 						<Section
 							id="people"
 							heading="People"
 							lead="Time worked beside the time expected of each person: their working week, less public holidays and approved leave. Leave is never counted as worked. Requests for leave made at short notice are counted by the day the leave starts."
 						>
 							<Ledger heading="Worked, expected and leave" note={loaderData.range}>
-								<LedgerRows label="Worked, expected and leave by person">
-									{report.people.map((person) => (
-										<LedgerRow
-											key={person.id}
-											title={<span className="wrap-anywhere">{person.name}</span>}
-											detail={
-												<>
-													{person.address && (
-														<span className="block wrap-anywhere">{person.address}</span>
-													)}
-													{`${person.expected} expected · ${person.leave}`}
-													{person.overtime && <span className="block">{person.overtime}</span>}
-													{person.shortNotice && (
-														<span className="block">{person.shortNotice}</span>
-													)}
-												</>
-											}
-											value={person.worked}
-										/>
-									))}
-								</LedgerRows>
+								<PeopleRows
+									people={report.people}
+									count={report.peopleCount}
+									peoplePath={report.peoplePath}
+									showSearch={report.showSearch}
+								/>
 							</Ledger>
 						</Section>
 					)}

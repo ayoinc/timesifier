@@ -14,8 +14,8 @@ import {
 	profitability,
 } from "./profitability";
 import type { ReportDays } from "./query";
-import type { Row } from "./report";
-import { type ReportRequest, rowsOfReport } from "./reports.server";
+import type { ReportRequest } from "./reports.server";
+import { pricedBy, sumsOf } from "./sums.server";
 
 /**
  * Profitability (TS-071) read from the database: the projects as pricing
@@ -76,21 +76,23 @@ export interface ProfitabilityReport {
 
 /**
  * The Profitability report of `request`'s range: every project's revenue,
- * cost and profit, and the totals in the organisation's currency. `pieces`
- * are the report's, read once by a page that shows more than this.
+ * cost and profit, and the totals in the organisation's currency. Time is
+ * read as sums (`sumsOf`) apart by person, project, task where it bills by
+ * task, overtime, and span of days in which no billable or cost rate starts,
+ * so each sum is priced once at the rates every one of its entries has
+ * (docs/decisions.md entry 57).
  */
-export async function profitabilityReport(
-	request: ReportRequest,
-	pieces?: readonly Row[],
-): Promise<ProfitabilityReport> {
+export async function profitabilityReport(request: ReportRequest): Promise<ProfitabilityReport> {
 	const { scope, days } = request;
 	const { currency } = await organisationMoney(scope.organisationId);
-	const [{ projects, billableRates }, costRates, expenses, read] = await Promise.all([
+	const [{ projects, billableRates }, costRates, expenses] = await Promise.all([
 		profitProjects(scope, currency),
 		costRatesOf(scope),
 		expensesOf(scope, days, request.people),
-		pieces ?? rowsOfReport(request),
 	]);
+	const { sums: read } = await sumsOf(request, {
+		money: pricedBy({ projects, rates: billableRates }, costRates),
+	});
 	const { lines, totals } = profitability({
 		projects,
 		billableRates,

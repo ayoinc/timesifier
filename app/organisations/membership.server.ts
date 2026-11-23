@@ -6,12 +6,13 @@
  * database every time (docs/decisions.md entry 20).
  */
 import { env } from "cloudflare:workers";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { createContext, data } from "react-router";
 import { getSession, type SignedIn } from "~/auth/auth.server";
 import { organisationScope, organisations } from "~/db";
 import type { Viewer } from "~/shell/destinations";
+import { managedPlaces } from "~/teams/teams.server";
 import { Role } from "./roles";
 
 /** A signed-in person, an organisation they belong to, and their role in it. */
@@ -53,7 +54,8 @@ export async function findMembership(request: Request, slug: string): Promise<Me
  * The same, for a person a guard has already read from the request: the
  * membership of `user` in the organisation at `slug`, or `null`. The same three
  * queries run whether or not the organisation exists: the organisation, the
- * person's membership of it, and whether they manage one of its teams.
+ * person's membership of it, and the places in the teams they manage, which
+ * the request keeps for `accessOf` (`managedPlaces`).
  */
 export async function membershipOf(
 	user: SignedIn["user"],
@@ -77,9 +79,7 @@ export async function membershipOf(
 	const scope = organisationScope(env.DB, organisation?.id ?? "");
 	const [[membership], managed] = await Promise.all([
 		scope.memberships.select((m) => eq(m.userId, user.id)),
-		scope.teamMembers.select((t) => and(eq(t.userId, user.id), eq(t.isManager, true)), {
-			limit: 1,
-		}),
+		managedPlaces(scope, user.id),
 	]);
 
 	// A role this application does not know grants nothing.

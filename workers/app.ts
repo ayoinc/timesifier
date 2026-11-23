@@ -1,4 +1,5 @@
 import { createRequestHandler, RouterContextProvider } from "react-router";
+import { withRequestMemo } from "~/organisations/request-memo.server";
 
 import { canonicalHost } from "./canonical-host";
 import { formerSignUp } from "./former-sign-up";
@@ -13,10 +14,11 @@ const requestHandler = createRequestHandler(
 	import.meta.env.MODE,
 );
 
+/** React Router's handling of `request`, with the request's memo of what it has read (`request-memo.server.ts`). */
 function handleWithFramework(request: Request, nonce: string): Promise<Response> {
 	const context = new RouterContextProvider();
 	context.set(nonceContext, nonce);
-	return requestHandler(request, context);
+	return withRequestMemo(request, () => requestHandler(request, context));
 }
 
 export default {

@@ -389,6 +389,65 @@ describe("the Contractors report", () => {
 		expect(text).toContain("Linus Torvalds 1:00 hours · Missing rate for 1:00 £0.00");
 	});
 
+	it("reads the range by stored day: its first and last days count, the days either side do not", async () => {
+		const [site] = await scope.projects.insert([{ name: "Site", nameKey: "site" }]);
+		if (!site) throw new Error("seed failed");
+		await mark(ada, linus, true);
+		await scope.rates.insert({
+			kind: "cost",
+			userId: linus.user.id,
+			amountMinor: 3000,
+			currency: "GBP",
+			effectiveFrom: "2026-01-01",
+		});
+		// Linus tracks in Auckland, 13 hours ahead of UTC in October: each entry
+		// starts at noon UTC on the day before the day stored with it.
+		const tracked = (from: string, spentOn: string, minutes: number, overtime = false) => ({
+			userId: linus.user.id,
+			projectId: site.id,
+			startedAt: new Date(from),
+			spentOn,
+			endedAt: new Date(Date.parse(from) + minutes * 60_000),
+			overtime,
+		});
+		await scope.timeEntries.insert([
+			// The day before the first, and the day after the last: in no report of the week.
+			tracked("2026-10-03T12:00:00Z", "2026-10-04", 120),
+			tracked("2026-10-11T12:00:00Z", "2026-10-12", 240),
+			// An hour on Monday 5 October, the first day, and half an hour of
+			// overtime on Sunday 11 October, the last: costed at the same rate.
+			tracked("2026-10-04T12:00:00Z", "2026-10-05", 60),
+			tracked("2026-10-10T12:00:00Z", "2026-10-11", 30, true),
+		]);
+		for (const entry of await scope.timeEntries.select()) {
+			expect(entry.spentOn).toBe(dayOf(entry.startedAt, "Pacific/Auckland"));
+			expect(entry.spentOn).not.toBe(dayOf(entry.startedAt, "UTC"));
+		}
+
+		const text = textOf(await pageBody(await open(`${REPORT}?${WEEK}`, ada)));
+		expect(text).toContain("Linus Torvalds 1:30 hours £45.00");
+		expect(text).toContain("Total, 1:30 hours £45.00");
+		const { rows } = await exported(ada, WEEK);
+		expect(rows).toEqual([["Linus Torvalds", "no", "no", "5400", "1.500000", "GBP", "45.00"]]);
+	});
+
+	it("counts a running entry up to the time of the request", async () => {
+		const [site] = await scope.projects.insert([{ name: "Site", nameKey: "site" }]);
+		if (!site) throw new Error("seed failed");
+		await mark(ada, linus, true);
+		// Started 45 minutes ago, on a day of the week as stored: a few seconds pass before the page is read.
+		await scope.timeEntries.insert({
+			userId: linus.user.id,
+			projectId: site.id,
+			startedAt: new Date(Date.now() - 45 * 60_000),
+			spentOn: "2026-10-08",
+			endedAt: null,
+		});
+
+		const text = textOf(await pageBody(await open(`${REPORT}?${WEEK}`, ada)));
+		expect(text).toContain("Linus Torvalds 0:45 hours · Missing rate for 0:45 £0.00");
+	});
+
 	it("exports the same people as a CSV, with seconds and hours to six places", async () => {
 		await aWeekOfWork();
 

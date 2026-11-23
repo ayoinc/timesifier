@@ -48,7 +48,8 @@ describe(`an organisation of ${PEOPLE} people`, () => {
 			for (const path of PAGES) await read(path, who);
 			const team = await read(`/app/acme/team?week=${WEEK}`, who);
 			expect(team).toContain("Person 001");
-			expect(team).toContain("Person 147");
+			// Team lists people 50 at a time since TS-113; the filter finds the last.
+			expect(await read(`/app/acme/team?week=${WEEK}&q=Person%20147`, who)).toContain("Person 147");
 			const approvals = await read(`/app/acme/approvals?week=${WEEK}&status=pending`, who);
 			expect(approvals).toContain("Person 147");
 			const requests = await read("/app/acme/time-off?show=requests", who);
@@ -74,9 +75,11 @@ describe(`a manager of ${MANAGED} people`, () => {
 		]) {
 			await read(path, manager);
 		}
-		const team = await read(`/app/acme/team?week=${WEEK}`, manager);
-		expect(team).toContain(`Person ${String(MANAGED).padStart(3, "0")}`);
-		expect(team).not.toContain(`Person ${String(MANAGED + 1).padStart(3, "0")}`);
+		// Team lists people 50 at a time since TS-113; the filter finds them.
+		const team = (q: string) =>
+			read(`/app/acme/team?week=${WEEK}&q=${encodeURIComponent(q)}`, manager);
+		expect(await team("Person 120")).toContain("Person 120");
+		expect(await team("Person 121")).toContain("Nobody's name or address holds “Person 121”.");
 		const approvals = await read(`/app/acme/approvals?week=${WEEK}&status=pending`, manager);
 		expect(approvals).toContain("Person 120");
 		expect(approvals).not.toContain("Person 121");

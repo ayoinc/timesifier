@@ -23,3 +23,13 @@ export function among(column: SQLWrapper, values: Iterable<string | number>): SQ
 export function notAmong(column: SQLWrapper, values: Iterable<string | number>): SQL {
 	return sql`${column} not in (select value from json_each(${listOf(values)}))`;
 }
+
+/**
+ * The latest of `values` on or before `value` (they compare as SQL does), or
+ * null when none is: one bound parameter however many they are. Reports and
+ * budgets group time by the latest rate start on or before its day, so each
+ * group is one span of days in which no rate starts (decision 57).
+ */
+export function latestAmong(value: SQLWrapper, values: Iterable<string | number>): SQL {
+	return sql`(select max(value) from json_each(${listOf(values)}) where value <= ${value})`;
+}

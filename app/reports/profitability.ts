@@ -4,7 +4,7 @@ import { type PricedProject, priceTime } from "~/rates/price";
 import { type RateRow, resolveRate } from "~/rates/rates";
 import { type Day, daysFrom } from "~/time/calendar";
 import type { ReportDays } from "./query";
-import type { Row } from "./report";
+import type { Piece } from "./report";
 
 /**
  * Profitability (TS-071, B6), as Harvest's Profitability report counts it
@@ -127,7 +127,7 @@ export function profitability(input: {
 	costRates: readonly RateRow[];
 	currency: string;
 	range: ReportDays;
-	rows: readonly Row[];
+	rows: readonly Piece[];
 	expenses: readonly ProfitExpense[];
 }): { lines: ProfitLine[]; totals: ProfitTotals } {
 	const { projects, billableRates, costRates, currency, range, rows, expenses } = input;

@@ -593,6 +593,8 @@ const ROLE_TABLE: Record<string, Row> = {
 	"routes/app/reports.export": { page: every(200) },
 	"routes/app/reports.expenses": { page: every(200) },
 	"routes/app/reports.expenses.export": { page: every(200) },
+	// A report's people (TS-113): whoever is shown the report, read when a group opens.
+	"routes/app/reports.people": { page: every(200) },
 	"routes/app/reports.utilisation": {
 		address: () => `${REPORTS_AT}/utilisation${RANGE}`,
 		page: every(200),

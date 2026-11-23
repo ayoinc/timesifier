@@ -133,11 +133,12 @@ test("a report is chosen and shown with the keyboard alone", async ({ page }) =>
 	await last.fill(LAST);
 
 	await expect(page).toHaveURL(`${reportsPath()}?range=custom&group=day&from=${FIRST}&to=${LAST}`);
-	// An entry across midnight counts whole on the day it starts.
+	// An entry across midnight counts whole on the day it starts. Each day has
+	// its People link, read when opened (TS-113).
 	await expect(totals(page).getByRole("listitem")).toHaveText([
-		"Monday 5 October1:30",
-		"Tuesday 6 October2:00",
-		"Thursday 8 October0:45",
+		"Monday 5 October1:30People",
+		"Tuesday 6 October2:00People",
+		"Thursday 8 October0:45People",
 	]);
 	await expect(page.getByText(/^Total\s*4:15$/)).toBeVisible();
 	await expect(page.getByRole("heading", { level: 2, name: "Entries" })).toBeVisible();
@@ -173,7 +174,10 @@ test.describe("a range the page refuses", () => {
 
 test("groups by client, with the time of no client last", async ({ page }) => {
 	await openShell(page, `${customWeek()}&group=client`);
-	await expect(totals(page).getByRole("listitem")).toHaveText(["Initech3:30", "No client0:45"]);
+	await expect(totals(page).getByRole("listitem")).toHaveText([
+		"Initech3:30People",
+		"No client0:45People",
+	]);
 });
 
 test("the export downloads the rows on screen as a UTF-8 CSV named for the range", async ({

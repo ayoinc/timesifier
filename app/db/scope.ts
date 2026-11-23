@@ -127,6 +127,15 @@ export interface Sum<K> {
 	total: number;
 }
 
+/**
+ * One line of `sums`: which of the groupings it is of (its index), the values
+ * of that grouping's keys (null for a key the grouping leaves out), and the
+ * totals of the rows that have them.
+ */
+export type SumLine<K extends string, A extends string> = { grouping: number } & {
+	[Key in K]: string | number | null;
+} & { [Amount in A]: number };
+
 export interface ScopedAccessor<T extends TenantTable> {
 	/** Rows of this organisation, all of them or those the filter keeps. */
 	select(filter?: Filter<T>, options?: SelectOptions<T>): Promise<Row<T>[]>;
@@ -153,6 +162,19 @@ export interface ScopedAccessor<T extends TenantTable> {
 		by: (table: T) => C,
 		filter?: Filter<T>,
 	): Promise<Sum<GetColumnData<C>>[]>;
+	/**
+	 * Adds up several amounts over the rows of this organisation that the
+	 * filter keeps, grouped several ways in one statement: for each grouping,
+	 * one line for each combination of its keys' values (`SELECT keys,
+	 * SUM(amount)… GROUP BY keys`), the groupings joined by `UNION ALL`. A
+	 * grouping of no key is one line of the whole, even of no row.
+	 */
+	sums<K extends string, A extends string>(
+		keys: (table: T) => Record<K, SQL | AnySQLiteColumn>,
+		amounts: (table: T) => Record<A, SQL<number>>,
+		groupings: readonly (readonly K[])[],
+		filter?: Filter<T>,
+	): Promise<SumLine<K, A>[]>;
 	/** The writes, built and not sent, for `OrganisationScope.batch`. */
 	statements: {
 		insert(rows: Values<T> | Values<T>[]): ScopedStatement<Row<T>>;
@@ -282,6 +304,45 @@ export function scopedAccessor<T extends TenantTable>(
 				key: row.key as GetColumnData<typeof key>,
 				total: Number(row.total),
 			}));
+		},
+		async sums<K extends string, A extends string>(
+			keys: (table: T) => Record<K, SQL | AnySQLiteColumn>,
+			amounts: (table: T) => Record<A, SQL<number>>,
+			groupings: readonly (readonly K[])[],
+			filter?: Filter<T>,
+		): Promise<SumLine<K, A>[]> {
+			const keyed = Object.entries(keys(table)) as [K, SQL | AnySQLiteColumn][];
+			const added = Object.entries(amounts(table)) as [A, SQL<number>][];
+			// Each part names its columns, so the lines of every part line up; a part
+			// groups by its keys' names, so an expression with a bound value is bound once.
+			const parts = groupings.map((grouping, at) => {
+				const columns = [
+					sql`${sql.raw(String(at))} as "grouping"`,
+					...keyed.map(([name, expression]) =>
+						grouping.includes(name)
+							? sql`${expression} as ${sql.identifier(`k_${name}`)}`
+							: sql`null as ${sql.identifier(`k_${name}`)}`,
+					),
+					...added.map(
+						([name, expression]) =>
+							sql`coalesce(sum(${expression}), 0) as ${sql.identifier(`a_${name}`)}`,
+					),
+				];
+				const by = grouping.map((name) => sql.identifier(`k_${name}`));
+				return sql`select ${sql.join(columns, sql`, `)} from ${tenantTable} where ${within(filter)}${
+					by.length > 0 ? sql` group by ${sql.join(by, sql`, `)}` : sql``
+				}`;
+			});
+			const rows = await db.all<Record<string, string | number | null>>(
+				sql.join(parts, sql` union all `),
+			);
+			return rows.map((row) => {
+				const line: Record<string, string | number | null> = { grouping: Number(row.grouping) };
+				for (const [name] of keyed) line[name] = row[`k_${name}`] ?? null;
+				for (const [name] of added) line[name] = Number(row[`a_${name}`] ?? 0);
+				// Built from the caller's own names: the keys' values and the totals as numbers.
+				return line as unknown as SumLine<K, A>;
+			});
 		},
 		statements,
 	};

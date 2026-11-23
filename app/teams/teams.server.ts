@@ -1,8 +1,9 @@
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { nameKey } from "~/lib/names";
+import { remembered } from "~/organisations/request-memo.server";
 
 /**
  * Teams and their managers (TS-038, docs/decisions.md entry 29). A manager is
@@ -13,12 +14,34 @@ import { nameKey } from "~/lib/names";
  * person who made it.
  */
 
+/** A person's place in a team, and whether they manage it. */
+export interface Place {
+	teamId: string;
+	userId: string;
+	isManager: boolean;
+}
+
+/**
+ * Every place in every team `userId` manages, theirs among them: none when
+ * they manage no team. One statement, read once a request (`remembered`):
+ * whether they manage a team, which teams, and whom, all come from it.
+ */
+export function managedPlaces(scope: OrganisationScope, userId: string): Promise<Place[]> {
+	return remembered(scope.organisationId, `places managed by ${userId}`, async () => {
+		// The teams they manage, a subquery: after `in` it is a list, not one value.
+		const theirTeams = scope.teamMembers.value(
+			(t) => t.teamId,
+			(t) => and(eq(t.userId, userId), eq(t.isManager, true)),
+		);
+		const rows = await scope.teamMembers.select((t) => sql`${t.teamId} in ${theirTeams}`);
+		return rows.map(({ teamId, userId, isManager }) => ({ teamId, userId, isManager }));
+	});
+}
+
 /** The ids of the teams `userId` manages in the organisation. */
 export async function managedTeams(scope: OrganisationScope, userId: string): Promise<string[]> {
-	const rows = await scope.teamMembers.select((t) =>
-		and(eq(t.userId, userId), eq(t.isManager, true)),
-	);
-	return rows.map((row) => row.teamId);
+	const places = await managedPlaces(scope, userId);
+	return places.filter((p) => p.userId === userId && p.isManager).map((p) => p.teamId);
 }
 
 /**
@@ -29,10 +52,7 @@ export async function managedPeople(
 	scope: OrganisationScope,
 	userId: string,
 ): Promise<Set<string>> {
-	const teams = await managedTeams(scope, userId);
-	if (teams.length === 0) return new Set();
-	const rows = await scope.teamMembers.select((t) => among(t.teamId, teams));
-	return new Set(rows.map((row) => row.userId));
+	return new Set((await managedPlaces(scope, userId)).map((p) => p.userId));
 }
 
 /** A team and its places: who is in it, and which of them manage it. */

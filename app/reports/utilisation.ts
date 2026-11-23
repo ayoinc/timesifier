@@ -1,4 +1,4 @@
-import type { Row } from "./report";
+import type { Piece } from "./report";
 
 /**
  * Utilisation (TS-068, B8): the time a person tracked against their capacity
@@ -44,7 +44,7 @@ export function sumFigures(all: Iterable<UtilisationFigures>): UtilisationFigure
 }
 
 /** Whether a row bills: its entry is marked billable and its project bills at all. */
-export function bills(row: Row, nonBillableProjects: ReadonlySet<string>): boolean {
+export function bills(row: Piece, nonBillableProjects: ReadonlySet<string>): boolean {
 	return row.entry.billable && !nonBillableProjects.has(row.entry.projectId);
 }
 
@@ -53,7 +53,7 @@ type Tracked = Omit<UtilisationFigures, "capacityMinutes">;
 
 /** Each person's tracked, billable and overtime seconds in `rows`. */
 export function trackedByPerson(
-	rows: readonly Row[],
+	rows: readonly Piece[],
 	nonBillableProjects: ReadonlySet<string>,
 ): Map<string, Tracked> {
 	const tracked = new Map<string, Tracked>();

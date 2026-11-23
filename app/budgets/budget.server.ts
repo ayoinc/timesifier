@@ -1,14 +1,14 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sendEmail } from "~/auth/email.server";
 import { compose, type PlatformLook } from "~/auth/email-frame";
 import { billableMinuteMinor } from "~/billing/billable";
 import { getPlatformBrand } from "~/brand/platform-brand.server";
-import { among, type OrganisationScope, users } from "~/db";
+import { among, latestAmong, type OrganisationScope, users } from "~/db";
 import { roundHalfUp } from "~/money/money";
 import type { OrganisationMoney, Pricing } from "~/projects/money.server";
-import { priceTime, wholeMinutes } from "~/rates/price";
+import { type PricedProject, priceTime } from "~/rates/price";
 import { dayOf } from "~/time/calendar";
 
 import {
@@ -87,75 +87,93 @@ export async function projectBudget(
 	project: BudgetedProject,
 	context: BudgetContext,
 ): Promise<BudgetFigures | null> {
-	const kind = budgetKindOf(project.budgetKind);
-	if (kind === "none") return null;
-	const { zone, now, money, pricing } = context;
-	const priced = pricing.projects.get(project.id);
-	if (!priced) return null;
-	const period = budgetPeriod({
-		resetsMonthly: project.budgetResetsMonthly,
-		today: dayOf(now, zone),
-	});
-	// The entries whose day is in the period (TS-111).
-	const { startsOn, endsOn } = period;
-	const [entries, lines] = await Promise.all([
-		scope.timeEntries.select((e) =>
-			and(
-				eq(e.projectId, project.id),
-				startsOn === LIFETIME_START ? undefined : gte(e.spentOn, startsOn),
-				endsOn === null ? undefined : lte(e.spentOn, endsOn),
-			),
-		),
-		kind === "total_hours" || kind === "total_fees"
-			? Promise.resolve([])
-			: scope.budgetLines.select((l) => eq(l.projectId, project.id)),
-	]);
-	const hours = isHoursBudget(kind);
-	const keyOf = (entry: { taskId: string | null; userId: string }) =>
-		kind === "person_hours" ? entry.userId : (entry.taskId ?? "");
+	return (await projectBudgets(scope, [project], context)).get(project.id) ?? null;
+}
 
-	// Seconds for hours, minute-minor units for fees, by line key ("" for the whole).
-	const spent = new Map<string, number>();
-	let whole = 0;
-	for (const entry of entries) {
-		const end = entry.endedAt?.getTime() ?? now;
-		const seconds = Math.max(0, Math.floor((end - entry.startedAt.getTime()) / 1000));
-		const billable = priced.billingType !== "non_billable" && entry.billable;
-		let add: number;
-		if (hours) {
-			if (!countsTowardHours(billable, money.budgetCountsNonBillable)) continue;
-			add = seconds;
-		} else {
-			add = billableMinuteMinor([
-				priceTime(priced, pricing.rates, {
-					userId: entry.userId,
-					taskId: entry.taskId,
-					billable: entry.billable,
-					overtime: entry.overtime,
-					day: entry.spentOn,
-					minutes: wholeMinutes(seconds),
-				}),
-			]);
-		}
-		whole += add;
-		const key = keyOf(entry);
-		spent.set(key, (spent.get(key) ?? 0) + add);
+/** A project with a budget: its kind, how its time is priced, and the period it counts over. */
+interface Counted {
+	project: BudgetedProject;
+	kind: Exclude<BudgetKind, "none">;
+	priced: PricedProject;
+	period: BudgetPeriod;
+}
+
+/**
+ * The budgets of many projects at once, by project id, for a list such as
+ * Dashboards' "nearest their limit" (TS-086) or the Track time warning. A
+ * project with no budget is left out. However many projects and entries,
+ * it reads in three statements (TS-113, D5): the time spent, added up in
+ * groups; the budget lines; and the expenses of the budgets that count them.
+ */
+export async function projectBudgets(
+	scope: OrganisationScope,
+	projects: readonly BudgetedProject[],
+	context: BudgetContext,
+): Promise<Map<string, BudgetFigures>> {
+	const today = dayOf(context.now, context.zone);
+	const counted = projects.flatMap((project): Counted[] => {
+		const kind = budgetKindOf(project.budgetKind);
+		const priced = context.pricing.projects.get(project.id);
+		if (kind === "none" || !priced) return [];
+		const period = budgetPeriod({ resetsMonthly: project.budgetResetsMonthly, today });
+		return [{ project, kind, priced, period }];
+	});
+	const byLine = counted.filter(({ kind }) => kind !== "total_hours" && kind !== "total_fees");
+	const withExpenses = counted.filter(
+		({ kind, project }) => kind === "total_fees" && project.budgetIncludesExpenses,
+	);
+	const [spent, lines, expenses] = await Promise.all([
+		timeSpent(scope, counted, context),
+		byLine.length === 0
+			? []
+			: scope.budgetLines.select((l) =>
+					among(
+						l.projectId,
+						byLine.map(({ project }) => project.id),
+					),
+				),
+		expensesSpent(scope, withExpenses),
+	]);
+	const linesOf = new Map<string, typeof lines>();
+	for (const line of lines)
+		linesOf.set(line.projectId, [...(linesOf.get(line.projectId) ?? []), line]);
+
+	const byProject = new Map<string, BudgetFigures>();
+	for (const each of counted) {
+		const { id } = each.project;
+		byProject.set(
+			id,
+			figuresOf(each, spent.get(id) ?? new Map(), linesOf.get(id) ?? [], expenses.get(id) ?? 0),
+		);
 	}
+	return byProject;
+}
+
+/**
+ * A budget's figures from what its time spent, by line key (see `timeSpent`),
+ * its lines, and the expenses it counts in minor units.
+ */
+function figuresOf(
+	{ project, kind, priced, period }: Counted,
+	spent: ReadonlyMap<string, number>,
+	lines: readonly { taskId: string | null; userId: string | null; amount: number }[],
+	expenses: number,
+): BudgetFigures {
+	const hours = isHoursBudget(kind);
 	const settle = (raw: number) => (hours ? Math.floor(raw / 60) : roundHalfUp(raw, 60));
+	const { currency } = priced;
 
 	if (kind === "total_hours" || kind === "total_fees") {
-		let total = settle(whole);
-		if (kind === "total_fees" && project.budgetIncludesExpenses) {
-			total += await expensesSpent(scope, project.id, priced.currency, period);
-		}
+		let whole = 0;
+		for (const raw of spent.values()) whole += raw;
 		const amount = project.budgetAmount ?? 0;
 		return {
 			kind,
 			hours,
-			currency: priced.currency,
+			currency,
 			period,
 			amount,
-			total: budgetStatus({ amount, spent: total }),
+			total: budgetStatus({ amount, spent: settle(whole) + expenses }),
 			lines: [],
 		};
 	}
@@ -169,7 +187,7 @@ export async function projectBudget(
 		};
 	});
 	if (figures.length === 0) {
-		return { kind, hours, currency: priced.currency, period, amount: null, total: null, lines: [] };
+		return { kind, hours, currency, period, amount: null, total: null, lines: [] };
 	}
 	// A line left blank does not count, so the whole is the sum of the lines.
 	const amount = figures.reduce((sum, line) => sum + line.amount, 0);
@@ -177,7 +195,7 @@ export async function projectBudget(
 	return {
 		kind,
 		hours,
-		currency: priced.currency,
+		currency,
 		period,
 		amount,
 		total: budgetStatus({ amount, spent: settle(rawOfLines) }),
@@ -185,22 +203,146 @@ export async function projectBudget(
 	};
 }
 
-/** The project's expenses in its currency over `period`, billable or not, in minor units. */
-async function expensesSpent(
-	scope: OrganisationScope,
-	projectId: string,
-	currency: string,
-	period: BudgetPeriod,
-): Promise<number> {
-	const rows = await scope.expenses.select((x) =>
+/**
+ * The rows of the counted projects whose day is in their budget's period:
+ * one condition for each period, so a few however many projects. The list
+ * of every project comes first, so SQLite reads the rows of those projects
+ * alone, by its index, rather than every row of the organisation.
+ */
+function inPeriods(projectId: SQLWrapper, day: SQLWrapper, counted: readonly Counted[]): SQL {
+	const byPeriod = new Map<string, { period: BudgetPeriod; ids: string[] }>();
+	for (const { project, period } of counted) {
+		const key = `${period.startsOn} ${period.endsOn}`;
+		const held = byPeriod.get(key) ?? { period, ids: [] };
+		held.ids.push(project.id);
+		byPeriod.set(key, held);
+	}
+	const conditions = [...byPeriod.values()].map(({ period: { startsOn, endsOn }, ids }) =>
 		and(
-			eq(x.projectId, projectId),
-			eq(x.currency, currency),
-			gte(x.spentOn, period.startsOn),
-			period.endsOn === null ? undefined : lte(x.spentOn, period.endsOn),
+			among(projectId, ids),
+			startsOn === LIFETIME_START ? undefined : gte(day, startsOn),
+			endsOn === null ? undefined : lte(day, endsOn),
 		),
 	);
-	return rows.reduce((sum, row) => sum + row.amountMinor, 0);
+	const every = among(
+		projectId,
+		counted.map(({ project }) => project.id),
+	);
+	return and(every, or(...conditions)) ?? every;
+}
+
+/**
+ * What the time of each counted project has spent, by project and then by
+ * line key: the person's id for a per-person budget, otherwise the task's
+ * ("" for none). Hours budgets count seconds; fees budgets count minute-minor
+ * units (`billableMinuteMinor`).
+ *
+ * One statement adds the entries up in groups, so the work grows with the
+ * groups and not with the entries. Each entry counts as before: a running one
+ * up to now, its seconds whole for hours and its minutes whole for fees, each
+ * rounded down before it is added. A group is all of a project's entries of
+ * one person, one task, billable or not, overtime or not, and for fees within
+ * one span of days in which no rate starts. Pricing is minutes times the rate,
+ * so a group priced once at the rate in force on its span's first day is the
+ * sum of its entries priced one by one. Overtime is kept apart so that a
+ * multiplier for it (TS-111f) is one factor on its groups.
+ */
+async function timeSpent(
+	scope: OrganisationScope,
+	counted: readonly Counted[],
+	{ now, money, pricing }: BudgetContext,
+): Promise<Map<string, Map<string, number>>> {
+	const spent = new Map<string, Map<string, number>>();
+	if (counted.length === 0) return spent;
+	const idsOf = (keep: (kind: Counted["kind"]) => boolean) =>
+		counted.filter(({ kind }) => keep(kind)).map(({ project }) => project.id);
+	const fees = idsOf((kind) => !isHoursBudget(kind));
+	const byPerson = idsOf((kind) => kind === "person_hours" || !isHoursBudget(kind));
+	const byTask = idsOf((kind) => kind === "task_hours" || !isHoursBudget(kind));
+	// The days a rate that could price these projects' time starts on.
+	const feeProjects = new Set(fees);
+	const rateStarts = pricing.rates
+		.filter((rate) => rate.projectId === null || feeProjects.has(rate.projectId))
+		.map((rate) => rate.effectiveFrom);
+
+	const groups = await scope.timeEntries.sums(
+		(e) => ({
+			project: e.projectId,
+			person: sql`case when ${among(e.projectId, byPerson)} then ${e.userId} end`,
+			task: sql`case when ${among(e.projectId, byTask)} then ${e.taskId} end`,
+			billable: e.billable,
+			overtime: e.overtime,
+			// The first day of the entry's span: the last day a rate starts on, on or before its day.
+			from: sql`case when ${among(e.projectId, fees)} then ${latestAmong(e.spentOn, rateStarts)} end`,
+		}),
+		(e) => {
+			const elapsed = sql`(coalesce(${e.endedAt}, cast(${now} as integer)) - ${e.startedAt})`;
+			return {
+				seconds: sql<number>`max(0, ${elapsed} / 1000)`,
+				minutes: sql<number>`max(0, ${elapsed} / 60000)`,
+			};
+		},
+		[["project", "person", "task", "billable", "overtime", "from"]],
+		(e) => inPeriods(e.projectId, e.spentOn, counted),
+	);
+
+	const countedOf = new Map(counted.map((each) => [each.project.id, each]));
+	for (const group of groups) {
+		const each = countedOf.get(String(group.project));
+		if (!each) continue;
+		const userId = group.person === null ? "" : String(group.person);
+		const taskId = group.task === null ? null : String(group.task);
+		const billable = Number(group.billable) === 1;
+		let add: number;
+		if (isHoursBudget(each.kind)) {
+			const counts = each.priced.billingType !== "non_billable" && billable;
+			if (!countsTowardHours(counts, money.budgetCountsNonBillable)) continue;
+			add = group.seconds;
+		} else {
+			// Before the first rate starts no rate is in force: the time adds nothing.
+			if (group.from === null) continue;
+			const day = String(group.from);
+			add = billableMinuteMinor([
+				priceTime(each.priced, pricing.rates, {
+					userId,
+					taskId,
+					billable,
+					overtime: Number(group.overtime) === 1,
+					day,
+					minutes: group.minutes,
+				}),
+			]);
+		}
+		const key = each.kind === "person_hours" ? userId : (taskId ?? "");
+		const byKey = spent.get(each.project.id) ?? new Map<string, number>();
+		byKey.set(key, (byKey.get(key) ?? 0) + add);
+		spent.set(each.project.id, byKey);
+	}
+	return spent;
+}
+
+/**
+ * The expenses of each counted project in its currency over its period,
+ * billable or not, in minor units, by project id: one statement for all.
+ */
+async function expensesSpent(
+	scope: OrganisationScope,
+	counted: readonly Counted[],
+): Promise<Map<string, number>> {
+	const spent = new Map<string, number>();
+	if (counted.length === 0) return spent;
+	const totals = await scope.expenses.sums(
+		(x) => ({ project: x.projectId, currency: x.currency }),
+		(x) => ({ minor: sql<number>`${x.amountMinor}` }),
+		[["project", "currency"]],
+		(x) => inPeriods(x.projectId, x.spentOn, counted),
+	);
+	const currencyOf = new Map(counted.map(({ project, priced }) => [project.id, priced.currency]));
+	for (const total of totals) {
+		const id = String(total.project);
+		if (total.currency === currencyOf.get(id)) spent.set(id, total.minor);
+	}
+	return spent;
 }
 
 /** Whether a budget's whole is over. */
@@ -339,23 +481,4 @@ export function budgetAlertEmail(
 		},
 		platform,
 	);
-}
-
-/**
- * The budgets of many projects at once, by project id, for a list such as
- * Dashboards' "nearest their limit" (TS-086). A project with no budget is
- * left out.
- */
-export async function projectBudgets(
-	scope: OrganisationScope,
-	projects: readonly BudgetedProject[],
-	context: BudgetContext,
-): Promise<Map<string, BudgetFigures>> {
-	const figures = await Promise.all(projects.map((p) => projectBudget(scope, p, context)));
-	const byProject = new Map<string, BudgetFigures>();
-	projects.forEach((project, at) => {
-		const each = figures[at];
-		if (each) byProject.set(project.id, each);
-	});
-	return byProject;
 }

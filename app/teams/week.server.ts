@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 
 import { among, type OrganisationScope } from "~/db";
 import type { PeriodDays, PeriodStatus } from "~/periods/periods";
@@ -77,6 +77,39 @@ export async function teamWeek(
 			status: (periods.find((p) => p.userId === person.id)?.status ?? null) as PeriodStatus | null,
 		};
 	});
+}
+
+/**
+ * The time all of `people` logged in `period`, and of it the overtime, added
+ * up in one statement however many they are: the total under a page of Team
+ * that lists only some of them (TS-113). Each entry counts in whole seconds
+ * up to `now` while it runs, as `secondsOf` counts it.
+ */
+export async function weekTotal(
+	scope: OrganisationScope,
+	people: readonly Person[],
+	period: PeriodDays,
+	now: number,
+): Promise<{ seconds: number; overtimeSeconds: number }> {
+	if (people.length === 0) return { seconds: 0, overtimeSeconds: 0 };
+	const lines = await scope.timeEntries.sum(
+		(e) =>
+			sql<number>`max(0, cast((coalesce(${e.endedAt}, ${now}) - ${e.startedAt}) / 1000 as integer))`,
+		(e) => e.overtime,
+		(e) =>
+			and(
+				among(
+					e.userId,
+					people.map((p) => p.id),
+				),
+				gte(e.spentOn, period.startsOn),
+				lte(e.spentOn, period.endsOn),
+			),
+	);
+	return {
+		seconds: lines.reduce((sum, line) => sum + line.total, 0),
+		overtimeSeconds: lines.reduce((sum, line) => sum + (line.key ? line.total : 0), 0),
+	};
 }
 
 /** The time one person logged on one project in a period. */

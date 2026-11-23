@@ -1,7 +1,7 @@
 import { and, asc, eq, isNotNull, isNull, or, type SQL } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
-import { type OrganisationScope, uuidv7 } from "~/db";
+import { among, type OrganisationScope, uuidv7 } from "~/db";
 import type { Day } from "~/time/calendar";
 
 import { type RateLevel, type RateRow, rateLevel } from "./rates";
@@ -50,11 +50,26 @@ export async function ratesForProject(
 	return rows.map(toView);
 }
 
-/** The organisation's default billable rates: each person's and each task's, every effective day. */
-export async function defaultRates(scope: OrganisationScope): Promise<RateView[]> {
-	const rows = await scope.rates.select((r) => and(eq(r.kind, "billable"), isNull(r.projectId)), {
-		orderBy: (r) => [asc(r.effectiveFrom)],
-	});
+/**
+ * The organisation's default billable rates, every effective day: each task's,
+ * and the rates of the people among `people` alone, so a page of Default rates
+ * reads the rates of the people it lists and no one else's (TS-113).
+ */
+export async function defaultRates(
+	scope: OrganisationScope,
+	people: readonly string[],
+): Promise<RateView[]> {
+	const rows = await scope.rates.select(
+		(r) =>
+			and(
+				eq(r.kind, "billable"),
+				isNull(r.projectId),
+				people.length === 0
+					? isNotNull(r.taskId)
+					: or(among(r.userId, people), and(isNull(r.userId), isNotNull(r.taskId))),
+			),
+		{ orderBy: (r) => [asc(r.effectiveFrom)] },
+	);
 	return rows.map(toView).filter((row) => row.level === "person" || row.level === "task");
 }
 
