@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
-import type { Locator, Page } from "@playwright/test";
+import type { Locator, Page, Request } from "@playwright/test";
 
 import { destinationPath } from "../app/shell/destinations";
 import { newPerson, ownAddress, signIn } from "./auth";
@@ -214,4 +214,131 @@ test("Projects and Clients are searched with the keyboard alone, in the address"
 	const clients = page.getByRole("list", { name: "Active clients" });
 	await expect(clients).toContainText("Initech");
 	await expect(clients).not.toContainText("Globex");
+});
+
+/**
+ * The data requests the page makes from now on, each as its path and query:
+ * what React Router asks the server for when a loader is to run.
+ */
+function dataRequests(page: Page): string[] {
+	const asked: string[] = [];
+	page.on("request", (request) => {
+		const { pathname, search } = new URL(request.url());
+		if (pathname.endsWith(".data")) asked.push(`${pathname}${search}`);
+	});
+	return asked;
+}
+
+/**
+ * Gives a request the page might make a second to start: it resolves when one
+ * finishes, or after the second when none came. A test that asks nothing is
+ * sent passes it this way, having given a request every chance to be made.
+ */
+async function settled(page: Page) {
+	await page
+		.waitForEvent("requestfinished", {
+			predicate: (request) => new URL(request.url()).pathname.endsWith(".data"),
+			timeout: 1_000,
+		})
+		.catch(() => undefined);
+}
+
+// Main run 45137788218: the Projects field had applied each key, so Enter sent
+// the address it was already at, and React Router reads every loader again for
+// that. The list read for "GLOB" became the page's own; clearing the field then
+// asked to read again, which the page refused as a move between tabs, so the
+// list kept Globex alone and the page asked dozens of times.
+test("Enter on a search already applied asks the server nothing, and clearing it brings every project back", async ({
+	page,
+}) => {
+	const slug = await ownSeededOrganisation(page);
+	const projects = destinationPath(slug, "projects");
+	await openShell(page, projects);
+	const groups = page.getByRole("tabpanel").getByRole("heading", { level: 2 });
+	const field = page.getByRole("searchbox", { name: "Search projects or clients" });
+
+	await field.focus();
+	await page.keyboard.type("GLOB");
+	// The field applies with each key: the address holds the words before Enter.
+	await expect(page).toHaveURL(/\?q=GLOB$/);
+	await expect(groups).toHaveText(["Globex"]);
+
+	const asked = dataRequests(page);
+	await page.keyboard.press("Enter");
+	await settled(page);
+	expect(asked, "what Enter asked the server").toEqual([]);
+
+	await page.getByRole("button", { name: "Clear search" }).click();
+	await expect(page).toHaveURL(new RegExp(`${projects}$`));
+	await expect(groups).toHaveText(["Globex", "Initech", "No client"]);
+	await expect(field).toHaveValue("");
+	// The page held every project: clearing reads nothing.
+	await settled(page);
+	expect(asked, "what clearing asked the server").toEqual([]);
+
+	// Clients' field applies once typing stops; Enter after it asks nothing either.
+	await openShell(page, destinationPath(slug, "clients"));
+	const filter = page.getByRole("searchbox", { name: "Search clients" });
+	await filter.focus();
+	await page.keyboard.type("init");
+	await expect(page).toHaveURL(/\?q=init$/);
+	const clients = page.getByRole("list", { name: "Active clients" });
+	await expect(clients).not.toContainText("Globex");
+	await settled(page);
+	asked.length = 0;
+	await page.keyboard.press("Enter");
+	await settled(page);
+	expect(asked, "what Enter asked the server on Clients").toEqual([]);
+	await expect(clients).toContainText("Initech");
+});
+
+test("The list always has the words in the field, when an answer for older words arrives last", async ({
+	page,
+}) => {
+	const slug = await ownSeededOrganisation(page);
+	const projects = destinationPath(slug, "projects");
+	// Read by the server for "glob": the page holds Globex's project alone.
+	await openShell(page, `${projects}?q=glob`);
+	const groups = page.getByRole("tabpanel").getByRole("heading", { level: 2 });
+	const field = page.getByRole("searchbox", { name: "Search projects or clients" });
+	await expect(groups).toHaveText(["Globex"]);
+
+	// Clearing the field asks for every project. That answer is held back until
+	// newer words have been typed, so it arrives after them.
+	const { promise: released, resolve: release } = Promise.withResolvers<void>();
+	let held: Request | undefined;
+	await page.route(`**${projects}.data*`, async (route) => {
+		if (held || new URL(route.request().url()).searchParams.has("q")) {
+			await route.continue();
+			return;
+		}
+		held = route.request();
+		await released;
+		// The page may have given up on it, as a newer request replaces it.
+		await route.continue().catch(() => undefined);
+	});
+
+	await page.getByRole("button", { name: "Clear search" }).click();
+	await expect(page).toHaveURL(new RegExp(`${projects}$`));
+	await expect(field).toHaveValue("");
+	await expect
+		.poll(() => held !== undefined, { message: "the page asks for every project" })
+		.toBe(true);
+	// Until the answer comes, the list shows what it holds that has the words.
+	await expect(groups).toHaveText(["Globex"]);
+
+	await field.pressSequentially("pay");
+	await expect(page).toHaveURL(/\?q=pay$/);
+	await expect(groups).toHaveText(["Initech"]);
+	await expect(page.getByRole("tabpanel")).toContainText("Payroll");
+
+	// The older answer, for no words at all, now arrives; the list keeps "pay".
+	const done = held?.response().catch(() => null);
+	release();
+	await done;
+	await settled(page);
+	await expect(field).toHaveValue("pay");
+	await expect(page).toHaveURL(/\?q=pay$/);
+	await expect(groups).toHaveText(["Initech"]);
+	await expect(page.getByRole("tabpanel")).not.toContainText("Website");
 });

@@ -215,16 +215,16 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 	const [search] = useSearchParams();
 	// The words in the address, which the field writes with each key. The list
 	// the server sent is filtered here while they narrow the words it was sent
-	// for; words that do not are asked of the server.
+	// for; words that do not are asked of the server, and until its answer comes
+	// the list shows only what it holds that has them. What is shown always has
+	// the words in the field: an answer for other words is never shown as it is.
 	const query = searchIn(search);
 	const narrows = nameKey(query).includes(nameKey(loaderData.query));
 	const { revalidate, state } = useRevalidator();
 	useEffect(() => {
 		if (!narrows && state === "idle") void revalidate();
 	}, [narrows, state, revalidate]);
-	const projects = narrows
-		? loaderData.projects.filter((each) => projectMatches(each, query, showsClients))
-		: loaderData.projects;
+	const projects = loaderData.projects.filter((each) => projectMatches(each, query, showsClients));
 
 	const [task, setTask] = useState<Task | null>(null);
 	// Which project the open sheet is about. Kept after it closes, so the sheet
