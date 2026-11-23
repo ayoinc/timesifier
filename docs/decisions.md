@@ -826,6 +826,7 @@ Decided on 2026-11-23 (TS-113), on D6 to D8 of the scale test (`research/corpora
 | Wellbeing kept on a rolling window, by start                   | Disagrees with every other figure, which counts an entry on its stored day; and it cannot be summed by an index on the day.                                                                              |
 
 **What it costs.** Wellbeing's figures move at the organisation's midnight and leave out today. The report's list and export come in a new order. Team and Default rates show 50 people at a time; a person beyond them is found with the search. Until TS-113b, every write to `time_entries` updates one index more than it needs. Approvals, Time off and Work schedules still list everyone and repeat some reads: TS-113b.
+
 ### 64. The buyer pages: one source for each claim, prices before payment, and company sign-in said as not yet built
 
 TS-106, 2026-11-23, from the owner's answers 8, 9 and 10 of the same day.
