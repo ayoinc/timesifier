@@ -399,11 +399,13 @@ describe("the callback's answer", () => {
 			const claims = provider === "google" ? googleClaims(EMAIL) : microsoftClaims(EMAIL);
 			const { response } = await signInWith(provider, claims);
 
-			// A redirect loads nothing, so it gets the policy under which nothing loads.
+			// A redirect loads nothing, so it gets the policy under which nothing loads,
+			// which reports a violation where every policy does (TS-107d).
 			expect(response.status).toBe(302);
 			expect(response.headers.get("Content-Security-Policy")).toBe(
-				"default-src 'none'; frame-ancestors 'none'",
+				"default-src 'none'; frame-ancestors 'none'; report-to csp",
 			);
+			expect(response.headers.get("Reporting-Endpoints")).toBe('csp="/browser-errors"');
 			expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
 			expect(response.headers.get("Strict-Transport-Security")).toBeTruthy();
 			const session = response.headers
