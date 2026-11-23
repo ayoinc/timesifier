@@ -14,6 +14,7 @@ import {
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 import { kindOf, seedLeave } from "./leave-seed";
+import { seedEntry, seedPeriod, seedProject } from "./periods-seed";
 
 // Time off with the timesheet rules of TS-090: notice for leave, requests for
 // overtime and weekend work, and the team's leave to come, through the page's
@@ -163,7 +164,7 @@ describe("notice for leave", () => {
 		const soon = weekdayFrom(addDays(today(), 3));
 		const bare = await requestLeave(grace, "annual", soon, soon);
 		expect(bare.status).toBe(400);
-		expect(bare.said).toMatch(/This is short notice \(\d+ days?\): say why in one line\./);
+		expect(bare.said).toMatch(/This is short notice \(\d+ working days?\): say why in one line\./);
 		expect(bare.id).toBeNull();
 
 		const tooLong = await requestLeave(grace, "annual", soon, soon, {
@@ -182,8 +183,9 @@ describe("notice for leave", () => {
 			told.id,
 		);
 		expect(stored).toMatchObject({ short_notice: 1, notice_reason: "Family emergency" });
-		expect(stored?.notice_days).toBeGreaterThanOrEqual(2);
-		expect(stored?.notice_days).toBeLessThanOrEqual(6);
+		// Three days ahead, moved to a weekday: one to three working days, counted from today (decision 51).
+		expect(stored?.notice_days).toBeGreaterThanOrEqual(1);
+		expect(stored?.notice_days).toBeLessThanOrEqual(3);
 	});
 
 	it("leave asked for in good time is not short, and keeps no reason", async () => {
@@ -195,7 +197,7 @@ describe("notice for leave", () => {
 		expect(made.status).toBe(200);
 		expect(
 			await row(
-				"select short_notice, notice_reason, notice_days >= 29 as enough from leave_requests where id = ?",
+				"select short_notice, notice_reason, notice_days >= 20 as enough from leave_requests where id = ?",
 				made.id,
 			),
 		).toEqual({ short_notice: 0, notice_reason: null, enough: 1 });
@@ -224,7 +226,7 @@ describe("notice for leave", () => {
 		});
 		expect(refused.status).toBe(400);
 		expect(refused.said).toContain(
-			"Annual leave needs 14 days' notice here: the earliest first day is",
+			"Annual leave needs 14 working days' notice here: the earliest first day is",
 		);
 		expect(refused.id).toBeNull();
 		const later = weekdayFrom(addDays(today(), 30));
@@ -240,9 +242,70 @@ describe("notice for leave", () => {
 		for (const approver of [mona, hedy]) {
 			const text = await textAt(REQUESTS, approver);
 			expect(text).toContain("grace@example.com · Annual leave");
-			expect(text).toMatch(/Short notice \(\d+ days?\) Why: “Family emergency”/);
-			expect(text).toMatch(/\d+ days' notice/);
+			expect(text).toMatch(/Short notice \(\d+ working days?\) Why: “Family emergency”/);
+			expect(text).toMatch(/\d+ working days' notice/);
 		}
+	});
+
+	it("notice runs to the first day taken (TR-16)", async () => {
+		const { grace, alan } = await seedPeople();
+		// A Saturday at least three days off, and the Monday after it: the same first day taken.
+		const saturday = onOrAfter(addDays(today(), 3), 6);
+		const monday = addDays(saturday, 2);
+		const fromSaturday = await requestLeave(grace, "annual", saturday, addDays(monday, 2));
+		const fromMonday = await requestLeave(alan, "annual", monday, addDays(monday, 2));
+		expect(fromSaturday.status).toBe(400);
+		// Both short of annual leave's 14 working days, by the same count.
+		expect(fromSaturday.said).toMatch(/This is short notice \(\d+ working days?\)/);
+		const given = (said: string) => said.match(/short notice \((\d+) working days?\)/)?.[1];
+		expect(given(fromSaturday.said)).toBe(given(fromMonday.said));
+
+		const asked = await requestLeave(grace, "annual", saturday, addDays(monday, 2), {
+			noticeReason: "Family",
+		});
+		const askedMonday = await requestLeave(alan, "annual", monday, addDays(monday, 2), {
+			noticeReason: "Family",
+		});
+		const noticeOf = (id: string | null) =>
+			value<number>("select notice_days from leave_requests where id = ?", id);
+		expect(await noticeOf(asked.id)).toBe(await noticeOf(askedMonday.id));
+	});
+});
+
+describe("leave on days that hold time (TR-04)", () => {
+	it("leave is not approved onto a day that holds time, and the approver sees the time", async () => {
+		const { grace, mona } = await seedPeople();
+		const site = await seedProject(acme.id, "Site");
+		const day = weekdayFrom(addDays(today(), 30));
+		const pending = await seedLeave(acme.id, grace.user.id, "annual", day, day, {
+			status: "pending",
+		});
+		await seedEntry(acme.id, grace.user.id, site, `${day}T09:00:00Z`, `${day}T16:30:00Z`);
+
+		const text = await textAt(REQUESTS, mona);
+		expect(text).toContain("grace@example.com · Annual leave");
+		expect(text).toContain("7:30 tracked on");
+		const approve = await ask(mona, { intent: "approve", requestId: pending });
+		expect(approve.status).toBe(409);
+		expect(approve.said).toContain("has 7:30 tracked on");
+		expect(approve.said).toContain(
+			"Leave and time cannot share that day: the time is removed first, or the request refused.",
+		);
+		expect(await value("select status from leave_requests where id = ?", pending)).toBe("pending");
+	});
+
+	it("sick leave is not recorded onto a day of an approved week", async () => {
+		const { grace } = await seedPeople();
+		// A Monday one or two weeks back: a week already approved.
+		const lastMonday = onOrAfter(addDays(today(), -13), 1);
+		await seedPeriod(acme.id, grace.user.id, lastMonday, "approved");
+		const tuesday = addDays(lastMonday, 1);
+		const sick = await requestLeave(grace, "sick", tuesday, tuesday);
+		expect(sick.status).not.toBe(200);
+		expect(sick.said).toContain(
+			"is in a submitted or approved week, so leave cannot be taken on it until the week is withdrawn or reopened.",
+		);
+		expect(sick.id).toBeNull();
 	});
 });
 

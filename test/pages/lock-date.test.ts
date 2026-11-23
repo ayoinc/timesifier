@@ -377,7 +377,7 @@ describe("the lock date binds everyone", () => {
 		expect(text).toContain("October payroll");
 	});
 
-	it("refuses leave asked for on or before it, and deciding or withdrawing leave that reaches it", async () => {
+	it("refuses leave asked for on or before it, and approving leave that reaches it", async () => {
 		const grace = await joined("grace@example.com", "member");
 		await post(settings, { intent: "lock-date", lockedThrough: "2026-11-05" }, ada);
 		const annual = await kindOf(acme.id, "annual");
@@ -393,7 +393,6 @@ describe("the lock date binds everyone", () => {
 			status: "pending",
 		});
 		expect(await post(timeOff, { intent: "approve", requestId: pending }, ada)).toBe(409);
-		expect(await post(timeOff, { intent: "withdraw", requestId: pending }, grace)).toBe(409);
 		expect(await value("select status from leave_requests where id = ?", pending)).toBe("pending");
 		expect(
 			await post(
@@ -405,6 +404,51 @@ describe("the lock date binds everyone", () => {
 					endsOn: "2026-11-16",
 					// Less than annual leave's notice (TS-090), so it says why.
 					noticeReason: "A family wedding",
+				},
+				grace,
+			),
+		).toBe(200);
+	});
+
+	it("a pending request the lock date has reached can be withdrawn or refused, and its later days asked for again", async () => {
+		const grace = await joined("grace@example.com", "member");
+		const annual = await kindOf(acme.id, "annual");
+		const timeOff = `/app/${acme.slug}/time-off`;
+		const asked = await seedLeave(acme.id, grace.user.id, "annual", "2026-11-05", "2026-11-20", {
+			status: "pending",
+		});
+		const other = await seedLeave(acme.id, grace.user.id, "annual", "2026-11-04", "2026-11-04", {
+			status: "pending",
+		});
+		await post(settings, { intent: "lock-date", lockedThrough: "2026-11-06" }, ada);
+		const statusOf = (id: string) =>
+			value<string>("select status from leave_requests where id = ?", id);
+
+		// Approving would put leave on a locked day: it says what can be done instead.
+		const approve = await submit(timeOff, { intent: "approve", requestId: asked }, ada, {
+			byScript: true,
+		});
+		expect(approve.status).toBe(409);
+		expect(await approve.text()).toContain(
+			"Thu 5 is on or before the lock date, so this leave cannot be approved. It can be withdrawn, and the days from Sat 7, the first open day, asked for again.",
+		);
+		expect(await statusOf(asked)).toBe("pending");
+
+		// Withdrawing and refusing change no day: the lock date does not stop them.
+		expect(await post(timeOff, { intent: "withdraw", requestId: asked }, grace)).toBe(200);
+		expect(await statusOf(asked)).toBe("withdrawn");
+		expect(await post(timeOff, { intent: "refuse", requestId: other }, ada)).toBe(200);
+		expect(await statusOf(other)).toBe("refused");
+
+		expect(
+			await post(
+				timeOff,
+				{
+					intent: "request",
+					kindId: annual,
+					startsOn: "2026-11-16",
+					endsOn: "2026-11-20",
+					noticeReason: "Asked again from the first open week",
 				},
 				grace,
 			),

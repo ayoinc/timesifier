@@ -114,10 +114,14 @@ test("the owner sets the timesheet rules with the keyboard alone, then asks for 
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.press("ArrowDown");
 	await expect(overtime.getByRole("radio", { name: "Only with pre-approval" })).toBeChecked();
+	// A change applies from next Monday unless another day is chosen (TR-10): this one from today.
+	const from = sheet.getByRole("textbox", { name: "From" });
+	await expect(from).toHaveValue(mondayOf(dayFromToday(7)));
+	await from.fill(dayFromToday(0));
 	await tabTo(page, sheet.getByRole("button", { name: "Save" }));
 	await page.keyboard.press("Enter");
 	await expect(sheet).toBeHidden();
-	await expect(status(page)).toHaveText("The timesheet rules are saved.");
+	await expect(status(page)).toHaveText(/^The timesheet rules are saved\. They apply from /);
 	await expect(rules).toContainText("Only with pre-approval");
 
 	await openShell(page, destinationPath(slug, "time-off"));
@@ -151,12 +155,12 @@ test("annual leave at short notice says so, asks why, and is sent with the reaso
 		.getByRole("option", { name: "Annual leave" })
 		.click();
 	await expect(sheet).toContainText(
-		/Annual leave needs 14 days' notice: the earliest well-noticed first day is/,
+		/Annual leave needs 14 working days' notice: the earliest well-noticed first day is/,
 	);
 	// Five days on, or the weekday after: annual leave on a weekend holds no working day.
 	await sheet.getByRole("textbox", { name: "First day" }).fill(weekdayFromToday(5));
 	await sheet.getByRole("textbox", { name: "Last day" }).fill(weekdayFromToday(5));
-	await expect(sheet).toContainText(/This is short notice \(\d+ days?\)\./);
+	await expect(sheet).toContainText(/This is short notice \(\d+ working days?\)\./);
 	const why = sheet.getByRole("textbox", { name: "Why at short notice?" });
 	await expect(why).toBeVisible();
 	await why.fill("A family wedding moved forward");

@@ -3,7 +3,7 @@ import * as z from "zod";
 import { periodContaining } from "~/periods/periods";
 import type { Timetable } from "~/schedules/schedules";
 import { addDays, type Day, daysFrom } from "~/time/calendar";
-import { formatDuration } from "~/time/format";
+import { formatDay, formatDuration } from "~/time/format";
 
 import { type DayStatus, dayStatus, type LeaveCalendar } from "./days";
 import type { KindKey, LeaveStatus } from "./kinds";
@@ -21,8 +21,15 @@ import { WEEKDAY_NAMES } from "./words";
  * organisation's overtime rule allows:
  *
  * - A public holiday, or a day of whole-day leave, is closed: no time at all.
+ *   Where the organisation allows overtime at all, a public holiday takes
+ *   approved holiday work, as overtime (decision 52).
  * - A working day, or a day of half-day leave, takes its expected time as
- *   regular time (7:30, or 3:45 on a half day).
+ *   regular time (7:30, or 3:45 on a half day). Where a half day takes more
+ *   (overtime allowed, or approved), the time past its half is regular until
+ *   the day reaches its full expected hours, and overtime only past them
+ *   (decision 50).
+ * - A day holding more than 24 hours is over its limit, whatever its rules
+ *   (decision 52).
  * - A day the working week does not work takes no regular time: its time is
  *   all overtime, unless the organisation does not allow time on such days,
  *   when it is closed.
@@ -97,14 +104,15 @@ export const SHORT_NOTICE_LABELS: Record<ShortNoticeRule, string> = {
 	refused: "Not allowed",
 };
 
-/** The two kinds of pre-approved work. */
-export const WORK_KINDS = ["overtime", "weekend"] as const;
+/** The kinds of pre-approved work: overtime, weekend work, and work on a public holiday (decision 52). */
+export const WORK_KINDS = ["overtime", "weekend", "holiday"] as const;
 export const WorkKind = z.enum(WORK_KINDS);
 export type WorkKind = z.infer<typeof WorkKind>;
 
 export const WORK_KIND_LABELS: Record<WorkKind, string> = {
 	overtime: "Overtime",
 	weekend: "Weekend work",
+	holiday: "Public holiday work",
 };
 
 /** A request for overtime or weekend work as the rules read it. */
@@ -120,17 +128,26 @@ export interface WorkRequestLike {
 /** The most a request for overtime or weekend work asks for on one day, in minutes. */
 export const MOST_WORK_MINUTES_A_DAY = 16 * 60;
 
+/** The organisation's rules from a day on (TR-10, decision 53): a change of the rules applies from its day. */
+export interface RulesVersion
+	extends Pick<DayRulesOf, "overtime" | "weekend" | "overtimeDayCap" | "overtimeWeekCap"> {
+	effectiveFrom: Day;
+}
+
 /** Everything that decides one person's limits: their leave calendar, the organisation's rules, and their approved work. */
 export interface RulesCalendar extends LeaveCalendar {
-	/** The organisation's rules: a day's schedule may carry its own (`rulesOn`). */
+	/** The organisation's rules before its first dated version: a day's version, then its schedule, may carry others (`rulesOn`). */
 	rules: DayRulesOf;
-	/** The person's requests for overtime and weekend work. Only approved ones count. */
+	/** The organisation's dated changes of its rules, any order. None: `rules` hold every day. */
+	versions?: readonly RulesVersion[];
+	/** The person's requests for overtime, weekend and holiday work. Only approved ones count. */
 	work: readonly WorkRequestLike[];
 }
 
 /** Why a day takes no time. */
 export type Closed =
 	| { why: "holiday"; name: string }
+	| { why: "holiday-needs-approval"; name: string }
 	| { why: "leave"; kindName: string }
 	| { why: "weekend-not-allowed" };
 
@@ -157,23 +174,43 @@ export interface DayLimit {
 }
 
 /**
- * The rules that hold on `day` for the person (TS-097): their schedule's own
- * overtime rule, with its caps, and its own rule for days not worked, where
- * it has them; else the organisation's.
+ * The rules that hold on `day` for the person: the organisation's version in
+ * force on the day (TR-10), then their schedule's own overtime rule, with its
+ * caps, and its own rule for days not worked, where it has them (TS-097).
  */
 export function rulesOn<
 	R extends Pick<DayRulesOf, "overtime" | "weekend" | "overtimeDayCap" | "overtimeWeekCap">,
->(calendar: { rules: R; timetable: Timetable }, day: Day): R {
+>(calendar: { rules: R; timetable: Timetable; versions?: readonly RulesVersion[] }, day: Day): R {
+	const base = versionOn(calendar.rules, calendar.versions, day);
 	const own = calendar.timetable(day).rules;
-	if (!own.overtime && !own.weekend) return calendar.rules;
+	if (!own.overtime && !own.weekend) return base;
 	return {
-		...calendar.rules,
+		...base,
 		...(own.overtime && {
 			overtime: own.overtime.policy,
 			overtimeDayCap: own.overtime.dayCap,
 			overtimeWeekCap: own.overtime.weekCap,
 		}),
 		...(own.weekend && { weekend: own.weekend }),
+	};
+}
+
+/** The organisation's rules in force on `day`: its latest version from that day or before, else `rules`. */
+export function versionOn<
+	R extends Pick<DayRulesOf, "overtime" | "weekend" | "overtimeDayCap" | "overtimeWeekCap">,
+>(rules: R, versions: readonly RulesVersion[] | undefined, day: Day): R {
+	let found: RulesVersion | undefined;
+	for (const version of versions ?? []) {
+		if (version.effectiveFrom > day) continue;
+		if (!found || version.effectiveFrom > found.effectiveFrom) found = version;
+	}
+	if (!found) return rules;
+	return {
+		...rules,
+		overtime: found.overtime,
+		weekend: found.weekend,
+		overtimeDayCap: found.overtimeDayCap,
+		overtimeWeekCap: found.overtimeWeekCap,
 	};
 }
 
@@ -236,8 +273,22 @@ export function dayLimit(calendar: RulesCalendar, day: Day): DayLimit {
 		approvedMinutes: 0,
 	});
 	switch (is.kind) {
-		case "holiday":
-			return closed({ why: "holiday", name: is.name });
+		case "holiday": {
+			// Work on a public holiday is overtime, taken only as far as approved
+			// holiday work covers it, wherever overtime is allowed at all (decision 52).
+			if (rules.overtime === "none") return closed({ why: "holiday", name: is.name });
+			const approved = approvedWorkMinutes(calendar.work, "holiday", day);
+			if (approved === 0) return closed({ why: "holiday-needs-approval", name: is.name });
+			return {
+				day,
+				status,
+				regularMinutes: 0,
+				closed: null,
+				overtimeMinutes: least(approved, rules.overtimeDayCap),
+				noOvertime: null,
+				approvedMinutes: approved,
+			};
+		}
 		case "not-a-working-day": {
 			if (rules.weekend === "none") return closed({ why: "weekend-not-allowed" });
 			const approved = approvedWorkMinutes(calendar.work, "weekend", day);
@@ -256,12 +307,41 @@ export function dayLimit(calendar: RulesCalendar, day: Day): DayLimit {
 				return closed({ why: "leave", kindName: is.request.kindName });
 			}
 			const approved = approvedWorkMinutes(calendar.work, "overtime", day);
+			const half = Math.floor(status.expectedMinutes);
+			const overtime = overtimeOf(rules, approved, true);
+			if (is.kind === "working" || overtime.noOvertime) {
+				return {
+					day,
+					status,
+					regularMinutes: half,
+					closed: null,
+					...overtime,
+					approvedMinutes: approved,
+				};
+			}
+			// A day of half-day leave that takes more than its half (decision 50):
+			// the time past the half is regular until the day reaches its full
+			// expected hours, and overtime only past them. Caps count overtime only.
+			const room = Math.max(0, Math.floor(calendar.timetable(day).minutes) - half);
+			if (rules.overtime === "allowed") {
+				return {
+					day,
+					status,
+					regularMinutes: half + room,
+					closed: null,
+					...overtime,
+					approvedMinutes: approved,
+				};
+			}
+			const regularMore = Math.min(room, approved);
+			const rest = approved - regularMore;
 			return {
 				day,
 				status,
-				regularMinutes: Math.floor(status.expectedMinutes),
+				regularMinutes: half + regularMore,
 				closed: null,
-				...overtimeOf(rules, approved, true),
+				overtimeMinutes: rest === 0 ? 0 : least(rest, rules.overtimeDayCap),
+				noOvertime: rest === 0 ? "needs-approval" : null,
 				approvedMinutes: approved,
 			};
 		}
@@ -287,6 +367,11 @@ export interface KindsMs {
 /** The first day of the organisation's week that holds `day`. */
 export function weekOf(rules: Pick<DayRulesOf, "weekStartsOn">, day: Day): Day {
 	return periodContaining(day, rules.weekStartsOn).startsOn;
+}
+
+/** The Monday after `day`: the day a change of the rules applies from unless another is chosen (TR-10). */
+export function nextMondayAfter(day: Day): Day {
+	return addDays(periodContaining(day, 1).startsOn, 7);
 }
 
 /**
@@ -343,6 +428,8 @@ export function closedReason(closed: Closed, day: Day, who?: string): string {
 	switch (closed.why) {
 		case "holiday":
 			return `${closed.name} is a public holiday: no time can be tracked on it.`;
+		case "holiday-needs-approval":
+			return `${closed.name} is a public holiday: time on it needs approved holiday work. Request it on Time off.`;
 		case "leave":
 			return who
 				? `${who} is on ${closed.kindName.toLowerCase()} that day.`
@@ -369,9 +456,35 @@ export function leftMessage(minutes: number): string {
 	return `This day has ${formatDuration(minutes * 60)} left.`;
 }
 
-/** A day over its limit in words: "Over by 0:15". */
-export function overLabel(minutes: number): string {
-	return `Over by ${formatDuration(minutes * 60)}`;
+/** The most minutes a day holds: a day holding more is over its limit (decision 52). */
+export const MINUTES_A_DAY = 24 * 60;
+
+/** What a day holding more than 24 hours is told, wherever it is flagged or blocks a week (decision 52). */
+export const MORE_THAN_A_DAY = "A day cannot hold more than 24 hours.";
+
+/** A day over its limit in words: "Over by 0:15", or "Over 24 hours by 3:30" for a day holding more than a day. */
+export function overLabel(minutes: number, moreThanADay = false): string {
+	const by = formatDuration(minutes * 60);
+	return moreThanADay ? `Over 24 hours by ${by}` : `Over by ${by}`;
+}
+
+/**
+ * Why a week with days over their limit cannot be submitted, naming each:
+ * "Correct the days over their limit before you submit the week: Tue 10 Nov
+ * over by 0:15." A day holding more than 24 hours says so, and the sentence
+ * `MORE_THAN_A_DAY` follows (decision 52).
+ */
+export function overDaysRefusal(
+	days: readonly Pick<DayRule, "day" | "overMinutes" | "moreThanADay">[],
+): string {
+	const named = days
+		.map(
+			(d) =>
+				`${formatDay(d.day, "short")} ${overLabel(d.overMinutes, d.moreThanADay).toLowerCase()}`,
+		)
+		.join(", ");
+	const more = days.some((d) => d.moreThanADay) ? ` ${MORE_THAN_A_DAY}` : "";
+	return `Correct the days over their limit before you submit the week: ${named}.${more}`;
 }
 
 /** A change to one day of one kind, as `mayWrite` reads it. */
@@ -454,6 +567,9 @@ export function mayWrite(
  * day the week does not work has no regular time: its time is overtime.
  */
 export function regularRefusal(limit: DayLimit, left: number): string {
+	if (limit.status.is.kind === "holiday") {
+		return `${limit.status.is.name} is a public holiday: track its time as overtime.`;
+	}
 	if (limit.status.is.kind === "not-a-working-day") {
 		const name = weekdayName(limit.day);
 		switch (limit.noOvertime) {
@@ -477,18 +593,27 @@ export function regularRefusal(limit: DayLimit, left: number): string {
 
 /**
  * Whether a timer may start on a day: not on a closed day, nor one with no
- * regular time left and no overtime to be had. `overtimeLeft` is what the day
- * and its week still take of overtime, null for no limit.
+ * regular time left and no overtime to be had. `overtimeLeftMinutes` is what
+ * the day and its week still take of overtime, null for no limit;
+ * `overtimeHeldByWeek` says it is the week's cap that holds it, so that a
+ * refusal names the week (TR-18a).
  */
 export function mayStart(
 	limit: DayLimit,
 	regularMs: number,
 	overtimeLeftMinutes: number | null,
+	overtimeHeldByWeek = false,
 ): Verdict {
 	if (limit.closed) return { ok: false, message: closedReason(limit.closed, limit.day) };
 	const left = minutesLeft(limit, regularMs);
 	if (left > 0) return { ok: true };
 	if (!limit.noOvertime && overtimeLeftMinutes !== 0) return { ok: true };
+	if (!limit.noOvertime) {
+		return {
+			ok: false,
+			message: `This ${overtimeHeldByWeek ? "week" : "day"} has ${formatDuration(0)} of overtime left.`,
+		};
+	}
 	return { ok: false, message: regularRefusal(limit, 0) };
 }
 
@@ -496,7 +621,9 @@ export function mayStart(
  * Where a timer stopped at `endedAt` is cut (TS-095): its regular time ends
  * when the day's expected time is used, `regularLeftMs` after it started, and
  * the rest is overtime, when the day takes overtime at all. Past a cap, or
- * when the day takes none, the rest is kept and the day is flagged over.
+ * when the day takes none, the rest is kept and the day is flagged over. A
+ * rest of less than a whole minute is no cut: it stays with the regular time,
+ * as the Timesheet counts whole minutes (TR-17).
  * Null `overtimeFrom` is no cut: the entry is all of the kind `overtime` says.
  */
 export function splitAtLimit(
@@ -508,6 +635,7 @@ export function splitAtLimit(
 	const left = Math.max(0, regularLeftMs);
 	if (!overtimeOpen || length <= left) return { overtime: false, overtimeFrom: null };
 	if (left === 0) return { overtime: true, overtimeFrom: null };
+	if (length - left < 60_000) return { overtime: false, overtimeFrom: null };
 	return { overtime: false, overtimeFrom: entry.startedAt + left };
 }
 
@@ -538,9 +666,11 @@ export interface DayRule {
 	 * null for a closed day, which says `closedReason`.
 	 */
 	fullReason: string | null;
-	/** The whole minutes it is over its limits; 0 when it is not. */
+	/** The whole minutes it is over its limits, or past 24 hours where that is more; 0 when it is not. */
 	overMinutes: number;
-	/** Minutes of approved overtime or weekend work on it. */
+	/** Whether it holds more than 24 hours (decision 52): it says `MORE_THAN_A_DAY`. */
+	moreThanADay: boolean;
+	/** Minutes of approved overtime, weekend or holiday work on it. */
 	approvedMinutes: number;
 }
 
@@ -561,11 +691,13 @@ export function dayRules(
 		const before = weekOvertimeBetween(rules, weekOf(rules, day), day, tracked);
 		const allowance = overtimeAllowance(limit, rules, before);
 		const overtime = wholeMinutes(ms.overtimeMs);
+		const trackedMinutes = wholeMinutes(ms.regularMs + ms.overtimeMs);
+		const pastADay = Math.max(0, trackedMinutes - MINUTES_A_DAY);
 		return {
 			day,
 			limitMinutes: limit.regularMinutes,
 			closedReason: limit.closed ? closedReason(limit.closed, day) : null,
-			trackedMinutes: wholeMinutes(ms.regularMs + ms.overtimeMs),
+			trackedMinutes,
 			regularMinutes: wholeMinutes(ms.regularMs),
 			overtimeMinutes: overtime,
 			leftMinutes: minutesLeft(limit, ms.regularMs),
@@ -573,7 +705,8 @@ export function dayRules(
 			overtimeLeftMinutes: allowance === null ? null : Math.max(0, allowance - overtime),
 			noOvertimeReason: limit.noOvertime ? noOvertimeReason(limit.noOvertime, day) : null,
 			fullReason: limit.closed ? null : regularRefusal(limit, 0),
-			overMinutes: minutesOver(limit, ms, allowance),
+			overMinutes: Math.max(minutesOver(limit, ms, allowance), pastADay),
+			moreThanADay: pastADay > 0,
 			approvedMinutes: limit.approvedMinutes,
 		};
 	});
@@ -638,7 +771,7 @@ export const DEFAULT_NOTICE_DAYS: Record<KindKey, number> = {
 	holiday: 0,
 };
 
-/** The most notice a kind may ask for, in days. */
+/** The most notice a kind may ask for, in working days. */
 export const LONGEST_NOTICE_DAYS = 365;
 
 /** The longest reason given for short notice: one line. */
@@ -649,53 +782,90 @@ export function heldToNotice(kind: { key: KindKey }): boolean {
 	return kind.key !== "sick" && kind.key !== "holiday";
 }
 
-/** The days of notice a kind asks for: none for a kind never held to it. */
+/** The working days of notice a kind asks for: none for a kind never held to it. */
 export function noticeAsked(kind: { key: KindKey; noticeDays: number }): number {
 	return heldToNotice(kind) ? kind.noticeDays : 0;
 }
 
-/** The days of notice given by asking on `today` for leave from `startsOn`: negative once it has begun. */
-export function noticeGiven(today: Day, startsOn: Day): number {
-	return Math.round(
-		(Date.parse(`${startsOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
-	);
+/** Whether a person works on a day: their schedule works it and it is no public holiday (`isWorkingDay`). */
+export type WorksOn = (day: Day) => boolean;
+
+/**
+ * The first day a request takes (TR-16): its first working day, a public
+ * holiday or a day off before it not counted. The first day of the span when
+ * it holds no working day.
+ */
+export function firstDayTaken(span: { startsOn: Day; endsOn: Day }, worksOn: WorksOn): Day {
+	return daysFrom(span.startsOn, span.endsOn).find(worksOn) ?? span.startsOn;
 }
 
-/** The first day that can be asked for on `today` with the notice a kind asks. */
-export function earliestNoticed(kind: { key: KindKey; noticeDays: number }, today: Day): Day {
-	return addDays(today, noticeAsked(kind));
+/**
+ * The notice given by asking on `today` for leave whose first day taken is
+ * `firstDay` (decision 51): the working days after `today` up to and including
+ * `firstDay`, so that for someone who works every day it is the count of
+ * calendar days. Negative once the leave has begun, in calendar days.
+ */
+export function noticeGiven(today: Day, firstDay: Day, worksOn: WorksOn): number {
+	if (firstDay <= today) {
+		return Math.round(
+			(Date.parse(`${firstDay}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
+		);
+	}
+	return daysFrom(addDays(today, 1), firstDay).filter(worksOn).length;
 }
 
-/** Whether asking on `today` for leave from `startsOn` gives less notice than the kind asks. */
+/** The longest run of days searched for working days: two years and a little. */
+const NOTICE_SEARCH_DAYS = 800;
+
+/** The first day that can be asked for on `today` with the notice a kind asks, counted in working days. */
+export function earliestNoticed(
+	kind: { key: KindKey; noticeDays: number },
+	today: Day,
+	worksOn: WorksOn,
+): Day {
+	const asked = noticeAsked(kind);
+	if (asked === 0) return today;
+	let counted = 0;
+	for (let ahead = 1; ahead <= NOTICE_SEARCH_DAYS; ahead++) {
+		const day = addDays(today, ahead);
+		if (worksOn(day) && ++counted === asked) return day;
+	}
+	return addDays(today, asked);
+}
+
+/** Whether asking on `today` for leave whose first day taken is `firstDay` gives less notice than the kind asks. */
 export function isShortNotice(
 	kind: { key: KindKey; noticeDays: number },
 	today: Day,
-	startsOn: Day,
+	firstDay: Day,
+	worksOn: WorksOn,
 ): boolean {
 	const asked = noticeAsked(kind);
-	return asked > 0 && noticeGiven(today, startsOn) < asked;
+	return asked > 0 && noticeGiven(today, firstDay, worksOn) < asked;
 }
 
-/** Days as words: "1 day", "14 days". */
-export function daysLabel(days: number): string {
-	return `${days} ${days === 1 ? "day" : "days"}`;
+/** Working days as words: "1 working day", "14 working days". */
+export function workingDaysLabel(days: number): string {
+	return `${days} ${days === 1 ? "working day" : "working days"}`;
 }
 
-/** The notice a request gave, as an approver reads it: "Short notice (3 days)", "14 days' notice". */
+/** The notice a request gave, as an approver reads it: "Short notice (3 working days)", "14 working days' notice". */
 export function noticeLabel(request: { noticeDays: number; shortNotice: boolean }): string {
 	const given = Math.max(0, request.noticeDays);
-	if (request.shortNotice) return `Short notice (${daysLabel(given)})`;
-	return given === 1 ? "1 day's notice" : `${given} days' notice`;
+	if (request.shortNotice) return `Short notice (${workingDaysLabel(given)})`;
+	return given === 1 ? "1 working day's notice" : `${given} working days' notice`;
 }
 
-// Requests for overtime and weekend work.
+// Requests for overtime, weekend work and work on a public holiday.
 
 /**
- * Whether the organisation's rules let a person ask for `kind`: only while
- * overtime needs pre-approval, and weekend work only while time on a day not
- * worked counts as overtime (TS-095).
+ * Whether the organisation's rules let a person ask for `kind`: overtime only
+ * while it needs pre-approval, and weekend work only while time on a day not
+ * worked counts as overtime too (TS-095); work on a public holiday wherever
+ * overtime is allowed at all, as it always needs pre-approval (decision 52).
  */
 export function mayAskFor(rules: Pick<TimesheetRules, "overtime" | "weekend">, kind: WorkKind) {
+	if (kind === "holiday") return rules.overtime !== "none";
 	if (rules.overtime !== "approval") return false;
 	return kind === "overtime" || rules.weekend === "overtime";
 }
@@ -703,7 +873,7 @@ export function mayAskFor(rules: Pick<TimesheetRules, "overtime" | "weekend">, k
 /**
  * The days of a span a request of `kind` applies to: working days without a
  * holiday or whole-day leave for overtime, days the week does not work (and
- * no public holiday) for weekend work.
+ * no public holiday) for weekend work, public holidays for holiday work.
  */
 export function workDays(
 	calendar: LeaveCalendar,
@@ -713,6 +883,7 @@ export function workDays(
 	return daysFrom(span.startsOn, span.endsOn).filter((day) => {
 		const { is } = dayStatus(calendar, day);
 		if (kind === "weekend") return is.kind === "not-a-working-day";
+		if (kind === "holiday") return is.kind === "holiday";
 		return is.kind === "working" || (is.kind === "leave" && is.halves === 1);
 	});
 }

@@ -76,9 +76,11 @@ export function WorkFields({ kind, today }: { kind: WorkKind; today: Day }) {
 				inputMode="decimal"
 				isRequired
 				description={
-					kind === "overtime"
-						? `Beyond the day's expected hours, as 2 or 1:30, at most ${MOST_WORK_MINUTES_A_DAY / 60}. Counted on working days only.`
-						: `As 4 or 3:30, at most ${MOST_WORK_MINUTES_A_DAY / 60}. Counted on days the working week does not work.`
+					{
+						overtime: `Beyond the day's expected hours, as 2 or 1:30, at most ${MOST_WORK_MINUTES_A_DAY / 60}. Counted on working days only.`,
+						weekend: `As 4 or 3:30, at most ${MOST_WORK_MINUTES_A_DAY / 60}. Counted on days the working week does not work.`,
+						holiday: `As 4 or 3:30, at most ${MOST_WORK_MINUTES_A_DAY / 60}. Counted on public holidays only, as overtime.`,
+					}[kind]
 				}
 			/>
 			<TextField

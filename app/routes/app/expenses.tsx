@@ -32,7 +32,7 @@ import {
 	termsOf,
 } from "~/expenses/expenses.server";
 import { receiptPath } from "~/expenses/paths";
-import { overLabel } from "~/leave/rules";
+import { overDaysRefusal } from "~/leave/rules";
 import { daysOver } from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
 import { type LockReason, lockDateNotice } from "~/locks/locks";
@@ -361,14 +361,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 						: "Week submitted. Its time and expenses are locked until it is decided.",
 				);
 			}
-			const over = (("over" in submitted && submitted.over) || [])
-				.map((d) => `${formatDay(d.day, "short")} ${overLabel(d.overMinutes).toLowerCase()}`)
-				.join(", ");
 			const problem: Record<NotMoved, string> = {
 				"not-yet": "A week can be submitted once it has begun.",
 				running: "Stop the timer before you submit the week.",
 				"not-from-here": "This week is already submitted or approved.",
-				over: `Correct the days over their limit before you submit the week: ${over}.`,
+				over: overDaysRefusal(("over" in submitted && submitted.over) || []),
 			};
 			return declined(problem[submitted.reason], 409);
 		}

@@ -35,7 +35,7 @@ export interface LeaveSettingsData {
 
 type Task = "kind" | "add-holiday" | "remove-holiday";
 
-/** The notice a kind asks for, as its row reads: "14 days' notice", "No notice", "Never needs notice". */
+/** The notice a kind asks for, as its row reads: "14 working days' notice", "No notice", "Never needs notice". */
 const noticeText = (kind: { key: KindKey; noticeDays: number }) => {
 	if (!heldToNotice(kind)) return "Never needs notice";
 	return kind.noticeDays > 0
@@ -209,7 +209,7 @@ export function LeaveSettings({
 										inputMode="numeric"
 										autoComplete="off"
 										maxLength={3}
-										description={`Whole days between asking and the first day off, at most ${LONGEST_NOTICE_DAYS}. Empty or 0 is none. Asking later needs a reason, or is refused, as Timesheet rules say.`}
+										description={`Working days between asking and the first day taken, public holidays not counted, at most ${LONGEST_NOTICE_DAYS}. Empty or 0 is none. Asking later needs a reason, or is refused, as Timesheet rules say.`}
 									/>
 								) : (
 									<p>Never needs notice: people ask for it when they are ill.</p>
@@ -237,6 +237,14 @@ export function LeaveSettings({
 					isRequired
 					maxLength={LEAVE_NAME_MAX_LENGTH}
 				/>
+				<p>
+					A public holiday takes no time. If anyone has already tracked time on the day, Add says
+					whose and how much, and adds the holiday only once this is ticked: for them the day stays
+					a working day, and their time stands.
+				</p>
+				<Checkbox name="keepTime" value="on">
+					Keep the time already tracked on it
+				</Checkbox>
 			</FormSheet>
 
 			<FormSheet

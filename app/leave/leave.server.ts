@@ -2,10 +2,10 @@ import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { changes, record } from "~/activity/activity.server";
+import { changes, record, recordStatement } from "~/activity/activity.server";
 import { leaveRefusersOf } from "~/approvals/refusals.server";
-import { among, type OrganisationScope, type ScopedAccessor, users } from "~/db";
-import { lockDateOf, lockReachFor } from "~/locks/locks.server";
+import { among, type OrganisationScope, type ScopedAccessor, users, uuidv7 } from "~/db";
+import { lockDateOf, lockReachFor, lockReasonsOn } from "~/locks/locks.server";
 import {
 	type Access,
 	isAdministrator,
@@ -19,7 +19,7 @@ import { nameOrEmail } from "~/organisations/people";
 import { type Timetables, timetableFor, timetablesOf } from "~/schedules/schedules.server";
 import { type Person, peopleOf } from "~/teams/people.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
-import { formatDayWithYear } from "~/time/format";
+import { formatDay, formatDayWithYear, formatDuration } from "~/time/format";
 
 import {
 	type Balance,
@@ -29,6 +29,7 @@ import {
 	expectedMinutes,
 	halfDaysByYear,
 	halfDaysTaken,
+	isWorkingDay,
 	type LeaveCalendar,
 	type LeaveRequestLike,
 	type LeaveSpan,
@@ -46,15 +47,20 @@ import {
 	LONGEST_REQUEST_DAYS,
 } from "./kinds";
 import {
-	daysLabel,
+	dayLimit,
 	earliestNoticed,
+	firstDayTaken,
 	heldToNotice,
 	isShortNotice,
 	noticeAsked,
 	noticeGiven,
 	noticeLabel,
 	type ShortNoticeRule,
+	type WorksOn,
+	wholeMinutes,
+	workingDaysLabel,
 } from "./rules";
+import { rulesCalendarOf, trackedOn } from "./rules.server";
 
 /**
  * Leave as the database holds it (TS-061): the organisation's kinds, working
@@ -83,6 +89,8 @@ export interface PublicHoliday {
 	id: string;
 	day: Day;
 	name: string;
+	/** The people whose time already on the day was kept when it was added: for them it stays a working day (TR-10). */
+	workedBy: string[];
 }
 
 /** The organisation's public holidays from `first` to `last`, or all of them, by day. */
@@ -94,7 +102,7 @@ export async function publicHolidaysOf(
 		(h) => (range ? and(gte(h.day, range.first), lte(h.day, range.last)) : undefined),
 		{ orderBy: (h) => [asc(h.day)] },
 	);
-	return rows.map(({ id, day, name }) => ({ id, day, name }));
+	return rows.map(({ id, day, name, workedBy }) => ({ id, day, name, workedBy: workedBy ?? [] }));
 }
 
 /** A request with its kind, as the pages read it. */
@@ -148,6 +156,8 @@ export interface LeaveContext {
 	timetables: Timetables;
 	/** Public holidays in the run, by day; empty while public holidays are switched off. */
 	holidays: Map<Day, string>;
+	/** The people for whom a holiday of the run stays a working day, as their time on it was kept (TR-10). */
+	keptBy: Map<Day, ReadonlySet<string>>;
 	/** Approved requests of the people that touch the run. */
 	approved: LeaveRequest[];
 }
@@ -176,19 +186,28 @@ export async function leaveContext(
 				),
 	]);
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
+	const shown = holidaysOn ? holidays : [];
 	return {
 		kinds,
 		timetables,
-		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
+		holidays: new Map(shown.map((h) => [h.day, h.name])),
+		keptBy: new Map(
+			shown.filter((h) => h.workedBy.length > 0).map((h) => [h.day, new Set(h.workedBy)]),
+		),
 		approved: rows.map((row) => requestOf(row, kinds)),
 	};
 }
 
-/** The calendar of one person out of a `LeaveContext`. */
+/** The calendar of one person out of a `LeaveContext`: a holiday their time was kept on is a working day for them. */
 export function calendarOf(context: LeaveContext, userId: string): LeaveCalendar {
+	const kept = [...context.keptBy].filter(([, people]) => people.has(userId));
+	const holidays =
+		kept.length === 0
+			? context.holidays
+			: new Map([...context.holidays].filter(([day]) => !kept.some(([keptOn]) => keptOn === day)));
 	return {
 		timetable: context.timetables(userId),
-		holidays: context.holidays,
+		holidays,
 		leave: context.approved.filter((r) => r.userId === userId),
 	};
 }
@@ -272,6 +291,31 @@ async function takenByYear(scope: OrganisationScope, userId: string, span: Leave
 		byYear: halfDaysByYear(span, calendar),
 		taken: halfDaysTaken(span, calendar),
 	};
+}
+
+/** How far ahead notice is counted: past the most notice a kind may ask for, in working days. */
+const NOTICE_AHEAD_DAYS = 800;
+
+/**
+ * Whether `userId` works on a day from `today` on, as notice counts it
+ * (decision 51): their schedule works it and it is no public holiday.
+ */
+export async function worksOnOf(
+	scope: OrganisationScope,
+	userId: string,
+	today: Day,
+): Promise<WorksOn> {
+	const [kinds, timetable, holidays] = await Promise.all([
+		leaveKindsOf(scope),
+		timetableFor(scope, userId),
+		publicHolidaysOf(scope, { first: today, last: addDays(today, NOTICE_AHEAD_DAYS) }),
+	]);
+	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
+	const calendar = {
+		timetable,
+		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
+	};
+	return (day) => isWorkingDay(calendar, day);
 }
 
 /** A request as a person makes it. */
@@ -358,15 +402,18 @@ export async function requestLeave(
 			problem: { field: "endsOn", message: "These days hold no working day to take." },
 		};
 	}
-	const noticeDays = noticeGiven(asking.today, span.startsOn);
-	const short = isShortNotice(kind, asking.today, span.startsOn);
+	// Notice runs to the first day the request takes, in working days (TR-16, decision 51).
+	const worksOn = await worksOnOf(scope, userId, asking.today);
+	const firstDay = firstDayTaken(span, (day) => worksOn(day) && isWorkingDay(calendar, day));
+	const noticeDays = noticeGiven(asking.today, firstDay, worksOn);
+	const short = isShortNotice(kind, asking.today, firstDay, worksOn);
 	const noticeReason = short ? request.noticeReason?.trim() || null : null;
 	if (short && asking.shortNotice === "refused") {
 		return {
 			ok: false,
 			problem: {
 				field: "kindId",
-				message: `${kind.name} needs ${noticeLabel({ noticeDays: noticeAsked(kind), shortNotice: false })} here: the earliest first day is ${formatDayWithYear(earliestNoticed(kind, asking.today))}.`,
+				message: `${kind.name} needs ${noticeLabel({ noticeDays: noticeAsked(kind), shortNotice: false })} here: the earliest first day is ${formatDayWithYear(earliestNoticed(kind, asking.today, worksOn))}.`,
 			},
 		};
 	}
@@ -375,7 +422,7 @@ export async function requestLeave(
 			ok: false,
 			problem: {
 				field: "noticeReason",
-				message: `This is short notice (${daysLabel(Math.max(0, noticeDays))}): say why in one line.`,
+				message: `This is short notice (${workingDaysLabel(Math.max(0, noticeDays))}): say why in one line.`,
 			},
 		};
 	}
@@ -426,6 +473,17 @@ export async function requestLeave(
 
 	const alone = kind.needsApproval && !(await someoneElseDecides(scope, userId));
 	const status: LeaveStatus = kind.needsApproval && !alone ? "pending" : "approved";
+	if (status === "approved") {
+		// Approved as it is made: it may not land on a day that holds time (TR-04).
+		const blocked = await leaveBlockedBy(
+			scope,
+			userId,
+			{ ...span, kindKey: kind.key, kindName: kind.name },
+			null,
+			now.getTime(),
+		);
+		if (blocked) return { ok: false, problem: { field: "form", message: blocked } };
+	}
 	const [made] = await scope.leaveRequests.insert({
 		userId,
 		kindId: kind.id,
@@ -458,6 +516,98 @@ const LEAVE_FIELDS = ["kindId", "startsOn", "endsOn", "startsHalf", "endsHalf", 
 async function reachesLockDate(scope: OrganisationScope, row: { startsOn: Day }) {
 	const lockedThrough = await lockDateOf(scope.organisationId);
 	return lockedThrough !== null && row.startsOn <= lockedThrough;
+}
+
+/** A day of a request that holds time leave cannot share, and how much. */
+export interface TimeInTheWay {
+	day: Day;
+	minutes: number;
+}
+
+/**
+ * The days of `span` on which leave and the time `userId` has tracked cannot
+ * share the day, by the rule time on a leave day is held to (TR-04): a day the
+ * leave closes, with any time on it; a day of half-day leave holding more
+ * regular time than it then takes. A running entry counts to `now`.
+ */
+export async function timeInTheWay(
+	scope: OrganisationScope,
+	userId: string,
+	span: LeaveSpan & { kindKey: KindKey; kindName: string },
+	now: number,
+): Promise<TimeInTheWay[]> {
+	const entries = await scope.timeEntries.select((e) =>
+		and(eq(e.userId, userId), gte(e.spentOn, span.startsOn), lte(e.spentOn, span.endsOn)),
+	);
+	if (entries.length === 0) return [];
+	const calendar = await rulesCalendarOf(scope, userId, span.startsOn, span.endsOn);
+	const withLeave = {
+		...calendar,
+		leave: [...calendar.leave, { ...span, userId, status: "approved" as const }],
+	};
+	const timed = entries.map((row) => ({
+		id: row.id,
+		startedAt: row.startedAt.getTime(),
+		endedAt: row.endedAt?.getTime() ?? null,
+		overtime: row.overtime,
+		day: row.spentOn,
+	}));
+	const inTheWay: TimeInTheWay[] = [];
+	for (const day of daysFrom(span.startsOn, span.endsOn)) {
+		const tracked = trackedOn(timed, day, now);
+		const minutes = wholeMinutes(tracked.regularMs + tracked.overtimeMs);
+		if (minutes === 0) continue;
+		const limit = dayLimit(withLeave, day);
+		if (limit.status.is.kind !== "leave") continue;
+		if (limit.closed || wholeMinutes(tracked.regularMs) > limit.regularMinutes) {
+			inTheWay.push({ day, minutes });
+		}
+	}
+	return inTheWay;
+}
+
+/** The time in the way in words: "7:30 tracked on Tue 10", "7:30 tracked on Tue 10 and 2:00 on Wed 11". */
+export function trackedWords(inTheWay: readonly TimeInTheWay[]): string {
+	return new Intl.ListFormat("en-GB", { type: "conjunction" }).format(
+		inTheWay.map(
+			({ day, minutes }, index) =>
+				`${formatDuration(minutes * 60)}${index === 0 ? " tracked" : ""} on ${formatDay(day, "short")}`,
+		),
+	);
+}
+
+/**
+ * Why leave `span` of `userId` cannot be approved now, or null when it can: a
+ * day of it in a submitted or approved week (TR-04, as the lock date is), or
+ * time on its days that leave cannot share. `who` names the person to someone
+ * else; null speaks to the person.
+ */
+async function leaveBlockedBy(
+	scope: OrganisationScope,
+	userId: string,
+	span: LeaveSpan & { kindKey: KindKey; kindName: string },
+	who: string | null,
+	now: number,
+): Promise<string | null> {
+	const days = daysFrom(span.startsOn, span.endsOn);
+	const [locks, statuses] = await Promise.all([
+		lockReasonsOn(scope, userId, days),
+		daysOf(scope, userId, span.startsOn, span.endsOn),
+	]);
+	const takes = new Set(statuses.filter((s) => s.is.kind === "working").map((s) => s.day));
+	const inWeek = days.find((day) => {
+		const reason = locks.get(day);
+		return takes.has(day) && (reason === "submitted" || reason === "approved");
+	});
+	if (inWeek) {
+		return `${formatDay(inWeek, "short")} is in a submitted or approved week, so leave cannot be taken on it until the week is withdrawn or reopened.`;
+	}
+	const inTheWay = await timeInTheWay(scope, userId, span, now);
+	if (inTheWay.length === 0) return null;
+	const share = inTheWay.length === 1 ? "that day" : "those days";
+	return who === null
+		? `You have ${trackedWords(inTheWay)}. Leave and time cannot share ${share}: remove the time first.`
+		: `${who} has ${trackedWords(inTheWay)}. Leave and time cannot share ${share}: the time is removed first, or the request refused.`;
 }
 
 /** Records a step on a request that has been taken. */
@@ -515,9 +665,20 @@ export async function someoneElseDecides(
 /**
  * What a step on a request came to. `locked`: its days reach the lock date
  * (TS-065). `refused-before`: someone else refused these days, so only they,
- * an owner or an admin may approve them (D5, decision 47).
+ * an owner or an admin may approve them (D5, decision 47). `begun`: the leave
+ * has begun (TR-18f).
  */
-export type Stepped = "done" | "missing" | "not-allowed" | "stale" | "locked" | "refused-before";
+export type Stepped =
+	| "done"
+	| "missing"
+	| "not-allowed"
+	| "stale"
+	| "locked"
+	| "refused-before"
+	| "begun";
+
+/** A step refused with its own sentence: whose time is in the way, or the lock date reached (TR-04, TR-08). */
+export type Refused = { problem: string };
 
 async function requestRow(scope: OrganisationScope, id: string) {
 	const [row] = await scope.leaveRequests.select((r) => eq(r.id, id), { limit: 1 });
@@ -534,7 +695,6 @@ export async function withdrawLeave(
 	if (!row) return "missing";
 	if (!mayChangeTimeOf(access, row.userId)) return "not-allowed";
 	if (row.status !== "pending") return "stale";
-	if (await reachesLockDate(scope, row)) return "locked";
 	const changed = await scope.leaveRequests.update({ status: "withdrawn" }, (r) =>
 		and(eq(r.id, row.id), eq(r.status, "pending")),
 	);
@@ -546,14 +706,19 @@ export async function withdrawLeave(
 /** A decision on a pending request. */
 export type LeaveDecision = { action: "approved" | "refused"; comment: string | null };
 
-/** Approves or refuses a pending request, as `access`. A decided request is never decided again. */
+/**
+ * Approves or refuses a pending request, as `access`. A decided request is
+ * never decided again. Refusing changes no day, so the lock date never stands
+ * in its way (TR-08); approving is refused while a day of the request is on or
+ * before the lock date, or holds time leave cannot share (TR-04), with why.
+ */
 export async function decideLeave(
 	scope: OrganisationScope,
 	access: Access,
 	requestId: string,
 	decision: LeaveDecision,
 	now = new Date(),
-): Promise<Stepped> {
+): Promise<Stepped | Refused> {
 	const row = await requestRow(scope, requestId);
 	if (!row) return "missing";
 	if (!mayDecideLeaveOf(access, row.userId)) return "not-allowed";
@@ -564,7 +729,24 @@ export async function decideLeave(
 	) {
 		return "refused-before";
 	}
-	if (await reachesLockDate(scope, row)) return "locked";
+	if (decision.action === "approved") {
+		const lockedThrough = await lockDateOf(scope.organisationId);
+		if (lockedThrough !== null && row.startsOn <= lockedThrough) {
+			return {
+				problem: `${formatDay(row.startsOn, "short")} is on or before the lock date, so this leave cannot be approved. It can be withdrawn, and the days from ${formatDay(addDays(lockedThrough, 1), "short")}, the first open day, asked for again.`,
+			};
+		}
+		const [kinds, names] = await Promise.all([leaveKindsOf(scope), namesOf([row.userId])]);
+		const kind = kinds.find((k) => k.id === row.kindId);
+		const blocked = await leaveBlockedBy(
+			scope,
+			row.userId,
+			{ ...row, kindKey: kind?.key ?? "annual", kindName: kind?.name ?? "" },
+			names.get(row.userId) ?? "This person",
+			now.getTime(),
+		);
+		if (blocked) return { problem: blocked };
+	}
 	const changed = await scope.leaveRequests.update(
 		{
 			status: decision.action,
@@ -600,7 +782,8 @@ export async function cancelLeave(
 	const row = await requestRow(scope, requestId);
 	if (!row) return "missing";
 	if (!mayCancelLeaveOf(access, row.userId)) return "not-allowed";
-	if (row.status !== "approved" || row.startsOn <= (await todayOf(row.userId))) return "stale";
+	if (row.status !== "approved") return "stale";
+	if (row.startsOn <= (await todayOf(row.userId))) return "begun";
 	if (await reachesLockDate(scope, row)) return "locked";
 	const changed = await scope.leaveRequests.update(
 		{ status: "cancelled", decidedBy: access.userId, decidedAt: now, comment: reason },
@@ -630,6 +813,8 @@ export interface RequestToDecide extends LeaveRequest {
 	decidedByName: string | null;
 	/** Whether the viewer may cancel it now. */
 	cancellable: boolean;
+	/** Of a pending request, the time on its days that leave cannot share: "7:30 tracked on Tue 10" (TR-04). */
+	inTheWay: string | null;
 }
 
 /**
@@ -684,6 +869,7 @@ export async function requestsToDecide(
 			}),
 			decidedByName: (row.decidedBy && deciders.get(row.decidedBy)) || null,
 			cancellable: false,
+			inTheWay: null,
 		};
 		if (request.status === "pending") {
 			if (mayDecideLeaveOf(access, person.id)) pending.push(listed);
@@ -691,6 +877,13 @@ export async function requestsToDecide(
 			upcoming.push({ ...listed, cancellable: mayCancelLeaveOf(access, person.id) });
 		}
 	}
+	const now = Date.now();
+	await Promise.all(
+		pending.map(async (request) => {
+			const inTheWay = await timeInTheWay(scope, request.userId, request, now);
+			if (inTheWay.length > 0) request.inTheWay = trackedWords(inTheWay);
+		}),
+	);
 	return { pending, upcoming };
 }
 
@@ -714,42 +907,138 @@ export interface KindChange {
 	noticeDays: number;
 }
 
-/** Changes one of the organisation's kinds; false when it has no such kind. */
+/** What the activity log records of a kind's change. */
+const KIND_FIELDS = [
+	"name",
+	"enabled",
+	"needsApproval",
+	"allowanceHalfDays",
+	"noticeDays",
+] as const;
+
+/** Changes one of the organisation's kinds, recorded with before and after (TR-11); false when it has no such kind. */
 export async function changeKind(
 	scope: OrganisationScope,
+	actorId: string,
 	kindId: string,
 	change: KindChange,
 ): Promise<boolean> {
 	const [row] = await scope.leaveKinds.select((k) => eq(k.id, kindId), { limit: 1 });
 	if (!row) return false;
 	const holiday = row.key === HOLIDAY_KIND;
-	const changed = await scope.leaveKinds.update(
-		{
-			name: change.name,
-			enabled: change.enabled,
-			needsApproval: holiday ? false : change.needsApproval,
-			allowanceHalfDays: holiday ? null : change.allowanceHalfDays,
-			noticeDays: heldToNotice({ key: KindKey.parse(row.key) }) ? change.noticeDays : 0,
-		},
-		(k) => eq(k.id, row.id),
-	);
+	const after = {
+		name: change.name,
+		enabled: change.enabled,
+		needsApproval: holiday ? false : change.needsApproval,
+		allowanceHalfDays: holiday ? null : change.allowanceHalfDays,
+		noticeDays: heldToNotice({ key: KindKey.parse(row.key) }) ? change.noticeDays : 0,
+	};
+	const summary = changes(row, after, KIND_FIELDS);
+	const [changed] = await scope.batch([
+		scope.leaveKinds.statements.update(after, (k) => eq(k.id, row.id)),
+		recordStatement(
+			scope,
+			actorId,
+			"leave_kind.changed",
+			{ type: "leave_kind", id: row.id, ownerId: null },
+			summary,
+		),
+	]);
 	return changed.length === 1;
 }
 
-/** Adds a public holiday; false when the organisation already has one on that day. */
+/** What adding a public holiday came to. */
+export type HolidayAdded =
+	| { ok: true; kept: string | null }
+	| { ok: false; reason: "exists" }
+	| { ok: false; reason: "time"; held: string };
+
+/**
+ * Adds a public holiday, recorded (TR-11). On a day that already holds
+ * people's time (TR-10) it is refused, saying whose and how much, unless
+ * `keepTime` confirms it: then the holiday is added, and for those people the
+ * day stays a working day, so the time they tracked stands.
+ */
 export async function addPublicHoliday(
 	scope: OrganisationScope,
+	actorId: string,
 	holiday: { day: Day; name: string },
-): Promise<boolean> {
-	const existing = await scope.publicHolidays.select((h) => eq(h.day, holiday.day), { limit: 1 });
-	if (existing.length > 0) return false;
-	await scope.publicHolidays.insert(holiday);
-	return true;
+	keepTime: boolean,
+): Promise<HolidayAdded> {
+	const [existing, entries] = await Promise.all([
+		scope.publicHolidays.select((h) => eq(h.day, holiday.day), { limit: 1 }),
+		scope.timeEntries.select((e) => eq(e.spentOn, holiday.day)),
+	]);
+	if (existing.length > 0) return { ok: false, reason: "exists" };
+	const now = Date.now();
+	const minutesOf = new Map<string, number>();
+	for (const entry of entries) {
+		const ms = Math.max(0, (entry.endedAt?.getTime() ?? now) - entry.startedAt.getTime());
+		minutesOf.set(entry.userId, (minutesOf.get(entry.userId) ?? 0) + ms);
+	}
+	const names = await namesOf([...minutesOf.keys()]);
+	const whose = [...minutesOf]
+		.map(([userId, ms]) => ({
+			userId,
+			name: names.get(userId) ?? "A former member",
+			minutes: wholeMinutes(ms),
+		}))
+		.sort((a, b) => a.name.localeCompare(b.name));
+	const list = new Intl.ListFormat("en-GB", { type: "conjunction" });
+	const held =
+		whose.length === 0
+			? null
+			: list.format(
+					whose.map(
+						(w, index) =>
+							`${w.name} has ${formatDuration(w.minutes * 60)}${index === 0 ? ` tracked on ${formatDay(holiday.day, "short")}` : ""}`,
+					),
+				);
+	if (held !== null && !keepTime) return { ok: false, reason: "time", held };
+	const id = uuidv7();
+	const workedBy = whose.map((w) => w.userId);
+	await scope.batch([
+		scope.publicHolidays.statements.insert({
+			id,
+			...holiday,
+			workedBy: workedBy.length > 0 ? workedBy : null,
+		}),
+		recordStatement(
+			scope,
+			actorId,
+			"public_holiday.added",
+			{ type: "public_holiday", id, ownerId: null },
+			changes(null, { ...holiday, keptFor: held }, ["day", "name", "keptFor"]),
+		),
+	]);
+	return {
+		ok: true,
+		kept:
+			whose.length === 0
+				? null
+				: list.format(whose.map((w) => `${w.name}'s ${formatDuration(w.minutes * 60)}`)),
+	};
 }
 
-/** Removes a public holiday; false when the organisation has no such holiday. */
-export async function removePublicHoliday(scope: OrganisationScope, id: string): Promise<boolean> {
-	return (await scope.publicHolidays.delete((h) => eq(h.id, id))).length === 1;
+/** Removes a public holiday, recorded (TR-11); false when the organisation has no such holiday. */
+export async function removePublicHoliday(
+	scope: OrganisationScope,
+	actorId: string,
+	id: string,
+): Promise<boolean> {
+	const [row] = await scope.publicHolidays.select((h) => eq(h.id, id), { limit: 1 });
+	if (!row) return false;
+	const [removed] = await scope.batch([
+		scope.publicHolidays.statements.delete((h) => eq(h.id, row.id)),
+		recordStatement(
+			scope,
+			actorId,
+			"public_holiday.removed",
+			{ type: "public_holiday", id: row.id, ownerId: null },
+			changes(row, null, ["day", "name"]),
+		),
+	]);
+	return removed.length === 1;
 }
 
 /** One person's leave over a run of days, and where they stand now. */

@@ -317,7 +317,8 @@ function Grid({
 								Day total
 							</th>
 							{sheet.days.map((each) => {
-								const over = ruleOf(each.day)?.overMinutes ?? 0;
+								const dayRule = ruleOf(each.day);
+								const over = dayRule?.overMinutes ?? 0;
 								return (
 									<td
 										key={each.day}
@@ -343,7 +344,7 @@ function Grid({
 												)}
 											>
 												<span className="sr-only">, </span>
-												{overLabel(over)}
+												{overLabel(over, dayRule?.moreThanADay)}
 											</span>
 										)}
 									</td>

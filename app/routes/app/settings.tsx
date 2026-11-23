@@ -29,15 +29,23 @@ import {
 	NON_WORKING_RULE_LABELS,
 	NON_WORKING_RULES,
 	NonWorkingRule,
+	nextMondayAfter,
 	OVERTIME_RULE_LABELS,
 	OVERTIME_RULES,
 	OvertimeRule,
+	type RulesVersion,
 	SHORT_NOTICE_LABELS,
 	SHORT_NOTICE_RULES,
 	ShortNoticeRule,
 	type TimesheetRules,
 } from "~/leave/rules";
-import { setTimesheetRules, timesheetRulesOf } from "~/leave/rules.server";
+import {
+	nextRulesOf,
+	rulesEffectOf,
+	rulesSavedSentence,
+	setTimesheetRules,
+	timesheetRulesOf,
+} from "~/leave/rules.server";
 import { parseRequest } from "~/lib/validate";
 import { LockSettings } from "~/locks/LockSettings";
 import { LOCK_FORMS, lockAction, lockingData } from "~/locks/settings.server";
@@ -97,13 +105,15 @@ export async function loader({ context }: Route.LoaderArgs) {
 	const canChange = allows(role, { organization: ["update"] });
 	const scope = organisationScope(env.DB, organisation.id);
 	const now = new Date();
+	const today = dayOf(now.getTime(), organisation.timeZone);
 	const isOwner = role === "owner";
-	const [book, kinds, holidays, rules, categories, terms, locking, standing, grant] =
+	const [book, kinds, holidays, rules, next, categories, terms, locking, standing, grant] =
 		await Promise.all([
 			scheduleBookOf(scope),
 			leaveKindsOf(scope),
 			publicHolidaysOf(scope),
-			timesheetRulesOf(organisation.id),
+			timesheetRulesOf(organisation.id, today),
+			nextRulesOf(organisation.id, today),
 			listCategories(scope),
 			termsOf(organisation.id),
 			lockingData(organisation, now.getTime()),
@@ -134,7 +144,13 @@ export async function loader({ context }: Route.LoaderArgs) {
 			holidays,
 		},
 		/** Overtime, weekend work and short-notice leave (TS-090). */
-		rules,
+		rules: {
+			now: rules,
+			/** A dated change still to come (TR-10), which the sheet opens on. */
+			next,
+			/** The day a change applies from unless the admin chooses another: next week's first day. */
+			from: next?.effectiveFrom ?? nextMondayAfter(today),
+		},
 		/** The expense categories (TS-070). */
 		expenses: {
 			currency: terms.currency,
@@ -242,8 +258,16 @@ const form = z.discriminatedUnion("intent", [
 		overtimeDayCap: CapHours,
 		overtimeWeekCap: CapHours,
 		shortNotice: ShortNoticeRule,
+		// The day the rules apply from (TR-10); empty is the Monday of next week.
+		from: z.preprocess((value) => (value === "" ? undefined : value), Day.optional()),
 	}),
-	z.object({ intent: z.literal("add-holiday"), day: Day, name: LeaveName }),
+	z.object({
+		intent: z.literal("add-holiday"),
+		day: Day,
+		name: LeaveName,
+		// Confirms that time already tracked on the day stands (TR-10).
+		keepTime: Ticked,
+	}),
 	z.object({ intent: z.literal("remove-holiday"), holidayId: z.string().min(1).max(64) }),
 	z.object({
 		intent: z.literal("add-category"),
@@ -290,7 +314,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "clients": {
 			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
 			if (input.intent === "time-zone") {
-				await changeGeneral(env.DB, organisation.id, { timeZone: input.timeZone });
+				await changeGeneral(env.DB, organisation.id, { timeZone: input.timeZone }, user.id);
 				return done(`The default time zone is now ${zoneLabel(input.timeZone)}.`);
 			}
 			if (input.intent === "week-start") {
@@ -299,11 +323,11 @@ export async function action({ request, context }: Route.ActionArgs) {
 						? null
 						: await weekStartRefusal(organisationScope(env.DB, organisation.id));
 				if (waiting) return declined(waiting, 409);
-				await changeGeneral(env.DB, organisation.id, { weekStartsOn: input.weekStartsOn });
+				await changeGeneral(env.DB, organisation.id, { weekStartsOn: input.weekStartsOn }, user.id);
 				return done(`Weeks now start on ${weekdayName(input.weekStartsOn)}.`);
 			}
 			const clientsEnabled = input.clientsEnabled === "on";
-			await changeGeneral(env.DB, organisation.id, { clientsEnabled });
+			await changeGeneral(env.DB, organisation.id, { clientsEnabled }, user.id);
 			return done(
 				clientsEnabled
 					? "Clients is on. Everyone sees each project's client."
@@ -315,13 +339,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "budget-hours": {
 			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
 			if (input.intent === "currency") {
-				await changeGeneral(env.DB, organisation.id, { currency: input.currency });
+				await changeGeneral(env.DB, organisation.id, { currency: input.currency }, user.id);
 				return done(
 					`Amounts are now in ${input.currency} unless a client or a project has its own.`,
 				);
 			}
 			const counts = input.countNonBillable === "on";
-			await changeGeneral(env.DB, organisation.id, { budgetCountsNonBillable: counts });
+			await changeGeneral(env.DB, organisation.id, { budgetCountsNonBillable: counts }, user.id);
 			return done(
 				counts
 					? "Non-billable hours now count against hour budgets."
@@ -335,7 +359,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
 			const scope = organisationScope(env.DB, organisation.id);
 			if (input.intent === "kind") {
-				const changed = await changeKind(scope, input.kindId, {
+				const changed = await changeKind(scope, user.id, input.kindId, {
 					name: input.name,
 					enabled: input.enabled,
 					needsApproval: input.needsApproval,
@@ -347,25 +371,54 @@ export async function action({ request, context }: Route.ActionArgs) {
 					: declined("That kind of leave is not there.", 404);
 			}
 			if (input.intent === "add-holiday") {
-				return (await addPublicHoliday(scope, { day: input.day, name: input.name }))
-					? done(`${input.name} is a public holiday.`)
-					: declined("There is already a public holiday on that day.", 409);
+				const added = await addPublicHoliday(
+					scope,
+					user.id,
+					{ day: input.day, name: input.name },
+					input.keepTime,
+				);
+				if (added.ok) {
+					return done(
+						added.kept === null
+							? `${input.name} is a public holiday.`
+							: `${input.name} is a public holiday. The time already tracked on it stands: ${added.kept}.`,
+					);
+				}
+				return added.reason === "exists"
+					? declined("There is already a public holiday on that day.", 409)
+					: declined(
+							`${added.held}. To make it a public holiday and keep that time, tick "Keep the time already tracked on it".`,
+							409,
+						);
 			}
-			return (await removePublicHoliday(scope, input.holidayId))
+			return (await removePublicHoliday(scope, user.id, input.holidayId))
 				? done("Public holiday removed.")
 				: declined("That public holiday is no longer there.", 404);
 		}
 
 		case "timesheet-rules": {
 			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
-			await setTimesheetRules(organisation.id, user.id, {
+			const from = input.from ?? nextMondayAfter(dayOf(Date.now(), organisation.timeZone));
+			const next = {
 				overtime: input.overtime,
 				weekend: input.weekend,
 				overtimeDayCap: input.overtimeDayCap,
 				overtimeWeekCap: input.overtimeWeekCap,
-				shortNotice: input.shortNotice,
-			});
-			return done("The timesheet rules are saved.");
+			};
+			const before = await timesheetRulesOf(organisation.id, from);
+			const dated = (Object.keys(next) as (keyof typeof next)[]).some(
+				(field) => before[field] !== next[field],
+			);
+			const effect = dated
+				? await rulesEffectOf(organisationScope(env.DB, organisation.id), from, next, Date.now())
+				: null;
+			await setTimesheetRules(
+				organisation.id,
+				user.id,
+				{ ...next, shortNotice: input.shortNotice },
+				from,
+			);
+			return done(rulesSavedSentence(from, effect));
 		}
 
 		case "add-category":
@@ -492,7 +545,7 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 
 			<LockSettings data={locking} onDone={setSaid} />
 
-			<RulesSection rules={rules} onDone={setSaid} />
+			<RulesSection {...rules} onDone={setSaid} />
 
 			<ExpenseCategories data={expenses} onDone={setSaid} />
 
@@ -702,13 +755,19 @@ const capText = (minutes: number | null) =>
  * pre-approval, with an optional cap a day and a week; whether time on a day
  * the working week does not work counts as overtime or is not allowed; and
  * whether leave asked for at short notice is allowed with a reason. One sheet
- * changes them all.
+ * changes them all. The rules of a day apply from the day the admin chooses,
+ * next week's first day unless another, so the days before keep theirs
+ * (TR-10): the rules in force today are shown, and a change still to come.
  */
 function RulesSection({
-	rules,
+	now: rules,
+	next,
+	from,
 	onDone,
 }: {
-	rules: TimesheetRules;
+	now: TimesheetRules;
+	next: RulesVersion | null;
+	from: Day;
 	onDone: (said: string) => void;
 }) {
 	const [isOpen, setOpen] = useState(false);
@@ -717,6 +776,8 @@ function RulesSection({
 		rules.overtime === "none"
 			? ""
 			: ` Cap: ${capText(rules.overtimeDayCap)} a day, ${capText(rules.overtimeWeekCap)} a week.`;
+	// The sheet opens on the change still to come, which saving from its day replaces.
+	const sheet = next ? { ...rules, ...next } : rules;
 
 	return (
 		<Section
@@ -739,6 +800,12 @@ function RulesSection({
 						title={SHORT_NOTICE_LABELS[rules.shortNotice]}
 						detail="Short-notice leave requests. Leave asked for with less notice than its kind needs."
 					/>
+					{next && (
+						<LedgerRow
+							title={`From ${formatDayWithYear(next.effectiveFrom)}`}
+							detail={`Overtime: ${OVERTIME_RULE_LABELS[next.overtime]}${next.overtime === "none" ? "" : `, cap ${capText(next.overtimeDayCap)} a day and ${capText(next.overtimeWeekCap)} a week`}. Weekend and non-working days: ${NON_WORKING_RULE_LABELS[next.weekend]}.`}
+						/>
+					)}
 				</LedgerRows>
 			</Ledger>
 			<div className="mt-4">
@@ -759,7 +826,15 @@ function RulesSection({
 					A day takes its expected hours: the working week, less leave and public holidays. Time
 					past them is entered as overtime, where overtime is allowed.
 				</p>
-				<RadioGroup label="Overtime" name="overtime" defaultValue={rules.overtime} isRequired>
+				<TextField
+					label="From"
+					name="from"
+					type="date"
+					defaultValue={from}
+					isRequired
+					description="The overtime and weekend rules apply to the days from this one; the days before keep the rules they had. Next Monday unless you choose another day. Short-notice requests change at once."
+				/>
+				<RadioGroup label="Overtime" name="overtime" defaultValue={sheet.overtime} isRequired>
 					{OVERTIME_RULES.map((rule) => (
 						<Radio key={rule} value={rule}>
 							{OVERTIME_RULE_LABELS[rule]}
@@ -772,7 +847,7 @@ function RulesSection({
 						name="overtimeDayCap"
 						description="Hours, as 2 or 1:30. Empty is no cap."
 						defaultValue={
-							rules.overtimeDayCap === null ? "" : formatDuration(rules.overtimeDayCap * 60)
+							sheet.overtimeDayCap === null ? "" : formatDuration(sheet.overtimeDayCap * 60)
 						}
 						inputMode="decimal"
 						autoComplete="off"
@@ -783,7 +858,7 @@ function RulesSection({
 						name="overtimeWeekCap"
 						description="Hours, as 10 or 7:30. Empty is no cap."
 						defaultValue={
-							rules.overtimeWeekCap === null ? "" : formatDuration(rules.overtimeWeekCap * 60)
+							sheet.overtimeWeekCap === null ? "" : formatDuration(sheet.overtimeWeekCap * 60)
 						}
 						inputMode="decimal"
 						autoComplete="off"
@@ -793,7 +868,7 @@ function RulesSection({
 				<RadioGroup
 					label="Weekend and non-working days"
 					name="weekend"
-					defaultValue={rules.weekend}
+					defaultValue={sheet.weekend}
 					isRequired
 				>
 					{NON_WORKING_RULES.map((rule) => (

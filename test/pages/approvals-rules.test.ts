@@ -214,10 +214,10 @@ describe("notice on Approvals", () => {
 		const html = await pageBody(await open(APPROVALS, ada));
 		const text = textOf(html);
 		expect(text).toContain(
-			"grace@example.com · Annual leave 14–18 December 2099 · 5 days Short notice (3 days): “Family wedding”",
+			"grace@example.com · Annual leave 14–18 December 2099 · 5 days Short notice (3 working days): “Family wedding”",
 		);
 		expect(text).toContain(
-			"linus@example.com · Annual leave 21 December 2099 · 1 day 20 days' notice",
+			"linus@example.com · Annual leave 21 December 2099 · 1 day 20 working days' notice",
 		);
 		expect(text).not.toContain("Short notice (20");
 	});
