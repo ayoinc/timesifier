@@ -51,51 +51,36 @@ async function entriesIn(scope: OrganisationScope, people: readonly Person[], pe
 	);
 }
 
-/** Each of `people` in `period`, in the order given. */
-export async function teamWeek(
-	scope: OrganisationScope,
-	people: readonly Person[],
-	period: PeriodDays,
-	now: number,
-): Promise<PersonInWeek[]> {
-	if (people.length === 0) return [];
-	const ids = people.map((p) => p.id);
-	const [entries, running, periods] = await Promise.all([
-		entriesIn(scope, people, period),
-		scope.timeEntries.select((e) => and(among(e.userId, ids), isNull(e.endedAt))),
-		scope.periods.select((p) => and(among(p.userId, ids), eq(p.startsOn, period.startsOn))),
-	]);
-	return people.map((person) => {
-		const own = entries.filter((e) => e.userId === person.id);
-		return {
-			id: person.id,
-			name: person.name,
-			email: person.email,
-			seconds: own.reduce((sum, e) => sum + secondsOf(e, now), 0),
-			overtimeSeconds: own.reduce((sum, e) => sum + (e.overtime ? secondsOf(e, now) : 0), 0),
-			running: running.some((e) => e.userId === person.id),
-			status: (periods.find((p) => p.userId === person.id)?.status ?? null) as PeriodStatus | null,
-		};
-	});
+/** What one person logged in a period, and of it the overtime (TS-095). */
+export interface Logged {
+	seconds: number;
+	overtimeSeconds: number;
 }
 
 /**
- * The time all of `people` logged in `period`, and of it the overtime, added
- * up in one statement however many they are: the total under a page of Team
- * that lists only some of them (TS-113). Each entry counts in whole seconds
- * up to `now` while it runs, as `secondsOf` counts it.
+ * The time each of `people` logged in `period`, and of it the overtime, added
+ * up in one statement however many they are (TS-113): Team sorts all of them
+ * by it before taking a page, and adds the page's total from it (TS-125). Each
+ * entry counts in whole seconds up to `now` while it runs, as `secondsOf`
+ * counts it. Somebody who logged nothing is not in the map.
  */
-export async function weekTotal(
+export async function loggedByPerson(
 	scope: OrganisationScope,
 	people: readonly Person[],
 	period: PeriodDays,
 	now: number,
-): Promise<{ seconds: number; overtimeSeconds: number }> {
-	if (people.length === 0) return { seconds: 0, overtimeSeconds: 0 };
-	const lines = await scope.timeEntries.sum(
-		(e) =>
-			sql<number>`max(0, cast((coalesce(${e.endedAt}, ${now}) - ${e.startedAt}) / 1000 as integer))`,
-		(e) => e.overtime,
+): Promise<Map<string, Logged>> {
+	if (people.length === 0) return new Map();
+	const lines = await scope.timeEntries.sums(
+		(e) => ({ userId: e.userId }),
+		(e) => {
+			const seconds = sql<number>`max(0, cast((coalesce(${e.endedAt}, ${now}) - ${e.startedAt}) / 1000 as integer))`;
+			return {
+				seconds,
+				overtimeSeconds: sql<number>`case when ${e.overtime} then ${seconds} else 0 end`,
+			};
+		},
+		[["userId"]],
 		(e) =>
 			and(
 				among(
@@ -106,10 +91,63 @@ export async function weekTotal(
 				lte(e.spentOn, period.endsOn),
 			),
 	);
-	return {
-		seconds: lines.reduce((sum, line) => sum + line.total, 0),
-		overtimeSeconds: lines.reduce((sum, line) => sum + (line.key ? line.total : 0), 0),
-	};
+	return new Map(
+		lines.map((line) => [
+			String(line.userId),
+			{ seconds: line.seconds, overtimeSeconds: line.overtimeSeconds },
+		]),
+	);
+}
+
+/** Which of `people` have a timer running now, in whatever period it started. */
+export async function runningOf(
+	scope: OrganisationScope,
+	people: readonly Person[],
+): Promise<Set<string>> {
+	if (people.length === 0) return new Set();
+	const running = await scope.timeEntries.select((e) =>
+		and(
+			among(
+				e.userId,
+				people.map((p) => p.id),
+			),
+			isNull(e.endedAt),
+		),
+	);
+	return new Set(running.map((e) => e.userId));
+}
+
+/**
+ * Each of `people` in `period`, in the order given, with what `logged` says
+ * they logged and whether `running` holds them; their period's status is read
+ * here, for them alone.
+ */
+export async function teamWeek(
+	scope: OrganisationScope,
+	people: readonly Person[],
+	period: PeriodDays,
+	logged: ReadonlyMap<string, Logged>,
+	running: ReadonlySet<string>,
+): Promise<PersonInWeek[]> {
+	if (people.length === 0) return [];
+	const periods = await scope.periods.select((p) =>
+		and(
+			among(
+				p.userId,
+				people.map((person) => person.id),
+			),
+			eq(p.startsOn, period.startsOn),
+		),
+	);
+	return people.map((person) => ({
+		id: person.id,
+		name: person.name,
+		email: person.email,
+		seconds: logged.get(person.id)?.seconds ?? 0,
+		overtimeSeconds: logged.get(person.id)?.overtimeSeconds ?? 0,
+		running: running.has(person.id),
+		status: (periods.find((p) => p.userId === person.id)?.status ?? null) as PeriodStatus | null,
+	}));
 }
 
 /** The time one person logged on one project in a period. */

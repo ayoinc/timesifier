@@ -1084,3 +1084,28 @@ None goes to a person on leave all of today. Each goes once in its period, by it
 **Each duty on its own.** In every cron, each duty runs in its own `try`: one that fails is logged by its name and the next still runs, in their order, auto-lock, the lock date and billing before the reminders (`runEach` in `workers/scheduled.ts`; `test/scheduled/duties.test.ts`).
 
 **What remains: TS-049b.** The reminders' share is now bounded, and none is lost when there is too much for one run; but every organisation shares one pass, so at about 1,000 organisations with work an hour a reminder can come an hour late. TS-049b gives each organisation a Queue message, so each has an invocation, and its 1,000 queries, of its own, and checks an organisation's running timers in a fixed number of queries.
+
+### 70. Team's week is a capacity table: each person measured against their expected week, ordered by the figures across every page
+
+Decided for TS-125 (research/harvest-sweep-2.md, S2-08).
+
+**What a row says.** Each person on This week has their time logged, overtime apart as before ("37:30 + 2:00 overtime"), the time expected of them, and their leave, then a bar and a line in words: "3:45 under · 89% of capacity", "2:00 over · 105% of capacity", "On capacity" within a minute either way, and "1:00 over, nothing expected" for time on a week that expected none. The expected time is the one Reports and the person's own week already use: their schedule's week less public holidays and approved leave (`leaveOfPeople`, `expectedMinutes`), so the three pages cannot disagree. The share is never shown without the hours beside it.
+
+**The bar.** Primary for the time logged up to what was expected, error past it, and the week's approved leave as a hatched stretch after the expected time, so leave visibly shortens the week by its hours. Over and under are said in words beside it and read out by the bar's `aria-valuetext`; colour is never the only sign. Drawn in SVG lengths, so no `style` attribute is written (docs/security.md), as the budget bar is.
+
+**The headline.** The week's logged total of everyone the search keeps leads the page in the Reports style, "103:30 of 198:45 expected", and is the sum of the rows on every page. The total at the sheet's foot stays, with the expected and the standing under it.
+
+**The order.** Name (the default, left out of the address), Most logged, Most of capacity and Most remaining, in `?sort=`. The Week's arrows, the pages and the search keep it. People who tie keep the order by name. Time logged where none was expected sorts above every share. The people the viewer pinned still come first, each part in the order chosen.
+
+**Paging and the figures.** To order by the figures across 50-a-page lists, every person the search keeps is measured before a page is taken: what they logged is one `SUM … GROUP BY user_id` statement (`loggedByPerson`), which also gives the page's rows and the total, so no entry is read row by row; what they were expected is one reading of the schedules, leave and holidays for all of them. The page's 50 alone go to the browser. Team's statements for a manager of 120 went from 36 to 35.
+
+| Option                                                | Evidence                                                                                                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Measure everyone the search keeps, then page (chosen) | An order that holds across pages; one sum and one leave reading whatever the count, the statements the same for any order or page (`test/pages/capacity.test.ts`).             |
+| Order only the page's 50                              | Fewer people measured, but "Most remaining" would mean the most remaining among A to Ax: page 2 could hold someone further under than page 1.                                  |
+| Order in SQL, with expected hours as a column         | Would page in the database, but expected hours come from dated schedules, leave halves and holidays in the people's own zones; repeating that in SQL would be a second reader. |
+| Colour the over and under rows                        | Harvest's look, but a colour alone says nothing to a screen reader or in some schemes; the words carry it and the bar repeats it.                                              |
+
+**Left out.** The sweep's filter by team and the running timer's project in the row: neither is part of this card. Billable time in the headline stays in Reports.
+
+**What it costs.** A search that keeps thousands of people reads the leave and schedules of all of them on each page, where it read 50; the statements are the same in number. The bar is one more SVG per row.

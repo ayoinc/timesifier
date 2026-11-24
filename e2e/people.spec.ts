@@ -146,9 +146,11 @@ for (const viewport of [
 			await expect(page.getByRole("link", { name: "Previous week" })).toBeVisible();
 			await expect(page.getByRole("link", { name: "Next week" })).toBeVisible();
 			await expect(page.getByRole("link", { name: "This week", exact: true }).last()).toBeVisible();
-			// The week's total is the sheet's footer, under the people (W30).
-			const total = page.getByText(/^Week's total\s*7:30$/);
+			// The week's total is the sheet's footer, under the people (W30), with
+			// the expected and the standing under it (TS-125).
+			const total = page.getByText("Week's total", { exact: true });
 			await expect(total).toBeVisible();
+			await expect(total.locator("..")).toContainText(/^Week's total\s*7:30\d/);
 			const peopleBox = await page.getByRole("list", { name: "People" }).boundingBox();
 			expect((await total.boundingBox())?.y ?? 0).toBeGreaterThan(peopleBox?.y ?? 0);
 
@@ -168,7 +170,9 @@ for (const viewport of [
 			await page.keyboard.type("grace");
 			await page.keyboard.press("Enter");
 			await expect(page).toHaveURL(`${team}?week=${WEEK}&q=grace`);
-			await expect(page.getByText(/^Total for “grace”\s*7:30$/)).toBeVisible();
+			await expect(
+				page.getByText("Total for “grace”", { exact: true }).locator(".."),
+			).toContainText(/^Total for “grace”\s*7:30\d/);
 			await expectNoProblems(page, "Team");
 
 			// Opening a person shows their week, to read.
