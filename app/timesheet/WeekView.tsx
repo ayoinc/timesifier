@@ -6,10 +6,9 @@ import { cx } from "~/components/cx";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { type DayRule, leftMessage, overLabel, wholeMinutes } from "~/leave/rules";
-import { codedName } from "~/lib/codes";
 import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
-import { projectAndPackage } from "~/projects/work-packages";
+import { lineKey, lineOf } from "~/projects/work-packages";
 import { useTerms } from "~/routes/app/useOrganisation";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { type TrackChoices, TrackChoicesContext } from "~/tasks/track";
@@ -19,18 +18,11 @@ import { nearWord } from "~/time/format";
 import { type Aim, stepsAround } from "./aim";
 import { ClosedDays, OvertimeTag, RuleLine } from "./DayRules";
 import { cellText, formatDuration, minutesToMs, TypedHours } from "./durations";
+import { useClosedPackage, useEntryName } from "./entry-names";
 import { useReportAnswer } from "./feedback";
 import { dayNumber, useDayFormat, usePeriodFormat } from "./format";
 import { PeriodHeader } from "./Submission";
-import {
-	type GridCell,
-	type GridRow,
-	isTypable,
-	lineKey,
-	lineOf,
-	rowKey,
-	weekSheet,
-} from "./sheets";
+import { type GridCell, type GridRow, isTypable, rowKey, weekSheet } from "./sheets";
 import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
 import type { WeekData } from "./timesheet.server";
 import { dayPath, timerAction, weekPath } from "./views";
@@ -77,7 +69,7 @@ export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; ai
 		data.rules.some((rule) => rule.overtimeOpen),
 	);
 	const choices = use(TrackChoicesContext);
-	const lineName = useLineName(projects, choices);
+	const lineName = useLineName(projects);
 	const inGrid = new Set(rows.map(lineOfRow));
 	const addable = addableLines(projects, choices).filter((line) => !inGrid.has(line));
 	const editable = lockedDays.length < days.length;
@@ -206,7 +198,7 @@ function Grid({
 	const formatDay = useDayFormat("short");
 	const formatLong = useDayFormat();
 	const terms = useTerms();
-	const lineName = useLineName(projects, use(TrackChoicesContext));
+	const lineName = useLineName(projects);
 	const nameOf = (row: GridRow) => lineName(lineKey(row.projectId, row.workPackageId));
 	const ruleOf = (day: string) => rules.find((rule) => rule.day === day);
 	// The time of one kind on a day, across every row: what a cell's change is checked against.
@@ -609,19 +601,16 @@ function addableLines(projects: WeekData["projects"], choices: TrackChoices | nu
 }
 
 /** How a line is named: "ACME-001 · Website rebuild › WP2 Build", with "(archived)" or "(closed)" where it is. */
-function useLineName(projects: WeekData["projects"], choices: TrackChoices | null) {
+function useLineName(projects: WeekData["projects"]) {
+	const named = useEntryName(projects);
+	const closed = useClosedPackage();
 	return (line: string): string => {
 		const { projectId, workPackageId } = lineOf(line);
 		const project = projects.find((p) => p.id === projectId);
 		if (!project) return "";
-		const wp =
-			workPackageId === null
-				? null
-				: ((choices?.workPackages[projectId] ?? []).find((each) => each.id === workPackageId) ??
-					null);
-		const named = projectAndPackage(project, wp);
-		if (project.archived) return `${named} (archived)`;
-		return wp && !wp.open ? `${named} (closed)` : named;
+		const name = named(projectId, workPackageId);
+		if (project.archived) return `${name} (archived)`;
+		return closed(projectId, workPackageId) ? `${name} (closed)` : name;
 	};
 }
 

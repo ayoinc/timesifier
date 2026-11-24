@@ -15,9 +15,9 @@ import { TextField } from "~/components/TextField";
 import { StartArrowhead } from "~/components/TimerMark";
 import { Tooltip } from "~/components/Tooltip";
 import { type DayRule, overLabel } from "~/leave/rules";
-import { codedName } from "~/lib/codes";
 import { LOCK_LABELS, lockSentence } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
+import { WORK_PACKAGE_FIELD } from "~/projects/work-packages";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { useCreatesProjects, useTerms } from "~/routes/app/useOrganisation";
 import { destinationPath } from "~/shell/destinations";
@@ -29,11 +29,11 @@ import type { Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { nearWord } from "~/time/format";
 import { inTerms, withArticle } from "~/workspace/work-model";
-
 import { type Aim, stepsAround } from "./aim";
 import { DayPicker } from "./DayPicker";
 import { OvertimeTag, refusalOfDay } from "./DayRules";
 import { formatDuration, formatElapsed } from "./durations";
+import { useEntryName } from "./entry-names";
 import { ChangedMark, useReport, useReportAnswer, useReported } from "./feedback";
 import { dayNumber, useClockFormat, useDayFormat, usePeriodFormat } from "./format";
 import { GettingStartedList, usePutAwayAnswer } from "./GettingStarted";
@@ -84,10 +84,7 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 	const formatShort = useDayFormat("short");
 	const formatPeriod = usePeriodFormat();
 	const clock = useClockFormat(zone);
-	const projectName = (id: string) => {
-		const project = projects.find((p) => p.id === id);
-		return project ? codedName(project.code, project.name) : "";
-	};
+	const projectName = useEntryName(projects);
 	const travel = useTravel(dayNumber(day));
 	// A press answered before the server (TS-114): the day it asks for is the
 	// one the stepper and the chips show at once, and what it replaces dims.
@@ -136,7 +133,8 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 		const form = new FormData();
 		form.set("intent", "track");
 		form.set("projectId", each.projectId);
-		form.set(PENDING_PROJECT_NAME, projectName(each.projectId));
+		form.set(PENDING_PROJECT_NAME, projectName(each.projectId, each.workPackageId));
+		if (each.workPackageId) form.set(WORK_PACKAGE_FIELD, each.workPackageId);
 		form.set("description", each.description ?? "");
 		form.set("day", today);
 		if (own?.taskId) form.set("taskId", own.taskId);
@@ -256,7 +254,7 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 								<LedgerRows label={over > 0 ? "Entries to trim or move" : "Entries"}>
 									{entries.map((each) => {
 										const isRunning = each.endedAt === null;
-										const name = projectName(each.projectId);
+										const name = projectName(each.projectId, each.workPackageId);
 										const what = each.description || name;
 										return (
 											<LedgerRow
@@ -509,7 +507,7 @@ function Timer({
 }: {
 	data: DayData;
 	slug: string;
-	projectName: (id: string) => string;
+	projectName: (id: string, workPackageId?: string | null) => string;
 	/** Opens "Track time"; null where nothing can be tracked. */
 	onTrack: (() => void) | null;
 	/** The shown day's limit, while its entries can change. */
@@ -536,6 +534,7 @@ function Timer({
 		: pending.stopping
 			? null
 			: data.running;
+	const runningPackage = running && "workPackageId" in running ? running.workPackageId : null;
 	const terms = useTerms();
 	const createsProjects = useCreatesProjects();
 	const whyId = useId();
@@ -601,10 +600,12 @@ function Timer({
 					<div className="min-w-0 flex-1">
 						<p className="text-label-large">Running since {clock(running.startedAt)}</p>
 						<p className="truncate text-title-medium">
-							{running.description || projectName(running.projectId)}
+							{running.description || projectName(running.projectId, runningPackage)}
 						</p>
 						{running.description && (
-							<p className="truncate text-body-medium">{projectName(running.projectId)}</p>
+							<p className="truncate text-body-medium">
+								{projectName(running.projectId, runningPackage)}
+							</p>
 						)}
 					</div>
 					<p role="timer" aria-label="Elapsed" className="text-display-small tabular-nums">

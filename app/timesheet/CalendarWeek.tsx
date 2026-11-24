@@ -72,7 +72,7 @@ export function CalendarWeek({
 	statuses: CalendarData["statuses"];
 	/** Whether there is an active project to track time on. */
 	canTrack: boolean;
-	projectName: (id: string) => string;
+	projectName: (id: string, workPackageId?: string | null) => string;
 	onEdit: (entry: SheetEntry) => void;
 	onTrack: (day: Day, start: string) => void;
 }) {
@@ -363,9 +363,14 @@ export function CalendarWeek({
 													locked={locked}
 													slug={slug}
 													now={now}
-													name={part.entry.description || projectName(part.entry.projectId)}
+													name={
+														part.entry.description ||
+														projectName(part.entry.projectId, part.entry.workPackageId)
+													}
 													project={
-														part.entry.description ? projectName(part.entry.projectId) : null
+														part.entry.description
+															? projectName(part.entry.projectId, part.entry.workPackageId)
+															: null
 													}
 													clock={clock}
 													focusProps={itemProps(blockId(part))}

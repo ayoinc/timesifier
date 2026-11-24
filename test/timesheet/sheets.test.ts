@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { periodContaining } from "~/periods/periods";
+import { lineKey, lineOf } from "~/projects/work-packages";
 import { type Day, dayOf, daysFrom, exactInstantAt, instantAt } from "~/time/calendar";
 import { cellText, formatDuration, formatElapsed, TypedHours } from "~/timesheet/durations";
 import {
 	historyRows,
 	isTypable,
-	lineKey,
-	lineOf,
 	periodState,
 	type SheetEntry,
 	totalOf,

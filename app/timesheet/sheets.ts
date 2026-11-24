@@ -1,4 +1,5 @@
 import { locksEntries, type PeriodDays, type PeriodStatus, periodAfter } from "~/periods/periods";
+import { lineKey, lineOf } from "~/projects/work-packages";
 import type { Day } from "~/time/calendar";
 
 /**
@@ -150,19 +151,6 @@ export function weekSheet(
 		return { day, total, overtime };
 	});
 	return { days: dayTotals, rows, total: dayTotals.reduce((sum, each) => sum + each.total, 0) };
-}
-
-/** A line of the grid: a project and its work package, or the project alone (TS-115b). */
-export function lineKey(projectId: string, workPackageId: string | null): string {
-	return workPackageId === null ? projectId : `${projectId}/${workPackageId}`;
-}
-
-/** The project and work package of a line. */
-export function lineOf(line: string): { projectId: string; workPackageId: string | null } {
-	const at = line.indexOf("/");
-	return at === -1
-		? { projectId: line, workPackageId: null }
-		: { projectId: line.slice(0, at), workPackageId: line.slice(at + 1) };
 }
 
 /** A row of the grid by its line and kind, as `data-row` names it. */

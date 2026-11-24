@@ -30,6 +30,22 @@ export function projectAndPackage(
 	return wp === null ? named : `${named} › ${workPackageLabel(wp)}`;
 }
 
+/**
+ * A line: a project and its work package, or the project alone, as one key
+ * (TS-115b). The Week grid's rows and the picker's options are lines.
+ */
+export function lineKey(projectId: string, workPackageId: string | null): string {
+	return workPackageId === null ? projectId : `${projectId}/${workPackageId}`;
+}
+
+/** The project and work package of a line. */
+export function lineOf(line: string): { projectId: string; workPackageId: string | null } {
+	const at = line.indexOf("/");
+	return at === -1
+		? { projectId: line, workPackageId: null }
+		: { projectId: line.slice(0, at), workPackageId: line.slice(at + 1) };
+}
+
 /** The form field that sends an entry's work package. */
 export const WORK_PACKAGE_FIELD = "workPackageId";
 

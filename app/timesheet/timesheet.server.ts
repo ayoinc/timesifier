@@ -16,6 +16,7 @@ import {
 	periodContaining,
 	periodOfWeek,
 } from "~/periods/periods";
+import { lineKey } from "~/projects/work-packages";
 import { packageRules } from "~/projects/work-packages.server";
 import { hoursLabel } from "~/schedules/schedules";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
@@ -32,7 +33,6 @@ import {
 	HISTORY_LENGTH,
 	type HistoryRow,
 	historyRows,
-	lineKey,
 	type PeriodState,
 	periodState,
 	type SheetEntry,

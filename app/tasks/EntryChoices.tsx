@@ -2,6 +2,7 @@ import { use, useState } from "react";
 
 import { Select } from "~/components/Select";
 import { ProjectPicker } from "~/projects/ProjectPicker";
+import { WORK_PACKAGE_FIELD } from "~/projects/work-packages";
 import { useTerms } from "~/routes/app/useOrganisation";
 import { TagPicker } from "~/tags/TagPicker";
 import { inTerms } from "~/workspace/work-model";
@@ -25,7 +26,10 @@ export interface EntryChoicesProps {
  * follows the project: choosing another project offers its tasks. An entry
  * keeps a task archived or taken off the list since; a new one is offered
  * the active ones alone. Choosing a project whose budget is over, where its
- * people are warned, says so (TS-069); the entry still saves.
+ * people are warned, says so (TS-069); the entry still saves. A project with
+ * open work packages is chosen by one of them (TS-115b); an entry keeps a
+ * work package closed since, the one it has, and a new one is offered the
+ * open ones alone.
  */
 export function EntryChoices({
 	projects,
@@ -37,6 +41,7 @@ export function EntryChoices({
 	const terms = useTerms();
 	const [projectId, setProjectId] = useState<string | null>(defaultProjectId);
 	const own = entryId === undefined ? undefined : choices?.entries[entryId];
+	const [workPackageId, setWorkPackageId] = useState<string | null>(own?.workPackageId ?? null);
 	const keeps = projectId === defaultProjectId ? (own?.taskId ?? null) : null;
 	const tasks = (projectId === null ? [] : (choices?.tasks[projectId] ?? [])).filter(
 		(task) => !task.archived || task.id === keeps,
@@ -56,6 +61,7 @@ export function EntryChoices({
 		<>
 			<ProjectPicker
 				name="projectId"
+				workPackageName={WORK_PACKAGE_FIELD}
 				projects={projects.map((p) => {
 					const choice = choices?.projects[p.id];
 					return {
@@ -65,12 +71,20 @@ export function EntryChoices({
 						clientName: choice?.client?.name ?? null,
 						clientCode: choice?.client?.code ?? null,
 						workCode: choice?.workCode ?? false,
+						workPackages: (choices?.workPackages[p.id] ?? []).filter(
+							(wp) =>
+								wp.open || (p.id === defaultProjectId && wp.id === (own?.workPackageId ?? null)),
+						),
 					};
 				})}
 				recent={choices?.recent}
 				pinned={choices?.pinned}
 				value={projectId}
-				onChange={setProjectId}
+				workPackageId={workPackageId}
+				onChange={(id, wp) => {
+					setProjectId(id);
+					setWorkPackageId(wp);
+				}}
 				autoFocus={autoFocusProject}
 				isRequired
 			/>
