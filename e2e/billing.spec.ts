@@ -16,7 +16,7 @@ import { SIGNED_OUT } from "./auth-state";
 import { EMPTY_INPUT, problems } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
-import { workEveryDay } from "./timesheet";
+import { afternoonZone, workEveryDay } from "./timesheet";
 
 // Bill in a browser (TS-073, TS-074, TS-077): the owner invoices a client and
 // takes the payment with the keyboard alone; a project bills its overtime at
@@ -215,90 +215,97 @@ test("the owner invoices a client, issues it, and records its payment with the k
 	await expect(page.getByRole("list", { name: "Paid invoices" })).toContainText("Paid");
 });
 
-test("a project bills overtime at its own rate, and New invoice puts it on a line of its own", async ({
-	page,
-}) => {
-	await signIn(page, newPerson().email);
-	const { slug } = await createOrganisation(page);
-	await createClient(page, slug);
+// Its hours are tracked today, which has room for them only once they have
+// passed (W08): the browser, and so the person, is where it is afternoon now.
+// In UTC, from midnight to 08:30, today had no room for its 8:30.
+test.describe("where it is afternoon", () => {
+	test.use({ timezoneId: afternoonZone() });
 
-	// Site, for the client.
-	await openShell(page, destinationPath(slug, "projects"));
-	await page.getByRole("button", { name: "Create project" }).click();
-	const creating = page.getByRole("dialog", { name: "Create a project" });
-	await creating.getByLabel("Project name").fill("Site");
-	await choose(page, creating, "Client", CLIENT);
-	await creating.getByRole("button", { name: "Create the project" }).click();
-	await expect(creating).toBeHidden();
+	test("a project bills overtime at its own rate, and New invoice puts it on a line of its own", async ({
+		page,
+	}) => {
+		await signIn(page, newPerson().email);
+		const { slug } = await createOrganisation(page);
+		await createClient(page, slug);
 
-	// Overtime allowed from today, through Settings › Timesheet rules: a change
-	// applies from next Monday unless another day is chosen (TR-10), and the hour
-	// of overtime below is tracked today, the browser's day and so the person's.
-	await openShell(page, destinationPath(slug, "settings"));
-	await page.getByRole("button", { name: "Change timesheet rules" }).click();
-	const rules = page.getByRole("dialog", { name: "Change the timesheet rules" });
-	await rules
-		.getByRole("radiogroup", { name: "Overtime" })
-		.getByText("Allowed", { exact: true })
-		.click();
-	const today = await page.evaluate(() => new Date().toLocaleDateString("en-CA"));
-	await rules.getByRole("textbox", { name: "From" }).fill(today);
-	await rules.getByRole("button", { name: "Save" }).click();
-	await expect(rules).toBeHidden();
+		// Site, for the client.
+		await openShell(page, destinationPath(slug, "projects"));
+		await page.getByRole("button", { name: "Create project" }).click();
+		const creating = page.getByRole("dialog", { name: "Create a project" });
+		await creating.getByLabel("Project name").fill("Site");
+		await choose(page, creating, "Client", CLIENT);
+		await creating.getByRole("button", { name: "Create the project" }).click();
+		await expect(creating).toBeHidden();
 
-	// Site's settings: £60 an hour, its overtime at ×1.5.
-	await openShell(page, destinationPath(slug, "projects"));
-	await page.getByRole("main").getByRole("link", { name: "Site", exact: true }).click();
-	await page
-		.getByRole("group", { name: "Project pages" })
-		.getByRole("link", { name: "Settings" })
-		.click();
-	const settings = page.getByRole("list", { name: "The project's settings" });
-	await expect(settings).toContainText("×1 the day's rate");
-	await page.getByRole("button", { name: "Change billing" }).click();
-	const billing = page.getByRole("dialog", { name: "Billing" });
-	await billing.getByRole("textbox", { name: "Project rate an hour" }).fill("60");
-	await billing.getByRole("button", { name: "Save billing" }).click();
-	await expect(billing).toBeHidden();
+		// Overtime allowed from today, through Settings › Timesheet rules: a change
+		// applies from next Monday unless another day is chosen (TR-10), and the hour
+		// of overtime below is tracked today, the browser's day and so the person's.
+		await openShell(page, destinationPath(slug, "settings"));
+		await page.getByRole("button", { name: "Change timesheet rules" }).click();
+		const rules = page.getByRole("dialog", { name: "Change the timesheet rules" });
+		await rules
+			.getByRole("radiogroup", { name: "Overtime" })
+			.getByText("Allowed", { exact: true })
+			.click();
+		const today = await page.evaluate(() => new Date().toLocaleDateString("en-CA"));
+		await rules.getByRole("textbox", { name: "From" }).fill(today);
+		await rules.getByRole("button", { name: "Save" }).click();
+		await expect(rules).toBeHidden();
 
-	await page.getByRole("button", { name: "Change what overtime is billed at" }).click();
-	const overtime = page.getByRole("dialog", { name: "Overtime billed at" });
-	const choices = overtime.getByRole("radiogroup", { name: "Overtime billed at" });
-	await expect(choices.getByRole("radio", { name: "×1, the day's rate" })).toBeChecked();
-	await choices.getByText("×1.5", { exact: true }).click();
-	await overtime.getByRole("button", { name: "Save" }).click();
-	await expect(overtime).toBeHidden();
-	await expect(page.getByRole("status")).toHaveText("Overtime is billed at ×1.5 the day's rate.");
-	await expect(settings).toContainText("×1.5 the day's rate");
+		// Site's settings: £60 an hour, its overtime at ×1.5.
+		await openShell(page, destinationPath(slug, "projects"));
+		await page.getByRole("main").getByRole("link", { name: "Site", exact: true }).click();
+		await page
+			.getByRole("group", { name: "Project pages" })
+			.getByRole("link", { name: "Settings" })
+			.click();
+		const settings = page.getByRole("list", { name: "The project's settings" });
+		await expect(settings).toContainText("×1 the day's rate");
+		await page.getByRole("button", { name: "Change billing" }).click();
+		const billing = page.getByRole("dialog", { name: "Billing" });
+		await billing.getByRole("textbox", { name: "Project rate an hour" }).fill("60");
+		await billing.getByRole("button", { name: "Save billing" }).click();
+		await expect(billing).toBeHidden();
 
-	// Today, a working day of 7:30 (the rate is in force from today): its 7:30, then an hour of overtime.
-	await workEveryDay(page, slug);
-	for (const [field, hours] of [
-		["Hours", "7:30"],
-		["Overtime", "1"],
-	] as const) {
-		await openShell(page, organisationPath(slug));
-		await page.getByRole("main").getByRole("button", { name: "Track time", exact: true }).click();
-		const sheet = page.getByRole("dialog", { name: "Track time" });
-		await sheet.getByRole("textbox", { name: field, exact: true }).fill(hours);
-		await sheet.getByRole("button", { name: "Save entry" }).click();
-		await expect(sheet).toBeHidden();
-	}
+		await page.getByRole("button", { name: "Change what overtime is billed at" }).click();
+		const overtime = page.getByRole("dialog", { name: "Overtime billed at" });
+		const choices = overtime.getByRole("radiogroup", { name: "Overtime billed at" });
+		await expect(choices.getByRole("radio", { name: "×1, the day's rate" })).toBeChecked();
+		await choices.getByText("×1.5", { exact: true }).click();
+		await overtime.getByRole("button", { name: "Save" }).click();
+		await expect(overtime).toBeHidden();
+		await expect(page.getByRole("status")).toHaveText("Overtime is billed at ×1.5 the day's rate.");
+		await expect(settings).toContainText("×1.5 the day's rate");
 
-	// New invoice: the overtime on a line of its own, at £90.00 an hour.
-	await openShell(page, newInvoicePath(slug));
-	const what = page.getByRole("form", { name: "What to invoice" });
-	await choose(page, what, "Client", CLIENT);
-	await what.getByRole("button", { name: "Show what can be invoiced" }).click();
-	const lines = page.getByRole("list", { name: "Lines" });
-	await expect(lines.getByRole("listitem")).toHaveCount(2);
-	await expect(lines.getByRole("listitem").nth(0)).toContainText("Site");
-	await expect(lines.getByRole("listitem").nth(0)).toContainText("£450.00");
-	await expect(lines.getByRole("listitem").nth(1)).toContainText("Site (overtime)");
-	await expect(lines.getByRole("listitem").nth(1)).toContainText("£90.00");
-	await expect(page.getByRole("list", { name: "Entries" })).toContainText("Overtime");
-	await page.getByRole("button", { name: "Create draft invoice" }).click();
-	await expect(page.getByRole("region", { name: "Draft" })).toContainText("Site (overtime)");
+		// Today, a working day of 7:30 (the rate is in force from today): its 7:30, then an hour of overtime.
+		await workEveryDay(page, slug);
+		for (const [field, hours] of [
+			["Hours", "7:30"],
+			["Overtime", "1"],
+		] as const) {
+			await openShell(page, organisationPath(slug));
+			await page.getByRole("main").getByRole("button", { name: "Track time", exact: true }).click();
+			const sheet = page.getByRole("dialog", { name: "Track time" });
+			await sheet.getByRole("textbox", { name: field, exact: true }).fill(hours);
+			await sheet.getByRole("button", { name: "Save entry" }).click();
+			await expect(sheet).toBeHidden();
+		}
+
+		// New invoice: the overtime on a line of its own, at £90.00 an hour.
+		await openShell(page, newInvoicePath(slug));
+		const what = page.getByRole("form", { name: "What to invoice" });
+		await choose(page, what, "Client", CLIENT);
+		await what.getByRole("button", { name: "Show what can be invoiced" }).click();
+		const lines = page.getByRole("list", { name: "Lines" });
+		await expect(lines.getByRole("listitem")).toHaveCount(2);
+		await expect(lines.getByRole("listitem").nth(0)).toContainText("Site");
+		await expect(lines.getByRole("listitem").nth(0)).toContainText("£450.00");
+		await expect(lines.getByRole("listitem").nth(1)).toContainText("Site (overtime)");
+		await expect(lines.getByRole("listitem").nth(1)).toContainText("£90.00");
+		await expect(page.getByRole("list", { name: "Entries" })).toContainText("Overtime");
+		await page.getByRole("button", { name: "Create draft invoice" }).click();
+		await expect(page.getByRole("region", { name: "Draft" })).toContainText("Site (overtime)");
+	});
 });
 
 test("an estimate is sent to the client's contact, accepted on its link signed out, and made an invoice", async ({
