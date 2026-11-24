@@ -5,6 +5,7 @@ import {
 	Input,
 	Label,
 	Text,
+	TextArea,
 } from "react-aria-components";
 
 import { cx } from "./cx";
@@ -51,11 +52,14 @@ export interface TextFieldProps
 	 * to show the browser's own message for `isRequired`, `type` and `pattern`.
 	 */
 	errorMessage?: string;
+	/** Lines shown at once, for a value of several lines: the field is then a text area the person can make taller. */
+	rows?: number;
 }
 
 /**
- * A single-line text input in the Material 3 filled style, with its label,
- * supporting text and error text. A required field is marked with an asterisk.
+ * A text input in the Material 3 filled style, with its label, supporting
+ * text and error text: one line, or `rows` lines. A required field is marked
+ * with an asterisk.
  */
 export function TextField({
 	label,
@@ -63,6 +67,7 @@ export function TextField({
 	errorMessage,
 	min,
 	max,
+	rows,
 	...props
 }: TextFieldProps) {
 	return (
@@ -70,21 +75,35 @@ export function TextField({
 			{(field) => (
 				<>
 					<div className={fieldContainer(field)}>
-						{/* The one-space placeholder lets the label tell an empty input from a filled one. */}
-						<Input
-							placeholder=" "
-							min={min}
-							max={max}
-							className={cx(
-								FIELD_CONTROL,
-								"px-4 pt-6 pb-2 text-body-large",
-								field.isInvalid ? "caret-error" : "caret-primary",
-							)}
-						/>
+						{rows ? (
+							<TextArea
+								rows={rows}
+								className={cx(
+									FIELD_CONTROL,
+									"block resize-y px-4 pt-7 pb-2 text-body-large",
+									field.isInvalid ? "caret-error" : "caret-primary",
+								)}
+							/>
+						) : (
+							// The one-space placeholder lets the label tell an empty input from a filled one.
+							<Input
+								placeholder=" "
+								min={min}
+								max={max}
+								className={cx(
+									FIELD_CONTROL,
+									"px-4 pt-6 pb-2 text-body-large",
+									field.isInvalid ? "caret-error" : "caret-primary",
+								)}
+							/>
+						)}
 						<Label
 							className={cx(
 								fieldLabel(field),
-								"end-4 peer-placeholder-shown:group-not-has-data-focused/field:top-4 peer-placeholder-shown:group-not-has-data-focused/field:text-body-large",
+								"end-4",
+								// A text area's label stays above its lines, where nothing it holds can cover it.
+								!rows &&
+									"peer-placeholder-shown:group-not-has-data-focused/field:top-4 peer-placeholder-shown:group-not-has-data-focused/field:text-body-large",
 							)}
 						>
 							{label}

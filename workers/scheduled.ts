@@ -4,16 +4,20 @@ import { advanceExports, deleteExpiredExports } from "~/exports/job.server";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
 import { runBillingSchedule } from "~/invoices/schedule.server";
 import { runAutoLock, runLockReach } from "~/locks/locks.server";
+import { sendWaitingInvitations } from "~/onboarding/onboarding.server";
 import { recheckDomains } from "~/organisations/domains.server";
+import { MAIL_BATCH } from "~/platform/limits";
 import { sendWaitingMail } from "~/platform/mail.server";
 
 /**
  * The Worker's background work, run by the Cron Triggers in wrangler.jsonc.
  * Each run is one short sequence of named steps, chosen by its trigger.
  *
- * - Every minute: the webhooks' deliveries that are due are sent (TS-087), and
- *   the next mailings to account holders, within the day's cap (TS-099); then
- *   one step of the oldest export of everything being made (TS-126).
+ * - Every minute: the webhooks' deliveries that are due are sent (TS-087),
+ *   then the invitation emails waiting from "Invite many" and people imports
+ *   (TS-108), then the next mailings to account holders: one batch between
+ *   them, within the day's cap (TS-099); then one step of the oldest export
+ *   of everything being made (TS-126).
  * - Every hour: auto-lock (TS-065), then the lock date reaching the days that
  *   have ended since (D7: timers on them stopped, weeks auto-submitted); recurring invoices that are due are issued
  *   and overdue invoices are reminded (TS-074, TS-078). Exports of everything
@@ -34,7 +38,8 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 	const now = controller.scheduledTime;
 	if (controller.cron === EVERY_MINUTE) {
 		await dispatchWebhooks({ now });
-		await sendWaitingMail(new Date(now));
+		const invitations = await sendWaitingInvitations(new Date(now));
+		await sendWaitingMail(new Date(now), MAIL_BATCH - invitations);
 		await advanceExports(new Date(now));
 	}
 	if (controller.cron === HOURLY) {

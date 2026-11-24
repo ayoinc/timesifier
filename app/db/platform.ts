@@ -4,6 +4,7 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { SIGN_IN_DAYS } from "~/platform/limits";
 import { among } from "./among";
 import {
+	invitationPlans,
 	invitations,
 	invoices,
 	mailingDeliveries,
@@ -794,6 +795,15 @@ export async function sentSince(database: D1Database, since: Date): Promise<numb
 		.select({ n: count() })
 		.from(mailingDeliveries)
 		.where(and(gte(mailingDeliveries.sentAt, since), eq(mailingDeliveries.outcome, "sent")));
+	return row?.n ?? 0;
+}
+
+/** Invitation emails sent since `since` (TS-108): they count against the same cap. */
+export async function invitationsMailedSince(database: D1Database, since: Date): Promise<number> {
+	const [row] = await drizzle(database)
+		.select({ n: count() })
+		.from(invitationPlans)
+		.where(and(eq(invitationPlans.mailState, "sent"), gte(invitationPlans.mailedAt, since)));
 	return row?.n ?? 0;
 }
 

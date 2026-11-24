@@ -43,6 +43,7 @@ import { termsOf } from "~/expenses/expenses.server";
 import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
 import { deleteOrganisationExports } from "~/exports/job.server";
 import { DPA_VERSION } from "~/landing/trust";
+import { applyInvitationPlan } from "~/onboarding/onboarding.server";
 import { acceptDpa } from "~/organisations/dpa.server";
 import {
 	COMPANY_SIGN_IN_REQUIRED,
@@ -59,7 +60,7 @@ import { sendEmail } from "./email.server";
 import { isOurHost } from "./hosts";
 import { valid } from "./input.server";
 import { INVITATION_LIFETIME_SECONDS, invitationEmail } from "./invitation-email";
-import { type Cap, takeOne } from "./quota.server";
+import { INVITATIONS_PER_SENDER, invitationsKey, takeOne } from "./quota.server";
 
 /** Requests one client may make on one of these paths in `window` seconds; the next is answered 429. */
 const LIMIT = { window: 60, max: 10 };
@@ -77,8 +78,6 @@ export const ORGANISATION_RATE_LIMITS = {
 // account could create organisations without end, each named with a sentence
 // of its choosing, and have the application's own address send that sentence
 // to strangers ten times a minute.
-/** Invitations one person may send in any 24 hours, across every organisation. */
-const INVITATIONS_PER_SENDER: Cap = { max: 20, seconds: 24 * 60 * 60 };
 /** Organisations one person may own. Creating one makes its creator its owner. */
 const ORGANISATIONS_PER_OWNER = 5;
 
@@ -487,12 +486,17 @@ export function organisationPlugins() {
 					if (!(await seatForOneMore(organization.id, new Date()))) {
 						throw new APIError("FORBIDDEN", { code: "SEATS_FULL", message: SEATS_FULL });
 					}
-					if (!(await takeOne(env.DB, `invitations:${inviter.id}`, INVITATIONS_PER_SENDER))) {
+					if (!(await takeOne(env.DB, invitationsKey(inviter.id), INVITATIONS_PER_SENDER))) {
 						throw new APIError("TOO_MANY_REQUESTS", {
 							code: "TOO_MANY_INVITATIONS",
 							message: `You have sent ${INVITATIONS_PER_SENDER.max} invitations in the last 24 hours. Try again later.`,
 						});
 					}
+				},
+				// An invitation sent with others (TS-108) may carry a team, a manager
+				// and a schedule for the person: they are given them now they are in.
+				async afterAcceptInvitation({ invitation, user }) {
+					await applyInvitationPlan(invitation.organizationId, invitation.id, user, new Date());
 				},
 				// The plugin deletes an organisation's memberships first and its row
 				// last, and the database refuses to take the last owner from an

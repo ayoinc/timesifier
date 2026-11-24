@@ -57,19 +57,28 @@ function dayStart(now: Date): Date {
 	return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
-/** How many more messages may go today. */
+/**
+ * How many more messages may go today: mailings and the invitation emails of
+ * "Invite many" and people imports (TS-108) share the one cap.
+ */
 export async function capLeft(now: Date): Promise<number> {
-	return Math.max(0, DAILY_MAIL_CAP - (await platformData.sentSince(env.DB, dayStart(now))));
+	const since = dayStart(now);
+	const [mailings, invitations] = await Promise.all([
+		platformData.sentSince(env.DB, since),
+		platformData.invitationsMailedSince(env.DB, since),
+	]);
+	return Math.max(0, DAILY_MAIL_CAP - mailings - invitations);
 }
 
 /**
- * Sends the next waiting deliveries, within the batch and the day's cap.
- * Answers how many were sent. A message Email Service did not take stays
- * waiting, and the run stops there, to try again next minute.
+ * Sends the next waiting deliveries, within `budget` (the batch, less what
+ * this run sent of invitations) and the day's cap. Answers how many were
+ * sent. A message Email Service did not take stays waiting, and the run stops
+ * there, to try again next minute.
  */
-export async function sendWaitingMail(now: Date): Promise<number> {
-	const left = Math.min(MAIL_BATCH, await capLeft(now));
-	if (left === 0) return 0;
+export async function sendWaitingMail(now: Date, budget = MAIL_BATCH): Promise<number> {
+	const left = Math.min(budget, await capLeft(now));
+	if (left <= 0) return 0;
 	const waiting = await platformData.waitingDeliveries(env.DB, left);
 	const origin = mailOrigin();
 	const platform = await getPlatformBrand(env);

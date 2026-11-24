@@ -2676,7 +2676,7 @@ export const invitationPlans = sqliteTable(
 			table.organisationId,
 			table.importId,
 		),
-		index("invitation_plans_mail_state_created_at_idx").on(table.mailState, table.createdAt),
+		index("invitation_plans_mail_state_mailed_at_idx").on(table.mailState, table.mailedAt),
 		foreignKey({
 			name: "invitation_plans_import_fk",
 			columns: [table.organisationId, table.importId],

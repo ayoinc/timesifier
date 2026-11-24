@@ -61,4 +61,4 @@ CREATE TABLE `invitation_plans` (
 CREATE UNIQUE INDEX `invitation_plans_organisation_id_id_unique` ON `invitation_plans` (`organisation_id`,`id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `invitation_plans_invitation_id_unique` ON `invitation_plans` (`invitation_id`);--> statement-breakpoint
 CREATE INDEX `invitation_plans_organisation_id_import_id_idx` ON `invitation_plans` (`organisation_id`,`import_id`);--> statement-breakpoint
-CREATE INDEX `invitation_plans_mail_state_created_at_idx` ON `invitation_plans` (`mail_state`,`created_at`);
+CREATE INDEX `invitation_plans_mail_state_mailed_at_idx` ON `invitation_plans` (`mail_state`,`mailed_at`);

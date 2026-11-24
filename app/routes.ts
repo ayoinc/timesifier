@@ -43,6 +43,7 @@ import {
 	MOVED,
 	NEW_ORGANISATION_SEGMENT,
 	ORGANISATION_PARAM,
+	PEOPLE_IMPORT_SEGMENT,
 	SCHEDULES_SEGMENT,
 	SIGN_IN_SETTINGS_SEGMENT,
 } from "./shell/destinations";
@@ -72,6 +73,7 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	}),
 	route(MEMBERS_SEGMENT, "routes/app/members.tsx"),
 	route(INVITATIONS_SEGMENT, "routes/app/invitations.tsx"),
+	route(PEOPLE_IMPORT_SEGMENT, "routes/app/invitations.import.tsx"),
 	route(SCHEDULES_SEGMENT, "routes/app/schedules.tsx"),
 	route(SIGN_IN_SETTINGS_SEGMENT, "routes/app/sign-in-settings.tsx"),
 	route(REPORT_EXPORT_SEGMENT, "routes/app/reports.export.ts"),

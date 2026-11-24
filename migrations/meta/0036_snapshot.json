@@ -2155,9 +2155,9 @@
 					"columns": ["organisation_id", "import_id"],
 					"isUnique": false
 				},
-				"invitation_plans_mail_state_created_at_idx": {
-					"name": "invitation_plans_mail_state_created_at_idx",
-					"columns": ["mail_state", "created_at"],
+				"invitation_plans_mail_state_mailed_at_idx": {
+					"name": "invitation_plans_mail_state_mailed_at_idx",
+					"columns": ["mail_state", "mailed_at"],
 					"isUnique": false
 				}
 			},
