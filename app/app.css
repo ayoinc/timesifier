@@ -243,6 +243,16 @@
 	transition-duration: --value(--duration-*);
 }
 
+/* A text field's text area (TextField's `rows`): `min-lines-6` is six of its lines
+   tall at least, `max-lines-16` at most, each with the 28px over the lines that
+   holds the label and the 8px under them. */
+@utility min-lines-* {
+	min-height: calc(--value(integer) * 1lh + 36px);
+}
+@utility max-lines-* {
+	max-height: calc(--value(integer) * 1lh + 36px);
+}
+
 html,
 body {
 	@apply bg-surface text-on-surface;

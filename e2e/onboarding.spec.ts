@@ -8,7 +8,7 @@ import type { Locator, Page } from "@playwright/test";
 import { invitationsPath, peopleImportPath } from "../app/shell/destinations";
 import { newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
-import { EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
+import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 
@@ -29,6 +29,9 @@ test.beforeEach(async ({ context, baseURL }) => {
 });
 
 const SHOTS = process.env.TS108_SHOTS;
+
+/** What axe says of text another element lies partly across. */
+const PARTLY_OBSCURED = "elmPartiallyObscured";
 
 /**
  * Runs SQL against the database the test server uses. Two workers writing at
@@ -133,12 +136,41 @@ for (const viewport of [
 				const sheet = page.getByRole("dialog", { name: "Invite many people" });
 				const addresses = sheet.getByRole("textbox", { name: "Email addresses" });
 				await expect(addresses).toBeFocused();
-				await page.keyboard.type(
+				// A box six lines tall, whose pasted lines all show, under its label, unscrolled.
+				const lines = () =>
+					addresses.evaluate((box: HTMLTextAreaElement) => {
+						const style = getComputedStyle(box);
+						const label = box.parentElement?.querySelector("label")?.getBoundingClientRect();
+						return {
+							shown:
+								(box.clientHeight - Number.parseFloat(style.paddingBottom)) /
+								Number.parseFloat(style.lineHeight),
+							overflow: box.scrollHeight - box.clientHeight,
+							scrolled: box.scrollTop,
+							underLabel: label
+								? box.getBoundingClientRect().top + box.clientTop >= label.bottom
+								: false,
+						};
+					});
+				expect((await lines()).shown).toBeGreaterThanOrEqual(6);
+				await page.keyboard.insertText(
 					`${address("ada")}\n${address("ada").toUpperCase()}\n${address("bob")}\n${email}`,
 				);
+				const pasted = await lines();
+				expect(pasted.shown).toBeGreaterThanOrEqual(6);
+				expect(pasted.overflow).toBeLessThanOrEqual(0);
+				expect(pasted.scrolled).toBe(0);
+				expect(pasted.underLabel).toBe(true);
 				await choose(page, sheet, "Team", "Design");
 				await expect(sheet).toContainText("9 seats are left on the plan, of 10.");
-				await check(page, `invite-many-sheet-${at}`, [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS]);
+				// The label and the line lie across the text area's box, so axe cannot
+				// measure its lines: they are measured here.
+				expect(await contrast(addresses), "contrast of the addresses").toBeGreaterThanOrEqual(4.5);
+				await check(page, `invite-many-sheet-${at}`, [
+					UNDER_AN_OVERLAY,
+					OVER_SEVERAL_ELEMENTS,
+					PARTLY_OBSCURED,
+				]);
 				await press(page, sheet.getByRole("button", { name: "Send invitations" }));
 				await expect(sheet).toBeHidden();
 				await expect(status).toContainText("2 invitations are on the way, each into Design.");
