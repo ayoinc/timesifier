@@ -160,8 +160,8 @@ export async function createDraft(
 	draft: NewInvoice,
 	source: "web" | "system" = "web",
 ): Promise<{ ok: true; id: string } | { ok: false; problem: string }> {
-	if (draft.lines.length === 0) return { ok: false, problem: NOTHING_TO_INVOICE };
 	if (!(await makesBilling(scope))) return { ok: false, problem: NOTHING_BILLED_INTERNALLY };
+	if (draft.lines.length === 0) return { ok: false, problem: NOTHING_TO_INVOICE };
 	const [details, taxes, taxIds] = await Promise.all([
 		invoiceDetailsOf(scope),
 		taxesOf(scope),

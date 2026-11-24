@@ -1161,13 +1161,8 @@ function WorkModelSheet({
 				onChange={(value) => setChosen(WorkModel.parse(value))}
 			>
 				{WORK_MODELS.map((model) => (
-					<Radio key={model} value={model}>
-						<span className="flex flex-col">
-							<span>{WORK_MODEL_LABELS[model]}</span>
-							<span className="text-body-medium text-on-surface-variant">
-								{WORK_MODEL_HINTS[model]}
-							</span>
-						</span>
+					<Radio key={model} value={model} hint={WORK_MODEL_HINTS[model]}>
+						{WORK_MODEL_LABELS[model]}
 					</Radio>
 				))}
 			</RadioGroup>

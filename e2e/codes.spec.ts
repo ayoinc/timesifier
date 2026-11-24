@@ -27,17 +27,21 @@ import { pastWeekday, zoneIsTheBrowsers } from "./timesheet";
 //
 // 1. Track time's project picker names each project by its code first
 //    (`ACME-001 · Website`), finds one by its code or its client's, and under
-//    How you work = Both holds the work codes in a group of their own.
+//    How you work = Both holds the work codes in a group of their own; a
+//    client project's task says whether it is billable.
 // 2. An owner changes How you work on Workspace settings, between Client
 //    projects, Internal work and Both, with the internal term, the code rule,
-//    the pattern and, under Both, the work codes' own rule; and /app/new asks
-//    the question of a new organisation.
+//    the pattern and, under Both, the work codes' own rule; /app/new asks
+//    the question of a new organisation, each radio's ring on its label's first
+//    line; and Create's Code field gives a client project's example, ACME-001,
+//    and a work code's, OPS-01.
 // 3. On Clients an owner names a member account manager of a client; the
 //    member is then offered Create on Projects, for that client only, and is
 //    offered it no longer once the owner takes it away.
 // 4. An organisation that works internally says its own term, "Work codes", on
-//    the Timesheet and on its Projects page, never "project" or "client", and
-//    its navigation has no Clients, Invoices or Estimates.
+//    the Timesheet and on its Projects page, never "project" or "client", nor
+//    "billable" of a task; its Code field's example is OPS-01; and its
+//    navigation has no Clients, Invoices or Estimates.
 //
 // Every page is operated with the keyboard alone and scanned by axe, which
 // finds nothing. Who may do what, and the rules themselves, are tested through
@@ -131,6 +135,18 @@ async function createCodedProject(
 	await sheet.getByRole("button", { name: /^Create the (?:project|work code)$/ }).click();
 	await expect(sheet).toBeHidden();
 	await expect(page.getByRole("main")).toContainText(`${code} · ${name}`);
+}
+
+/** Creates a task on Tasks, put on every project the organisation has now. */
+async function createTaskOnEveryProject(page: Page, slug: string, name: string) {
+	await openShell(page, destinationPath(slug, "tasks"));
+	await page.getByRole("button", { name: "Create task" }).click();
+	const sheet = page.getByRole("dialog", { name: "Create a task" });
+	await sheet.getByLabel("Task name").fill(name);
+	await sheet.getByText("Put it on every project now").click();
+	await sheet.getByRole("button", { name: "Create the task" }).click();
+	await expect(sheet).toBeHidden();
+	await expect(page.getByRole("status")).toHaveText(`Task created: ${name}.`);
 }
 
 /**
@@ -233,6 +249,9 @@ for (const viewport of [
 				await createCodedProject(page, both, "Support", "OPS-01");
 				await createCodedProject(page, internal, "Support", "OPS-01");
 				await createCodedProject(page, internal, "Maintenance", "OPS-02");
+				// A billable-by-default task on every project, so Track time has a Task field to describe.
+				await createTaskOnEveryProject(page, both, "Admin");
+				await createTaskOnEveryProject(page, internal, "Admin");
 				// Time is tracked on a past weekday of the browser's zone, which is the person's.
 				await zoneIsTheBrowsers(page, both);
 				await zoneIsTheBrowsers(page, internal);
@@ -327,6 +346,30 @@ for (const viewport of [
 					await expect(list).toBeHidden();
 					await expect(picker).toHaveValue("ACME-001 · Website");
 					await expect(picker).toBeFocused();
+					// A client project's task says whether it is billable.
+					await expect(sheet.getByRole("button", { name: /Task/ })).toContainText("Admin");
+					await expect(sheet).toContainText("Billable");
+					await page.keyboard.press("Escape");
+					await expect(sheet).toBeHidden();
+				});
+
+				test("2. Create on Projects gives a client project's code as its example, ACME-001, and a work code's as OPS-01", async ({
+					page,
+				}) => {
+					await openShell(page, destinationPath(both, "projects"));
+					await tabTo(page, page.getByRole("button", { name: "Create project" }));
+					await page.keyboard.press("Enter");
+					const sheet = page.getByRole("dialog", { name: "Create a project" });
+					const code = sheet.getByRole("textbox", { name: "Code", exact: true });
+					// The Client field opens on no client: under Both, a work code.
+					await expect(code).toHaveAccessibleDescription("Optional, for example OPS-01.");
+					await sheet.getByRole("button", { name: /Client/ }).click();
+					await page
+						.getByRole("listbox", { name: "Client" })
+						.getByRole("option", { name: "ACME · Acme" })
+						.click();
+					await expect(code).toHaveAccessibleDescription("Optional, for example ACME-001.");
+					await expectNoProblems(page, "in Create a project", [EMPTY_INPUT, UNDER_AN_OVERLAY]);
 					await page.keyboard.press("Escape");
 					await expect(sheet).toBeHidden();
 				});
@@ -480,6 +523,21 @@ for (const viewport of [
 					await page.keyboard.press("ArrowUp");
 					await expect(modelRadio(question, "Internal work")).toBeChecked();
 					await expectNoProblems(page, "on /app/new");
+					// Each ring is centred on its label's first line, not on the label and its meaning together.
+					for (const model of ["Client projects", "Internal work", "Both"] as const) {
+						const choice = question.locator("label").filter({ has: modelRadio(question, model) });
+						const ring = await choice.locator(":scope > span").first().boundingBox();
+						const line = await choice
+							.locator(":scope > span")
+							.nth(1)
+							.getByText(model, { exact: true })
+							.boundingBox();
+						if (!ring || !line) throw new Error(`${model} is not drawn`);
+						expect(
+							Math.abs(ring.y + ring.height / 2 - (line.y + line.height / 2)),
+							`${model}'s ring against its label`,
+						).toBeLessThanOrEqual(1);
+					}
 					await shoot(page, "2-new-organisation-how-you-work");
 
 					await tabTo(page, page.getByRole("button", { name: "Create organisation" }));
@@ -526,6 +584,9 @@ for (const viewport of [
 					await page.keyboard.press("ArrowDown");
 					await page.keyboard.press("Enter");
 					await expect(picker).toHaveValue("OPS-02 · Maintenance");
+					// Under Internal work nothing is billable, so the task says nothing of it.
+					await expect(sheet.getByRole("button", { name: /Task/ })).toContainText("Admin");
+					await expect(sheet).not.toContainText(/billable/i);
 					await page.keyboard.press("Escape");
 					await expect(sheet).toBeHidden();
 					expect(await shownText(page)).not.toMatch(PROJECT_OR_CLIENT);
@@ -576,6 +637,10 @@ for (const viewport of [
 					await page.keyboard.press("Tab");
 					await expect(sheet.getByRole("textbox", { name: "Code", exact: true })).toBeFocused();
 					await page.keyboard.type("OPS-03");
+					// Under Internal work the example is the organisation's own code.
+					await expect(
+						sheet.getByRole("textbox", { name: "Code", exact: true }),
+					).toHaveAccessibleDescription("Optional, for example OPS-01.");
 					expect(await shownText(page)).not.toMatch(PROJECT_OR_CLIENT);
 					await expectNoProblems(page, "in Create a work code", [EMPTY_INPUT, UNDER_AN_OVERLAY]);
 					await shoot(page, "4-internal-create-work-code-sheet");
@@ -640,6 +705,9 @@ for (const viewport of [
 					await page.keyboard.press("Tab");
 					await expect(sheet.getByRole("textbox", { name: "Code", exact: true })).toBeFocused();
 					await page.keyboard.type("ACME-002");
+					await expect(
+						sheet.getByRole("textbox", { name: "Code", exact: true }),
+					).toHaveAccessibleDescription("Optional, for example ACME-001.");
 
 					// The Client field offers Acme alone: not Globex, and no work code.
 					const client = sheet.getByRole("button", { name: /Client/ });

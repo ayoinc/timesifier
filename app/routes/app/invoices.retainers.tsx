@@ -179,24 +179,27 @@ export default function Retainers({ loaderData }: Route.ComponentProps) {
 								</p>
 							)}
 							<LedgerTotal label="Balance" value={retainer.balance} />
-							<div className="border-t border-outline-variant px-4 py-4 @sm:px-5">
-								<ActionForm
-									intent="funds"
-									hidden={{ retainerId: retainer.id }}
-									submitLabel="Invoice funds"
-									variant="outlined"
-									submitName={`Invoice funds into ${retainer.name}`}
-								>
-									{(field) => (
-										<TextField
-											label={`Amount (${retainer.currency})`}
-											inputMode="decimal"
-											isRequired
-											{...field("amount")}
-										/>
-									)}
-								</ActionForm>
-							</div>
+							{/* Under Internal work nothing new is invoiced (TS-115a). */}
+							{makes && (
+								<div className="border-t border-outline-variant px-4 py-4 @sm:px-5">
+									<ActionForm
+										intent="funds"
+										hidden={{ retainerId: retainer.id }}
+										submitLabel="Invoice funds"
+										variant="outlined"
+										submitName={`Invoice funds into ${retainer.name}`}
+									>
+										{(field) => (
+											<TextField
+												label={`Amount (${retainer.currency})`}
+												inputMode="decimal"
+												isRequired
+												{...field("amount")}
+											/>
+										)}
+									</ActionForm>
+								</div>
+							)}
 						</Ledger>
 					))
 				)}

@@ -98,7 +98,7 @@ const Form = z.discriminatedUnion("intent", [
 ]);
 
 export async function loader({ request, context, params }: Route.LoaderArgs) {
-	const { scope, organisation, locale } = await billingOf(context, request);
+	const { makes, scope, organisation, locale } = await billingOf(context, request);
 	const estimate = await findEstimate(scope, params.estimate);
 	if (!estimate) throw notFound();
 	const [printed, lines, taxes, contacts, [client]] = await Promise.all([
@@ -111,6 +111,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 	const open = estimate.status === "draft" || estimate.status === "sent";
 	return {
 		slug: organisation.slug,
+		makes,
 		estimate: {
 			id: estimate.id,
 			number: estimate.number,
@@ -254,7 +255,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 }
 
 export default function EstimatePage({ loaderData }: Route.ComponentProps) {
-	const { estimate, printed, lines, taxes, contacts } = loaderData;
+	const { estimate, printed, lines, taxes, contacts, makes } = loaderData;
 	const terms = useTerms();
 	return (
 		<>
@@ -407,7 +408,8 @@ export default function EstimatePage({ loaderData }: Route.ComponentProps) {
 								Open its invoice
 							</Link>
 						) : (
-							<ActionForm intent="invoice" submitLabel="Make invoice" />
+							// Under Internal work nothing new is invoiced (TS-115a).
+							makes && <ActionForm intent="invoice" submitLabel="Make invoice" />
 						))}
 					{estimate.status === "accepted" && (
 						<ActionForm

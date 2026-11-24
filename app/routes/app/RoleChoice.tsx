@@ -13,13 +13,8 @@ export function RoleChoice({
 	return (
 		<RadioGroup label="Role" name="role" defaultValue={defaultValue} isRequired>
 			{roles.map((role) => (
-				<Radio key={role} value={role}>
-					<span className="py-2">
-						<span className="block">{ROLE_LABELS[role]}</span>
-						<span className="block text-body-medium text-on-surface-variant">
-							{ROLE_MEANINGS[role]}
-						</span>
-					</span>
+				<Radio key={role} value={role} hint={ROLE_MEANINGS[role]}>
+					{ROLE_LABELS[role]}
 				</Radio>
 			))}
 		</RadioGroup>
