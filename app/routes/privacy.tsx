@@ -7,6 +7,7 @@ import { configuredProviders, PROVIDER_NAMES, type Provider } from "~/auth/provi
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
 import { browserErrorNotice } from "~/browser-errors/report";
 import { PROCESSED_FOR_ORGANISATIONS, STORED, type StoredTerm } from "~/db/personal-data";
+import { EXPORT_KEEP_DAYS } from "~/exports/paths";
 import { ENTRY_DAYS_BACK, LEAVE_DAYS_BACK } from "~/integrations/feeds.server";
 import { EVENT_LABELS } from "~/integrations/scopes";
 import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
@@ -77,7 +78,7 @@ export function loader({ request }: Route.LoaderArgs) {
 }
 
 /** This version of the notice. */
-const VERSION = { date: "2026-11-23", inWords: "23 November 2026" };
+const VERSION = { date: "2026-11-24", inWords: "24 November 2026" };
 
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
 
@@ -279,6 +280,13 @@ export default function Privacy({
 			<>
 				Each time an owner of the organisation grants Timesifier support access: who granted it,
 				until when, and who ended it early, if anyone did.
+			</>
+		),
+		"Exports of everything": (
+			<>
+				Each export of everything an owner asks for: who asked, when, how far it has been made, and
+				when it was made and is deleted. The ZIP itself is kept in R2 beside the receipts, under the
+				organisation's own prefix.
 			</>
 		),
 		"Verified domains": (
@@ -574,10 +582,17 @@ export default function Privacy({
 					<Row term="An invitation">
 						It can be accepted for {INVITATION_DAYS} days. Its record stays with the organisation.
 					</Row>
+					<Row term="An export of everything">
+						An owner's export of everything the organisation holds is kept for{" "}
+						{EXPORT_KEEP_DAYS} days from when it is made, then its file and its record are deleted
+						by a job that runs every hour. Asking for another deletes the one before. It is a copy
+						as it stood when it was made, so something deleted since, such as the receipts of a
+						deleted account, stays in it until it is deleted.
+					</Row>
 					<Row term="Your organisation's work">
 						<p>
 							Until it is deleted in Timesifier, or the organisation is. Nothing in it is deleted
-							for its age, except the activity log.
+							for its age, except the activity log and the exports of everything.
 						</p>
 						<ul className="mt-2 list-disc ps-6">
 							<li>
@@ -643,7 +658,10 @@ export default function Privacy({
 						every invoice as a PDF in one ZIP, from Integrations. Owners, admins and Finance can
 						download the reports of invoices, the Contractors report and a file for Xero, as CSV.
 						Anyone can download everything Timesifier holds about them, as one ZIP of JSON and CSV
-						files, from My account.
+						files, from My account. An owner, and nobody else, can export everything the
+						organisation holds, as one ZIP of every table as CSV, every receipt and the logo, from
+						Workspace settings; it is kept for {EXPORT_KEEP_DAYS} days, and each export and each
+						download is written in the activity log.
 					</Row>
 					<Row term="Corrections">
 						You can change your name and your time zone in My account, and your own time entries and

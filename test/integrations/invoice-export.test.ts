@@ -8,6 +8,7 @@ import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { createOrganisation, seedMembership, seedTeam } from "../organisations/harness";
 import { open, type Person, person } from "../pages/harness";
+import { endRecord, unzip } from "../zip";
 
 // Every invoice as its PDF in one ZIP (TS-076), below Integrations: owners and
 // admins download it, everyone else gets the 404 a stranger gets. The ZIP is
@@ -52,81 +53,6 @@ async function draft(amountMinor: number) {
 	});
 	if (!made.ok) throw new Error(made.problem);
 	return made.id;
-}
-
-interface Unzipped {
-	name: string;
-	utf8: boolean;
-	method: number;
-	bytes: Uint8Array;
-}
-
-async function inflateRaw(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
-	const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-	return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-/**
- * The end record, found as an unzipper finds it: searching back from the end
- * for its signature, at the place where the comment it gives the length of
- * ends the file. With the archive's comment.
- */
-function endRecord(file: Uint8Array<ArrayBuffer>): { end: number; comment: string } {
-	const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
-	for (let end = file.length - 22; end >= 0; end--) {
-		if (view.getUint32(end, true) !== 0x0605_4b50) continue;
-		const length = view.getUint16(end + 20, true);
-		if (end + 22 + length !== file.length) continue;
-		return { end, comment: new TextDecoder().decode(file.subarray(end + 22)) };
-	}
-	throw new Error("no end record");
-}
-
-/**
- * Reads a ZIP the way an unzipper does: the end record, then each entry of the
- * central directory, then its local header and data. Checks that the two
- * headers agree, that the sizes are right and that each CRC is the CRC of the
- * bytes it holds.
- */
-async function unzip(file: Uint8Array<ArrayBuffer>): Promise<Unzipped[]> {
-	const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
-	const { end } = endRecord(file);
-	const count = view.getUint16(end + 10, true);
-	const size = view.getUint32(end + 12, true);
-	let at = view.getUint32(end + 16, true);
-	expect(at + size).toBe(end);
-	const decoder = new TextDecoder();
-	const entries: Unzipped[] = [];
-	for (let n = 0; n < count; n++) {
-		expect(view.getUint32(at, true)).toBe(0x0201_4b50);
-		const flags = view.getUint16(at + 8, true);
-		const method = view.getUint16(at + 10, true);
-		const crc = view.getUint32(at + 16, true);
-		const compressed = view.getUint32(at + 20, true);
-		const length = view.getUint32(at + 24, true);
-		const nameLength = view.getUint16(at + 28, true);
-		const extra = view.getUint16(at + 30, true);
-		const comment = view.getUint16(at + 32, true);
-		const local = view.getUint32(at + 42, true);
-		const name = decoder.decode(file.subarray(at + 46, at + 46 + nameLength));
-		at += 46 + nameLength + extra + comment;
-
-		expect(view.getUint32(local, true)).toBe(0x0403_4b50);
-		expect(view.getUint16(local + 6, true)).toBe(flags);
-		expect(view.getUint16(local + 8, true)).toBe(method);
-		expect(view.getUint32(local + 14, true)).toBe(crc);
-		expect(view.getUint32(local + 18, true)).toBe(compressed);
-		expect(view.getUint32(local + 22, true)).toBe(length);
-		const localName = view.getUint16(local + 26, true);
-		const start = local + 30 + localName + view.getUint16(local + 28, true);
-		const data = file.slice(start, start + compressed);
-		const bytes = method === 8 ? await inflateRaw(data) : data;
-		expect(method === 0 || method === 8).toBe(true);
-		expect(bytes.length).toBe(length);
-		expect(crc32(bytes)).toBe(crc);
-		entries.push({ name, utf8: (flags & 0x0800) !== 0, method, bytes });
-	}
-	return entries;
 }
 
 async function bytesOf(response: Response) {
