@@ -14,12 +14,15 @@ import {
 } from "~/contracts/contracts";
 import { contractorOn, covers, END_OF_TIME, overlaps, spanOn } from "~/contracts/spans";
 import { contractsView } from "~/contracts/view";
+import { BELOW_STATUTORY, belowStatutoryFloor, holidayMinutesOn } from "~/leave/entitlement";
 import {
 	ORGANISATION_RULES,
 	type ScheduleBook,
+	type ScheduleWeek,
 	SINCE_EVER,
 	STANDARD_WEEK,
 	versionOn,
+	weekOfMinutes,
 } from "~/schedules/schedules";
 import { addDays, type Day, daysFrom } from "~/time/calendar";
 
@@ -356,5 +359,71 @@ describe("a contract in words", () => {
 			overtimeMultiplierBp: 10000,
 			restDayMultiplierBp: null,
 		});
+	});
+});
+
+// The statutory floor (TS-098b, research/contracts-model.md section 3), from
+// gov.uk, Holiday entitlement (https://www.gov.uk/holiday-entitlement-rights):
+// "Almost all people classed as workers are legally entitled to 5.6 weeks'
+// paid holiday a year"; "Statutory paid holiday entitlement is limited to 28
+// days. For example, staff working 6 days a week are only entitled to 28
+// days' paid holiday."; "An employer can choose to include bank holidays as
+// part of a worker's statutory annual leave."
+describe("statutory floor", () => {
+	const FIVE = weekOfMinutes([450, 450, 450, 450, 450, 0, 0]);
+	const THREE = weekOfMinutes([450, 450, 450, 0, 0, 0, 0]);
+	const SIX = weekOfMinutes([450, 450, 450, 450, 450, 450, 0]);
+	/** England and Wales's eight bank holidays of 2026, each on a weekday. */
+	const BANK_HOLIDAYS: Day[] = [
+		"2026-01-01",
+		"2026-04-03",
+		"2026-04-06",
+		"2026-05-04",
+		"2026-05-25",
+		"2026-08-31",
+		"2026-12-25",
+		"2026-12-28",
+	];
+	const below = (leaveDays: number, week: ScheduleWeek, holidaysFromAllowance: boolean) =>
+		belowStatutoryFloor({
+			leaveDays,
+			week,
+			holidayMinutes: holidayMinutesOn(week, BANK_HOLIDAYS),
+			holidaysFromAllowance,
+		});
+
+	it("warns below 5.6 weeks, counting public holidays where they are on top", () => {
+		// 20 days and the 8 bank holidays on top are 28 days: 5.6 weeks of five days.
+		expect(below(20, FIVE, false)).toBe(false);
+		expect(below(19, FIVE, false)).toBe(true);
+		// Where public holidays come out of annual leave, the 28 days are all in it.
+		expect(below(20, FIVE, true)).toBe(true);
+		expect(below(28, FIVE, true)).toBe(false);
+	});
+
+	it("pro rata on a part-time week: 5.6 weeks of three days is 16.8 days", () => {
+		// gov.uk: "if they work 3 days a week, they must get at least 16.8 days' leave a year (3 × 5.6)".
+		// 28 a year for a full week is 16.8 of hers; 27 is 16.2.
+		expect(below(28, THREE, true)).toBe(false);
+		expect(below(27, THREE, true)).toBe(true);
+		// The five bank holidays on her Mondays count on top: 20 ÷ 5 × 22:30 is
+		// 90 hours, and 37:30 of holidays make 127:30, over 5.6 × 22:30 = 126.
+		expect(holidayMinutesOn(THREE, BANK_HOLIDAYS)).toBe(5 * 450);
+		expect(below(20, THREE, false)).toBe(false);
+		expect(below(19, THREE, false)).toBe(true);
+	});
+
+	it("caps the floor at 28 days on a six-day week", () => {
+		// 5.6 weeks of six days is 33.6 days; the floor is 28 of them, 210 hours.
+		// 24 a year for a full week is 24 ÷ 5 × 45:00 = 216 hours; 23 is 207.
+		expect(below(24, SIX, true)).toBe(false);
+		expect(below(23, SIX, true)).toBe(true);
+	});
+
+	it("says so in a sentence citing gov.uk, and never for a week with no working day", () => {
+		expect(BELOW_STATUTORY).toBe(
+			"This is less than the 5.6 weeks' paid holiday UK law gives (gov.uk, Holiday entitlement).",
+		);
+		expect(below(0, weekOfMinutes([0, 0, 0, 0, 0, 0, 0]), true)).toBe(false);
 	});
 });

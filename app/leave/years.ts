@@ -20,9 +20,11 @@ export const LeaveYearStarts = z
 	.string()
 	.regex(MONTH_DAY)
 	.refine((value) => {
-		// 2001 was not a leap year: 29 February, and any day a month does not have, comes back as another.
+		// 2001 was not a leap year: 29 February, and any day a month does not
+		// have, is no date then, or comes back as another.
 		const day = `2001-${value}`;
-		return new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day;
+		const date = new Date(`${day}T00:00:00Z`);
+		return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === day;
 	}, "Not a day of every year.");
 
 /** A leave year: the calendar year it starts in, and its first and last days. */
