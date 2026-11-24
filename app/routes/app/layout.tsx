@@ -25,6 +25,7 @@ import {
 	APP_PATH,
 	accountPath,
 	destinationPath,
+	destinations,
 	NEW_ORGANISATION_PATH,
 	ORGANISATION_PARAM,
 } from "~/shell/destinations";
@@ -236,7 +237,16 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 								className={cx(
 									"outline-none focus-visible:focus-indicator-inner",
 									organisation
-										? cx("min-w-0 flex-1 pt-10 pb-24", menuHidden ? "medium:ms-26" : "medium:ms-32")
+										? cx(
+												"min-w-0 flex-1 pt-10 pb-24",
+												// Under 600px Track time floats over the foot of every page of the
+												// organisation but the Timesheet, where it shows only while a timer
+												// runs (NavigationTimer.tsx); the page keeps room for it there.
+												(destinations[index]?.id !== "timesheet" ||
+													organisationData?.timer?.running) &&
+													"max-medium:pb-track-time",
+												menuHidden ? "medium:ms-26" : "medium:ms-32",
+											)
 										: OUTSIDE_MAIN,
 								)}
 							>
