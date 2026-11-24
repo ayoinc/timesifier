@@ -53,8 +53,17 @@ export function WhoSeesWhat({ leaving }: WhoSeesWhatProps) {
 				</Row>
 				<Row term="Account managers">
 					Any member an owner or admin names as a client's account manager creates that client's
-					projects, and sees what their role lets them, nothing more. Owners, admins and Finance see
-					who each client's account managers are.
+					projects, manages their work packages and their teams, names their delivery managers, and
+					sees each of those projects' team, the hours tracked to it and its budget in hours, but no
+					rate or money unless their role shows it. Owners, admins and Finance see who each client's
+					account managers are.
+				</Row>
+				<Row term="Delivery managers">
+					A person an owner, admin or account manager puts on a project's team as its delivery
+					manager, while they are, sees that project's team, the hours tracked to it and its budget
+					in hours, assigns members to it and manages its work packages, but names no other delivery
+					manager and sees no rate or money unless their role shows it. Everyone else on a team sees
+					their own days on it.
 				</Row>
 				<Row term="Contractors">
 					A person whose contract is a contractor's, or whom an owner or admin marks as a contractor

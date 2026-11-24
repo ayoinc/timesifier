@@ -59,6 +59,23 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-115c · Project teams and assigned-only tracking
+
+Builder: an AI session on branch `ts-115c-project-teams`, pull request #112. Builds the owner's decisions 3 and 4 of `research/projects-model.md`. Decision 75 is this card's. Migration `0040_project_teams` only adds: `project_members` and its two overlap triggers, `setup_imports` (TS-115d's), and `organisations.project_tracking`, `anyone` by default. The CSV set-up import is TS-115d, stacked on this one.
+
+- [x] A project's team is its people's stretches from a day to a day or on, as a member or a delivery manager; no two of one person on one project share a day, refused by the server and by triggers. Test: `test/projects/project-teams.test.ts` ("a stretch on a team").
+- [x] Existing organisations keep `anyone`, and every path takes time as before. Test: `test/projects/project-teams.test.ts` ("an organisation from before").
+- [x] `/app/new` asks an organisation with clients who tracks time, "Assigned people only" first; Internal work is not asked. Tests: `test/pages/app.test.ts` ("tracking by"), `e2e/organisations-keyboard.spec.ts`, `e2e/codes.spec.ts`.
+- [x] Under `assigned`, time on a day goes to a project only from a person on its team that day, the owner too, on track, a calendar slot, the timer, a cell, edit, undo and the API; a change that keeps project and day and adds no time is let be. Test: `test/projects/project-teams.test.ts` ("each path an entry is written by").
+- [x] Copy leaves out entries whose teams do not have the person on the day, and says how many; the CSV time import skips such a row, and a row on a project it would add, with why. Test: `test/projects/project-teams.test.ts` ("copying time forward", "the CSV time import").
+- [x] Owners, admins and a project's delivery managers, while they lead it, add themselves from the picker in one step, recorded as their own doing; Finance, account managers, line managers, members and contractors 403, a stranger 404. Test: `test/projects/project-teams.test.ts` ("adding yourself from the picker").
+- [x] Owners, admins, the client's account managers and the project's delivery managers assign, end, change and remove; only the first three name a delivery manager; Finance, other account managers, line managers, members and contractors 403, a stranger 404; a stretch with time is ended, not removed. Test: `test/projects/project-teams.test.ts` ("who manages a project's team").
+- [x] The Team tab shows the whole team to owners, admins, Finance, account managers, delivery managers and line managers, and others their own stretches. Test: `test/projects/project-teams.test.ts` ("the Team tab").
+- [x] The API: `project_members` (GET, POST, PATCH, DELETE) under `projects:read` and the new `projects:write`, by the page's rules; `docs/api.md` and `docs/openapi.yaml` kept in step. Tests: `test/integrations/project-members.test.ts`, `test/integrations/api.test.ts`.
+- [x] The privacy notice, Who sees what and `docs/security.md` say what is stored and who sees and manages it. Test: `test/claims.test.ts`.
+- [ ] Browser specs with keyboard and axe at 390px and 1280px, light and dark, and screenshots in `cmux-assets/browser/timesifier/TS-115c/`. Test: `e2e/project-teams.spec.ts`.
+- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+
 ### TS-098a · Contracts and their changes
 
 Builder: an AI session on branch `ts-098a-contracts`, pull request #111. Decision 74; `research/contracts-model.md` section 9. Migration `0039_contracts`, kept at 0039 for the merge train to renumber.
