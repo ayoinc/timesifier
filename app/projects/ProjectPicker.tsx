@@ -43,7 +43,9 @@ import { lineKey, lineOf, projectAndPackage, WORK_PACKAGE_REFUSALS } from "./wor
 // organisation's (TS-115a). A project with open work packages is offered by
 // each of them, "ACME-001 · Website rebuild › WP2 Build", found by the work
 // package's code or name too, and a second hidden input sends the work
-// package's id (TS-115b).
+// package's id (TS-115b). The person's own projects, those whose team they
+// are on, head the list (TS-115c); a project they may add themselves to's
+// team, where only its team tracks to it, is offered last, apart.
 
 /** A project the picker offers. The caller leaves archived projects out. */
 export interface PickerProject {
@@ -111,6 +113,10 @@ export interface ProjectPickerProps {
 	recent?: readonly string[];
 	/** The ids of the projects the person pinned; all are shown, first, A to Z. */
 	pinned?: readonly string[];
+	/** The ids of the projects whose team the person is on (TS-115c): shown first, A to Z. */
+	assigned?: readonly string[];
+	/** The ids of the projects the person may add themselves to the team of (TS-115c): shown last, apart. */
+	joinable?: readonly string[];
 	/** The chosen project's id. */
 	value: string | null;
 	/** The chosen work package's id (TS-115b); null or left out for none. */
@@ -137,9 +143,14 @@ export const RECENT_LIMIT = 5;
 export const RECENT_TITLE = "Recent";
 export const NO_CLIENT_TITLE = "No client";
 export const NO_MATCH = "No project matches";
+/** The heading of the person's own projects, in the organisation's word for them. */
+export const ASSIGNED_TITLE = "Your projects";
+/** The heading of the projects the person may add themselves to the team of. */
+export const JOINABLE_TITLE = "Not on the team";
 
 /**
- * The list as shown for what is typed: the pinned projects first, A to Z,
+ * The list as shown for what is typed: the person's own projects first, those
+ * whose team they are on (TS-115c), then the pinned projects, A to Z,
  * then up to five recent projects, then each client's projects, clients A to
  * Z and projects A to Z within them, and the projects without a client last. A
  * project is listed once: a pinned one is not repeated as recent, nor either
@@ -149,7 +160,8 @@ export const NO_MATCH = "No project matches";
  * project is listed as its options (TS-115b), its work packages by code. What
  * is typed keeps the options whose project's code or name, client's name or
  * code, or work package's code or name holds it, in any case; an empty query
- * keeps every one. Sections left empty are dropped.
+ * keeps every one. Sections left empty are dropped. The projects the person
+ * may add themselves to the team of come last, in a section of their own.
  */
 export function projectSections(
 	projects: readonly PickerProject[],
@@ -157,6 +169,10 @@ export function projectSections(
 	query: string,
 	terms: Terms = CLIENT_PROJECT_TERMS,
 	pinned: readonly string[] = [],
+	{
+		assigned = [],
+		joinable = [],
+	}: { assigned?: readonly string[]; joinable?: readonly string[] } = {},
 ): ProjectSection[] {
 	const needle = query.trim().toLocaleLowerCase();
 	const holds = (text: string | null | undefined) =>
@@ -180,27 +196,40 @@ export function projectSections(
 							holds(optionLabel(option)))),
 			);
 
-	const byId = new Map(projects.map((project) => [project.id, project]));
+	const isJoinable = new Set(joinable);
+	const joinableProjects = projects.filter((project) => isJoinable.has(project.id)).sort(byLabel);
+	const offered = projects.filter((project) => !isJoinable.has(project.id));
+	const byId = new Map(offered.map((project) => [project.id, project]));
+	const isAssigned = new Set(assigned);
+	const assignedProjects = offered.filter((project) => isAssigned.has(project.id)).sort(byLabel);
 	const isPinned = new Set(pinned);
-	const pinnedProjects = projects.filter((project) => isPinned.has(project.id)).sort(byLabel);
+	const pinnedProjects = offered
+		.filter((project) => isPinned.has(project.id) && !isAssigned.has(project.id))
+		.sort(byLabel);
 	const recentProjects: PickerProject[] = [];
 	for (const id of recent) {
 		const project = byId.get(id);
-		if (!project || recentProjects.includes(project) || isPinned.has(id)) continue;
+		if (!project || recentProjects.includes(project) || isPinned.has(id) || isAssigned.has(id))
+			continue;
 		recentProjects.push(project);
 		if (recentProjects.length === RECENT_LIMIT) break;
 	}
-	const isAbove = new Set([...pinnedProjects, ...recentProjects].map((project) => project.id));
-	const rest = projects.filter((project) => !isAbove.has(project.id));
+	const isAbove = new Set(
+		[...assignedProjects, ...pinnedProjects, ...recentProjects].map((project) => project.id),
+	);
+	const rest = offered.filter((project) => !isAbove.has(project.id));
 	const above = [
+		{ id: "assigned", title: inTerms(ASSIGNED_TITLE, terms), options: kept(assignedProjects) },
 		{ id: "pinned", title: PINNED_TITLE, options: kept(pinnedProjects) },
 		{ id: "recent", title: RECENT_TITLE, options: kept(recentProjects) },
 	];
+	const apart = { id: "joinable", title: JOINABLE_TITLE, options: kept(joinableProjects) };
 
 	if (!terms.clients) {
 		return [
 			...above,
 			{ id: "all", title: terms.Projects, options: kept(rest.sort(byLabel)) },
+			apart,
 		].filter((section) => section.options.length > 0);
 	}
 
@@ -228,6 +257,7 @@ export function projectSections(
 			})),
 		{ id: "no-client", title: NO_CLIENT_TITLE, options: kept(noClient.sort(byLabel)) },
 		{ id: "work-codes", title: terms.WorkCodes, options: kept(workCodes.sort(byLabel)) },
+		apart,
 	];
 	return sections.filter((section) => section.options.length > 0);
 }
@@ -245,6 +275,8 @@ export function ProjectPicker({
 	projects,
 	recent = [],
 	pinned = [],
+	assigned = [],
+	joinable = [],
 	value,
 	workPackageId = null,
 	onChange,
@@ -262,7 +294,10 @@ export function ProjectPicker({
 		? (optionsOf(project).find((option) => option.id === lineKey(project.id, workPackageId)) ??
 			null)
 		: null;
-	const sections = projectSections(projects, recent, query ?? "", terms, pinned);
+	const sections = projectSections(projects, recent, query ?? "", terms, pinned, {
+		assigned,
+		joinable,
+	});
 	// Its project chosen but none of its work packages, as an entry tracked before the project had
 	// any is (TS-115b): the field says one must be chosen, and is not sent until one is.
 	const lacksPackage =

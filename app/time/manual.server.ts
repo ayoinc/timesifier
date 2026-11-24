@@ -6,6 +6,7 @@ import { type OrganisationScope, uuidv7 } from "~/db";
 import { refusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
+import { entryTeamOf } from "~/projects/teams.server";
 import { entryPackageOf } from "~/projects/work-packages.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
@@ -25,7 +26,9 @@ import { gridEntryStart, placeOnDay } from "./grid";
  * take: a public holiday, whole-day leave, regular time past the day's
  * expected hours, or overtime the organisation's rules do not allow (TS-090,
  * TS-095, `refusalOf`), and so is an entry of a project with an open work
- * package that names none, or names a closed one (TS-115b, `entryPackageOf`).
+ * package that names none, or names a closed one (TS-115b, `entryPackageOf`),
+ * and, where tracking is by assignment, time on a day its person is not on
+ * the project's team (TS-115c, `entryTeamOf`).
  * Each change goes in one batch with its row in the activity log.
  */
 
@@ -42,6 +45,7 @@ export type NotWritten =
 	| "no-task"
 	| "no-work-package"
 	| "work-package-closed"
+	| "not-assigned"
 	| "no-tag"
 	| "ahead"
 	| "too-long";
@@ -194,6 +198,13 @@ export async function editEntry(
 			: null,
 	);
 	if (!wp.ok) return refuse(wp.reason);
+	// Where tracking is by assignment, its project's team must take it on its day (TS-115c).
+	const team = await entryTeamOf(scope, userId, span.projectId, spentOn, {
+		projectId: entry.projectId,
+		spentOn: entry.spentOn,
+		addsTime: span.endedAt - span.startedAt > entry.endedAt.getTime() - entry.startedAt.getTime(),
+	});
+	if (!team.ok) return refuse(team.reason);
 	const currentTags = (await tagsOfEntries(scope, [id])).get(id) ?? [];
 	if (span.tagIds && !(await tagsAllowed(scope, currentTags, span.tagIds))) return refuse("no-tag");
 	const changed = {
@@ -307,6 +318,9 @@ export async function restoreEntry(
 	// Put back is new time: its work package must still take it (TS-115b).
 	const wp = await entryPackageOf(scope, entry.projectId, entry.workPackageId ?? null);
 	if (!wp.ok) return refuse(wp.reason);
+	// And its project's team must take it on its day (TS-115c).
+	const team = await entryTeamOf(scope, userId, entry.projectId, entry.spentOn);
+	if (!team.ok) return refuse(team.reason);
 	const restored = {
 		id: entry.id,
 		userId,
@@ -396,6 +410,8 @@ export async function addHours(
 	if (!task.ok) return refuse("no-task");
 	const wp = await entryPackageOf(scope, projectId, hours.workPackageId ?? null);
 	if (!wp.ok) return refuse(wp.reason);
+	const team = await entryTeamOf(scope, userId, projectId, day);
+	if (!team.ok) return refuse(team.reason);
 	if (hours.tagIds && !(await tagsAllowed(scope, [], hours.tagIds))) return refuse("no-tag");
 	const wanted =
 		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day), now);
@@ -513,6 +529,22 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 			: null,
 	);
 	if (!wp.ok) return refuse(wp.reason);
+	// So must the project's team on the day (TS-115c), unless the cell only loses time.
+	const team = await entryTeamOf(
+		scope,
+		userId,
+		projectId,
+		day,
+		entry
+			? {
+					projectId,
+					spentOn: day,
+					addsTime:
+						minutes * 60_000 > (entry.endedAt?.getTime() ?? now) - entry.startedAt.getTime(),
+				}
+			: null,
+	);
+	if (!team.ok) return refuse(team.reason);
 
 	const wanted = entry ? entry.startedAt.getTime() : gridEntryStart(day, zone, ofDay, now);
 	const placed = placeOnDay(day, zone, wanted, minutes, now);

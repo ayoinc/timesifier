@@ -26,6 +26,10 @@ export const ActivityAction = z.enum([
 	"project.restored",
 	"project.client_changed",
 	"project.updated",
+	// TS-115c: a person put on a project's team, their stretch changed, or taken off.
+	"project.member_added",
+	"project.member_changed",
+	"project.member_removed",
 	"work_package.created",
 	"work_package.updated",
 	"work_package.closed",

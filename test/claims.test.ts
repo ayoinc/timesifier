@@ -503,7 +503,13 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 	const pages = [PRIVACY_PATH, SECURITY_PATH];
 	for (const path of pages) {
 		const html = await page(path);
-		for (const term of [...Object.values(rows), "Managers", "Account managers", "Contractors"]) {
+		for (const term of [
+			...Object.values(rows),
+			"Managers",
+			"Account managers",
+			"Delivery managers",
+			"Contractors",
+		]) {
 			expect(html, `${path}: ${term}`).toContain(
 				`<dt class="text-title-medium wrap-anywhere">${term}</dt>`,
 			);

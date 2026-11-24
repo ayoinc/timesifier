@@ -257,6 +257,20 @@ test("creating an organisation: the field, the action and the way out, with the 
 	await expect(model("Internal work")).toBeChecked();
 	await page.keyboard.press("ArrowUp");
 	await expect(model("Client projects")).toBeChecked();
+	// Then who tracks time to a project, asked of an organisation with clients: one
+	// stop at "Assigned people only", chosen to start with (TS-115c, decision 75).
+	const tracking = (name: string) =>
+		main
+			.getByRole("radiogroup", { name: "Who tracks time to a project" })
+			.getByRole("radio", { name: new RegExp(`^${name}`) });
+	await page.keyboard.press("Tab");
+	await expectRadioFocused(tracking("Assigned people only"));
+	await expect(tracking("Assigned people only")).toBeChecked();
+	await page.keyboard.press("ArrowDown");
+	await expectRadioFocused(tracking("Anyone"));
+	await expect(tracking("Anyone")).toBeChecked();
+	await page.keyboard.press("ArrowUp");
+	await expect(tracking("Assigned people only")).toBeChecked();
 	// What creating it accepts, each a link, then the action (TS-105).
 	await tabTo(page, main.getByRole("link", { name: "terms", exact: true }));
 	await tabTo(page, main.getByRole("link", { name: "data processing agreement", exact: true }));

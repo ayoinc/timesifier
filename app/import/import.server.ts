@@ -32,6 +32,7 @@ import { nameKey, recordName } from "~/lib/names";
 import { lockOf, lockReachOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
 import { nextPatternCodes, projectCodeRules } from "~/projects/projects.server";
+import { teamRules } from "~/projects/teams.server";
 import { type PackageRules, packageRules } from "~/projects/work-packages.server";
 import { addDays, type Day, dayOf, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
@@ -58,7 +59,9 @@ import {
  * clients, projects and tasks are. A row is held to its day's limits as the
  * Timesheet holds a change (TS-095): past the day's expected hours it is
  * overtime where the organisation allows that much, and skipped with the
- * reason where it does not.
+ * reason where it does not. Where only a project's team tracks to it
+ * (TS-115c), a row is skipped unless its person is on its project's team on
+ * its day; a project the import adds has nobody on its team, and takes none.
  */
 
 /** The largest file an import takes, in bytes. */
@@ -492,6 +495,13 @@ async function previewRecords(
 	preview.creates.projects = kind === "projects" ? named : [];
 }
 
+/** Why a row is skipped where only a project's team tracks to it and its person is not on it that day (TS-115c). */
+export const NOT_ON_TEAM = "This person is not on the project's team on that day.";
+
+/** Why a row on a project the import adds is skipped where only a project's team tracks to it. */
+export const NEW_PROJECT_NO_TEAM =
+	"Only a project's team tracks time to it, and a project the import adds has nobody on its team.";
+
 async function previewTime(
 	scope: OrganisationScope,
 	organisation: ImportOrganisation,
@@ -507,11 +517,14 @@ async function previewTime(
 		scope.clients.select(),
 	]);
 	const projectIdOf = new Map(projects.map((p) => [p.nameKey, p.id]));
-	// A row's work package is found by its code within its project (TS-115b).
-	const packages = await packageRules(
-		scope,
-		projects.map((p) => p.id),
-	);
+	// A row's work package is found by its code within its project (TS-115b),
+	// and its person must be on its project's team on its day where tracking
+	// is by assignment (TS-115c).
+	const projectIds = projects.map((p) => p.id);
+	const [packages, team] = await Promise.all([
+		packageRules(scope, projectIds),
+		teamRules(scope, projectIds),
+	]);
 	const byEmail = new Map(members.map((m) => [m.email, m]));
 	const byName = new Map<string, Member[]>();
 	for (const member of members) {
@@ -605,6 +618,17 @@ async function previewTime(
 		if ("reason" in workPackage) {
 			preview.skipped.push({ line: row.line, reason: workPackage.reason });
 			continue;
+		}
+		if (team.tracking === "assigned") {
+			const projectId = found ? (projectIdOf.get(found.nameKey) ?? null) : null;
+			if (projectId === null) {
+				preview.skipped.push({ line: row.line, reason: NEW_PROJECT_NO_TEAM });
+				continue;
+			}
+			if (!team.admits(member.userId, projectId, day)) {
+				preview.skipped.push({ line: row.line, reason: NOT_ON_TEAM });
+				continue;
+			}
 		}
 		if (!found) projectFinder.add(project, projectCode);
 		const notes = cell(row, "notes");

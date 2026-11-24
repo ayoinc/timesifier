@@ -6,8 +6,11 @@ import type { Membership } from "~/organisations/membership.server";
 import { pinnedProjectIds } from "~/pins/pins.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { recentProjectIds } from "~/projects/recent.server";
+import { teamChoices, trackingOf } from "~/projects/teams.server";
 import { workPackageChoices } from "~/projects/work-packages.server";
 import { tagOptions, tagsOfEntries } from "~/tags/tags.server";
+import { dayOf } from "~/time/calendar";
+import { zoneOfMember } from "~/time/zones.server";
 import { hasClients } from "~/workspace/work-model";
 import { tasksOfProjects } from "./tasks.server";
 import type { ProjectChoice, TrackChoices } from "./track";
@@ -19,8 +22,9 @@ import type { ProjectChoice, TrackChoices } from "./track";
  * entry shown, so its sheet starts at what it has, and for the project picker
  * the person's pinned and recent projects and each project's code, client
  * and the client's code, and whether it is a work code (TS-115a), and each
- * project's work packages (TS-115b). An
- * organisation that shows no clients is given none.
+ * project's work packages (TS-115b), and the person's place on each
+ * project's team (TS-115c). An organisation that shows no clients is given
+ * none.
  */
 export async function trackChoices(
 	scope: OrganisationScope,
@@ -43,6 +47,8 @@ export async function trackChoices(
 		active,
 		clients,
 		packages,
+		team,
+		zone,
 	] = await Promise.all([
 		tasksOfProjects(scope),
 		tagOptions(scope),
@@ -56,6 +62,11 @@ export async function trackChoices(
 		scope.projects.select((p) => isNull(p.archivedAt)),
 		showsClients ? scope.clients.select() : [],
 		workPackageChoices(scope),
+		trackingOf(scope).then((tracking) =>
+			teamChoices(scope, membership.user.id, membership.role, tracking),
+		),
+		// The person's today, in their own zone, as every writer counts their days (TS-111).
+		zoneOfMember(membership),
 	]);
 	const clientOf = new Map(clients.map((c) => [c.id, { name: c.name, code: c.code }]));
 	return {
@@ -91,6 +102,7 @@ export async function trackChoices(
 			]),
 		),
 		workPackages: packages,
+		team: { ...team, today: dayOf(now, zone) },
 	};
 }
 

@@ -33,7 +33,9 @@ import { organisationMoney, pricedProject, pricingOf } from "./money.server";
  * (`timeScopeOf`); amounts, rates and a budget in fees are read only for
  * those who see rates (`maySeeRates`), and are left out of the data
  * altogether for anybody else. A budget in hours is shown to managers as
- * well; a member is not shown the budget, only warned when it is over.
+ * well, and to those who oversee the project (TS-115c): its delivery managers
+ * and its client's account managers, who see everyone's hours on it too; a
+ * member is not shown the budget, only warned when it is over.
  */
 
 /** The most entries without a rate the page lists. */
@@ -89,6 +91,8 @@ export async function projectPage(
 	whose: TimeScope,
 	now: number,
 	locale: string,
+	/** Whether the viewer oversees this project (`oversightOf`), and so sees its hours and budget in hours. */
+	oversees = false,
 ) {
 	const [project] = await scope.projects.select((p) => eq(p.id, projectId), { limit: 1 });
 	if (!project) return null;
@@ -104,7 +108,10 @@ export async function projectPage(
 
 	const [entries, taskLists, allTasks, tagIds, tags, members, pricing, alerts] = await Promise.all([
 		scope.timeEntries.select((e) =>
-			and(eq(e.projectId, projectId), whose.everyone ? undefined : among(e.userId, whose.people)),
+			and(
+				eq(e.projectId, projectId),
+				whose.everyone || oversees ? undefined : among(e.userId, whose.people),
+			),
 		),
 		tasksOfProjects(scope, [projectId]),
 		activeTasks(scope),
@@ -169,7 +176,7 @@ export async function projectPage(
 		money,
 		pricing,
 	});
-	const shownBudget = budgetShownTo(membership, budget);
+	const shownBudget = budgetShownTo(membership, budget, oversees);
 
 	const memberIds = members.map((m) => m.userId);
 	const names = await namesOf([...new Set([...memberIds, ...byPerson.keys()])]);
@@ -393,14 +400,16 @@ export async function projectCurrencies(scope: OrganisationScope, projectId: str
  * The budget as `membership` is shown it, or null. A budget is shown to those
  * who oversee the work: in hours to a manager too, in fees only to those who
  * see rates. A member is only warned (TS-069). The project page and Projects
- * (TS-122) both ask here.
+ * (TS-122) both ask here. `oversees` is whether the viewer oversees the
+ * project (TS-115c): its budget in hours is theirs to see.
  */
 export function budgetShownTo(
 	membership: Membership,
 	budget: BudgetFigures | null,
+	oversees = false,
 ): BudgetFigures | null {
 	const seesRates = maySeeRates(membership.role);
-	if (!budget || !(seesRates || membership.managesTeams)) return null;
+	if (!budget || !(seesRates || membership.managesTeams || oversees)) return null;
 	return budget.hours || seesRates ? budget : null;
 }
 
@@ -428,13 +437,15 @@ export async function listedBudgets(
 	membership: Membership,
 	projectIds: readonly string[],
 	now: number,
+	/** The projects the viewer oversees (TS-115c), whose budgets in hours they see. */
+	overseen: ReadonlySet<string> = new Set(),
 ): Promise<Map<string, ListedBudget>> {
 	const listed = new Map<string, ListedBudget>();
-	if (projectIds.length === 0 || !(maySeeRates(membership.role) || membership.managesTeams)) {
-		return listed;
-	}
+	const seesAll = maySeeRates(membership.role) || membership.managesTeams;
+	const shown = seesAll ? projectIds : projectIds.filter((id) => overseen.has(id));
+	if (shown.length === 0) return listed;
 	const projects = (
-		await scope.projects.select((p) => and(among(p.id, projectIds), ne(p.budgetKind, "none")))
+		await scope.projects.select((p) => and(among(p.id, shown), ne(p.budgetKind, "none")))
 	).filter((p) => p.archivedAt === null);
 	if (projects.length === 0) return listed;
 	const money = await organisationMoney(scope.organisationId);
@@ -445,7 +456,11 @@ export async function listedBudgets(
 		pricing: await pricingOf(scope, money.currency),
 	});
 	for (const project of projects) {
-		const budget = budgetShownTo(membership, figures.get(project.id) ?? null);
+		const budget = budgetShownTo(
+			membership,
+			figures.get(project.id) ?? null,
+			overseen.has(project.id),
+		);
 		if (!budget?.total || budget.amount === null) continue;
 		const { amount } = budget;
 		const alert = project.budgetAlertPercent;

@@ -117,11 +117,18 @@ export async function projectHours(
 	scope: OrganisationScope,
 	whose: TimeScope,
 	now: number,
+	/** The projects the viewer oversees (TS-115c), of which everyone's hours count. */
+	overseen: ReadonlySet<string> = new Set(),
 ): Promise<Map<string, number>> {
 	const totals = await scope.timeEntries.sum(
 		(e) => sql<number>`max(0, coalesce(${e.endedAt}, ${now}) - ${e.startedAt})`,
 		(e) => e.projectId,
-		whose.everyone ? undefined : (e) => among(e.userId, whose.people),
+		whose.everyone
+			? undefined
+			: (e) =>
+					overseen.size === 0
+						? among(e.userId, whose.people)
+						: or(among(e.userId, whose.people), among(e.projectId, overseen)),
 	);
 	return new Map(totals.map(({ key, total }) => [key, Math.floor(total / 1000)]));
 }

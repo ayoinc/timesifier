@@ -14,15 +14,16 @@ Authorization: Bearer tsf_…
 
 A token acts as the person who made it, with their role and teams as they are at each request. It never reaches more than that person could on the pages; the scopes chosen when it was made narrow it further:
 
-| Scope               | Lets the token                                      |
-| ------------------- | --------------------------------------------------- |
-| `time:read`         | Read time entries, and `GET /me`                    |
-| `time:write`        | Add, change and delete the maker's own time entries |
-| `descriptions:read` | Read entry descriptions and expense notes           |
-| `projects:read`     | Read projects, work packages, clients and tasks     |
-| `people:read`       | Read people and their leave                         |
-| `expenses:read`     | Read expenses                                       |
-| `invoices:read`     | Read invoices                                       |
+| Scope               | Lets the token                                                       |
+| ------------------- | -------------------------------------------------------------------- |
+| `time:read`         | Read time entries, and `GET /me`                                     |
+| `time:write`        | Add, change and delete the maker's own time entries                  |
+| `descriptions:read` | Read entry descriptions and expense notes                            |
+| `projects:read`     | Read projects, their teams, work packages, clients and tasks         |
+| `projects:write`    | Assign people to projects' teams, and change and end their stretches |
+| `people:read`       | Read people and their leave                                          |
+| `expenses:read`     | Read expenses                                                        |
+| `invoices:read`     | Read invoices                                                        |
 
 A token that is revoked, has expired, or whose maker has left the organisation is answered `401`.
 
@@ -36,20 +37,23 @@ Everything is JSON. A list is `{ "data": [ … ] }`; a list that pages adds `"ne
 
 An error is `{ "error": { "code", "message" } }`, and for `422` also `"fields"`, each field's problem:
 
-| Status | Code                     | When                                                                        |
-| ------ | ------------------------ | --------------------------------------------------------------------------- |
-| 400    | `bad_json`               | The body is not JSON                                                        |
-| 401    | `unauthorized`           | No working token                                                            |
-| 403    | `insufficient_scope`     | The token lacks the scope                                                   |
-| 403    | `forbidden`              | The maker's role may not do it, or it is someone else's entry               |
-| 404    | `not_found`              | Nothing at that address, or nothing the maker may see there                 |
-| 405    | `method_not_allowed`     | `Allow` says which methods are                                              |
-| 409    | `locked`, `running`      | The day is locked (submitted, approved, lock date), or the entry is running |
-| 409    | `invoiced`               | The entry is on an invoice; `message` names it and who can let it go        |
-| 413    | `too_large`              | A body over 16 KB                                                           |
-| 415    | `unsupported_media_type` | A body that is not `application/json`                                       |
-| 422    | `invalid`                | Values that cannot be used                                                  |
-| 429    | `rate_limited`           | See above                                                                   |
+| Status | Code                     | When                                                                         |
+| ------ | ------------------------ | ---------------------------------------------------------------------------- |
+| 400    | `bad_json`               | The body is not JSON                                                         |
+| 401    | `unauthorized`           | No working token                                                             |
+| 403    | `insufficient_scope`     | The token lacks the scope                                                    |
+| 403    | `forbidden`              | The maker's role may not do it, or it is someone else's entry                |
+| 404    | `not_found`              | Nothing at that address, or nothing the maker may see there                  |
+| 405    | `method_not_allowed`     | `Allow` says which methods are                                               |
+| 409    | `locked`, `running`      | The day is locked (submitted, approved, lock date), or the entry is running  |
+| 409    | `invoiced`               | The entry is on an invoice; `message` names it and who can let it go         |
+| 409    | `overlaps`, `has_time`   | A person's stretches on a team would share a day, or one taken away has time |
+| 413    | `too_large`              | A body over 16 KB                                                            |
+| 415    | `unsupported_media_type` | A body that is not `application/json`                                        |
+| 422    | `invalid`                | Values that cannot be used                                                   |
+| 422    | `ends_before_start`      | A stretch on a team that ends before it starts                               |
+| 422    | `not_member`             | A person put on a team who is not a member of the organisation               |
+| 429    | `rate_limited`           | See above                                                                    |
 
 ## Who sees what
 
@@ -62,7 +66,7 @@ The pages' rules (`docs/security.md`, "Whose time", "Rates and money"):
 | Manager (manages a team) | Their own and their teams' members' | Themselves and teams | No      | No       | No            | Own and teams' |
 | Member, contractor       | Their own                           | Themselves           | No      | No       | No            | Their own      |
 
-Everyone sees approved leave of everyone, as the live "not working" status does; requests not yet approved only their own. Every role writes only its own entries.
+Everyone sees approved leave of everyone, as the live "not working" status does; requests not yet approved only their own. Every role writes only its own entries. Who sees and changes a project's team is under `GET /project_members`.
 
 ## Endpoints
 
@@ -95,6 +99,50 @@ A client's or project's `code` is how the organisation refers to it, and is uniq
 Query: `project_id`. Each project's work packages (TS-115b), archived ones too, by project then code: `id`, `project_id`, `code` (`WP2`, unique in its project whatever its letters' case), `name`, `starts_on`, `ends_on`, `state` (`open` or `closed`), `billable`, `archived`, and `budget` (`{ kind, amount }`: `hours` in minutes for everyone, `fees` in minor units only for those who see money; null otherwise).
 
 While a project has an open work package, every new or changed entry of it names one, open and of that project; a closed one takes no new time, and the time already on it stays. Entries from before keep what they have.
+
+### `GET /project_members` — `projects:read`
+
+Query: `project_id`, `user_id`, `per_page`, `cursor`. By `id`. Each stretch of a person on a project's team (TS-115c): where the organisation lets only the people on a project's team track time to it, a person's time on a day goes to the project only while one of their stretches covers that day.
+
+```json
+{
+	"id": "0193…",
+	"project_id": "…",
+	"user": { "id": "…", "name": "Ada Lovelace" },
+	"role": "delivery_manager",
+	"starts_on": "2026-11-02",
+	"ends_on": null,
+	"source": "manual"
+}
+```
+
+`role` is `member` or `delivery_manager`; `ends_on` is the stretch's last day, null while it runs on; `source` is what made it: `manual`, `import` or `contract`. No two stretches of one person on one project share a day. Owners, admins, Finance, managers of teams, the client's account managers and the project's delivery managers see its whole team; anyone else sees only their own stretches. A `project_id` that is not the organisation's answers `404`.
+
+### `GET /project_members/{id}` — `projects:read`
+
+One stretch, or 404 where the maker may not see it.
+
+### `POST /project_members` — `projects:write`
+
+```json
+{
+	"project_id": "…",
+	"user_id": "…",
+	"role": "member",
+	"starts_on": "2026-11-02",
+	"ends_on": "2027-03-31"
+}
+```
+
+`201` with the stretch. `ends_on` left out or null, the stretch runs on. Owners, admins, the client's account managers and the project's delivery managers put people on its team; only owners, admins and the client's account managers name a delivery manager. Anyone else is answered `403` `forbidden`. A stretch that shares a day with another of the person's on the project answers `409` `overlaps`; one that ends before it starts `422` `ends_before_start`; a person who is not a member of the organisation `422` `not_member`.
+
+### `PATCH /project_members/{id}` — `projects:write`
+
+Either `{ "ends_on": "2026-12-31" }` (null: it runs on) or `{ "role": "delivery_manager", "from": "2026-12-01" }`. A role changed from the stretch's first day, or before, is the stretch's own; from a later day, the stretch ends the day before and a new one of the new role runs on to where it ran, and the answer is that new stretch. The same people as for `POST` change a stretch; a delivery manager's, only owners, admins and the client's account managers.
+
+### `DELETE /project_members/{id}` — `projects:write`
+
+`204`. Takes away a stretch put there in error. One in which its person has tracked time to the project answers `409` `has_time`: end it instead, so the time it let in stays explained.
 
 ### `GET /time_entries` — `time:read`
 

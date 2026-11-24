@@ -71,6 +71,13 @@ import { activeGrant } from "~/platform/support.server";
 import { MoneySettings, ownCurrencyHolders } from "~/projects/MoneySettings";
 import { organisationMoney } from "~/projects/money.server";
 import { projectCodeRules } from "~/projects/projects.server";
+import {
+	PROJECT_TRACKING_HINTS,
+	PROJECT_TRACKING_LABELS,
+	PROJECT_TRACKINGS,
+	ProjectTracking,
+} from "~/projects/teams";
+import { trackingOf } from "~/projects/teams.server";
 import { CapHours, defaultScheduleSummary } from "~/schedules/forms";
 import { scheduleBookOf } from "~/schedules/schedules.server";
 import {
@@ -93,6 +100,7 @@ import {
 	INTERNAL_TERM_MAX_LENGTH,
 	INTERNAL_TERM_PROBLEM,
 	InternalTerm,
+	inTerms,
 	WORK_MODEL_HINTS,
 	WORK_MODEL_LABELS,
 	WORK_MODELS,
@@ -143,6 +151,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		grant,
 		dpaToSign,
 		codes,
+		projectTracking,
 	] = await Promise.all([
 		scheduleBookOf(scope),
 		leaveKindsOf(scope),
@@ -158,6 +167,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		// So is accepting the data processing agreement (TS-105).
 		isOwner ? dpaToAccept(organisation.id) : false,
 		projectCodeRules(organisation.id),
+		trackingOf(scope),
 	]);
 	return {
 		organisation: {
@@ -167,6 +177,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 			weekStartsOn: organisation.weekStartsOn,
 			workModel: organisation.workModel,
 			internalTerm: organisation.internalTerm,
+			/** Who may track time to a project (TS-115c). */
+			projectTracking,
 			canChange,
 			canDelete: allows(role, { organization: ["delete"] }),
 		},
@@ -294,6 +306,7 @@ const form = z.discriminatedUnion("intent", [
 		// Checked by `parsePattern`, in the page's words; empty is none.
 		pattern: z.string().max(200),
 	}),
+	z.object({ intent: z.literal("project-tracking"), projectTracking: ProjectTracking }),
 	z.object({ intent: z.literal("currency"), currency: CurrencyCode }),
 	z.object({ intent: z.literal("budget-hours"), countNonBillable: z.literal("on").optional() }),
 	// What the person typed to confirm. It is compared with the name; it is never used as one.
@@ -394,6 +407,22 @@ export async function action({ request, context }: Route.ActionArgs) {
 				user.id,
 			);
 			return done(`How you work is now ${WORK_MODEL_LABELS[input.workModel]}.`);
+		}
+
+		case "project-tracking": {
+			// Who tracks time to a project (TS-115c, decision 75): recorded in Activity as any setting.
+			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
+			await changeGeneral(
+				env.DB,
+				organisation.id,
+				{ projectTracking: input.projectTracking },
+				user.id,
+			);
+			return done(
+				input.projectTracking === "assigned"
+					? "Only the people on a project's team track time to it now."
+					: "Anyone in the organisation tracks time to any active project now.",
+			);
 		}
 
 		case "project-codes": {
@@ -560,7 +589,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 /** The sheets of this page. One is open at a time. */
-type Task = "rename" | "time-zone" | "week-start" | "work-model" | "project-codes" | "delete";
+type Task =
+	| "rename"
+	| "time-zone"
+	| "week-start"
+	| "work-model"
+	| "project-tracking"
+	| "project-codes"
+	| "delete";
 
 export default function Settings({ loaderData, params }: Route.ComponentProps) {
 	const { organisation, zones, leave, rules, expenses, locking } = loaderData;
@@ -643,6 +679,14 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 										: `Clients and their projects, and ${workTerms("internal", organisation.internalTerm).projects} for internal time that bills nobody.`
 							}
 							action={change("work-model", "how you work")}
+						/>
+						<LedgerRow
+							title={PROJECT_TRACKING_LABELS[organisation.projectTracking]}
+							detail={inTerms(
+								PROJECT_TRACKING_HINTS[organisation.projectTracking],
+								workTerms(organisation.workModel, organisation.internalTerm),
+							)}
+							action={change("project-tracking", "who tracks time")}
 						/>
 						<LedgerRow
 							title={
@@ -816,6 +860,40 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 				workModel={organisation.workModel}
 				internalTerm={organisation.internalTerm}
 			/>
+
+			<FormSheet
+				title="Change who tracks time"
+				intent="project-tracking"
+				submitLabel="Save"
+				isOpen={task === "project-tracking"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<RadioGroup
+					label="Who tracks time"
+					name="projectTracking"
+					defaultValue={organisation.projectTracking}
+				>
+					{PROJECT_TRACKINGS.map((tracking) => (
+						<Radio
+							key={tracking}
+							value={tracking}
+							hint={inTerms(
+								PROJECT_TRACKING_HINTS[tracking],
+								workTerms(organisation.workModel, organisation.internalTerm),
+							)}
+						>
+							{PROJECT_TRACKING_LABELS[tracking]}
+						</Radio>
+					))}
+				</RadioGroup>
+				<p>
+					{inTerms(
+						"Time already tracked stays as it is. A project's team is on its page, under Team.",
+						workTerms(organisation.workModel, organisation.internalTerm),
+					)}
+				</p>
+			</FormSheet>
 
 			<FormSheet
 				title="Change the codes"

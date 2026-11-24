@@ -274,6 +274,13 @@
 			"when": 1795508026504,
 			"tag": "0039_contracts",
 			"breakpoints": true
+		},
+		{
+			"idx": 39,
+			"version": "6",
+			"when": 1795510008985,
+			"tag": "0040_project_teams",
+			"breakpoints": true
 		}
 	]
 }
