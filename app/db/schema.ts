@@ -2571,8 +2571,10 @@ export const webhookDeliveries = sqliteTable(
 );
 
 /**
- * One CSV import (B19): previewed first, then imported, and perhaps reverted,
- * which deletes exactly the entries whose `importId` names it.
+ * One CSV import (B19): previewed first, then imported, and perhaps reverted.
+ * A time import's revert deletes exactly the entries whose `importId` names
+ * it; a people import's (TS-108) withdraws the invitations it sent that are
+ * still waiting, and what was to happen when they were accepted.
  */
 export const importJobs = sqliteTable(
 	"import_jobs",
@@ -2581,7 +2583,7 @@ export const importJobs = sqliteTable(
 		organisationId: text("organisation_id")
 			.notNull()
 			.references(() => organisations.id, { onDelete: "cascade" }),
-		/** `time`, `clients`, `projects` or `expenses`. */
+		/** `time`, `clients`, `projects`, `expenses` or `people` (TS-108). */
 		kind: text("kind").notNull(),
 		/** `previewed`, `imported`, `reverted` or `failed`. */
 		status: text("status").notNull().default("previewed"),
@@ -2611,7 +2613,7 @@ export const importJobs = sqliteTable(
 		index("import_jobs_organisation_id_created_at_idx").on(table.organisationId, table.createdAt),
 		check(
 			"import_jobs_kind_known",
-			sql`${table.kind} IN ('time', 'clients', 'projects', 'expenses')`,
+			sql`${table.kind} IN ('time', 'clients', 'projects', 'expenses', 'people')`,
 		),
 		check(
 			"import_jobs_status_known",
@@ -2620,6 +2622,69 @@ export const importJobs = sqliteTable(
 		check(
 			"import_jobs_counts_not_negative",
 			sql`${table.rowCount} >= 0 AND ${table.importedCount} >= 0 AND ${table.skippedCount} >= 0`,
+		),
+	],
+);
+
+/**
+ * What is to happen when an invitation sent with others is accepted (TS-108,
+ * docs/decisions.md entry 72): an invitation from "Invite many" or from a
+ * people import, one row each. The person joins `teamId`; the member at
+ * `managerEmail` then manages that team; and `scheduleId` is theirs from
+ * `startsOn`, or from the day they join if that is later. `name` is the name
+ * the import gave, which becomes the person's own when they join if their
+ * account has none. The team and the schedule are looked for again when the
+ * person joins, so one deleted since is simply not applied.
+ *
+ * The invitation's email waits here (`mailState`) and the scheduled work sends
+ * it a few a minute, within the day's cap on mail (`app/platform/limits.ts`).
+ * The row goes with its invitation, and with its import.
+ */
+export const invitationPlans = sqliteTable(
+	"invitation_plans",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		invitationId: text("invitation_id")
+			.notNull()
+			.references(() => invitations.id, { onDelete: "cascade" }),
+		/** The people import that sent it; null for "Invite many". */
+		importId: text("import_id"),
+		name: text("name"),
+		teamId: text("team_id"),
+		/** The address of the person who is to manage `teamId`, in lower case. */
+		managerEmail: text("manager_email"),
+		scheduleId: text("schedule_id"),
+		/** The day `scheduleId` starts for them, `YYYY-MM-DD`. */
+		startsOn: text("starts_on"),
+		/** Who sent it: the person the changes made when it is accepted are recorded as. */
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		/** `waiting`, `sending`, `sent`, or `withdrawn` when it was cancelled before it went. */
+		mailState: text("mail_state").notNull().default("waiting"),
+		/** When the email was taken to be sent, then when it was sent. */
+		mailedAt: integer("mailed_at", { mode: "timestamp_ms" }),
+		/** When it was accepted and the plan applied. */
+		appliedAt: integer("applied_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("invitation_plans_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("invitation_plans_invitation_id_unique").on(table.invitationId),
+		index("invitation_plans_organisation_id_import_id_idx").on(
+			table.organisationId,
+			table.importId,
+		),
+		index("invitation_plans_mail_state_created_at_idx").on(table.mailState, table.createdAt),
+		foreignKey({
+			name: "invitation_plans_import_fk",
+			columns: [table.organisationId, table.importId],
+			foreignColumns: [importJobs.organisationId, importJobs.id],
+		}).onDelete("cascade"),
+		check(
+			"invitation_plans_mail_state_known",
+			sql`${table.mailState} IN ('waiting', 'sending', 'sent', 'withdrawn')`,
 		),
 	],
 );

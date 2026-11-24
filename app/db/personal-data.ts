@@ -26,7 +26,14 @@ export const STORED = [
 		rows: [
 			{
 				term: "The organisation and its people",
-				tables: ["organisations", "memberships", "invitations", "teams", "team_members"],
+				tables: [
+					"organisations",
+					"memberships",
+					"invitations",
+					"invitation_plans",
+					"teams",
+					"team_members",
+				],
 			},
 			{
 				term: "Time and approvals",
