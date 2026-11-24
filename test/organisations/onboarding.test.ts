@@ -655,7 +655,7 @@ describe("importing people from a CSV", () => {
 		).toBe(1);
 	});
 
-	it("reverts: withdraws the invitations still waiting and what they were to bring, records it, and leaves who joined", async () => {
+	it("reverts at any age: withdraws the invitations still waiting and what they were to bring, records it, and leaves who joined", async () => {
 		const { owner } = roles.people;
 		const id = await started(
 			owner,
@@ -670,6 +670,10 @@ describe("importing people from a CSV", () => {
 		const waitsInvitation = (await value<string>(
 			"select id from invitations where email = 'waits@x.example'",
 		)) as string;
+		// A revert has no time limit, as a time import's has none: this one is a year old.
+		await env.DB.prepare("update people_imports set imported_at = ? where id = ?")
+			.bind(Date.now() - 365 * 24 * 60 * 60 * 1000, id)
+			.run();
 
 		const reverted = await ask(IMPORT, owner, { intent: "revert", importId: id });
 		expect(reverted.status).toBe(200);

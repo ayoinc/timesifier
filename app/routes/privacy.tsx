@@ -29,7 +29,7 @@ import { WhoSeesWhat } from "~/landing/WhoSees";
 
 import { setting } from "~/lib/deployment";
 import { UNVERIFY_AFTER_DAYS, WARN_AFTER_DAYS } from "~/organisations/domains.server";
-import { SIGN_IN_DAYS } from "~/platform/limits";
+import { DAILY_MAIL_CAP, MAIL_BATCH, SIGN_IN_DAYS } from "~/platform/limits";
 
 import type { Route } from "./+types/privacy";
 
@@ -160,7 +160,11 @@ export default function Privacy({
 				version of the data processing agreement an owner accepted for it, who and when. Who belongs
 				to it, each person's role, and whether they work as a contractor. Its teams, who is in each
 				and who manages it. Each invitation: the email address invited, the role offered, who sent
-				it, when it expires and what became of it.
+				it, when it expires and what became of it. For an invitation sent with others, from Invite
+				many or a CSV import of people: the name the import gave the person, the team they are to
+				join, the address of the member who is to manage it, the work schedule they are to follow
+				and from which day, whether its email has gone, and when it was applied. It is deleted with
+				the invitation, and when its import is reverted before the person joins.
 			</>
 		),
 		"Time and approvals": (
@@ -243,9 +247,10 @@ export default function Privacy({
 		),
 		Imports: (
 			<>
-				Each CSV import: its file's name, what it imported, who made it, and how many rows it took
-				or skipped, with why. The file's text is kept while the import waits to be confirmed, and
-				emptied once it is imported.
+				Each CSV import, of time or of people: its file's name, what it imported, who made it, and
+				how many rows it took or skipped, with why. The file's text, which for an import of people
+				holds their names and email addresses, is kept while the import waits to be confirmed, and
+				emptied once it is imported or deleted if it is discarded.
 			</>
 		),
 		"Calendar feeds": (
@@ -403,6 +408,11 @@ export default function Privacy({
 								person who invited them, the organisation's name and the role offered;
 							</li>
 							<li>
+								an invitation sent with others, from Invite many or a CSV import of people, to each
+								address an owner or admin invites, with the same content, at most {MAIL_BATCH} a
+								minute;
+							</li>
+							<li>
 								an invoice or an estimate, as a PDF, to the billing contacts of a client, when an
 								owner, admin or Finance sends it, or when a recurring invoice is set to send itself;
 								an estimate's email holds a link with which anyone who has it can read the estimate
@@ -445,9 +455,11 @@ export default function Privacy({
 						</ul>
 						<p className="mt-2">
 							An organisation sends at most {facts.documentEmails} invoice and estimate emails in 24
-							hours. Every image in an email is attached to the message: the Timesifier logo or, on
-							an organisation's invoice, reminder or estimate, its logo if it has one and the
-							Timesifier mark. Nothing is fetched when an email is opened, and nothing tells
+							hours. Invitations sent with others share one cap with product announcements and the
+							newsletter: at most {DAILY_MAIL_CAP} of them a day across Timesifier, the rest waiting
+							for the next day. Every image in an email is attached to the message: the Timesifier
+							logo or, on an organisation's invoice, reminder or estimate, its logo if it has one
+							and the Timesifier mark. Nothing is fetched when an email is opened, and nothing tells
 							Timesifier it was. The email with a code holds no link.
 						</p>
 					</Row>
