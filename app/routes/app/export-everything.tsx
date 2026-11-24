@@ -1,5 +1,5 @@
 import { env, waitUntil } from "cloudflare:workers";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 import * as z from "zod";
 
@@ -108,6 +108,18 @@ export default function ExportEverything({ loaderData, params }: Route.Component
 		}, WHILE_MADE_EVERY_MS);
 		return () => window.clearInterval(every);
 	}, [running, revalidate, state]);
+
+	// Once the one being made is made, or fails, the status says so in place of
+	// "being made", and is read out.
+	const was = useRef(loaderData.status);
+	useEffect(() => {
+		if (was.current === "running" && loaderData.status === "ready") {
+			setSaid("Your export is ready to download.");
+		} else if (was.current === "running" && loaderData.status === "failed") {
+			setSaid("Your export could not be made.");
+		}
+		was.current = loaderData.status;
+	}, [loaderData.status]);
 
 	const heading = {
 		none: "No export to download",

@@ -59,6 +59,25 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-126 · Export everything
+
+Builder: an AI session on branch `ts-126-export-everything`, pull request #105. Closes gap 18 of `research/corporate-readiness.md`: one ZIP of every table the organisation owns, plus receipts and logos. Decision 71. Migration `0035_organisation_exports`, after #100's 0033 and #102's 0034; renumbered at merge. Until #102 (TS-049, the bell) merges, the owner is told by email alone.
+
+- [x] An owner asks for one ZIP of everything on Workspace settings › Export everything; it holds every table of the organisation as CSV, its receipts and logo, and `manifest.json` whose counts are the files' (`test/exports/export-everything.test.ts`, "holds every table of the organisation as CSV, its receipts and logo, and a manifest whose counts are the files'").
+- [x] It holds nothing of another organisation, and a former member by id alone (`test/exports/export-everything.test.ts`, "holds no row, receipt or name of another organisation", "names a former member's rows by their id alone, as the export of all time does").
+- [x] It leaves out the secrets that sign in or prove a link (`WITHHELD_COLUMNS`; `test/exports/export-everything.test.ts`, "holds every table…", which reads each table's header).
+- [x] A job of steps into one R2 multipart upload under `org/<id>/exports/`, each step stopped at 15 s or 400 calls, parts of exactly 5 MiB, its place kept between steps (`test/exports/export-everything.test.ts`, "pages each table by id across page boundaries, splits a table into files, and loses or repeats no row", "keeps its place between steps, uploads parts of 5 MiB as it goes, and makes one ZIP of them").
+- [x] The every-minute trigger advances it; a lease holds a step against a second; three failures in a row fail it (`test/exports/export-everything.test.ts`, "holds a step against a second one, and the trigger steps the oldest export free of one", "runs a failed step again from where the last one ended, and fails the export after three in a row").
+- [x] One at a time; a new one replaces the last (`test/exports/export-everything.test.ts`, "lets one export be made at a time, and a new one replaces the last", "tells an owner asking while one is being made that it is").
+- [x] ZIP64 past 4 GiB or 65,535 files (`test/exports/export-everything.test.ts`, "writes a file's place past 4 GiB in its extra field", "writes ZIP64's end record and locator past 65,535 files or 4 GiB, and not before").
+- [x] Owners alone: the page, the action and the download are 404 to an admin, Finance, a manager, a member, a contractor and a stranger (`test/exports/export-everything.test.ts`, "who may export"; `test/pages/finance.test.ts`; `test/pages/isolation.test.ts`; `test/action-validation.test.ts`).
+- [x] Each request, export made or failed, download and deletion is an activity record, and the owner who asked is emailed a link to the page (`test/exports/export-everything.test.ts`, "is recorded, and the owner who asked is emailed a link to its page", "who may export").
+- [x] Expired after 7 days: the page says so and the download is 404, then the hourly trigger deletes its file and its row; it goes with its organisation (`test/exports/export-everything.test.ts`, "is expired and no longer offered, and the hourly trigger deletes its file and its row", "goes with its organisation, and no other organisation's").
+- [x] The privacy notice names the email, the table and the 7 days; `/privacy`, `/security` and `/dpa` say R2 holds the exports, each for 7 days, from `R2_HOLDS` (`test/claims.test.ts`, "the notice names every email the application sends, and whom it goes to", "the pages say receipts, logos and exports are kept in the EU because their buckets have the EU jurisdiction", "the security page says how long each thing is kept from the constant that keeps it").
+- [x] Decision 71, with Cloudflare's limits read again on 2026-11-24; `docs/architecture.md` and `docs/security.md` ("The export of everything").
+- [x] Browser spec: an owner asks, sees it being made, then ready after the every-minute trigger's step, downloads it from the keyboard, sees it expire and the hourly trigger delete it; an admin is never shown it; axe at 390 and 1280 px, light and dark (`e2e/export-everything.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-126/`.
+- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+
 ### TS-122 · The rest of the Harvest sweep
 
 Builder: an AI session on branch `ts-122-sweep-rest`, pull request #91. Builds S2-07, S2-06, S2-12 and S2-09 of `research/harvest-sweep-2.md`'s top 15; S2-14, S2-13 and S2-10 are built on a branch of their own, and S2-08 (Team's week as a capacity table) waits for #84. Decision 65 is this card's. Migration `0033_pins`, renumbered at merge. Team's change is kept small, as #84 changes the same page: a pinned person is put first before #84's paging takes its page.
