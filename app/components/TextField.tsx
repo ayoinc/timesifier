@@ -76,11 +76,13 @@ export function TextField({
 				<>
 					<div className={fieldContainer(field)}>
 						{rows ? (
+							// The room for the label is a border, not padding: a text area's lines scroll
+							// within its padding, so they would pass under the label; never under a border.
 							<TextArea
 								rows={rows}
 								className={cx(
 									FIELD_CONTROL,
-									"block resize-y px-4 pt-7 pb-2 text-body-large",
+									"block resize-y border-t-28 border-transparent px-4 pb-2 text-body-large",
 									field.isInvalid ? "caret-error" : "caret-primary",
 								)}
 							/>

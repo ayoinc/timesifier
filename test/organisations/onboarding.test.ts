@@ -683,6 +683,9 @@ describe("importing people from a CSV", () => {
 		expect(await row("select status from people_imports where id = ?", id)).toEqual({
 			status: "reverted",
 		});
+		expect(await page(`${IMPORT}?import=${id}`, owner)).toContain(
+			"3 people invited, 0 not sent. Reverted: the invitations still waiting were withdrawn, and 1 person who joined stays.",
+		);
 		expect(
 			(
 				await env.DB.prepare(

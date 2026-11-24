@@ -321,7 +321,12 @@ export default function ImportPeople({ loaderData, actionData }: Route.Component
 					heading={job ? `${job.fileName}: ${job.status}` : "Choose a file"}
 					lead={
 						job && standing
-							? `${people(job.importedCount)} invited, ${job.skippedCount} not sent. ${standing.joined} joined, ${standing.waiting} still invited, ${standing.withdrawn} withdrawn or expired.`
+							? `${people(job.importedCount)} invited, ${job.skippedCount} not sent. ${
+									job.status === "reverted"
+										? // A revert deletes what the withdrawn invitations were to bring, so only who joined is left to count.
+											`Reverted: the invitations still waiting were withdrawn${standing.joined > 0 ? `, and ${people(standing.joined)} who joined ${standing.joined === 1 ? "stays" : "stay"}` : ""}.`
+										: `${standing.joined} joined, ${standing.waiting} still invited, ${standing.withdrawn} withdrawn or expired.`
+								}`
 							: `It is read, not sent: you see what each row would do first. At most ${PEOPLE_MAX_ROWS} people.`
 					}
 				>

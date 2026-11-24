@@ -78,6 +78,15 @@ Builder: an AI session on branch `ts-126-export-everything`, pull request #105. 
 - [x] Browser spec: an owner asks, sees it being made, then ready after the every-minute trigger's step, downloads it from the keyboard, sees it expire and the hourly trigger delete it; an admin is never shown it; axe at 390 and 1280 px, light and dark (`e2e/export-everything.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-126/`.
 - [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
 
+### TS-108 · Company onboarding
+
+Builder: an AI session on branch `ts-108-onboarding`. An owner or admin invites many people at once, or imports them from a CSV with a dry run and a revert. Decision 72 is this card's. Migration `0036_people_import` only adds: `people_imports` and `invitation_plans`; `import_jobs` and the time import are untouched.
+
+- [x] Invite many on Invitations: up to 200 addresses with one role and team, the seats left shown, members, waiting invitations and repeats reported and not sent. Tests: `test/organisations/onboarding.test.ts` ("Invite many"); `e2e/onboarding.spec.ts`.
+- [x] Import people from a CSV: a dry run with each row's outcome, Invite, Discard, earlier imports and Revert at any age, people who joined staying. Team, manager, schedule from a start date and name applied when each person accepts. Tests: `test/organisations/onboarding.test.ts` ("importing people from a CSV"); `e2e/onboarding.spec.ts`.
+- [x] One D1 batch per send through `insertMany`; the bulk cap at the plan's seats, never under 20; emails 40 a minute within the shared 1,000 a day. Tests: the 500-row and cap tests in `test/organisations/onboarding.test.ts`.
+- [x] The privacy notice (24 November 2026) and `docs/security.md` describe `invitation_plans` and `people_imports`. Test: `test/claims.test.ts`.
+
 ### TS-122 · The rest of the Harvest sweep
 
 Builder: an AI session on branch `ts-122-sweep-rest`, pull request #91. Builds S2-07, S2-06, S2-12 and S2-09 of `research/harvest-sweep-2.md`'s top 15; S2-14, S2-13 and S2-10 are built on a branch of their own, and S2-08 (Team's week as a capacity table) waits for #84. Decision 65 is this card's. Migration `0033_pins`, renumbered at merge. Team's change is kept small, as #84 changes the same page: a pinned person is put first before #84's paging takes its page.
