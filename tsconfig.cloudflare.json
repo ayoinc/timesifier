@@ -9,6 +9,8 @@
 		"test/**/*",
 		"worker-configuration.d.ts"
 	],
+	// Run by Vitest in Node, so checked with tsconfig.node.json.
+	"exclude": ["test/warm-up.ts"],
 	"compilerOptions": {
 		"composite": true,
 		"strict": true,
