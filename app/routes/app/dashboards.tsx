@@ -20,8 +20,9 @@ import { DEFAULT_LOCALE } from "~/shell/locale";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { regularAndOvertime } from "~/teams/words";
 import { formatDuration } from "~/time/format";
-
+import { inTerms } from "~/workspace/work-model";
 import type { Route } from "./+types/dashboards";
+import { useTerms } from "./useOrganisation";
 
 // Dashboards (TS-086): a range's figures on one page, each read by the
 // function its report reads and linking to it, so a panel's figure is the
@@ -157,6 +158,9 @@ type Shown = NonNullable<Route.ComponentProps["loaderData"]["board"]>;
 
 /** The panels. */
 function Board(d: Shown) {
+	// Every "project" the panels say, in the organisation's own word (TS-115a).
+	const terms = useTerms();
+	const t = (text: string) => inTerms(text, terms);
 	return (
 		<>
 			<Headline label="Total" value={d.total} beside={d.expected} />
@@ -185,8 +189,8 @@ function Board(d: Shown) {
 						Billable utilisation {d.billableUtilisation}.
 					</p>
 				</Panel>
-				<Ledger heading="Top projects" note={d.topProjects.length}>
-					<LedgerRows label="Top projects by time">
+				<Ledger heading={t("Top projects")} note={d.topProjects.length}>
+					<LedgerRows label={t("Top projects by time")}>
 						{d.topProjects.map((p) => (
 							<LedgerRow
 								key={p.id}
@@ -198,7 +202,7 @@ function Board(d: Shown) {
 					</LedgerRows>
 					<p className="border-t border-outline-variant px-4 py-3 @sm:px-5">
 						<Link to={d.links.time} className={TEXT_LINK}>
-							By project
+							{t("By project")}
 						</Link>
 					</p>
 				</Ledger>
@@ -216,12 +220,12 @@ function Board(d: Shown) {
 						</LedgerRows>
 					) : (
 						<p className="border-t border-outline-variant px-4 py-3 text-body-medium text-on-surface-variant @sm:px-5">
-							No project has a budget. Set one on Projects.
+							{t("No project has a budget. Set one on Projects.")}
 						</p>
 					)}
 					<p className="border-t border-outline-variant px-4 py-3 @sm:px-5">
 						<Link to={d.links.projects} className={TEXT_LINK}>
-							Projects
+							{terms.Projects}
 						</Link>
 					</p>
 				</Ledger>

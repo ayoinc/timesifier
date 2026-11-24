@@ -565,6 +565,25 @@ Decided on 2026-11-13, on card TS-114, from the measurements of `timesifier/rese
 
 **React Router patched.** `patches/react-router@8.5.1.patch`: a navigation aborts every fetcher load in flight, and when the abort lands after the answer's first line, React Router 8.5.1's turbo-stream decoder rejected a promise no one held, which the browser reported as an uncaught "AbortError: signal is aborted without reason" (`timesifier/research/merge-train-log.md`, #61). The patch keeps one promise for the end of the stream, which single fetch, never waiting for the end, handles; each value the abort cut short still rejects for whoever waits on it. 8.5.1 is the latest release; drop the patch when a release fixes the decoder (`test/node/turbo-stream-abort.test.ts` fails if a release reintroduces it).
 
+### 42. Who creates projects: owners, admins, and a client's account managers for that client
+
+Decided by the owner on 2026-11-23 (`research/projects-model.md`, "The owner's decisions", 5); built on TS-115a (#100). It amends entry 25, whose "Who sees what" said every role creates, renames and archives projects.
+
+- **Owners and admins** create a project for any client, or for none.
+- **An account manager** creates projects for the clients they manage, and only for those, never one without a client. A client's account managers are members its owners or admins name on Clients › the client (`client_managers`, migration 0033); each one added or removed is recorded in the activity log (`client.manager_added`, `client.manager_removed`) with the person as its owner. A membership that ends takes its account managements with it (the foreign key cascades).
+- **Nobody else**: Finance, team managers, members and contractors, who all could before, are not offered Create on Projects, and the server refuses them with 403 and stores nothing. A person of another organisation gets its 404.
+- **The same rule on every path that creates a project.** Projects' Create (`app/routes/app/projects.tsx`) and starting a fixed-fee project from an accepted estimate (`projectFromEstimate`) both ask `mayCreateProject` in `app/clients/managers.server.ts`; the page offers Create, and in its client field only the clients the person may create for, from the same function (`mayCreateAnyProject`). The CSV import, open to owners and admins alone, creates projects as they may. Duplicate (TS-122) is to ask it too when it lands.
+- **Under Internal work** there are no clients, so there are no account managers to create; owners and admins create every project.
+- Renaming and archiving a project are as entry 25 left them; giving a project a client stays with owners and admins.
+
+`test/pages/project-creators.test.ts` holds each role to the rule, on the page and at the server.
+
+| Option                                       | Evidence                                                                                                                           |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Owners, admins and account managers (chosen) | The owner's answer. The people who sell the work set it up; everyone else tracks to it.                                            |
+| Every role, as entry 25 had it               | Anyone could add a project with any name, so lists filled with near-duplicates and time went to projects no client was billed for. |
+| A per-organisation setting of who may create | A second rule to explain and test for every role, for no case the owner named.                                                     |
+
 ### 43. Search: the application serves robots.txt and the sitemap; structured data names the brand only
 
 Decided on 2026-11-13, on card TS-103.
@@ -1025,6 +1044,37 @@ Decided for TS-123, from the harvest sweep 2 (S2-14, S2-13, S2-10, `research/har
 | `[` for the menu, as the sweep proposed                     | Already the Timesheet's key for the period before (taste HT-D).                                                                                                                                                 |
 
 **What it costs.** One more cookie, which identifies nobody and grants nothing. Pages are drawn at two widths of column from 600px, so a page is checked at both. A disabled button in the focus order is one more Tab stop on the Week and Day views while there is nothing to copy.
+
+### 67. Codes, How you work, the work-code rule, and the internal term's article
+
+Decided by the owner on 2026-11-23 (`research/projects-model.md`, "The owner's decisions", 1 and 8); built on TS-115a (#100), 2026-11-24. Work packages, project teams and the time share are later cards.
+
+**Codes.** A client and a project may each have a code (`clients.code`, `projects.code`, migration 0033): optional, 1 to 24 letters, digits, dots, slashes, hyphens or underscores (`Code` in `app/lib/codes.ts`). Two codes are the same in an organisation by `codeKey` (NFKC, trimmed, lower-cased), archived ones included, and a unique index on `(organisation_id, code_key)` refuses the second even when two writes pass the check at once; another organisation may use the same code. The code is stored as typed and shown first wherever the thing appears, as `ACME-001 · Website` (`codedName`): the picker, which also finds a project by its code; Projects, Clients and a project's page; the Timesheet, Reports and their exports; invoices and estimates, their lists, pages and PDFs (a "Client code" fact); the API; and the CSV import, which finds a project by its code before its name.
+
+**The pattern.** An organisation may require every project to have a code, and may give a pattern such as `PRJ-0001`: a code ending in digits. A new project left without a code then takes the next number, widening past its digits (`W-99`, `W-100`). The numbers are taken by one `UPDATE … RETURNING` on `organisations.project_code_next` (`nextPatternCodes`), which D1 runs alone, so two creations at once get different numbers; a code a project of the organisation already has, or one an import is about to store, is passed over. Changing the pattern starts again from its first number. Creating, starting a project from an estimate and importing all number by it.
+
+**How you work** (`organisations.work_model`), asked when an organisation is created and changed by owners and admins in Workspace settings:
+
+- **Client projects**: clients, their projects, invoices and estimates.
+- **Internal work**: no clients, invoices or estimates (their pages and forms answer 404 to everyone, as Clients off did); what time goes to is called by the organisation's own term, `organisations.internal_term`, "Work codes" unless it names another (1 to 30 letters, in the plural). Every "Project" the pages, the Timesheet, Reports, exports and the import show is said in that term (`termsOf`, `inTerms`).
+- **Both**: client projects, and work codes beside them: a project with no client that bills nobody is a work code, created as such from Create's "No client" choice and grouped apart, after the clients, in the picker and on Projects.
+
+**The work-code rule.** Under Both, a work code has its own rule, "Every new work code has a code" (`work_code_required`), offered in Settings under Both alone; no pattern numbers work codes, so their codes are typed. `codeRuleFor` gives each project its rule, and Create, a project's edit (judged by the client the project will have) and the import each keep it. Outside Both every project has the organisation's one rule.
+
+**Articles.** The internal term is read by its sound when an article goes before it (`withArticle`): "an activity", "an hour", "a unit", "a user", and a word of capitals letter by letter, "an SOW". `inTerms` puts "Create a project" into the term with that article.
+
+**Existing organisations.** Migration 0033 made every organisation that had Clients on Both, and every one that had it off Internal work with "Projects" as its term, so nothing they see changes: the same navigation and pages, their projects under the same names and headings. One thing is new under Both: a project with no client that bills nobody, which before sat under "No client", is now under the work codes' heading. No code is given to anything that was there.
+
+**`clients_enabled` is kept but unread.** Nothing reads `organisations.clients_enabled` any more; `hasClients(work_model)` decides. The column is still written beside `work_model`, so a Worker of the previous release, which reads it, shows the right navigation while a release rolls out or is rolled back. It is dropped by a migration that ships alone, once no running Worker reads it (Backlog).
+
+Evidence: `test/workspace/work-model.test.ts` (articles), `test/projects/pattern-codes.test.ts` (the pattern), `test/pages/codes-unique.test.ts` (uniqueness), `test/pages/work-code-rule.test.ts` (the work-code rule), `test/db/work-model-migration.test.ts` (0033), `test/pages/internal-words.test.ts` (the term), `test/billing/documents.test.ts` (client codes on documents), and `e2e/codes.spec.ts`.
+
+| Option                                                | Evidence                                                                                                                                        |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| A code beside the name, unique ignoring case (chosen) | Consultancies already speak in codes (`ACME-001`); a name alone leaves two "Website" projects apart only by client.                             |
+| The code as the project's name                        | Loses the readable name everywhere a code is shown first, and renaming would renumber.                                                          |
+| A counter read, then written                          | Two creations at once read the same number; D1 offers a Worker no transaction across statements, and one `UPDATE … RETURNING` needs none.       |
+| Drop `clients_enabled` in migration 0033              | A Worker of the previous release reads it during the rollout and on a rollback; dropping it with the release that stops reading it breaks both. |
 
 ### 70. Team's week is a capacity table: each person measured against their expected week, ordered by the figures across every page
 

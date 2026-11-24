@@ -20,6 +20,7 @@ import { type Membership, notFound } from "~/organisations/membership.server";
 import { addressLine, nameOrEmail, shownName } from "~/organisations/people";
 import { type Day, dayOf, daysFrom } from "~/time/calendar";
 import { zoneOfMember } from "~/time/zones.server";
+import { hasClients } from "~/workspace/work-model";
 
 import type { Grouping } from "./choices";
 import {
@@ -117,7 +118,7 @@ export async function reportRequest(
 
 	const zone = await zoneOfMember(membership);
 	const today = dayOf(now, zone);
-	const showClients = organisation.clientsEnabled;
+	const showClients = hasClients(organisation.workModel);
 	const report: ReportChoices = {
 		scope,
 		query,
@@ -245,7 +246,7 @@ export async function* entryPages(
 		scope.tasks.select(),
 	]);
 	const projectsById = new Map(projects.map((p) => [p.id, p]));
-	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const clientsById = new Map(clients.map((c) => [c.id, c]));
 	const taskNames = new Map(tasks.map((t) => [t.id, t.name]));
 	const names = new Map<string, string>();
 
@@ -268,14 +269,17 @@ export async function* entryPages(
 		yield rows.map((row) => {
 			const project = projectsById.get(row.projectId);
 			const clientId = project?.clientId ?? null;
+			const client = clientId === null ? undefined : clientsById.get(clientId);
 			return {
 				id: row.id,
 				userId: row.userId,
 				person: names.get(row.userId) ?? "",
 				projectId: row.projectId,
 				project: project?.name ?? "",
+				projectCode: project?.code ?? null,
 				clientId,
-				client: clientId === null ? null : (clientNames.get(clientId) ?? null),
+				client: client?.name ?? null,
+				clientCode: client?.code ?? null,
 				description: row.description,
 				day: row.spentOn,
 				startedAt: row.startedAt.getTime(),

@@ -15,6 +15,7 @@ import { Overview, overviewData } from "~/invoices/Overview";
 import { invoiceOverview } from "~/invoices/overview.server";
 import { invoicePath, invoiceSettingsPath, newInvoicePath, xeroExportPath } from "~/invoices/paths";
 import { balanceOf, type InvoiceStatus, OWING, STATE_LABELS, stateOf } from "~/invoices/status";
+import { codedName } from "~/lib/codes";
 import { formatMoney } from "~/money/money";
 import { destination } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
@@ -72,7 +73,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		scope,
 		rows.map((row) => row.id),
 	);
-	const clientName = new Map(clients.map((c) => [c.id, c.name]));
+	const clientName = new Map(clients.map((c) => [c.id, codedName(c.code, c.name)]));
 	return {
 		slug: organisation.slug,
 		show,

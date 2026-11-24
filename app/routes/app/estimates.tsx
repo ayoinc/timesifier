@@ -15,6 +15,7 @@ import { ActionForm } from "~/invoices/ActionForm";
 import { billingOf } from "~/invoices/context.server";
 import { readForm, refuse } from "~/invoices/form.server";
 import { estimatePath } from "~/invoices/paths";
+import { codedName } from "~/lib/codes";
 import { CurrencyCode, formatMoney } from "~/money/money";
 import { destination } from "~/shell/destinations";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
@@ -58,7 +59,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		estimates: estimates.map((e) => ({
 			id: e.id,
 			to: estimatePath(organisation.slug, e.id),
-			title: `${e.number} · ${e.clientName}`,
+			title: `${e.number} · ${codedName(e.clientCode, e.clientName)}`,
 			detail: [
 				ESTIMATE_LABELS[EstimateStatus.parse(e.status)],
 				e.subject,

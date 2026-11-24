@@ -1,6 +1,7 @@
 import { Skeleton } from "~/components/Skeleton";
+import { useTerms } from "~/routes/app/useOrganisation";
 
-import { type DestinationId, destination } from "./destinations";
+import { type DestinationId, destination, destinationLabel } from "./destinations";
 
 // What a destination looks like before its answer has arrived: its shape, at its
 // size, in the one column every page of an organisation is drawn in. Shown in
@@ -120,10 +121,11 @@ function Body({ shape }: { shape: Shape }) {
  * the shapes themselves are hidden from it.
  */
 export function DestinationSkeleton({ id }: { id: DestinationId }) {
+	const terms = useTerms();
 	return (
 		<div data-skeleton={id}>
 			<p role="status" className="sr-only">
-				Loading {destination(id).label}
+				Loading {destinationLabel(destination(id), terms)}
 			</p>
 			<Skeleton className="h-10 w-56 medium:h-11" />
 			<Skeleton className="mt-4 h-6 w-full max-w-120" />

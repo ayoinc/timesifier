@@ -96,6 +96,8 @@ describe("trackChoices for the project picker", () => {
 		const membership = await membershipIn(ada, "acme");
 		const choices = await trackChoices(scope, membership, [], T0 + 5 * HOUR);
 		expect(choices.recent).toEqual([withClient, alone]);
-		expect(choices.clients).toEqual({ [withClient]: "Globex" });
+		expect(Object.keys(choices.projects).sort()).toEqual([withClient, alone].sort());
+		expect(choices.projects[withClient]?.client).toEqual({ name: "Globex", code: null });
+		expect(choices.projects[alone]?.client).toBeNull();
 	});
 });

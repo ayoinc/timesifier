@@ -20,8 +20,10 @@ import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { tagOptions } from "~/tags/tags.server";
+import { inTerms } from "~/workspace/work-model";
 
 import type { Route } from "./+types/reports.expenses";
+import { useTerms } from "./useOrganisation";
 
 // The Expenses view of Reports (TS-070, B9): the expenses dated in a range,
 // by category, project or person, with what they come to, what is billable and
@@ -121,7 +123,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 	const { report, expenseGroup } = loaderData;
-	const by = EXPENSE_GROUP_LABELS[expenseGroup].toLowerCase();
+	// "Project" in the organisation's own word under internal work (TS-115a).
+	const terms = useTerms();
+	const by = inTerms(EXPENSE_GROUP_LABELS[expenseGroup].toLowerCase(), terms);
 
 	return (
 		<>
@@ -136,7 +140,10 @@ export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 			<ReportChoice
 				{...loaderData}
 				ownGroups={{
-					options: EXPENSE_GROUPS.map((id) => ({ id, label: EXPENSE_GROUP_LABELS[id] })),
+					options: EXPENSE_GROUPS.map((id) => ({
+						id,
+						label: inTerms(EXPENSE_GROUP_LABELS[id], terms),
+					})),
 					value: expenseGroup,
 				}}
 			/>

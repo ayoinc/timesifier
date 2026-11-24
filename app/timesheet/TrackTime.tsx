@@ -12,11 +12,13 @@ import { Link, useFetcher, useRouteLoaderData } from "react-router";
 import { Skeleton } from "~/components/Skeleton";
 import { showSnackbar } from "~/components/Snackbar";
 import { TextField } from "~/components/TextField";
+import { codedName } from "~/lib/codes";
 import { LOCK_LABELS, lockSentence } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
 import type { TimesheetAnswer, loader as timesheetLoader } from "~/routes/app/timesheet";
 import type { loader as trackDayLoader } from "~/routes/app/timesheet.day";
+import { useCreatesProjects, useTerms } from "~/routes/app/useOrganisation";
 import { destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { EntryChoices } from "~/tasks/EntryChoices";
@@ -24,6 +26,7 @@ import { TrackChoicesContext } from "~/tasks/track";
 import type { Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { nearWord } from "~/time/format";
+import { inTerms, withArticle } from "~/workspace/work-model";
 import { refusalOfDay, takesOvertimeOnly } from "./DayRules";
 import { formatDuration } from "./durations";
 import { useReport } from "./feedback";
@@ -218,6 +221,8 @@ function TrackTimeSheet({
 	}, [data, date]);
 	const current = data && (asked === undefined || data.day === asked) ? data : undefined;
 
+	const terms = useTerms();
+	const createsProjects = useCreatesProjects();
 	const active = (shown?.projects ?? []).filter((p) => !p.archived);
 	const isToday = current !== undefined && current.day === current.today;
 	const timerAllowed = isToday && request.start === undefined;
@@ -245,7 +250,7 @@ function TrackTimeSheet({
 			onSubmitAtOnce={(form) => {
 				if (!startsTimer) return false;
 				const project = active.find((p) => p.id === form.get("projectId"));
-				if (project) form.set(PENDING_PROJECT_NAME, project.name);
+				if (project) form.set(PENDING_PROJECT_NAME, codedName(project.code, project.name));
 				onStartTimer(form);
 				return true;
 			}}
@@ -254,10 +259,14 @@ function TrackTimeSheet({
 				<FieldsSkeleton />
 			) : active.length === 0 ? (
 				<p className="text-body-large text-on-surface-variant">
-					Time is tracked against a project, and this organisation has none yet.{" "}
-					<Link to={destinationPath(slug, "projects")} onClick={onClose} className={TEXT_LINK}>
-						Create a project
-					</Link>
+					{inTerms("Time is tracked against a project, and this organisation has none yet.", terms)}{" "}
+					{createsProjects ? (
+						<Link to={destinationPath(slug, "projects")} onClick={onClose} className={TEXT_LINK}>
+							{`Create ${withArticle(terms.project)}`}
+						</Link>
+					) : (
+						"An owner or an admin creates them."
+					)}
 				</p>
 			) : (
 				<TrackChoicesContext value={shown.track}>
@@ -342,8 +351,13 @@ function overtimeNote(limitMinutes: number, leftMinutes: number | null): string 
  * come. Said once to assistive technology.
  */
 function FieldsSkeleton() {
+	const terms = useTerms();
 	return (
-		<div role="status" aria-label="Loading your projects" className="flex flex-col gap-4">
+		<div
+			role="status"
+			aria-label={`Loading your ${terms.projects}`}
+			className="flex flex-col gap-4"
+		>
 			<Skeleton className="h-14 w-full" />
 			<Skeleton className="h-14 w-full" />
 			<Skeleton className="h-14 w-full" />

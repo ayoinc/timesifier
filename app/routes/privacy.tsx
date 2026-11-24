@@ -198,9 +198,11 @@ export default function Privacy({
 		),
 		"Clients and their contacts": (
 			<>
-				The organisation's clients, and each client's billing contacts: an email address and, when
-				one is given, a name. These are people outside the organisation, whose addresses an owner,
-				admin or Finance enters so that invoices and estimates can be sent to them.
+				The organisation's clients, each with its code if it has one, and each client's billing
+				contacts: an email address and, when one is given, a name. These are people outside the
+				organisation, whose addresses an owner, admin or Finance enters so that invoices and
+				estimates can be sent to them. Which members are each client's account managers, as an owner
+				or admin names them.
 			</>
 		),
 		"Rates, invoices and estimates": (

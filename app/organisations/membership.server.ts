@@ -14,6 +14,7 @@ import { configuredProviders } from "~/auth/providers";
 import { organisationScope, organisations } from "~/db";
 import type { Viewer } from "~/shell/destinations";
 import { managedPlaces } from "~/teams/teams.server";
+import { hasClients, WorkModel } from "~/workspace/work-model";
 import { Role } from "./roles";
 import { admits, type CompanySignInNeeded, policyOf, type SignInPolicy } from "./sign-in-policy";
 
@@ -27,7 +28,10 @@ export type Membership = {
 		timeZone: string;
 		/** The day its timesheet periods start on: 1 is Monday, 7 is Sunday. */
 		weekStartsOn: number;
-		clientsEnabled: boolean;
+		/** How it works (TS-115a): client projects, internal work or both. */
+		workModel: WorkModel;
+		/** What it calls internal work, in the plural ("Work codes"). */
+		internalTerm: string;
 		/** When its logo was uploaded, for the logo's address in the band; null for no logo (TS-100). */
 		logoVersion: number | null;
 		/** Who may open its pages (TS-104): anyone signed in, or company sign-in. */
@@ -62,7 +66,8 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 			slug: organisations.slug,
 			timeZone: organisations.timeZone,
 			weekStartsOn: organisations.weekStartsOn,
-			clientsEnabled: organisations.clientsEnabled,
+			workModel: organisations.workModel,
+			internalTerm: organisations.internalTerm,
 			logoVersion: organisations.brandLogoVersion,
 			signInPolicy: organisations.signInPolicy,
 			signInProvider: organisations.signInProvider,
@@ -82,9 +87,13 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 	// A role this application does not know grants nothing.
 	const role = Role.safeParse(membership?.role);
 	if (!organisation || !role.success) return null;
-	const { signInPolicy, signInProvider, signInTenant, ...rest } = organisation;
+	const { signInPolicy, signInProvider, signInTenant, workModel, ...rest } = organisation;
 	return {
-		organisation: { ...rest, signIn: policyOf({ signInPolicy, signInProvider, signInTenant }) },
+		organisation: {
+			...rest,
+			workModel: WorkModel.parse(workModel),
+			signIn: policyOf({ signInPolicy, signInProvider, signInTenant }),
+		},
 		role: role.data,
 		managesTeams: managed.length > 0,
 		user,
@@ -93,7 +102,7 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 
 /** What decides the destinations a member is shown (`app/shell/destinations.ts`). */
 export function viewerOf({ role, managesTeams, organisation }: Membership): Viewer {
-	return { role, managesTeams, clientsEnabled: organisation.clientsEnabled };
+	return { role, managesTeams, clientsEnabled: hasClients(organisation.workModel) };
 }
 
 /**

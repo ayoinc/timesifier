@@ -1,3 +1,4 @@
+import { codedName } from "~/lib/codes";
 import type { Day } from "~/time/calendar";
 
 import type { Piece } from "./report";
@@ -13,6 +14,7 @@ import type { Piece } from "./report";
 export interface TimetableRow {
 	/** The project's id. */
 	key: string;
+	/** The project's code and name, code first (TS-115a). */
 	label: string;
 	/** Seconds on each of the timetable's days, in their order. */
 	cells: number[];
@@ -37,10 +39,10 @@ export function timetableOf(pieces: readonly Piece[], days: readonly Day[]): Tim
 	for (const piece of pieces) {
 		const at = column.get(piece.day);
 		if (at === undefined) continue;
-		const { projectId, project } = piece.entry;
+		const { projectId, project, projectCode } = piece.entry;
 		const row = rows.get(projectId) ?? {
 			key: projectId,
-			label: project,
+			label: codedName(projectCode, project),
 			cells: days.map(() => 0),
 			total: 0,
 		};

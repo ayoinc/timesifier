@@ -6,10 +6,10 @@ import * as z from "zod";
 import { BrandSettings } from "~/brand/BrandSettings";
 import { BRAND_FORMS, brandAction, brandData, SETTINGS_MAX_BYTES } from "~/brand/settings.server";
 import { Button } from "~/components/Button";
+import { Checkbox } from "~/components/Checkbox";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
-import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { keepCategory, listCategories } from "~/expenses/categories.server";
@@ -48,6 +48,7 @@ import {
 	setTimesheetRules,
 	timesheetRulesOf,
 } from "~/leave/rules.server";
+import { CODE_MAX_LENGTH, PATTERN_PROBLEM, parsePattern } from "~/lib/codes";
 import { parseRequest } from "~/lib/validate";
 import { LockSettings } from "~/locks/LockSettings";
 import { LOCK_FORMS, lockAction, lockingData } from "~/locks/settings.server";
@@ -67,8 +68,9 @@ import { weekStartRefusal } from "~/periods/submission.server";
 import { planStanding } from "~/plans/plans.server";
 import { SUPPORT_ACCESS_SEGMENT, WELLBEING_SEGMENT } from "~/platform/paths";
 import { activeGrant } from "~/platform/support.server";
-import { MoneySettings } from "~/projects/MoneySettings";
+import { MoneySettings, ownCurrencyHolders } from "~/projects/MoneySettings";
 import { organisationMoney } from "~/projects/money.server";
+import { projectCodeRules } from "~/projects/projects.server";
 import { CapHours, defaultScheduleSummary } from "~/schedules/forms";
 import { scheduleBookOf } from "~/schedules/schedules.server";
 import {
@@ -86,6 +88,18 @@ import { TimeZone } from "~/time/zones";
 import { zoneOfMember } from "~/time/zones.server";
 import { WEEKDAYS, weekdayName, zoneLabel } from "~/workspace/general";
 import { changeGeneral, timeZones } from "~/workspace/general.server";
+import {
+	DEFAULT_INTERNAL_TERM,
+	INTERNAL_TERM_MAX_LENGTH,
+	INTERNAL_TERM_PROBLEM,
+	InternalTerm,
+	singular,
+	WORK_MODEL_HINTS,
+	WORK_MODEL_LABELS,
+	WORK_MODELS,
+	WorkModel,
+	termsOf as workTerms,
+} from "~/workspace/work-model";
 
 import type { Route } from "./+types/settings";
 import { FormSheet } from "./FormSheet";
@@ -129,6 +143,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		standing,
 		grant,
 		dpaToSign,
+		codes,
 	] = await Promise.all([
 		scheduleBookOf(scope),
 		leaveKindsOf(scope),
@@ -143,6 +158,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		isOwner ? activeGrant(scope, now) : null,
 		// So is accepting the data processing agreement (TS-105).
 		isOwner ? dpaToAccept(organisation.id) : false,
+		projectCodeRules(organisation.id),
 	]);
 	return {
 		organisation: {
@@ -150,7 +166,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 			role,
 			timeZone: organisation.timeZone,
 			weekStartsOn: organisation.weekStartsOn,
-			clientsEnabled: organisation.clientsEnabled,
+			workModel: organisation.workModel,
+			internalTerm: organisation.internalTerm,
 			canChange,
 			canDelete: allows(role, { organization: ["delete"] }),
 		},
@@ -209,6 +226,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 			: null,
 		/** Whether an owner is asked to accept this version of the data processing agreement (TS-105). */
 		dpaToAccept: dpaToSign,
+		/** Whether every project needs a code, and the pattern they are numbered by (TS-115a). */
+		codes,
 	};
 }
 
@@ -262,8 +281,20 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("rename"), name: Name }),
 	z.object({ intent: z.literal("time-zone"), timeZone: TimeZone }),
 	z.object({ intent: z.literal("week-start"), weekStartsOn: WeekStart }),
-	// A switch sends its value only while it is on: no `clientsEnabled` is off.
-	z.object({ intent: z.literal("clients"), clientsEnabled: z.literal("on").optional() }),
+	z.object({
+		intent: z.literal("work-model"),
+		workModel: WorkModel,
+		// Checked by `InternalTerm`, in the page's words.
+		internalTerm: z.string().max(200),
+	}),
+	z.object({
+		intent: z.literal("project-codes"),
+		required: Ticked,
+		// Under Both: whether every work code needs a code too.
+		workCodeRequired: Ticked,
+		// Checked by `parsePattern`, in the page's words; empty is none.
+		pattern: z.string().max(200),
+	}),
 	z.object({ intent: z.literal("currency"), currency: CurrencyCode }),
 	z.object({ intent: z.literal("budget-hours"), countNonBillable: z.literal("on").optional() }),
 	// What the person typed to confirm. It is compared with the name; it is never used as one.
@@ -338,28 +369,67 @@ export async function action({ request, context }: Route.ActionArgs) {
 		}
 
 		case "time-zone":
-		case "week-start":
-		case "clients": {
+		case "week-start": {
 			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
 			if (input.intent === "time-zone") {
 				await changeGeneral(env.DB, organisation.id, { timeZone: input.timeZone }, user.id);
 				return done(`The default time zone is now ${zoneLabel(input.timeZone)}.`);
 			}
-			if (input.intent === "week-start") {
-				const waiting =
-					input.weekStartsOn === organisation.weekStartsOn
-						? null
-						: await weekStartRefusal(organisationScope(env.DB, organisation.id));
-				if (waiting) return declined(waiting, 409);
-				await changeGeneral(env.DB, organisation.id, { weekStartsOn: input.weekStartsOn }, user.id);
-				return done(`Weeks now start on ${weekdayName(input.weekStartsOn)}.`);
-			}
-			const clientsEnabled = input.clientsEnabled === "on";
-			await changeGeneral(env.DB, organisation.id, { clientsEnabled }, user.id);
+			const waiting =
+				input.weekStartsOn === organisation.weekStartsOn
+					? null
+					: await weekStartRefusal(organisationScope(env.DB, organisation.id));
+			if (waiting) return declined(waiting, 409);
+			await changeGeneral(env.DB, organisation.id, { weekStartsOn: input.weekStartsOn }, user.id);
+			return done(`Weeks now start on ${weekdayName(input.weekStartsOn)}.`);
+		}
+
+		case "work-model": {
+			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
+			const term = InternalTerm.safeParse(input.internalTerm);
+			if (!term.success) return declined(INTERNAL_TERM_PROBLEM);
+			await changeGeneral(
+				env.DB,
+				organisation.id,
+				{ workModel: input.workModel, internalTerm: term.data },
+				user.id,
+			);
+			return done(`How you work is now ${WORK_MODEL_LABELS[input.workModel]}.`);
+		}
+
+		case "project-codes": {
+			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
+			const pattern = input.pattern.trim() === "" ? null : input.pattern.trim();
+			if (pattern !== null && parsePattern(pattern) === null) return declined(PATTERN_PROBLEM);
+			// The work codes' own rule is offered, and so read, only under Both.
+			const both = organisation.workModel === "both";
+			await changeGeneral(
+				env.DB,
+				organisation.id,
+				{
+					projectCodeRequired: input.required,
+					projectCodePattern: pattern,
+					...(both ? { workCodeRequired: input.workCodeRequired } : {}),
+				},
+				user.id,
+			);
+			// The internal term in a sentence's words, as Internal work would say it.
+			const workCodes = workTerms("internal", organisation.internalTerm);
 			return done(
-				clientsEnabled
-					? "Clients is on. Everyone sees each project's client."
-					: "Clients is off. Nothing was deleted; turn it on to show them again.",
+				[
+					pattern
+						? `New projects without a code are numbered from ${pattern}.`
+						: input.required
+							? "Every new project needs a code."
+							: "Project codes are optional.",
+					...(both
+						? [
+								input.workCodeRequired
+									? `Every new ${workCodes.project} needs a code.`
+									: `Codes for ${workCodes.projects} are optional.`,
+							]
+						: []),
+				].join(" "),
 			);
 		}
 
@@ -368,8 +438,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (!allows(role, { organization: ["update"] })) return declined(NOT_ALLOWED, 403);
 			if (input.intent === "currency") {
 				await changeGeneral(env.DB, organisation.id, { currency: input.currency }, user.id);
+				const terms = workTerms(organisation.workModel, organisation.internalTerm);
 				return done(
-					`Amounts are now in ${input.currency} unless a client or a project has its own.`,
+					`Amounts are now in ${input.currency} unless ${ownCurrencyHolders(terms)} has its own.`,
 				);
 			}
 			const counts = input.countNonBillable === "on";
@@ -490,7 +561,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 /** The sheets of this page. One is open at a time. */
-type Task = "rename" | "time-zone" | "week-start" | "delete";
+type Task = "rename" | "time-zone" | "week-start" | "work-model" | "project-codes" | "delete";
 
 export default function Settings({ loaderData, params }: Route.ComponentProps) {
 	const { organisation, zones, leave, rules, expenses, locking } = loaderData;
@@ -550,11 +621,55 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 							detail="Week starts on. Every timesheet week, and the period it is submitted in, starts on this day."
 							action={change("week-start", "the day weeks start on")}
 						/>
-						<ClientsRow
-							enabled={organisation.clientsEnabled}
-							canChange={organisation.canChange}
-							onDone={setSaid}
+					</LedgerRows>
+				</Ledger>
+			</Section>
+
+			{/* How the organisation works, and its project codes (TS-115a, decision 67). */}
+			<Section
+				id="how-you-work"
+				heading="How you work"
+				lead="Where your time goes, and the codes it carries."
+				className="max-w-200"
+			>
+				<Ledger heading="How you work">
+					<LedgerRows>
+						<LedgerRow
+							title={WORK_MODEL_LABELS[organisation.workModel]}
+							detail={
+								organisation.workModel === "client_projects"
+									? "Clients, their projects, invoices and estimates."
+									: organisation.workModel === "internal"
+										? `No invoices or estimates. Time goes to ${workTerms("internal", organisation.internalTerm).projects}.`
+										: `Clients and their projects, and ${workTerms("internal", organisation.internalTerm).projects} for internal time that bills nobody.`
+							}
+							action={change("work-model", "how you work")}
 						/>
+						<LedgerRow
+							title={
+								loaderData.codes.pattern
+									? `Numbered from ${loaderData.codes.pattern}`
+									: loaderData.codes.required
+										? "Required"
+										: "Optional"
+							}
+							detail={
+								organisation.workModel === "internal"
+									? `${singular(organisation.internalTerm)} codes, such as OPS-01, shown first wherever one appears.`
+									: "Codes, such as ACME-001, shown first wherever a client or a project appears."
+							}
+							action={change("project-codes", "the codes")}
+						/>
+						{organisation.workModel === "both" && (
+							<LedgerRow
+								title={loaderData.codes.workCodeRequired ? "Required" : "Optional"}
+								detail={`${singular(organisation.internalTerm)} codes, such as OPS-01, typed for each: the pattern numbers projects only.`}
+								action={change(
+									"project-codes",
+									`the codes of ${workTerms("internal", organisation.internalTerm).projects}`,
+								)}
+							/>
+						)}
 					</LedgerRows>
 				</Ledger>
 			</Section>
@@ -594,6 +709,7 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 			<MoneySettings
 				currency={loaderData.money.currency}
 				budgetCountsNonBillable={loaderData.money.budgetCountsNonBillable}
+				terms={workTerms(organisation.workModel, organisation.internalTerm)}
 				canChange={organisation.canChange}
 				onDone={setSaid}
 			/>
@@ -691,6 +807,53 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 					options={[...WEEKDAYS]}
 					defaultValue={`${organisation.weekStartsOn}`}
 					isRequired
+				/>
+			</FormSheet>
+
+			<WorkModelSheet
+				isOpen={task === "work-model"}
+				onClose={close}
+				onDone={setSaid}
+				workModel={organisation.workModel}
+				internalTerm={organisation.internalTerm}
+			/>
+
+			<FormSheet
+				title="Change the codes"
+				intent="project-codes"
+				submitLabel="Save"
+				isOpen={task === "project-codes"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<p>
+					A code is shown first wherever one appears, and in every export. Codes already given stay
+					as they are.
+				</p>
+				<Checkbox name="required" value="on" defaultSelected={loaderData.codes.required}>
+					{organisation.workModel === "both"
+						? "Every new project has a code"
+						: "Every new one has a code"}
+				</Checkbox>
+				{organisation.workModel === "both" && (
+					<Checkbox
+						name="workCodeRequired"
+						value="on"
+						defaultSelected={loaderData.codes.workCodeRequired}
+					>
+						{`Every new ${workTerms("internal", organisation.internalTerm).project} has a code`}
+					</Checkbox>
+				)}
+				<TextField
+					label="Number new ones from"
+					name="pattern"
+					defaultValue={loaderData.codes.pattern ?? ""}
+					autoComplete="off"
+					maxLength={CODE_MAX_LENGTH}
+					validate={(typed) =>
+						typed.trim() === "" || parsePattern(typed) ? null : PATTERN_PROBLEM
+					}
+					description="Optional, for example PRJ-0001. One left without a code takes the next number."
 				/>
 			</FormSheet>
 
@@ -964,56 +1127,72 @@ function RulesSection({
 }
 
 /**
- * Whether Clients is shown, a switch that takes effect at once. Off, nobody is
- * shown Clients or a project's client; nothing is deleted (TS-048).
+ * The sheet that changes How you work (TS-115a, decision 67): the three
+ * answers, and what internal work is called, which matters under Internal work
+ * and Both. A change deletes nothing: clients, invoices and estimates come
+ * back with clients.
  */
-function ClientsRow({
-	enabled,
-	canChange,
+function WorkModelSheet({
+	isOpen,
+	onClose,
 	onDone,
+	workModel,
+	internalTerm,
 }: {
-	enabled: boolean;
-	canChange: boolean;
+	isOpen: boolean;
+	onClose: () => void;
 	onDone: (said: string) => void;
+	workModel: WorkModel;
+	internalTerm: string;
 }) {
-	const fetcher = useFetcher<Outcome>();
-	// While the change is on its way, the switch shows what was asked for.
-	const asked = fetcher.formData?.get("intent") === "clients";
-	const on = asked ? fetcher.formData?.get("clientsEnabled") === "on" : enabled;
-	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
-	// The answer to one change is told once.
-	useEffect(() => {
-		if (answer?.ok) onDone(answer.said);
-	}, [answer, onDone]);
-
+	const [chosen, setChosen] = useState<WorkModel>(workModel);
 	return (
-		<LedgerRow
-			title={
-				<Switch
-					isSelected={on}
-					isReadOnly={!canChange}
-					onChange={(selected) =>
-						fetcher.submit(
-							selected ? { intent: "clients", clientsEnabled: "on" } : { intent: "clients" },
-							{ method: "post" },
-						)
-					}
-				>
-					Clients
-				</Switch>
-			}
-			detail={
-				<>
-					Shows Clients to owners and admins, and each project's client to everyone. Turning it off
-					hides them and deletes nothing.
-					{answer && !answer.ok && (
-						<span role="alert" className="block text-error">
-							{answer.problem}
+		<FormSheet
+			title="Change how you work"
+			intent="work-model"
+			submitLabel="Save"
+			isOpen={isOpen}
+			onClose={onClose}
+			onDone={onDone}
+		>
+			<RadioGroup
+				label="How you work"
+				name="workModel"
+				value={chosen}
+				onChange={(value) => setChosen(WorkModel.parse(value))}
+			>
+				{WORK_MODELS.map((model) => (
+					<Radio key={model} value={model}>
+						<span className="flex flex-col">
+							<span>{WORK_MODEL_LABELS[model]}</span>
+							<span className="text-body-medium text-on-surface-variant">
+								{WORK_MODEL_HINTS[model]}
+							</span>
 						</span>
-					)}
-				</>
-			}
-		/>
+					</Radio>
+				))}
+			</RadioGroup>
+			{chosen === "client_projects" ? (
+				<input type="hidden" name="internalTerm" value={internalTerm} />
+			) : (
+				<TextField
+					label="What you call internal work"
+					name="internalTerm"
+					defaultValue={internalTerm}
+					autoComplete="off"
+					isRequired
+					maxLength={INTERNAL_TERM_MAX_LENGTH}
+					validate={(typed) =>
+						InternalTerm.safeParse(typed).success ? null : INTERNAL_TERM_PROBLEM
+					}
+					description={`In the plural, for example ${DEFAULT_INTERNAL_TERM} or Cost centres.`}
+				/>
+			)}
+			<p>
+				Nothing is deleted. Clients, invoices and estimates come back when you work with clients
+				again.
+			</p>
+		</FormSheet>
 	);
 }
 

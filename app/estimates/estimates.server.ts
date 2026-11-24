@@ -4,6 +4,7 @@ import * as z from "zod";
 
 import { recordStatement, recordStatementWhen } from "~/activity/activity.server";
 import { isKeyedHash, keyedHash } from "~/auth/keyed-hash.server";
+import { managedClientIds, mayCreateProject } from "~/clients/managers.server";
 import { type OrganisationScope, type TenantRow, uuidv7 } from "~/db";
 import {
 	ensureInvoiceSettings,
@@ -18,9 +19,12 @@ import {
 } from "~/invoices/documents.server";
 import { createDraft, type LineInput, type Result } from "~/invoices/invoices.server";
 import type { PrintedDocument } from "~/invoices/pdf";
+import { codeKey } from "~/lib/codes";
 import { required } from "~/lib/deployment";
 import { nameKey } from "~/lib/names";
 import { lineAmount } from "~/money/money";
+import { Role } from "~/organisations/roles";
+import { nextPatternCodes, projectCodeRules } from "~/projects/projects.server";
 import type { Day } from "~/time/calendar";
 import { formatDayWithYear } from "~/time/format";
 
@@ -61,14 +65,17 @@ export function estimateLinesOf(scope: OrganisationScope, id: string) {
 	});
 }
 
-/** The organisation's estimates with their clients' names, newest first. */
+/** The organisation's estimates with their clients' names and codes, newest first. */
 export async function listEstimates(scope: OrganisationScope) {
 	const [rows, clients] = await Promise.all([
 		scope.estimates.select(undefined, { orderBy: (e) => [desc(e.createdAt)] }),
 		scope.clients.select(),
 	]);
-	const clientName = new Map(clients.map((c) => [c.id, c.name]));
-	return rows.map((row) => ({ ...row, clientName: clientName.get(row.clientId) ?? "" }));
+	const clientById = new Map(clients.map((c) => [c.id, c]));
+	return rows.map((row) => {
+		const client = clientById.get(row.clientId);
+		return { ...row, clientName: client?.name ?? "", clientCode: client?.code ?? null };
+	});
 }
 
 /** What a person sets on an estimate. */
@@ -382,10 +389,21 @@ export async function invoiceEstimate(
 	return { ok: true, id: created.id };
 }
 
+/** Why a person may not start a project from an estimate (decision 42). */
+export const ESTIMATE_PROJECT_NOT_ALLOWED =
+	"Only an owner, an admin or an account manager of this client starts its projects.";
+
+/** Why an estimate starts no project where every project needs a code and none is numbered. */
+export const ESTIMATE_PROJECT_NEEDS_CODE =
+	"Every project here needs a code, and none is numbered by a pattern. Create the project on Projects with its code.";
+
 /**
  * Starts a fixed-fee project for the client from an accepted estimate, its
  * fee the estimate's total before tax. Its name is the estimate's subject, or
- * "Estimate <number>", with the number added when the name is taken.
+ * "Estimate <number>", with the number added when the name is taken. Only an
+ * owner, an admin or an account manager of the estimate's client starts one
+ * (decision 42, TS-115a). Its code is the organisation's pattern's next, or
+ * none; where every project needs one and no pattern numbers it, it is refused.
  */
 export async function projectFromEstimate(
 	scope: OrganisationScope,
@@ -394,8 +412,20 @@ export async function projectFromEstimate(
 ): Promise<Result<{ name: string }>> {
 	const estimate = await findEstimate(scope, id);
 	if (!estimate) return null;
+	const [membership, managed] = await Promise.all([
+		scope.memberships.select((m) => eq(m.userId, actor), { limit: 1 }),
+		managedClientIds(scope, actor),
+	]);
+	const role = Role.safeParse(membership[0]?.role);
+	if (!role.success || !mayCreateProject(role.data, managed, estimate.clientId)) {
+		return { ok: false, problem: ESTIMATE_PROJECT_NOT_ALLOWED };
+	}
 	if (estimate.status !== "accepted") {
 		return { ok: false, problem: "Only an accepted estimate starts a project." };
+	}
+	const rules = await projectCodeRules(scope.organisationId);
+	if (rules.required && rules.pattern === null) {
+		return { ok: false, problem: ESTIMATE_PROJECT_NEEDS_CODE };
 	}
 	const base = (estimate.subject ?? `Estimate ${estimate.number}`).slice(0, 100).trim();
 	const projects = await scope.projects.select();
@@ -404,6 +434,7 @@ export async function projectFromEstimate(
 	if (taken.has(nameKey(name))) {
 		return { ok: false, problem: "A project with this estimate's name already exists." };
 	}
+	const [code = null] = await nextPatternCodes(scope, 1);
 	const projectId = uuidv7();
 	await scope.batch([
 		scope.projects.statements.insert({
@@ -411,6 +442,8 @@ export async function projectFromEstimate(
 			name,
 			nameKey: nameKey(name),
 			clientId: estimate.clientId,
+			code,
+			codeKey: code === null ? null : codeKey(code),
 			billingType: "fixed_fee",
 			feeMinor: estimate.subtotalMinor - estimate.discountMinor,
 			currency: estimate.currency,
@@ -443,6 +476,7 @@ export async function printedEstimate(
 	]);
 	const facts: [string, string][] = [["Issued", formatDayWithYear(estimate.issuedOn)]];
 	if (estimate.poNumber) facts.push(["PO number", estimate.poNumber]);
+	if (client?.code) facts.push(["Client code", client.code]);
 	return printedDocument({
 		title: "Estimate",
 		number: estimate.number,

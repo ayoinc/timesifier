@@ -17,12 +17,20 @@ import type { Route } from "./+types/integrations.export";
 // here or in Harvest. It is streamed a page at a time and nothing is stored.
 // Overtime (TS-095) is a last column of its own, Yes or No; an import here
 // reads each row's kind from the day's limits again, and Harvest ignores it.
-// Each row's date is the entry's stored day (decision 39).
+// Each row's date is the entry's stored day (decision 39). The client and the
+// project each have their code in a column just before their name (TS-115a),
+// empty when they have none; an import reads the names and passes over the
+// codes, as Harvest does any column it does not know.
 
-/** The columns, in their order: Harvest's eight, the person's email, then whether it is overtime. */
+/**
+ * The columns, in their order: Harvest's eight, each name after its code,
+ * then the person's email and whether it is overtime.
+ */
 export const EXPORT_COLUMNS = [
 	"Date",
+	"Client code",
 	"Client",
+	"Project code",
 	"Project",
 	"Task",
 	"Notes",
@@ -43,8 +51,8 @@ export const EXPORT_PAGE = 2_000;
 
 /** What the rows name, by id. */
 interface Names {
-	project: Map<string, { name: string; clientId: string | null }>;
-	client: Map<string, string>;
+	project: Map<string, { name: string; code: string | null; clientId: string | null }>;
+	client: Map<string, { name: string; code: string | null }>;
 	task: Map<string, string>;
 	person: Map<string, { name: string; email: string }>;
 }
@@ -70,7 +78,7 @@ async function namesOf(scope: OrganisationScope): Promise<Names> {
 		: [];
 	return {
 		project: new Map(projects.map((p) => [p.id, p])),
-		client: new Map(clients.map((c) => [c.id, c.name])),
+		client: new Map(clients.map((c) => [c.id, c])),
 		task: new Map(tasks.map((t) => [t.id, t.name])),
 		person: new Map(people.map((p) => [p.id, p])),
 	};
@@ -97,10 +105,13 @@ async function* chunks(
 			const who = person.get(entry.userId);
 			const [first = "", ...rest] = (who?.name ?? "").split(" ");
 			const of = project.get(entry.projectId);
+			const by = of?.clientId ? client.get(of.clientId) : undefined;
 			const minutes = ((entry.endedAt?.getTime() ?? now) - entry.startedAt.getTime()) / 60_000;
 			chunk += csvLine([
 				entry.spentOn,
-				of?.clientId ? (client.get(of.clientId) ?? "") : "",
+				by?.code ?? "",
+				by?.name ?? "",
+				of?.code ?? "",
 				of?.name ?? "",
 				entry.taskId ? (task.get(entry.taskId) ?? "") : "",
 				entry.description ?? "",

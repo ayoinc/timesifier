@@ -1,10 +1,23 @@
-import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import { and, asc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { findActiveClient } from "~/clients/clients.server";
-import { among, type OrganisationScope, uuidv7 } from "~/db";
+import { among, type OrganisationScope, organisations, uuidv7 } from "~/db";
+import {
+	CODE_PROBLEM,
+	type CodeRules,
+	codeKey,
+	codeRuleFor,
+	isCodeClash,
+	parsePattern,
+	patternCode,
+	typedCode,
+} from "~/lib/codes";
 import { isNameClash, nameKey, RECORD_NAME_PROBLEM, recordName } from "~/lib/names";
 import type { TimeScope } from "~/organisations/access";
+import { DEFAULT_INTERNAL_TERM, hasWorkCodes, termsOf, WorkModel } from "~/workspace/work-model";
 
 import { copyName } from "./projects";
 import { nameHas } from "./search.server";
@@ -20,6 +33,7 @@ import { nameHas } from "./search.server";
 
 export const PROJECT_NAME_TAKEN = "A project with this name already exists.";
 export const CLIENT_NOT_OFFERED = "Choose an active client, or none.";
+export const PROJECT_CODE_TAKEN = "A project with this code already exists.";
 
 /** What a write answered: the project's name as stored, a sentence for the person, or null for no such project here. */
 export type ProjectResult = { ok: true; name: string } | { ok: false; problem: string } | null;
@@ -49,19 +63,25 @@ export interface ProjectSearch {
 
 /**
  * Every project of the organisation, active and archived, by name, each with
- * its client; those whose name, or whose client's name, has the words
- * searched for when there are some (TS-057). The projects are narrowed in
- * SQL: the clients, read for their names anyway, give the ids of those whose
- * name has the words, and the projects' query is passed them.
+ * its code and client; those whose name or code, or whose client's name or
+ * code, has the words searched for when there are some (TS-057, TS-115a). The
+ * projects are narrowed in SQL: the clients, read for their names anyway, give
+ * the ids of those whose name or code has the words, and the projects' query
+ * is passed them.
  */
 export async function listProjects(scope: OrganisationScope, { query, byClient }: ProjectSearch) {
 	const clients = await scope.clients.select();
 	const key = nameKey(query);
 	const clientsFound = byClient
-		? clients.filter((client) => client.nameKey.includes(key)).map((client) => client.id)
+		? clients
+				.filter((client) => client.nameKey.includes(key) || client.codeKey?.includes(key))
+				.map((client) => client.id)
 		: [];
 	const projects = await scope.projects.select(
-		key === "" ? undefined : (p) => or(nameHas(p.nameKey, query), among(p.clientId, clientsFound)),
+		key === ""
+			? undefined
+			: (p) =>
+					or(nameHas(p.nameKey, query), nameHas(p.codeKey, query), among(p.clientId, clientsFound)),
 		{ orderBy: (p) => [asc(p.nameKey)] },
 	);
 	const byId = new Map(clients.map((client) => [client.id, client]));
@@ -70,11 +90,15 @@ export async function listProjects(scope: OrganisationScope, { query, byClient }
 		return {
 			id: project.id,
 			name: project.name,
+			code: project.code,
+			/** No client and bills nothing: under Both, a work code (TS-115a). */
+			internal: project.clientId === null && project.billingType === "non_billable",
 			archived: project.archivedAt !== null,
 			client: client
 				? {
 						id: client.id,
 						name: client.name,
+						code: client.code,
 						key: client.nameKey,
 						archived: client.archivedAt !== null,
 					}
@@ -111,58 +135,169 @@ async function nameTaken(scope: OrganisationScope, key: string, except?: string)
 	return found.length > 0;
 }
 
+/** Whether another project of the organisation, archived or not, already has this code. */
+async function codeTaken(scope: OrganisationScope, key: string, except?: string) {
+	const found = await scope.projects.select(
+		(p) => and(eq(p.codeKey, key), except ? ne(p.id, except) : undefined),
+		{ limit: 1 },
+	);
+	return found.length > 0;
+}
+
+/** The organisation's rules for project codes (TS-115a), and under Both for work codes: `codeRuleFor` reads one project's. */
+export async function projectCodeRules(organisationId: string): Promise<CodeRules> {
+	const [rules] = await drizzle(env.DB)
+		.select({
+			required: organisations.projectCodeRequired,
+			pattern: organisations.projectCodePattern,
+			workModel: organisations.workModel,
+			workCodeRequired: organisations.workCodeRequired,
+			internalTerm: organisations.internalTerm,
+		})
+		.from(organisations)
+		.where(eq(organisations.id, organisationId))
+		.limit(1);
+	const model = WorkModel.catch("client_projects").parse(rules?.workModel);
+	return {
+		required: rules?.required ?? false,
+		pattern: rules?.pattern ?? null,
+		workCodes: hasWorkCodes(model),
+		workCodeRequired: rules?.workCodeRequired ?? false,
+		workCode: termsOf("internal", rules?.internalTerm ?? DEFAULT_INTERNAL_TERM).project,
+	};
+}
+
+/**
+ * The next `count` codes the organisation's pattern gives, in order, or none
+ * with no pattern. The numbers are taken by one `UPDATE … RETURNING`, which D1
+ * runs alone, so two creations at once never get the same one. A code another
+ * project already has, or one in `alsoTaken` (code keys about to be stored,
+ * such as an import's), is passed over and a further number taken.
+ */
+export async function nextPatternCodes(
+	scope: OrganisationScope,
+	count: number,
+	alsoTaken: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
+	const orm = drizzle(env.DB);
+	const codes: string[] = [];
+	while (codes.length < count) {
+		const wanted = count - codes.length;
+		const [taken] = await orm
+			.update(organisations)
+			.set({ projectCodeNext: sql`${organisations.projectCodeNext} + ${wanted}` })
+			.where(
+				and(
+					eq(organisations.id, scope.organisationId),
+					isNotNull(organisations.projectCodePattern),
+					isNotNull(organisations.projectCodeNext),
+				),
+			)
+			.returning({
+				next: organisations.projectCodeNext,
+				pattern: organisations.projectCodePattern,
+			});
+		const pattern = taken?.pattern ? parsePattern(taken.pattern) : null;
+		if (!taken?.next || !pattern) return codes;
+		const first = taken.next - wanted;
+		const offered = Array.from({ length: wanted }, (_, n) => patternCode(pattern, first + n));
+		const stored = await scope.projects.select((p) => among(p.codeKey, offered.map(codeKey)));
+		const used = new Set([...alsoTaken, ...stored.map((p) => p.codeKey)]);
+		codes.push(...offered.filter((code) => !used.has(codeKey(code))));
+	}
+	return codes;
+}
+
 /**
  * What a project is to have. `clientId` is left out to leave the client as it
- * is, null for none. Who may give a client is the caller's to decide.
+ * is, null for none. `code` is the code field as typed, "" for none; left out,
+ * a new project is numbered by the pattern and a changed one keeps its code.
+ * Who may give a client, and who may create a project at all
+ * (`mayCreateProject`), is the caller's to decide.
  */
 export interface ProjectInput {
 	name: string;
 	clientId?: string | null;
+	code?: string;
+	/** On creation: a work code (TS-115a), with no client and billing nothing. */
+	workCode?: boolean;
 }
 
-/** Adds a project with the name typed, and the client given, which is active. */
+/**
+ * Adds a project with the name typed, the client given, which is active, and
+ * its code: the one typed, or else the pattern's next. Without either, an
+ * organisation that requires codes refuses it. A work code has no client and
+ * bills nothing.
+ */
 export async function createProject(
 	scope: OrganisationScope,
 	actor: string,
-	{ name: typed, clientId = null }: ProjectInput,
+	{
+		name: typed,
+		clientId: givenClient = null,
+		code: typedProjectCode,
+		workCode = false,
+	}: ProjectInput,
 ): Promise<ProjectResult> {
+	const clientId = workCode ? null : givenClient;
 	const name = recordName(typed);
 	if (name === null) return { ok: false, problem: RECORD_NAME_PROBLEM };
 	const key = nameKey(name);
+	const given = typedCode(typedProjectCode);
+	if (given === false) return { ok: false, problem: CODE_PROBLEM };
 	if (await nameTaken(scope, key)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+	if (given !== null && (await codeTaken(scope, codeKey(given)))) {
+		return { ok: false, problem: PROJECT_CODE_TAKEN };
+	}
 	if (clientId !== null && !(await findActiveClient(scope, clientId))) {
 		return { ok: false, problem: CLIENT_NOT_OFFERED };
 	}
+	const rule = codeRuleFor(await projectCodeRules(scope.organisationId), workCode);
+	if (given === null && rule.required && rule.pattern === null) {
+		return { ok: false, problem: rule.problem };
+	}
+	const code =
+		given ?? (rule.pattern === null ? null : ((await nextPatternCodes(scope, 1))[0] ?? null));
 	const id = uuidv7();
 	try {
 		await scope.batch([
-			scope.projects.statements.insert({ id, name, nameKey: key, clientId }),
+			scope.projects.statements.insert({
+				id,
+				name,
+				nameKey: key,
+				clientId,
+				code,
+				codeKey: code === null ? null : codeKey(code),
+				...(workCode ? { billingType: "non_billable" } : {}),
+			}),
 			recordStatement(
 				scope,
 				actor,
 				"project.created",
 				{ type: "project", id },
-				changes(null, { name, clientId }, ["name", "clientId"]),
+				changes(null, { name, clientId, code }, ["name", "clientId", "code"]),
 			),
 		]);
 	} catch (error) {
 		if (isNameClash(error)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+		if (isCodeClash(error)) return { ok: false, problem: PROJECT_CODE_TAKEN };
 		throw error;
 	}
 	return { ok: true, name };
 }
 
 /**
- * Gives the project `id` the name typed, and the client given. Its own name in
- * other letters is no clash. An archived client is never given, but a project
- * that already has one keeps it. A new name and a new client are each
- * recorded; a save that changes neither records nothing.
+ * Gives the project `id` the name typed, the client given and the code typed.
+ * Its own name or code in other letters is no clash. An archived client is
+ * never given, but a project that already has one keeps it. A new name, a new
+ * client and a new code are each recorded; a save that changes none records
+ * nothing.
  */
 export async function changeProject(
 	scope: OrganisationScope,
 	actor: string,
 	id: string,
-	{ name: typed, clientId }: ProjectInput,
+	{ name: typed, clientId, code: typedProjectCode }: ProjectInput,
 ): Promise<ProjectResult> {
 	const [project] = await scope.projects.select((p) => eq(p.id, id), { limit: 1 });
 	if (!project) return null;
@@ -171,17 +306,43 @@ export async function changeProject(
 	if (name === null) return { ok: false, problem: RECORD_NAME_PROBLEM };
 	const key = nameKey(name);
 	if (await nameTaken(scope, key, id)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+	const code = typedProjectCode === undefined ? project.code : typedCode(typedProjectCode);
+	if (code === false) return { ok: false, problem: CODE_PROBLEM };
+	if (code !== null && (await codeTaken(scope, codeKey(code), id))) {
+		return { ok: false, problem: PROJECT_CODE_TAKEN };
+	}
 	const keepsClient = clientId === undefined || clientId === project.clientId;
+	if (code === null && project.code !== null) {
+		// Judged as the project will be: one moved to or from a client changes rule.
+		const clientAfter = keepsClient ? project.clientId : clientId;
+		const workCode = clientAfter === null && project.billingType === "non_billable";
+		const rule = codeRuleFor(await projectCodeRules(scope.organisationId), workCode);
+		if (rule.required) return { ok: false, problem: rule.problem };
+	}
 	if (!keepsClient && clientId !== null && !(await findActiveClient(scope, clientId))) {
 		return { ok: false, problem: CLIENT_NOT_OFFERED };
 	}
 	const subject = { type: "project", id } as const;
+	const codeColumns = { code, codeKey: code === null ? null : codeKey(code) };
 	try {
 		const [[changed]] = await scope.batch([
 			scope.projects.statements.update(
-				keepsClient ? { name, nameKey: key } : { name, nameKey: key, clientId },
+				keepsClient
+					? { name, nameKey: key, ...codeColumns }
+					: { name, nameKey: key, clientId, ...codeColumns },
 				(p) => eq(p.id, id),
 			),
+			...(code === project.code
+				? []
+				: [
+						recordStatement(
+							scope,
+							actor,
+							"project.updated",
+							subject,
+							changes(project, { code }, ["code"]),
+						),
+					]),
 			...(name === project.name
 				? []
 				: [
@@ -208,6 +369,7 @@ export async function changeProject(
 		return changed ? { ok: true, name } : null;
 	} catch (error) {
 		if (isNameClash(error)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+		if (isCodeClash(error)) return { ok: false, problem: PROJECT_CODE_TAKEN };
 		throw error;
 	}
 }

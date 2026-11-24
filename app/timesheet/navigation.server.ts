@@ -2,13 +2,14 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 
 import { organisationScope } from "~/db";
+import { codedName } from "~/lib/codes";
 import type { Membership } from "~/organisations/membership.server";
 import { runningEntry } from "~/time/entries.server";
 import { ownZoneOf } from "~/time/zones.server";
 
 /** What the timer's control in the navigation shows (TS-051). */
 export interface NavigationTimerData {
-	/** The person's running entry: its project's name and when it started. Null when nothing runs. */
+	/** The person's running entry: its project's code and name, and when it started. Null when nothing runs. */
 	running: { projectName: string; startedAt: number } | null;
 	/** Whether the person has chosen a zone, or had one set from their browser (TS-012a). */
 	hasTimeZone: boolean;
@@ -31,7 +32,10 @@ export async function navigationTimer(membership: Membership): Promise<Navigatio
 	let running: NavigationTimerData["running"] = null;
 	if (entry) {
 		const [project] = await scope.projects.select((p) => eq(p.id, entry.projectId), { limit: 1 });
-		running = { projectName: project?.name ?? "", startedAt: entry.startedAt.getTime() };
+		running = {
+			projectName: project ? codedName(project.code, project.name) : "",
+			startedAt: entry.startedAt.getTime(),
+		};
 	}
 	return { running, hasTimeZone: ownZone !== null, now: Date.now() };
 }

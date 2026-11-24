@@ -1,6 +1,7 @@
 import { data } from "react-router";
 import { DownloadLink } from "~/components/DownloadLink";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
+import { codedName } from "~/lib/codes";
 import { maySeeRates } from "~/organisations/access";
 import { membershipContext } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
@@ -29,8 +30,9 @@ import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { tagOptions } from "~/tags/tags.server";
 import { daysFrom, isoWeekday } from "~/time/calendar";
 import { formatDuration, formatTimeRange } from "~/time/format";
-
+import { inTerms } from "~/workspace/work-model";
 import type { Route } from "./+types/reports";
+import { useTerms } from "./useOrganisation";
 
 // Reports (TS-014a): the time in a range of days, grouped by project, client
 // or day, with each entry under it, and its export as CSV (TS-014b). Whose time
@@ -188,8 +190,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 						description: entry.description,
 						detail: [
 							dayLabel(row.day),
-							entry.project,
-							showClients ? entry.client : null,
+							codedName(entry.projectCode, entry.project),
+							showClients && entry.client !== null
+								? codedName(entry.clientCode, entry.client)
+								: null,
 							others ? entry.person : null,
 						]
 							.filter(Boolean)
@@ -222,6 +226,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function Reports({ loaderData }: Route.ComponentProps) {
 	const { query, report } = loaderData;
+	// Every "project" the page says, in the organisation's own word (TS-115a).
+	const terms = useTerms();
+	const by = inTerms(GROUP_LABELS[query.group].toLowerCase(), terms);
 
 	return (
 		<>
@@ -245,19 +252,16 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 					{report.week && (
 						<div className="mt-10 max-w-200">
 							<Timetable
-								caption="The week in hours and minutes, by project and day."
+								caption={inTerms("The week in hours and minutes, by project and day.", terms)}
 								{...report.week}
 							/>
 						</div>
 					)}
 
 					<div className="mt-10 max-w-200">
-						<Ledger
-							heading={`By ${GROUP_LABELS[query.group].toLowerCase()}`}
-							note={loaderData.range}
-						>
+						<Ledger heading={`By ${by}`} note={loaderData.range}>
 							{report.groups.length > 0 ? (
-								<LedgerRows label={`Time by ${GROUP_LABELS[query.group].toLowerCase()}`}>
+								<LedgerRows label={`Time by ${by}`}>
 									{report.groups.map((group) => (
 										<GroupRow
 											key={group.key}

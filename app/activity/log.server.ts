@@ -27,6 +27,7 @@ import { SIGN_IN_POLICY_LABELS } from "~/organisations/sign-in-policy";
 import { addDays, bounds, Day, dayOf, daysFrom } from "~/time/calendar";
 import { formatDayWithYear, formatDuration, formatRange, formatTime } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
+import { WORK_MODEL_LABELS } from "~/workspace/work-model";
 
 import { ActivityAction, ActivitySource, SubjectType } from "./actions";
 import { REDACTED } from "./activity.server";
@@ -208,6 +209,8 @@ const STEPS: Record<string, string> = {
 	member_added: "Added a member to",
 	member_removed: "Removed a member from",
 	manager_changed: "Changed a manager of",
+	manager_added: "Added an account manager to",
+	manager_removed: "Removed an account manager from",
 	sent: "Sent",
 	voided: "Voided",
 	accepted: "Recorded as accepted",
@@ -341,6 +344,11 @@ const FIELD_LABELS: Record<string, string> = {
 	signInPolicy: "Sign-in",
 	signInTenant: "Workspace domain or Microsoft tenant",
 	selfJoin: "People at the domain may join on their own",
+	code: "Code",
+	workModel: "How you work",
+	internalTerm: "Name for internal work",
+	projectCodeRequired: "Every project has a code",
+	projectCodePattern: "Project codes numbered from",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */
@@ -350,6 +358,7 @@ const RULE_VALUES: Record<string, Record<string, string>> = {
 	shortNotice: SHORT_NOTICE_LABELS,
 	kind: WORK_KIND_LABELS,
 	signInPolicy: SIGN_IN_POLICY_LABELS,
+	workModel: WORK_MODEL_LABELS,
 };
 
 /** The names a page shows for the ids its records hold. */

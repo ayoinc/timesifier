@@ -4,6 +4,7 @@ import {
 	canSee,
 	compactNavigation,
 	type DestinationId,
+	destination,
 	destinationIndex,
 	destinationPath,
 	destinations,
@@ -275,11 +276,12 @@ describe("the list of destinations", () => {
 		expect(two.more.map(({ heading }) => heading)).toEqual(["Organize", "Review"]);
 	});
 
-	it("hides Clients from everyone when the organisation turns Clients off, and nothing else", () => {
+	it("hides Clients, Invoices and Estimates from everyone under Internal work, and nothing else", () => {
+		const billing = ["clients", "invoices", "estimates"];
 		for (const viewer of Object.values(VIEWERS)) {
 			const off = { ...viewer, clientsEnabled: false };
 			for (const { id } of destinations) {
-				expect(canSee(off, id), id).toBe(id === "clients" ? false : canSee(viewer, id));
+				expect(canSee(off, id), id).toBe(billing.includes(id) ? false : canSee(viewer, id));
 			}
 		}
 	});
@@ -397,16 +399,19 @@ describe("a destination a person is not shown", () => {
 		expect((await open(team, people.manager)).status).toBe(404);
 	});
 
-	it("Clients is hidden and 404 for everyone while the organisation has it turned off", async () => {
-		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
+	it("Clients, Invoices and Estimates are hidden and 404 for everyone under Internal work", async () => {
+		await env.DB.prepare("update organisations set work_model = 'internal' where id = ?")
 			.bind(acme.id)
 			.run();
 
-		const clients = destinationPath(ACME, "clients");
 		const html = await pageBody(await open(organisationPath(ACME), people.owner));
-		expect(linksOf(navigationOf(html))).not.toContain("Clients");
-		expect((await open(clients, people.owner)).status).toBe(404);
-		expect((await open(clients, people.admin)).status).toBe(404);
+		const links = linksOf(navigationOf(html));
+		for (const id of ["clients", "invoices", "estimates"] as const) {
+			expect(links).not.toContain(destination(id).label);
+			for (const who of [people.owner, people.admin, people.finance]) {
+				expect((await open(destinationPath(ACME, id), who as Person)).status).toBe(404);
+			}
+		}
 	});
 });
 

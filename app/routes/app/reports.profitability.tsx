@@ -8,6 +8,7 @@ import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
+import { codedName } from "~/lib/codes";
 import { parseRequest } from "~/lib/validate";
 import { formatMoney } from "~/money/money";
 import { moneyText, parseMoney } from "~/money/typed";
@@ -34,8 +35,10 @@ import { destination } from "~/shell/destinations";
 import { DEFAULT_LOCALE } from "~/shell/locale";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { Day } from "~/time/calendar";
+import { hasClients, inTerms } from "~/workspace/work-model";
 import type { Route } from "./+types/reports.profitability";
 import { FormSheet } from "./FormSheet";
+import { useTerms } from "./useOrganisation";
 
 // The Profitability view of Reports (TS-071, B6): each project's revenue,
 // cost and profit for a range, with its margin, as Harvest counts them
@@ -122,7 +125,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		projects: profit.lines.map((line) => ({
 			id: line.projectId,
 			name: line.project,
-			client: line.client,
+			client: hasClients(membership.organisation.workModel) ? line.client : null,
 			type:
 				line.billingType === "fixed_fee"
 					? "Fixed fee"
@@ -172,7 +175,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			})),
 			fixedFee: fixedFee.map((p) => ({
 				id: p.id,
-				name: p.name,
+				name: codedName(p.code, p.name),
 				startsOn: p.startsOn ?? "",
 				endsOn: p.endsOn ?? "",
 				dates:
@@ -192,13 +195,17 @@ export default function Profitability({ loaderData }: Route.ComponentProps) {
 	const [person, setPerson] = useState<Data["people"][number] | null>(null);
 	const [project, setProject] = useState<Data["fixedFee"][number] | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
+	// Every "project" the page says, in the organisation's own word (TS-115a).
+	const terms = useTerms();
+	const t = (text: string) => inTerms(text, terms);
 
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
-				What each project earned and cost in {loaderData.currency}: revenue from billable time or a
-				fixed fee spread over its days, cost from each person's cost rate and every expense.
+				{t("What each project earned and cost in")} {loaderData.currency}: revenue from billable
+				time or a fixed fee spread over its days, cost from each person's cost rate and every
+				expense.
 			</PageLead>
 			<ReportTabs
 				slug={loaderData.slug}
@@ -266,12 +273,14 @@ export default function Profitability({ loaderData }: Route.ComponentProps) {
 			{fixedFee.length > 0 && (
 				<Section
 					id="fixed-fee"
-					heading="Fixed-fee projects"
-					lead="A fixed fee is spread evenly over the project's first to last day, both included."
+					heading={t("Fixed-fee projects")}
+					lead={t(
+						"A fixed fee is spread evenly over the project's first to last day, both included.",
+					)}
 				>
 					<div className="max-w-200">
 						<Ledger heading="Dates" note={fixedFee.length}>
-							<LedgerRows label="Fixed-fee projects and their dates">
+							<LedgerRows label={t("Fixed-fee projects and their dates")}>
 								{fixedFee.map((p) => (
 									<LedgerRow
 										key={p.id}
@@ -326,7 +335,7 @@ export default function Profitability({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
-				title={`Dates of ${project?.name ?? "this project"}`}
+				title={`Dates of ${project?.name ?? t("this project")}`}
 				intent="project-dates"
 				submitLabel="Set dates"
 				isOpen={project !== null}
@@ -362,6 +371,7 @@ function ProjectProfits({
 	missingCost,
 	range,
 }: NonNullable<Data["figures"]> & { range: string }) {
+	const terms = useTerms();
 	return (
 		<>
 			{missingCost.length > 0 && (
@@ -373,9 +383,9 @@ function ProjectProfits({
 			)}
 
 			<div className="mt-10 max-w-200">
-				<Ledger heading="By project" note={range}>
+				<Ledger heading={inTerms("By project", terms)} note={range}>
 					{projects.length > 0 ? (
-						<LedgerRows label="Profit by project">
+						<LedgerRows label={inTerms("Profit by project", terms)}>
 							{projects.map((p) => (
 								<LedgerRow
 									key={p.id}

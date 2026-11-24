@@ -30,14 +30,16 @@ import { lineRefusal, outcomeOf, readForm, refuse } from "~/invoices/form.server
 import { LineFields as LineFieldSchema, parseLine } from "~/invoices/line-input";
 import { addContact, contactsOf, EMAIL_ADDRESS, sendDocument } from "~/invoices/mail.server";
 import { estimateLinkPath, estimatePdfPath, estimatesPath, invoicePath } from "~/invoices/paths";
+import { codedName } from "~/lib/codes";
 import { parsePercent } from "~/money/typed";
 import { notFound } from "~/organisations/membership.server";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { Day } from "~/time/calendar";
 import { formatDayAndTime } from "~/time/format";
-
+import { inTerms, termsOf } from "~/workspace/work-model";
 import type { Route } from "./+types/estimates.$estimate";
+import { useTerms } from "./useOrganisation";
 
 // An estimate (TS-077): its lines and details while undecided, sending it
 // with its PDF and the link where the client accepts or declines, recording
@@ -129,7 +131,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 				: null,
 			open,
 		},
-		clientName: client?.name ?? "",
+		clientName: codedName(client?.code, client?.name ?? ""),
 		printed,
 		lines: lines.map((line) => ({ id: line.id, description: line.description })),
 		taxes: taxes
@@ -239,7 +241,8 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 		case "project":
 			return outcomeOf(
 				await projectFromEstimate(scope, actor, id),
-				({ name }) => `Project ${name} is started with the estimate's fee.`,
+				({ name }) =>
+					`${inTerms("Project", termsOf(membership.organisation.workModel, membership.organisation.internalTerm))} ${name} is started with the estimate's fee.`,
 			);
 		case "delete": {
 			const deleted = await deleteEstimate(scope, actor, id);
@@ -252,6 +255,7 @@ export async function action({ request, context, params }: Route.ActionArgs) {
 
 export default function EstimatePage({ loaderData }: Route.ComponentProps) {
 	const { estimate, printed, lines, taxes, contacts } = loaderData;
+	const terms = useTerms();
 	return (
 		<>
 			<p>
@@ -406,7 +410,11 @@ export default function EstimatePage({ loaderData }: Route.ComponentProps) {
 							<ActionForm intent="invoice" submitLabel="Make invoice" />
 						))}
 					{estimate.status === "accepted" && (
-						<ActionForm intent="project" submitLabel="Start fixed-fee project" variant="outlined" />
+						<ActionForm
+							intent="project"
+							submitLabel={inTerms("Start fixed-fee project", terms)}
+							variant="outlined"
+						/>
 					)}
 				</div>
 			</Section>

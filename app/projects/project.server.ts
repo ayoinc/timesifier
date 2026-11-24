@@ -194,8 +194,10 @@ export async function projectPage(
 		project: {
 			id: project.id,
 			name: project.name,
+			/** Its code (TS-115a), shown first; null for none. */
+			code: project.code,
 			archived: project.archivedAt !== null,
-			client: client ? { id: client.id, name: client.name } : null,
+			client: client ? { id: client.id, name: client.name, code: client.code } : null,
 			billingType: priced.billingType,
 			rateMode: priced.rateMode,
 			currency: priced.currency,

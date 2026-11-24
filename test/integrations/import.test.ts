@@ -117,6 +117,7 @@ describe("reading a file", () => {
 			date: 0,
 			client: 1,
 			project: 2,
+			project_code: 3,
 			task: 4,
 			notes: 5,
 			hours: 6,
@@ -148,9 +149,9 @@ describe("importing Harvest's export of all time", () => {
 		expect(page).toContain("The hours are not a number above 0 and at most 24.");
 		expect(page).toContain("The date is not YYYY-MM-DD or M/D/YYYY.");
 		expect(page).toContain(
-			"It adds clients Example Client, Acme Internal; projects Website Redesign, Research; tasks Design, Project Management, Reading.",
+			"It adds clients Example Client, Acme Internal; projects WR-01 · Website Redesign, Research; tasks Design, Project Management, Reading.",
 		);
-		expect(page).toContain("Ada Lovelace · Website Redesign · Design");
+		expect(page).toContain("Ada Lovelace · WR-01 · Website Redesign · Design");
 		expect(await value("select count(*) from time_entries")).toBe(1);
 	});
 
@@ -589,7 +590,9 @@ describe("exporting all time", () => {
 		const rows = parseCsv(csv) ?? [];
 		expect(rows[0]?.cells).toEqual([
 			"Date",
+			"Client code",
 			"Client",
+			"Project code",
 			"Project",
 			"Task",
 			"Notes",
@@ -603,6 +606,8 @@ describe("exporting all time", () => {
 			[
 				"2026-10-06",
 				"",
+				"",
+				"",
 				"Apollo",
 				"Programming",
 				"Fixed the build",
@@ -614,6 +619,8 @@ describe("exporting all time", () => {
 			],
 			[
 				"2026-10-07",
+				"",
+				"",
 				"",
 				"Apollo",
 				"",

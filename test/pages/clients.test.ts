@@ -107,9 +107,9 @@ describe("who may", () => {
 		expect(await clientCount()).toBe(1);
 	});
 
-	it("while Clients is off, the page and its forms are 404 for an owner too", async () => {
+	it("under Internal work, the page and its forms are 404 for an owner too", async () => {
 		await create("Globex");
-		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
+		await env.DB.prepare("update organisations set work_model = 'internal' where id = ?")
 			.bind(acme.id)
 			.run();
 
@@ -225,14 +225,14 @@ describe("filter by name (TS-057)", () => {
 	it("filters the archived tab too, from the address", async () => {
 		expect(await filtered("umb", "&show=archived")).toContain("Umbrella");
 		expect(await filtered("glob", "&show=archived")).toContain(
-			"No archived client has “glob” in its name.",
+			"No archived client has “glob” in its name or code.",
 		);
 	});
 
 	it("matches no project name, only the client's", async () => {
 		const text = await filtered("website");
 		expect(text).not.toContain("Globex");
-		expect(text).toContain("No active client has “website” in its name.");
+		expect(text).toContain("No active client has “website” in its name or code.");
 		expect(text).toContain("Create client");
 	});
 

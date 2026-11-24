@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
+import { useTerms } from "~/routes/app/useOrganisation";
+import { inTerms } from "~/workspace/work-model";
 
 import {
 	ANY_TAG,
@@ -91,6 +93,8 @@ function ReportFields({
 	tags = [],
 }: ReportChoiceProps) {
 	const apply = useApplyFilters();
+	// "Project" in the organisation's own word under internal work (TS-115a).
+	const terms = useTerms();
 	// The hidden select and the inputs hold the new value once React has drawn it.
 	const applySoon = () => setTimeout(apply, 0);
 	const [own, setOwn] = useState(ownGroups?.value ?? "");
@@ -157,7 +161,7 @@ function ReportFields({
 					<Select
 						label="Group by"
 						name="group"
-						options={groupings.map((id) => ({ id, label: GROUP_LABELS[id] }))}
+						options={groupings.map((id) => ({ id, label: inTerms(GROUP_LABELS[id], terms) }))}
 						value={group}
 						onChange={(id) => {
 							setGroup(GROUPS.find((each) => each === id) ?? group);

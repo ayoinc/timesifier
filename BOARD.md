@@ -682,6 +682,12 @@ The navigation these cards build towards, by role, is in `docs/navigation.md` (a
 
 Cards TS-064 to TS-089 come from `docs/research/harvest-b2b.md`, observed in Harvest's application with rea on 2026-11-11. Its cards B3 to B22 are TS-065 to TS-084, kept in this build order: TS-065 B22, TS-066 B4, TS-067 B5, TS-068 B8, TS-069 B7, TS-070 B9, TS-071 B6, TS-072 B17, TS-073 B10, TS-074 B11, TS-075 B16, TS-076 B19, TS-077 B12, TS-078 B13, TS-079 B15, TS-080 B18, TS-081 B20, TS-082 B14, TS-083 B21, TS-084 B3. B1 and B2 are in TS-061 with TS-040 and TS-042. TS-085 to TS-089 are what the owner asked for that the research leaves out. The owner's decisions: a Finance role (from TS-064), a lock date, rates seen only by owners, admins and Finance, never managers, an activity log kept 730 days, and invoicing before import. The tables of every card are in TS-064's schema.
 
+### Drop `clients_enabled` (after TS-115a)
+
+From TS-115a (decision 67). Waits until the release with migration 0033 has run in production long enough that no Worker of an earlier release can be rolled back to.
+
+- [ ] A migration that ships alone drops `organisations.clients_enabled`, which nothing reads since 0033 (`hasClients(work_model)` decides), and `changeGeneral` and `startWorkModel` in `app/workspace/general.server.ts` stop writing it; `docs/architecture.md` and `docs/security.md` lose their lines about it, and `test/db/work-model-migration.test.ts` stops reading it.
+
 ### TS-113b · Fast at company size, the rest
 
 From TS-113 (`research/corporate/scale-test.md`, D8 and D9, and its "After TS-113" section). Waits for TS-111d and TS-111e, which change Approvals, Time off and Work schedules; the lines below are at `ts-113-scale` (a3d335a) and will move.
