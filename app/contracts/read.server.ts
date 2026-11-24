@@ -53,6 +53,8 @@ export async function contractsOf(
 						overtimeMultiplierBp: v.overtimeMultiplierBp as Multiplier | null,
 						restDayMultiplierBp: v.restDayMultiplierBp as Multiplier | null,
 						leaveDays: v.leaveDays,
+						carryOverDays: v.carryOverDays,
+						carryOverExpiresAfterDays: v.carryOverExpiresAfterDays,
 					}),
 				),
 		});

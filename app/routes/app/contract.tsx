@@ -36,6 +36,21 @@ import { ContractFields } from "~/contracts/forms";
 import { contractsOf } from "~/contracts/read.server";
 import { type ContractDefaults, contractsView, defaultsOf } from "~/contracts/view";
 import { type OrganisationScope, organisationScope, users } from "~/db";
+import {
+	ADJUSTMENT_REASON_MAX_LENGTH,
+	BELOW_STATUTORY,
+	belowStatutoryFloor,
+	contractBalance,
+	contractBalanceWords,
+	holidayMinutesOn,
+	LONGEST_ADJUSTMENT_MINUTES,
+	leaveAmount,
+	minutesFrom,
+	USUAL_SETTINGS,
+} from "~/leave/entitlement";
+import { addAdjustment, adjustmentsOf } from "~/leave/entitlement.server";
+import { annualLeaveOf } from "~/leave/leave.server";
+import { leaveYear, leaveYearLabel, leaveYearOf } from "~/leave/years";
 import { parseRequest } from "~/lib/validate";
 import { mayChangeContractOf, maySeeContractOf, maySeePayOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
@@ -44,6 +59,7 @@ import { declined, done } from "~/organisations/outcome.server";
 import { shownName } from "~/organisations/people";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { organisationMoney } from "~/projects/money.server";
+import { type ScheduleWeek, versionOn } from "~/schedules/schedules";
 import { scheduleBookOf } from "~/schedules/schedules.server";
 import { CONTRACT_PERSON_PARAM, canSee, destinationPath } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
@@ -57,6 +73,10 @@ import { zoneOfMember } from "~/time/zones.server";
 import type { Route } from "./+types/contract";
 import { FormSheet } from "./FormSheet";
 import { useOrganisation } from "./useOrganisation";
+
+/** What the adjustment sheet's answer says to an adjustment of a year no contract gives. */
+const ADJUST_NEEDS_CONTRACT =
+	"Only annual leave a contract gives is adjusted here: give that leave year a contract with its own days of annual leave first.";
 
 // One person's contracts, a page of Team beside their Week (TS-098a,
 // research/contracts-model.md sections 6 and 7). Owners, admins and Finance
@@ -99,12 +119,13 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 	// Somebody this person may not read the contracts of is as absent as somebody who does not exist.
 	if (!maySeeContractOf(access, personId)) throw notFound();
 	const scope = organisationScope(env.DB, organisation.id);
-	const [contracts, book, zone, others, money] = await Promise.all([
+	const [contracts, book, zone, others, money, annualLeave] = await Promise.all([
 		contractsOf(scope, [personId]),
 		scheduleBookOf(scope),
 		zoneOfMember(membership),
 		otherAdministrators(scope, personId),
 		organisationMoney(organisation.id),
+		annualLeaveOf(scope, personId),
 	]);
 	const theirs = contracts.get(personId) ?? [];
 	const person = await personOf(scope, organisation, personId, theirs.length > 0);
@@ -112,7 +133,20 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 	const today = dayOf(Date.now(), zone);
 	const seesPay = maySeePayOf(access, personId);
 	const canChange = mayChangeContractOf(access, personId, others);
-	const { current, others: earlier, currentContract } = contractsView(theirs, book, today, seesPay);
+	const settings = annualLeave?.settings ?? USUAL_SETTINGS;
+	const {
+		current,
+		others: earlier,
+		currentContract,
+	} = contractsView(theirs, book, today, seesPay, settings.holidaysFromAllowance);
+	// Their annual leave this leave year, where a contract gives it (TS-098b); a leaver's went with their membership.
+	const year = leaveYearOf(settings.leaveYearStarts, today);
+	const counted = annualLeave && person.isMember ? contractBalance(annualLeave.leave, year) : null;
+	const adjustments =
+		annualLeave && counted ? await adjustmentsOf(scope, personId, annualLeave.annual.id) : [];
+	// The public holidays of this leave year and each schedule's week, for the sheets' statutory warning.
+	const thisYear = leaveYear(settings.leaveYearStarts, year);
+	const ownWeek = annualLeave?.leave.calendar.timetable(today).week ?? [];
 	const seesTeam = canSee(viewerOf(membership), "team");
 	const tabs: PersonTab[] = seesTeam && person.isMember ? ["week", "contract"] : ["contract"];
 	// The contract a sheet changes or ends: the one that covers today, or the next to begin, while it is not ended.
@@ -144,8 +178,50 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 					schedules: [...book.schedules.values()]
 						.filter((s) => !s.archived)
 						.map((s) => ({ id: s.id, name: s.name })),
+					floor: {
+						holidays: (annualLeave?.holidays ?? []).filter(
+							(d) => d >= thisYear.first && d <= thisYear.last,
+						),
+						holidaysFromAllowance: settings.holidaysFromAllowance,
+						ownWeek,
+						weeks: Object.fromEntries(
+							[...book.schedules.values()].map((s) => [s.id, versionOn(s, today).week]),
+						),
+					},
 				}
 			: null,
+		/** Their annual leave this leave year from the contract, and its adjustments; null where no contract gives it. */
+		leave: counted
+			? {
+					heading: `Annual leave, ${leaveYearLabel(settings.leaveYearStarts, year)}`,
+					...contractBalanceWords(counted, today),
+					adjustments: adjustments
+						.filter((a) => a.leaveYear === year)
+						.map((a) => {
+							const size = Math.abs(a.minutes);
+							const inDays =
+								counted.dayLength !== null && Number.isInteger((size * 2) / counted.dayLength);
+							return {
+								id: a.id,
+								title: `${a.minutes > 0 ? "Added" : "Taken away"}: ${leaveAmount(size, inDays ? counted.dayLength : null)}`,
+								reason: a.reason,
+								by: `${a.by ?? "A former member"}, ${formatDayWithYear(dayOf(a.createdAt, zone))}`,
+							};
+						}),
+				}
+			: null,
+		/** What the adjustment sheet offers: the leave year before, this one and the next. Only for those who change contracts. */
+		adjust:
+			canChange && counted
+				? {
+						year: String(year),
+						years: [year - 1, year, year + 1].map((y) => ({
+							id: String(y),
+							label: leaveYearLabel(settings.leaveYearStarts, y),
+						})),
+						inDays: counted.dayLength !== null,
+					}
+				: null,
 	};
 }
 
@@ -159,6 +235,14 @@ const form = z.discriminatedUnion("intent", [
 		contractId: Id,
 		lastDay: Day,
 		reason: EndReason.exclude(["replaced"]),
+	}),
+	// A change to their annual leave in a leave year (TS-098b): more or less, in days or hours, and why.
+	z.object({
+		intent: z.literal("adjust"),
+		leaveYear: z.coerce.number().int().min(2000).max(2200),
+		amount: z.string().max(20),
+		unit: z.enum(["days", "hours"]),
+		reason: z.string().trim().min(1).max(ADJUSTMENT_REASON_MAX_LENGTH),
 	}),
 ]);
 
@@ -202,7 +286,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
 	const today = dayOf(Date.now(), await zoneOfMember(membership));
 	// A contract named by the form is this person's, or it is nobody's here.
-	if (input.intent !== "give") {
+	if (input.intent === "change" || input.intent === "end") {
 		const theirs = (await contractsOf(scope, [personId])).get(personId) ?? [];
 		if (!theirs.some((c) => c.id === input.contractId)) {
 			return declined(refusal({ change: "missing" }), 404);
@@ -240,6 +324,35 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			);
 			return answer(change, `The contract ends on ${formatDayWithYear(input.lastDay)}.`);
 		}
+		case "adjust": {
+			// Only a member's balance is adjusted: a leaver's went with their membership.
+			const [member] = await scope.memberships.select((m) => eq(m.userId, personId), { limit: 1 });
+			const annualLeave = member ? await annualLeaveOf(scope, personId) : null;
+			if (!annualLeave) return declined(refusal({ change: "missing" }), 404);
+			const counted = contractBalance(annualLeave.leave, input.leaveYear);
+			if (!counted) return declined(ADJUST_NEEDS_CONTRACT, 409);
+			const minutes = minutesFrom(input.amount, input.unit, counted.dayLength);
+			if (minutes === null || Math.abs(minutes) > LONGEST_ADJUSTMENT_MINUTES) {
+				return declined(
+					input.unit === "days"
+						? "Enter whole or half days, more or less, such as 2 or -1.5."
+						: "Enter hours, more or less, such as 7:30 or -3.75.",
+				);
+			}
+			const added = await addAdjustment(
+				scope,
+				user.id,
+				personId,
+				annualLeave.leave,
+				annualLeave.annual,
+				{ leaveYear: input.leaveYear, minutes, reason: input.reason },
+			);
+			if (!added.ok) return declined(ADJUST_NEEDS_CONTRACT, 409);
+			const label = leaveYearLabel(annualLeave.settings.leaveYearStarts, input.leaveYear);
+			return done(
+				`Annual leave in ${label} is adjusted. ${contractBalanceWords(added.balance, today).value}.`,
+			);
+		}
 	}
 }
 
@@ -247,7 +360,7 @@ type LoaderData = Route.ComponentProps["loaderData"];
 type Sheets = NonNullable<LoaderData["sheets"]>;
 
 /** The sheets of this page. One is open at a time. */
-type Task = "give" | "change" | "end";
+type Task = "give" | "change" | "end" | "adjust";
 
 export default function Contract({ loaderData }: Route.ComponentProps) {
 	const organisation = useOrganisation();
@@ -262,6 +375,8 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 		canChange,
 		changesAlone,
 		sheets,
+		leave,
+		adjust,
 	} = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
 	// What the sheets were last opened with. The answer to a sheet's own form
@@ -359,6 +474,34 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 					</Button>
 				</div>
 			)}
+			{leave && (
+				<div className="mt-10 flex max-w-200 flex-col gap-4">
+					<Ledger heading={leave.heading}>
+						<LedgerRows label={leave.heading}>
+							<LedgerRow title="Balance" detail={leave.detail} value={leave.value} />
+							{leave.adjustments.map((a) => (
+								<LedgerRow
+									key={a.id}
+									title={a.title}
+									detail={
+										<>
+											<span className="block wrap-anywhere">“{a.reason}”</span>
+											{a.by}
+										</>
+									}
+								/>
+							))}
+						</LedgerRows>
+					</Ledger>
+					{adjust && (
+						<div>
+							<Button variant="text" onPress={() => setTask("adjust")}>
+								Adjust annual leave
+							</Button>
+						</div>
+					)}
+				</div>
+			)}
 
 			{earlier.length > 0 && (
 				<div className="mt-10 flex max-w-200 flex-col gap-6">
@@ -435,6 +578,57 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 					)}
 				</>
 			)}
+			{adjust && (
+				<FormSheet
+					title={`Adjust ${person.name}'s annual leave`}
+					intent="adjust"
+					submitLabel="Adjust"
+					isOpen={task === "adjust"}
+					onClose={close}
+					onDone={setSaid}
+				>
+					<Select
+						label="Leave year"
+						name="leaveYear"
+						defaultValue={adjust.year}
+						isRequired
+						options={adjust.years}
+					/>
+					<div className="flex flex-wrap gap-4 *:min-w-0 *:grow *:basis-44">
+						<TextField
+							label="More or less"
+							name="amount"
+							inputMode="decimal"
+							autoComplete="off"
+							isRequired
+							maxLength={20}
+							description={
+								adjust.inDays
+									? "Days as 2 or 0.5, hours as 7:30. A minus takes away: -1."
+									: "Hours as 7:30 or 7.5. A minus takes away: -7:30."
+							}
+						/>
+						<Select
+							label="In"
+							name="unit"
+							defaultValue={adjust.inDays ? "days" : "hours"}
+							isRequired
+							options={[
+								...(adjust.inDays ? [{ id: "days", label: "Days" }] : []),
+								{ id: "hours", label: "Hours" },
+							]}
+						/>
+					</div>
+					<TextField
+						label="Reason"
+						name="reason"
+						autoComplete="off"
+						isRequired
+						maxLength={ADJUSTMENT_REASON_MAX_LENGTH}
+						description="An opening balance, carry-over the law gives, or a correction. It is recorded, and the person reads it."
+					/>
+				</FormSheet>
+			)}
 		</>
 	);
 }
@@ -461,6 +655,19 @@ function TermsSheet({
 }) {
 	const [overtime, setOvertime] = useState<OvertimePay>(defaults?.overtimePay ?? "unpaid");
 	const [kind, setKind] = useState<string>(defaults?.kind ?? "permanent");
+	const [scheduleId, setScheduleId] = useState<string>(defaults?.scheduleId ?? "");
+	const [leaveDays, setLeaveDays] = useState<string>(defaults?.leaveDays ?? "");
+	// The statutory floor (TS-098b): warned of as the days are typed, never refused.
+	const week: ScheduleWeek = (scheduleId && sheets.floor.weeks[scheduleId]) || sheets.floor.ownWeek;
+	const below =
+		kind !== "contractor" &&
+		/^\d+$/.test(leaveDays.trim()) &&
+		belowStatutoryFloor({
+			leaveDays: Number(leaveDays),
+			week,
+			holidayMinutes: holidayMinutesOn(week, sheets.floor.holidays),
+			holidaysFromAllowance: sheets.floor.holidaysFromAllowance,
+		});
 	const multipliers = MULTIPLIERS.map((bp) => ({ id: String(bp), label: MULTIPLIER_LABELS[bp] }));
 	const giving = task === "give";
 	return (
@@ -513,7 +720,8 @@ function TermsSheet({
 			<Select
 				label="Work schedule"
 				name="scheduleId"
-				defaultValue={defaults?.scheduleId ?? ""}
+				value={scheduleId}
+				onChange={(id) => setScheduleId(id ?? "")}
 				options={[
 					{ id: "", label: "None of its own: their team's, role's or the default" },
 					...sheets.schedules.map((s) => ({ id: s.id, label: s.name })),
@@ -563,16 +771,44 @@ function TermsSheet({
 				</>
 			)}
 			{kind !== "contractor" && (
-				<TextField
-					label="Annual leave, days a year"
-					name="leaveDays"
-					type="number"
-					inputMode="numeric"
-					min="0"
-					max="366"
-					defaultValue={defaults?.leaveDays ?? ""}
-					description="For a full week, plus public holidays. Leave empty for the kind of leave's allowance."
-				/>
+				<>
+					<TextField
+						label="Annual leave, days a year"
+						name="leaveDays"
+						type="number"
+						inputMode="numeric"
+						min="0"
+						max="366"
+						value={leaveDays}
+						onChange={setLeaveDays}
+						description={`For a full week, ${sheets.floor.holidaysFromAllowance ? "public holidays included" : "plus public holidays"}. Leave empty for the kind of leave's allowance.`}
+					/>
+					<p role="status" className="text-body-medium text-on-surface-variant empty:hidden">
+						{below ? BELOW_STATUTORY : ""}
+					</p>
+					<div className="flex flex-wrap gap-4 *:min-w-0 *:grow *:basis-44">
+						<TextField
+							label="Days carried over"
+							name="carryOverDays"
+							type="number"
+							inputMode="numeric"
+							min="0"
+							max="366"
+							defaultValue={defaults?.carryOverDays ?? ""}
+							description="At most, of what is left at a leave year's end. Empty carries none."
+						/>
+						<TextField
+							label="Carried leave lasts, days"
+							name="carryOverExpiresAfterDays"
+							type="number"
+							inputMode="numeric"
+							min="1"
+							max="366"
+							defaultValue={defaults?.carryOverExpiresAfterDays ?? ""}
+							description="Into the next leave year. Empty lasts to its end."
+						/>
+					</div>
+				</>
 			)}
 			<TextField
 				label="Works number"

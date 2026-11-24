@@ -3766,9 +3766,6 @@ export const leaveAdjustments = sqliteTable(
 			"leave_adjustments_minutes_in_range",
 			sql`${table.minutes} <> 0 AND ${table.minutes} BETWEEN -527040 AND 527040`,
 		),
-		check(
-			"leave_adjustments_reason_length",
-			sql`length(trim(${table.reason})) BETWEEN 1 AND 200`,
-		),
+		check("leave_adjustments_reason_length", sql`length(trim(${table.reason})) BETWEEN 1 AND 200`),
 	],
 );

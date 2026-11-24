@@ -12,6 +12,7 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { type OrganisationScope, organisationScope } from "~/db";
 import { halfDaysTaken, isWorkingDay } from "~/leave/days";
+import { contractBalanceWords } from "~/leave/entitlement";
 import {
 	HOLIDAY_KIND,
 	halfDaysLabel,
@@ -123,7 +124,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 	const [mine, timetable, holidays, decidedByOthers, organisationRules, work, teamLeave] =
 		await Promise.all([
-			myLeave(scope, user.id, year),
+			myLeave(scope, user.id, today),
 			timetableFor(scope, user.id),
 			publicHolidaysOf(scope, { first: today, last: `${year + 1}-12-31` }),
 			someoneElseDecides(scope, user.id),
@@ -192,7 +193,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		show,
 		decides,
 		waiting,
-		year,
+		/** The leave year the balances are of, as its heading names it (TS-098b). */
+		year: mine.yearLabel,
 		today,
 		kinds: requestableKinds(mine.kinds).map((kind) => ({
 			id: kind.id,
@@ -211,14 +213,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		).filter(worksOn),
 		shortNotice: rules.shortNotice,
 		workRules: { overtime: rules.overtime, weekend: rules.weekend },
-		balances: mine.balances.map(({ kind, balance }) => ({
-			id: kind.id,
-			name: kind.name,
-			allowance: balance.allowance === null ? null : halfDaysLabel(balance.allowance),
-			approved: halfDaysLabel(balance.approved),
-			pending: balance.pending > 0 ? halfDaysLabel(balance.pending) : null,
-			left: balance.left === null ? null : halfDaysLabel(balance.left),
-		})),
+		/** Each kind's balance in the leave year, said on the server: annual leave from a contract in its own unit (TS-098b). */
+		balances: mine.balances.map(({ kind, balance, contract }) => {
+			if (contract)
+				return { id: kind.id, name: kind.name, ...contractBalanceWords(contract, today) };
+			const taken = `Taken: ${halfDaysLabel(balance.approved)}${balance.pending > 0 ? `; waiting: ${halfDaysLabel(balance.pending)}` : ""}.`;
+			return {
+				id: kind.id,
+				name: kind.name,
+				detail:
+					balance.allowance === null
+						? `No allowance. ${taken}`
+						: `${halfDaysLabel(balance.allowance)} a year. ${taken}`,
+				value: balance.left === null ? null : `${halfDaysLabel(balance.left)} left`,
+			};
+		}),
 		requests: mine.requests.map((r) => ({
 			id: r.id,
 			kind: r.kindName,
@@ -749,16 +758,7 @@ function Mine({
 				<Ledger heading="Kinds of leave" note={`${year}`}>
 					<LedgerRows label={`Your balance, ${year}`}>
 						{balances.map((b) => (
-							<LedgerRow
-								key={b.id}
-								title={b.name}
-								detail={
-									b.allowance === null
-										? `No allowance. Taken: ${b.approved}${b.pending ? `; waiting: ${b.pending}` : ""}.`
-										: `${b.allowance} a year. Taken: ${b.approved}${b.pending ? `; waiting: ${b.pending}` : ""}.`
-								}
-								value={b.left === null ? undefined : `${b.left} left`}
-							/>
+							<LedgerRow key={b.id} title={b.name} detail={b.detail} value={b.value ?? undefined} />
 						))}
 					</LedgerRows>
 				</Ledger>

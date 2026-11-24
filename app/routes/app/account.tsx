@@ -23,6 +23,7 @@ import {
 } from "~/db";
 import { calendarFeedsPath } from "~/integrations/paths";
 import { PRIVACY_EMAIL } from "~/landing/Site";
+import { leaveYearSettingsOf } from "~/leave/entitlement.server";
 import { parseRequest } from "~/lib/validate";
 import {
 	KIND_WORDS,
@@ -82,7 +83,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { role, user, organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
-	const [organisations, ownZone, zone, book, places, owners, mail, choices, contracts] =
+	const [organisations, ownZone, zone, book, places, owners, mail, choices, contracts, leaveYear] =
 		await Promise.all([
 			listOrganisations(request),
 			ownZoneOf(membership),
@@ -96,10 +97,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			platformData.mailChoices(env.DB, user.id),
 			notificationChoicesOf(env.DB, user.id),
 			contractsOf(scope, [user.id]),
+			leaveYearSettingsOf(organisation.id),
 		]);
 	const today = dayOf(Date.now(), zone);
 	// Their own contracts in full, pay included (TS-098a).
-	const contract = contractsView(contracts.get(user.id) ?? [], book, today, true);
+	const contract = contractsView(
+		contracts.get(user.id) ?? [],
+		book,
+		today,
+		true,
+		leaveYear.holidaysFromAllowance,
+	);
 	// The kinds that can reach this person here: those for deciders and budgets
 	// only for an owner, an admin or a manager of a team (TS-049); those of the
 	// export of everything only for an owner (TS-126b).

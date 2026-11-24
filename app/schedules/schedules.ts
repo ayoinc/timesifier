@@ -374,6 +374,8 @@ export interface ScheduledDay {
 	scheduleId: string;
 	scheduleName: string;
 	rules: ScheduleRules;
+	/** The whole week of the version that holds on the day: what annual leave from a contract is counted in (TS-098b). */
+	week: ScheduleWeek;
 }
 
 /** A person's schedule, day by day. */
@@ -388,6 +390,7 @@ function scheduledDay(schedule: Schedule, version: ScheduleVersion, day: Day): S
 		scheduleId: schedule.id,
 		scheduleName: schedule.name,
 		rules: { overtime: version.overtime, weekend: version.weekend },
+		week: version.week,
 	};
 }
 

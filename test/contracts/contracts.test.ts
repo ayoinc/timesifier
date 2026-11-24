@@ -61,6 +61,8 @@ const TERMS: ContractTerms = {
 	overtimeMultiplierBp: null,
 	restDayMultiplierBp: null,
 	leaveDays: 25,
+	carryOverDays: 0,
+	carryOverExpiresAfterDays: null,
 };
 
 function contract(
@@ -297,7 +299,7 @@ describe("a contract in words", () => {
 	});
 
 	it("says the pay, the multipliers and the works number to those who see pay", () => {
-		const view = contractsView([paid], book, "2026-03-02", true);
+		const view = contractsView([paid], book, "2026-03-02", true, false);
 		expect(view.current?.heading).toBe("Permanent, part time, from Monday 2 February 2026.");
 		expect(view.current?.lines).toEqual([
 			"Consultant.",
@@ -313,7 +315,7 @@ describe("a contract in words", () => {
 	});
 
 	it("leaves out every amount, multiplier and works number, and a change only of pay, for a manager", () => {
-		const view = contractsView([paid], book, "2026-03-02", false);
+		const view = contractsView([paid], book, "2026-03-02", false, false);
 		const words = JSON.stringify(view.current);
 		expect(words).not.toMatch(/£|44,000|42,000|time and a half|double time|W-7/);
 		expect(view.current?.lines).toContain("Overtime is paid.");
@@ -329,9 +331,21 @@ describe("a contract in words", () => {
 				true,
 			),
 		).toBe("Overtime becomes time off in lieu at time and a half.");
-		expect(leaveSentence(null)).toBe("Annual leave: the allowance of the kind of leave.");
-		expect(leaveSentence(1)).toBe(
+		const terms = { leaveDays: 1, carryOverDays: 0, carryOverExpiresAfterDays: null };
+		expect(leaveSentence({ ...terms, leaveDays: null }, false)).toBe(
+			"Annual leave: the allowance of the kind of leave.",
+		);
+		expect(leaveSentence(terms, false)).toBe(
 			"Annual leave: 1 day a year for a full week, plus public holidays.",
+		);
+		// Where public holidays come out of annual leave (TS-098b), and what carries over.
+		expect(leaveSentence({ ...terms, leaveDays: 25 }, true)).toBe(
+			"Annual leave: 25 days a year for a full week, public holidays included.",
+		);
+		expect(
+			leaveSentence({ leaveDays: 25, carryOverDays: 5, carryOverExpiresAfterDays: 90 }, false),
+		).toBe(
+			"Annual leave: 25 days a year for a full week, plus public holidays. Up to 5 days left at a year's end carry over, for 90 days of the next leave year.",
 		);
 		expect(multipliersOf({ overtimePay: "unpaid", overtimeMultiplier: 15000 })).toEqual({
 			overtimeMultiplierBp: null,

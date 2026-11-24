@@ -48,6 +48,8 @@ export interface ContractDefaults {
 	overtimeMultiplier: string;
 	restDayMultiplier: string;
 	leaveDays: string;
+	carryOverDays: string;
+	carryOverExpiresAfterDays: string;
 	worksNumber: string;
 	/** The earliest day a change may be from. */
 	firstDay: Day;
@@ -104,6 +106,16 @@ function changeWords(
 				: `${after.leaveDays} days' annual leave`,
 		);
 	}
+	if (
+		before.carryOverDays !== after.carryOverDays ||
+		before.carryOverExpiresAfterDays !== after.carryOverExpiresAfterDays
+	) {
+		words.push(
+			after.carryOverDays === 0
+				? "no annual leave carried over"
+				: `up to ${after.carryOverDays} days carried over${after.carryOverExpiresAfterDays === null ? "" : `, for ${after.carryOverExpiresAfterDays} days`}`,
+		);
+	}
 	if (seesPay) {
 		if (
 			before.payMinor !== after.payMinor ||
@@ -139,6 +151,7 @@ function linesOf(
 	book: ScheduleBook,
 	today: Day,
 	seesPay: boolean,
+	holidaysFromAllowance: boolean,
 ): ContractLines {
 	const day =
 		today < contract.startsOn
@@ -156,7 +169,7 @@ function linesOf(
 		...(terms.jobTitle ? [`${terms.jobTitle}.`] : []),
 		hours.sentence,
 		overtimeSentence(terms, seesPay),
-		...(contract.kind === "contractor" ? [] : [leaveSentence(terms.leaveDays)]),
+		...(contract.kind === "contractor" ? [] : [leaveSentence(terms, holidaysFromAllowance)]),
 		...(seesPay ? [`Paid ${payWords(terms)}.`] : []),
 		...(seesPay && contract.worksNumber ? [`Works number ${contract.worksNumber}.`] : []),
 		...(contract.endReason
@@ -183,22 +196,27 @@ function linesOf(
 	};
 }
 
-/** `contracts` as `viewer` reads them on `today`. */
+/**
+ * `contracts` as `viewer` reads them on `today`. Annual leave is said with
+ * public holidays on top of it, or inside it where the organisation counts
+ * them so (TS-098b).
+ */
 export function contractsView(
 	contracts: readonly Contract[],
 	book: ScheduleBook,
 	today: Day,
 	seesPay: boolean,
+	holidaysFromAllowance: boolean,
 ): ContractsView & { currentContract: Contract | null } {
 	const current =
 		contracts.find((c) => covers(c, today)) ?? contracts.find((c) => c.startsOn > today) ?? null;
 	return {
-		current: current ? linesOf(current, book, today, seesPay) : null,
+		current: current ? linesOf(current, book, today, seesPay, holidaysFromAllowance) : null,
 		currentContract: current,
 		others: contracts
 			.filter((c) => c !== current)
 			.reverse()
-			.map((c) => linesOf(c, book, today, seesPay)),
+			.map((c) => linesOf(c, book, today, seesPay, holidaysFromAllowance)),
 	};
 }
 
@@ -221,6 +239,9 @@ export function defaultsOf(contract: Contract, today: Day): ContractDefaults {
 			terms.overtimeMultiplierBp === null ? "" : String(terms.overtimeMultiplierBp),
 		restDayMultiplier: terms.restDayMultiplierBp === null ? "" : String(terms.restDayMultiplierBp),
 		leaveDays: terms.leaveDays === null ? "" : String(terms.leaveDays),
+		carryOverDays: terms.carryOverDays === 0 ? "" : String(terms.carryOverDays),
+		carryOverExpiresAfterDays:
+			terms.carryOverExpiresAfterDays === null ? "" : String(terms.carryOverExpiresAfterDays),
 		worksNumber: contract.worksNumber ?? "",
 		firstDay: day,
 	};

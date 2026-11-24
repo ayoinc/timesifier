@@ -98,6 +98,11 @@ async function termsOf(
 		overtimePay: fields.overtimePay,
 		...multipliersOf(fields),
 		leaveDays: fields.leaveDays ?? null,
+		carryOverDays: fields.carryOverDays ?? 0,
+		// Nothing carried over has nothing to last.
+		carryOverExpiresAfterDays: fields.carryOverDays
+			? (fields.carryOverExpiresAfterDays ?? null)
+			: null,
 	};
 }
 
@@ -171,6 +176,8 @@ const OPEN_FIELDS = [
 	"scheduleId",
 	"overtimePay",
 	"leaveDays",
+	"carryOverDays",
+	"carryOverExpiresAfterDays",
 	"endReason",
 	"changedAlone",
 ] as const;
@@ -245,6 +252,8 @@ function openTerms(terms: ContractTerms) {
 		scheduleId: terms.scheduleId,
 		overtimePay: terms.overtimePay,
 		leaveDays: terms.leaveDays,
+		carryOverDays: terms.carryOverDays,
+		carryOverExpiresAfterDays: terms.carryOverExpiresAfterDays,
 	};
 }
 

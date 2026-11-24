@@ -128,6 +128,10 @@ export interface ContractTerms {
 	restDayMultiplierBp: Multiplier | null;
 	/** A year for a full week; null for the kind of leave's allowance. */
 	leaveDays: number | null;
+	/** Days left at the end of a leave year that carry into the next (TS-098b); 0 carries none. */
+	carryOverDays: number;
+	/** Days into the next leave year that carried leave lasts; null to that year's end. */
+	carryOverExpiresAfterDays: number | null;
 }
 
 /** One version of a contract. */
@@ -286,8 +290,23 @@ export function overtimeSentence(
 		: `Overtime is paid${rate}${restDay}.`;
 }
 
-/** The annual leave in a sentence. */
-export function leaveSentence(leaveDays: number | null): string {
-	if (leaveDays === null) return "Annual leave: the allowance of the kind of leave.";
-	return `Annual leave: ${leaveDays} ${leaveDays === 1 ? "day" : "days"} a year for a full week, plus public holidays.`;
+/**
+ * The annual leave in a sentence, and what carries over. Public holidays are
+ * on top of it, or come out of it where the organisation says so (TS-098b).
+ */
+export function leaveSentence(
+	terms: Pick<ContractTerms, "leaveDays" | "carryOverDays" | "carryOverExpiresAfterDays">,
+	holidaysFromAllowance: boolean,
+): string {
+	const { leaveDays, carryOverDays, carryOverExpiresAfterDays } = terms;
+	const leave =
+		leaveDays === null
+			? "Annual leave: the allowance of the kind of leave."
+			: `Annual leave: ${leaveDays} ${leaveDays === 1 ? "day" : "days"} a year for a full week, ${holidaysFromAllowance ? "public holidays included" : "plus public holidays"}.`;
+	if (carryOverDays === 0) return leave;
+	const lasting =
+		carryOverExpiresAfterDays === null
+			? "for the next leave year"
+			: `for ${carryOverExpiresAfterDays} ${carryOverExpiresAfterDays === 1 ? "day" : "days"} of the next leave year`;
+	return `${leave} Up to ${carryOverDays} ${carryOverDays === 1 ? "day" : "days"} left at a year's end carry over, ${lasting}.`;
 }

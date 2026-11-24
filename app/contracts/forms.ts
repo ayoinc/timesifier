@@ -42,6 +42,10 @@ export const TermsFields = z.object({
 	overtimeMultiplier: MultiplierField,
 	restDayMultiplier: MultiplierField,
 	leaveDays: Optional(z.coerce.number().int().min(0).max(366)),
+	// Empty carries none over (TS-098b).
+	carryOverDays: Optional(z.coerce.number().int().min(0).max(366)),
+	// Empty lasts to the end of the next leave year.
+	carryOverExpiresAfterDays: Optional(z.coerce.number().int().min(1).max(366)),
 });
 export type TermsFields = z.infer<typeof TermsFields>;
 
