@@ -57,6 +57,9 @@ function entry(
 		clientId: "c1",
 		client: "Initech",
 		clientCode: null,
+		workPackageId: null,
+		workPackageCode: null,
+		workPackage: null,
 		description: "Work",
 		day: dayOf(typeof startedAt === "number" ? startedAt : Date.parse(startedAt), "UTC"),
 		startedAt: typeof startedAt === "number" ? startedAt : Date.parse(startedAt),
@@ -538,7 +541,7 @@ describe("a cell of the CSV", () => {
 	it("ends each line with CRLF", () => {
 		expect(csvLine(["a", "b"])).toBe("a,b\r\n");
 		expect(csvLine(CSV_COLUMNS)).toBe(
-			"entry_id,person,project_code,project,client_code,client,description,started_at,ended_at,duration_seconds,overtime\r\n",
+			"entry_id,person,project_code,project,work_package_code,client_code,client,description,started_at,ended_at,duration_seconds,overtime\r\n",
 		);
 	});
 

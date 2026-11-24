@@ -48,13 +48,15 @@ const WEEK = "range=week&from=2026-10-05";
 /** Every entry of the company whose stored day is in the range, as rows, counted entry by entry. */
 async function perEntry(first: string, last: string, people?: readonly string[]): Promise<Row[]> {
 	const { scope } = company;
-	const [entries, projects, clients, accounts] = await Promise.all([
+	const [entries, projects, clients, accounts, packages] = await Promise.all([
 		scope.timeEntries.select((e) => and(gte(e.spentOn, first), lte(e.spentOn, last))),
 		scope.projects.select(),
 		scope.clients.select(),
 		drizzle(env.DB).select().from(users),
+		scope.workPackages.select(),
 	]);
 	const project = new Map(projects.map((p) => [p.id, p]));
+	const wp = new Map(packages.map((w) => [w.id, w]));
 	const client = new Map(clients.map((c) => [c.id, c]));
 	const name = new Map(accounts.map((a) => [a.id, a.name]));
 	return entries
@@ -71,6 +73,9 @@ async function perEntry(first: string, last: string, people?: readonly string[])
 				clientId,
 				client: clientId === null ? null : (client.get(clientId)?.name ?? null),
 				clientCode: clientId === null ? null : (client.get(clientId)?.code ?? null),
+				workPackageId: e.workPackageId,
+				workPackageCode: e.workPackageId === null ? null : (wp.get(e.workPackageId)?.code ?? null),
+				workPackage: e.workPackageId === null ? null : (wp.get(e.workPackageId)?.name ?? null),
 				description: e.description,
 				day: e.spentOn,
 				startedAt: e.startedAt.getTime(),

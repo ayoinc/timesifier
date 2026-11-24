@@ -79,18 +79,19 @@ export async function sumsOf(
 
 	const groupings: (readonly Key[])[] = [
 		money
-			? ["user", "project", "billable", "overtime", "task", "span"]
-			: ["user", "project", "billable", "overtime"],
+			? ["user", "project", "workPackage", "billable", "overtime", "task", "span"]
+			: ["user", "project", "workPackage", "billable", "overtime"],
 	];
 	if (byDay === "day") groupings.push(["day", "overtime"]);
 	if (byDay === "day-and-project") groupings.push(["day", "project", "overtime"]);
 	if (byDay === "day-and-person") groupings.push(["day", "user", "overtime"]);
 
-	const [lines, projects, clients] = await Promise.all([
+	const [lines, projects, clients, packages] = await Promise.all([
 		scope.timeEntries.sums(
 			(e) => ({
 				user: e.userId,
 				project: e.projectId,
+				workPackage: e.workPackageId,
 				billable: e.billable,
 				overtime: e.overtime,
 				task:
@@ -113,9 +114,11 @@ export async function sumsOf(
 		),
 		scope.projects.select(),
 		scope.clients.select(),
+		scope.workPackages.select(),
 	]);
 	const projectsById = new Map(projects.map((p) => [p.id, p]));
 	const clientsById = new Map(clients.map((c) => [c.id, c]));
+	const packagesById = new Map(packages.map((wp) => [wp.id, wp]));
 
 	const sums: Sum[] = [];
 	const byDays: Sum[] = [];
@@ -125,6 +128,8 @@ export async function sumsOf(
 		const project = projectsById.get(projectId);
 		const clientId = project?.clientId ?? null;
 		const client = clientId === null ? undefined : clientsById.get(clientId);
+		const workPackageId = line.workPackage === null ? null : text(line.workPackage);
+		const wp = workPackageId === null ? undefined : packagesById.get(workPackageId);
 		const sum: Sum = {
 			entry: {
 				userId: text(line.user),
@@ -134,6 +139,9 @@ export async function sumsOf(
 				clientId,
 				client: client?.name ?? null,
 				clientCode: client?.code ?? null,
+				workPackageId,
+				workPackageCode: wp?.code ?? null,
+				workPackage: wp?.name ?? null,
 				taskId: line.task === null ? null : text(line.task),
 				billable: line.billable === 1,
 				overtime: line.overtime === 1,
@@ -150,7 +158,7 @@ export async function sumsOf(
 	return { sums, days: byDays, entries };
 }
 
-type Key = "user" | "project" | "billable" | "overtime" | "task" | "span" | "day";
+type Key = "user" | "project" | "workPackage" | "billable" | "overtime" | "task" | "span" | "day";
 
 function text(value: string | number | null): string {
 	return value === null ? "" : String(value);

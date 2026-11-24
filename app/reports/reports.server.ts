@@ -240,12 +240,14 @@ export async function* entryPages(
 ): AsyncGenerator<ReportEntry[]> {
 	const { scope } = request;
 	const within = entriesIn(request);
-	const [projects, clients, tasks] = await Promise.all([
+	const [projects, clients, tasks, packages] = await Promise.all([
 		scope.projects.select(),
 		scope.clients.select(),
 		scope.tasks.select(),
+		scope.workPackages.select(),
 	]);
 	const projectsById = new Map(projects.map((p) => [p.id, p]));
+	const packagesById = new Map(packages.map((wp) => [wp.id, wp]));
 	const clientsById = new Map(clients.map((c) => [c.id, c]));
 	const taskNames = new Map(tasks.map((t) => [t.id, t.name]));
 	const names = new Map<string, string>();
@@ -270,6 +272,7 @@ export async function* entryPages(
 			const project = projectsById.get(row.projectId);
 			const clientId = project?.clientId ?? null;
 			const client = clientId === null ? undefined : clientsById.get(clientId);
+			const wp = row.workPackageId === null ? undefined : packagesById.get(row.workPackageId);
 			return {
 				id: row.id,
 				userId: row.userId,
@@ -280,6 +283,9 @@ export async function* entryPages(
 				clientId,
 				client: client?.name ?? null,
 				clientCode: client?.code ?? null,
+				workPackageId: row.workPackageId,
+				workPackageCode: wp?.code ?? null,
+				workPackage: wp?.name ?? null,
 				description: row.description,
 				day: row.spentOn,
 				startedAt: row.startedAt.getTime(),
