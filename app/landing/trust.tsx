@@ -1,3 +1,5 @@
+import { EXPORT_KEEP_DAYS } from "~/exports/paths";
+
 import { Row, Rows } from "./Document";
 import { LINK, OUTSIDE_LINKS, type OutsideLink, PRIVACY_EMAIL, SECURITY_EMAIL } from "./Site";
 
@@ -43,6 +45,14 @@ export const TIME_TRAVEL_DAYS = 30;
  */
 export const WORKERS_LOGS_DAYS = 7;
 
+/**
+ * What Cloudflare R2 holds, in the buckets `RECEIPTS` and `BRAND`: receipts
+ * (TS-070), logos (TS-100) and the exports of everything (TS-126), each of
+ * which the hourly trigger deletes `EXPORT_KEEP_DAYS` after it is made. The
+ * same words on /privacy, /security and /dpa.
+ */
+export const R2_HOLDS = `receipts, organisations' logos and the exports of everything owners ask for, each export for ${EXPORT_KEEP_DAYS} days`;
+
 /** The parts of wrangler.jsonc that send data to a provider. Each is one sub-processor's. */
 export type Binding = "d1_databases" | "r2_buckets" | "send_email" | "observability" | "ratelimits";
 
@@ -76,7 +86,7 @@ export const SUB_PROCESSORS: readonly SubProcessor[] = [
 		receives: [
 			"every request, through Cloudflare Workers, which runs the application",
 			"the database, in Cloudflare D1, restricted to the EU",
-			"receipts and organisations' logos, in Cloudflare R2, restricted to the EU",
+			`${R2_HOLDS}, in Cloudflare R2, restricted to the EU`,
 			"every email Timesifier sends, with its recipient, through Cloudflare's Email Service",
 			"the check that a person is not a robot before a sign-in code is sent, through Cloudflare Turnstile",
 			"what Cloudflare Web Analytics measures of each page",
@@ -143,8 +153,8 @@ export function WhereItIsKept() {
 		<>
 			<p>
 				In one database, Cloudflare D1, restricted to the European Union: it runs and stores its
-				data only inside the EU. Receipts and organisations' logos are kept in Cloudflare R2, in
-				buckets restricted to the EU, whose files are stored only inside the EU.
+				data only inside the EU. Cloudflare R2 holds the {R2_HOLDS}, in buckets restricted to the
+				EU, whose files are stored only inside the EU.
 			</p>
 			<p>
 				The application runs on Cloudflare Workers in Frankfurt, near the database. Your request

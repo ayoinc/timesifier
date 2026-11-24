@@ -161,6 +161,9 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/account",
 				"/app/acme/account/calendar",
 				"/app/acme/settings/members",
+				// The export of everything and its ZIP (TS-126).
+				"/app/acme/settings/export",
+				"/app/acme/settings/export/download",
 				// Any other address: `*`, stood in for by `x`.
 				"/app/acme/x",
 			].sort(),
@@ -176,6 +179,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/estimates",
 			"routes/app/estimates.$estimate",
 			"routes/app/expenses",
+			"routes/app/export-everything",
 			"routes/app/integrations",
 			"routes/app/integrations.import",
 			"routes/app/invitations",
@@ -331,6 +335,8 @@ describe("a member of one organisation asking for another organisation's address
 		},
 		// Support access a stranger would grant themselves; no grant is made.
 		"routes/app/support-access": { intent: "grant", hours: "72" },
+		// An export of everything a stranger would make of another organisation; none is made.
+		"routes/app/export-everything": { intent: "export" },
 		"routes/app/sign-in-settings": { intent: "add-domain", domain: "acme-works.com" },
 	};
 

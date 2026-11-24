@@ -7,11 +7,38 @@
  * - An estimate's public link (TS-077) is opened by someone who is not signed
  *   in: the estimate is found by id and shown only once the link's token is
  *   proved against it.
+ * - The exports of everything (TS-126) are made, and deleted after 7 days, by
+ *   the triggers, which have no organisation to start from: they find the
+ *   exports by status here and do the rest through the export's organisation.
  */
-import { and, eq, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { estimates, invoiceSettings, organisations, recurringInvoices } from "./schema";
+import {
+	estimates,
+	invoiceSettings,
+	organisationExports,
+	organisations,
+	recurringInvoices,
+} from "./schema";
+
+/** The exports of everything being made, in any organisation, oldest first: their ids and organisations. */
+export function runningExports(database: D1Database, limit: number) {
+	return drizzle(database)
+		.select({ id: organisationExports.id, organisationId: organisationExports.organisationId })
+		.from(organisationExports)
+		.where(eq(organisationExports.status, "running"))
+		.orderBy(asc(organisationExports.createdAt))
+		.limit(limit);
+}
+
+/** The exports of everything, in any organisation, whose 7 days had ended by `now`: made, or failed. */
+export function expiredExports(database: D1Database, now: Date) {
+	return drizzle(database)
+		.select({ id: organisationExports.id, organisationId: organisationExports.organisationId })
+		.from(organisationExports)
+		.where(lte(organisationExports.expiresAt, now));
+}
 
 /** Recurring invoice templates, in any organisation, whose next issue date is on or before `latest`. */
 export function dueRecurringInvoices(database: D1Database, latest: string) {

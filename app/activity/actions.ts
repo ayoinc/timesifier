@@ -124,6 +124,12 @@ export const ActivityAction = z.enum([
 	"organisation_domain.unverified",
 	"organisation_domain.changed",
 	"organisation_domain.removed",
+	// TS-126: the export of everything, asked for, made (or not), downloaded, and deleted after 7 days.
+	"organisation_export.requested",
+	"organisation_export.made",
+	"organisation_export.failed",
+	"organisation_export.downloaded",
+	"organisation_export.deleted",
 ]);
 export type ActivityAction = z.infer<typeof ActivityAction>;
 
@@ -158,6 +164,7 @@ export const SubjectType = z.enum([
 	"public_holiday",
 	"work_request",
 	"user",
+	"organisation_export",
 ]);
 export type SubjectType = z.infer<typeof SubjectType>;
 

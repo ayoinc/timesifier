@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { routes } from "virtual:react-router/server-build";
 import { saveLogo } from "~/brand/organisation-brand.server";
 import { organisationScope } from "~/db";
+import { advanceExport, requestExport } from "~/exports/job.server";
 import { maySeeRates } from "~/organisations/access";
 import type { Role } from "~/organisations/roles";
 import { ORGANISATION_PARAM } from "~/shell/destinations";
@@ -107,22 +108,43 @@ export function namesARecord(route: Pick<RouteUnderTest, "id" | "address">): boo
 	return route.address.split("/").includes(STAND_IN_RECORD) && !(route.id in RECORD_PAGES);
 }
 
+/** The owner of the organisation `organisationId`. */
+async function ownerOf(organisationId: string): Promise<string> {
+	const owner = await env.DB.prepare(
+		"select user_id from memberships where organisation_id = ? and role = 'owner'",
+	)
+		.bind(organisationId)
+		.first<string>("user_id");
+	if (!owner) throw new Error("The organisation has no owner.");
+	return owner;
+}
+
 /**
  * The routes that answer 404 until the organisation has what they serve, and
  * how to give it that: the organisation's logo (`logo`, TS-100), uploaded by
- * its owner. `addressFor` gives it before the route is asked for.
+ * its owner, and an export of everything made (TS-126), asked for by its
+ * owner. `addressFor` gives it before the route is asked for.
  */
 const NEEDS: Record<string, (organisationId: string) => Promise<void>> = {
 	"routes/app/logo": async (organisationId) => {
-		const owner = await env.DB.prepare(
-			"select user_id from memberships where organisation_id = ? and role = 'owner'",
-		)
-			.bind(organisationId)
-			.first<string>("user_id");
-		if (!owner) throw new Error("The organisation has no owner.");
 		const file = new File([await png(48, 16)], "logo.png", { type: "image/png" });
-		const saved = await saveLogo(organisationId, owner, file, null, Date.now());
+		const saved = await saveLogo(
+			organisationId,
+			await ownerOf(organisationId),
+			file,
+			null,
+			Date.now(),
+		);
 		if (!saved.ok) throw new Error(saved.problem);
+	},
+	"routes/app/export-everything.download": async (organisationId) => {
+		const scope = organisationScope(env.DB, organisationId);
+		const now = new Date();
+		const requested = await requestExport(scope, await ownerOf(organisationId), now);
+		if (!requested.ok) throw new Error(requested.problem);
+		if ((await advanceExport(organisationId, requested.id, now)) !== "ready") {
+			throw new Error("The export was not made in one step.");
+		}
 	},
 };
 
@@ -157,6 +179,9 @@ const NARROWER: Record<string, (role: Role) => boolean> = {
 	"routes/app/reports.profitability": maySeeRates,
 	"routes/app/support-access": (role) => role === "owner",
 	"routes/app/wellbeing": (role) => role === "owner",
+	// The export of everything and its ZIP (TS-126), below Workspace settings too.
+	"routes/app/export-everything": (role) => role === "owner",
+	"routes/app/export-everything.download": (role) => role === "owner",
 };
 
 /** Whether a person of `role`, who is shown the route's destination, may open the route. */
