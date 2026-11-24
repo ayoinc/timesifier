@@ -6,6 +6,7 @@ import { daysOf } from "~/leave/leave.server";
 import { refusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { type PeriodDays, periodAfter } from "~/periods/periods";
+import { teamRules } from "~/projects/teams.server";
 import { packageRules } from "~/projects/work-packages.server";
 import { entryTagStatements, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
@@ -36,6 +37,10 @@ import { formatDuration } from "./durations";
  * A copy goes to its entry's work package (TS-115b, `packageRules`): an entry
  * whose work package has closed since, or one on no work package of a project
  * that now has an open one, is not copied, as new time it would be refused.
+ *
+ * Where only a project's team tracks to it (TS-115c, `teamRules`), an entry
+ * is copied only onto a day the person is on its project's team; the others
+ * are left out, and the copy says how many and why.
  */
 
 /** How far back a copy looks: three weeks (Harvest's "Copy your last timesheet"). */
@@ -150,6 +155,18 @@ export function leftOutSentence(left: LeftOut, { naming }: { naming: boolean }):
 	return `Its ${formatDuration(left.overtimeMs)} of overtime${on} was left out. ${left.why}`;
 }
 
+/** What a copy says of the entries it left out because their projects' teams do not have the person on the day. */
+export function offTeamSentence(count: number, day: Day, { naming }: { naming: boolean }): string {
+	const on = naming ? ` on ${formatDay(day, "short")}` : " on that day";
+	return count === 1
+		? `1 entry was left out: you are not on its project's team${on}.`
+		: `${count} entries were left out: you are not on their projects' teams${on}.`;
+}
+
+/** Why a copy onto a day wrote nothing, where every entry's project's team is without the person. */
+const NOT_ON_TEAMS =
+	"You are not on those entries' projects' teams on that day, so nothing was copied onto it.";
+
 /** Why `day` takes no copy, or the statements that write the copies onto it. */
 async function copyOnto(
 	scope: OrganisationScope,
@@ -159,7 +176,14 @@ async function copyOnto(
 	zone: string,
 	now: number,
 ): Promise<
-	| { ok: true; statements: Statement[]; ids: string[]; leftOut: LeftOut | null }
+	| {
+			ok: true;
+			statements: Statement[];
+			ids: string[];
+			leftOut: LeftOut | null;
+			/** How many entries were left out as their projects' teams do not have the person on the day. */
+			offTeam: number;
+	  }
 	| { ok: false; problem: string }
 > {
 	if ((await entriesOfDay(scope, userId, day)).length > 0) {
@@ -168,21 +192,25 @@ async function copyOnto(
 	if ((await lockedDays(scope, userId, [day])).size > 0) {
 		return { ok: false, problem: "That day is locked: nothing can be copied onto it." };
 	}
-	const rules = await packageRules(
-		scope,
-		given.map((s) => s.projectId),
-	);
-	const all = given.filter((s) =>
+	const projectIds = given.map((s) => s.projectId);
+	const [rules, team] = await Promise.all([
+		packageRules(scope, projectIds),
+		teamRules(scope, projectIds),
+	]);
+	const open = given.filter((s) =>
 		s.workPackageId === null
 			? !rules.required(s.projectId)
 			: rules.open(s.projectId, s.workPackageId) !== null,
 	);
-	if (all.length === 0) {
+	if (open.length === 0) {
 		return {
 			ok: false,
 			problem: "Those entries' work packages are closed, so nothing was copied onto that day.",
 		};
 	}
+	const all = open.filter((s) => team.admits(userId, s.projectId, day));
+	if (all.length === 0) return { ok: false, problem: NOT_ON_TEAMS };
+	const offTeam = open.length - all.length;
 	const lengthOf = (entries: readonly CopySource[]) =>
 		entries.reduce((sum, s) => sum + s.lengthMs, 0);
 	const regularMs = lengthOf(all.filter((s) => !s.overtime));
@@ -264,7 +292,7 @@ async function copyOnto(
 		ids.push(added.id);
 		at += source.lengthMs;
 	}
-	return { ok: true, statements, ids, leftOut };
+	return { ok: true, statements, ids, leftOut, offTeam };
 }
 
 /** Copies the entries of the person's last working day with time onto the empty `day`. */
@@ -275,7 +303,8 @@ export async function copyDay(
 	zone: string,
 	now: number,
 ): Promise<
-	{ ok: true; from: Day; ids: string[]; leftOut: LeftOut | null } | { ok: false; problem: string }
+	| { ok: true; from: Day; ids: string[]; leftOut: LeftOut | null; offTeam: number }
+	| { ok: false; problem: string }
 > {
 	const source = await copySourceDay(scope, userId, day);
 	if (!source) return { ok: false, problem: "No working day in the last three weeks has time." };
@@ -284,7 +313,13 @@ export async function copyDay(
 	if (onto.statements.length > 0) {
 		await scope.batch(onto.statements as [Statement, ...Statement[]]);
 	}
-	return { ok: true, from: source.day, ids: onto.ids, leftOut: onto.leftOut };
+	return {
+		ok: true,
+		from: source.day,
+		ids: onto.ids,
+		leftOut: onto.leftOut,
+		offTeam: onto.offTeam,
+	};
 }
 
 /**
@@ -292,7 +327,7 @@ export async function copyDay(
  * day onto the same day of this week. A day of this week with time, locked,
  * yet to come, or that does not take the time is left as it is; each day left
  * that had time to copy is named with why (TR-18e), and so is overtime a day
- * left out.
+ * left out, and so are entries whose projects' teams do not have the person.
  */
 export async function copyWeek(
 	scope: OrganisationScope,
@@ -321,6 +356,7 @@ export async function copyWeek(
 			continue;
 		}
 		if (onto.leftOut) notes.push(leftOutSentence(onto.leftOut, { naming: true }));
+		if (onto.offTeam > 0) notes.push(offTeamSentence(onto.offTeam, day, { naming: true }));
 		if (onto.ids.length === 0) continue;
 		statements.push(...onto.statements);
 		ids.push(...onto.ids);

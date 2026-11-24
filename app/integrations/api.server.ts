@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gt, gte, lt, lte, or, type SQL } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
+import { managedClientIds } from "~/clients/managers.server";
 import { among, users } from "~/db";
 import { dayStatus } from "~/leave/days";
 import { calendarOf, leaveContext } from "~/leave/leave.server";
@@ -16,7 +17,22 @@ import {
 	maySeeRates,
 	timeScopeOf,
 } from "~/organisations/access";
-import { TEAM_REFUSAL } from "~/projects/teams";
+import {
+	NAMES_LEADS_ONLY,
+	TEAM_PROBLEMS,
+	TEAM_REFUSAL,
+	type TeamProblem,
+	TeamRole,
+} from "~/projects/teams";
+import {
+	type Assignment,
+	assignToTeam,
+	changeStretch,
+	mayManageTeam,
+	mayNameDeliveryManagers,
+	oversightOf,
+	removeStretch,
+} from "~/projects/teams.server";
 import { WORK_PACKAGE_REFUSALS } from "~/projects/work-packages";
 import { clockTime } from "~/schedules/schedules";
 import { canSee } from "~/shell/destinations";
@@ -143,6 +159,11 @@ const ROUTES: Record<string, ApiRoute> = {
 	projects: { scope: { read: "projects:read" }, collection: { GET: listProjects } },
 	tasks: { scope: { read: "projects:read" }, collection: { GET: listTasks } },
 	work_packages: { scope: { read: "projects:read" }, collection: { GET: listWorkPackages } },
+	project_members: {
+		scope: { read: "projects:read", write: "projects:write" },
+		collection: { GET: listProjectMembers, POST: createProjectMember },
+		item: { GET: showProjectMember, PATCH: changeProjectMember, DELETE: removeProjectMember },
+	},
 	time_entries: {
 		scope: { read: "time:read", write: "time:write" },
 		collection: { GET: listEntries, POST: createEntry },
@@ -423,6 +444,259 @@ async function listWorkPackages({ caller, url }: Call) {
 					: { kind: wp.budgetKind, amount: wp.budgetAmount },
 		})),
 	});
+}
+
+// ── Project teams (TS-115c) ──────────────────────────────────────────────────
+
+/**
+ * What the caller may see and do of projects' teams, as a project's Team tab
+ * and its actions allow (`teamTab`, `teamAction`): the whole team to owners,
+ * admins, Finance, managers of teams and those who oversee the project (its
+ * delivery managers, its client's account managers), and anyone else their
+ * own stretches alone; owners, admins, the client's account managers (where
+ * the organisation has clients) and its delivery managers manage the team,
+ * and only the first three name its delivery managers.
+ */
+interface TeamPowers {
+	/** Whether they see every project's whole team. */
+	everyone: boolean;
+	/** The projects whose whole team they see besides: every team they manage is among them. */
+	overseen: ReadonlySet<string>;
+	manages(project: { id: string; clientId: string | null }): boolean;
+	namesLeads(project: { clientId: string | null }): boolean;
+}
+
+async function teamPowersOf(caller: TokenCaller, now: number): Promise<TeamPowers> {
+	const showsClients = hasClients(caller.organisation.workModel);
+	const [{ led, overseen }, managed] = await Promise.all([
+		oversightOf(caller.scope, caller.user.id, dayOf(now, caller.organisation.timeZone)),
+		showsClients ? managedClientIds(caller.scope, caller.user.id) : [],
+	]);
+	const clientOf = (project: { clientId: string | null }) =>
+		showsClients ? project.clientId : null;
+	return {
+		everyone: isAdministrator(caller.role) || caller.role === "finance" || caller.managesTeams,
+		overseen,
+		manages: (project) =>
+			mayManageTeam(caller.role, managed, clientOf(project), led.has(project.id)),
+		namesLeads: (project) => mayNameDeliveryManagers(caller.role, managed, clientOf(project)),
+	};
+}
+
+/** Whether `powers` show `stretch`: every stretch of a team seen whole, and one's own. */
+function seesStretch(caller: TokenCaller, powers: TeamPowers, stretch: Assignment): boolean {
+	return (
+		powers.everyone || powers.overseen.has(stretch.projectId) || stretch.userId === caller.user.id
+	);
+}
+
+/** Stretches as the API shows them: the person's name beside their id. */
+async function stretchesOut(rows: Assignment[]): Promise<Json[]> {
+	const names = await namesOfPeople(rows.map((row) => row.userId));
+	return rows.map((row) => ({
+		id: row.id,
+		project_id: row.projectId,
+		user: ref(row.userId, names),
+		role: row.role,
+		starts_on: row.startsOn,
+		ends_on: row.endsOn,
+		source: row.sourceKind,
+	}));
+}
+
+/** The stretch `id` of this organisation, whoever may see it. */
+async function stretchById(caller: TokenCaller, id: string) {
+	const [row] = await caller.scope.projectMembers.select((m) => eq(m.id, id), { limit: 1 });
+	return row;
+}
+
+/** What a refused change to a team answers, in the Team tab's words. */
+function teamRefused(refusal: TeamProblem): Response {
+	const status = refusal === "overlaps" || refusal === "has-time" ? 409 : 422;
+	return problem(status, refusal.replaceAll("-", "_"), TEAM_PROBLEMS[refusal]);
+}
+
+const NOT_TEAM_MANAGER =
+	"Owners, admins, the client's account managers and the project's delivery managers manage its team.";
+
+/**
+ * Why `caller` may not make a change to `project`'s team that touches a
+ * delivery manager (`touchesLead`), or null when they may.
+ */
+function teamRefusal(
+	powers: TeamPowers,
+	project: { id: string; clientId: string | null },
+	touchesLead: boolean,
+): Response | null {
+	if (!powers.manages(project)) return forbidden(NOT_TEAM_MANAGER);
+	if (touchesLead && !powers.namesLeads(project)) return forbidden(NAMES_LEADS_ONLY);
+	return null;
+}
+
+const ProjectMembersQuery = PageQuery.extend({
+	project_id: z.string().min(1).max(64).optional(),
+	user_id: z.string().min(1).max(64).optional(),
+});
+
+/**
+ * The stretches of projects' teams the caller sees, by id: every one of a
+ * team they see whole, and their own of any other. A project not of this
+ * organisation answers 404.
+ */
+async function listProjectMembers({ caller, url, now }: Call) {
+	const query = queryOf(url, ProjectMembersQuery);
+	if (!query.success) return invalid(query.error);
+	const { project_id, user_id, per_page: perPage, cursor } = query.data;
+	if (project_id !== undefined) {
+		const [project] = await caller.scope.projects.select((p) => eq(p.id, project_id), {
+			limit: 1,
+		});
+		if (!project) return notFound();
+	}
+	const powers = await teamPowersOf(caller, now);
+	const rows = await caller.scope.projectMembers.select(
+		(m) => {
+			const conditions: (SQL | undefined)[] = [];
+			if (!powers.everyone) {
+				conditions.push(or(among(m.projectId, powers.overseen), eq(m.userId, caller.user.id)));
+			}
+			if (project_id) conditions.push(eq(m.projectId, project_id));
+			if (user_id) conditions.push(eq(m.userId, user_id));
+			if (cursor) conditions.push(gt(m.id, cursor));
+			return conditions.length ? and(...conditions) : undefined;
+		},
+		{ orderBy: (m) => [asc(m.id)], limit: perPage + 1 },
+	);
+	return json(page(await stretchesOut(rows), perPage, (row) => String(row.id)));
+}
+
+async function showProjectMember({ caller, id, now }: Call) {
+	const stretch = await stretchById(caller, id);
+	if (!stretch || !seesStretch(caller, await teamPowersOf(caller, now), stretch)) {
+		return notFound();
+	}
+	const [shown] = await stretchesOut([stretch]);
+	return json(shown);
+}
+
+/** The stretch `id` as the API shows it after a change, or 404 when it is gone. */
+async function stretchAnswer(caller: TokenCaller, id: string, status = 200) {
+	const stretch = await stretchById(caller, id);
+	if (!stretch) return notFound();
+	const [shown] = await stretchesOut([stretch]);
+	return json(
+		shown,
+		status,
+		status === 201 ? { Location: `${API_PATH}/project_members/${id}` } : {},
+	);
+}
+
+const NewProjectMember = z
+	.object({
+		project_id: z.string().min(1).max(64),
+		user_id: z.string().min(1).max(64),
+		role: TeamRole,
+		starts_on: Day,
+		ends_on: Day.nullable().optional(),
+	})
+	.strict();
+
+const ProjectMemberChange = z
+	.object({ ends_on: Day.nullable().optional(), role: TeamRole.optional(), from: Day.optional() })
+	.strict()
+	.refine((body) => (body.ends_on === undefined) !== (body.role === undefined), {
+		message: "Send `ends_on`, or `role` with `from`.",
+	})
+	.refine((body) => (body.role === undefined) === (body.from === undefined), {
+		message: "Send `role` with `from`.",
+		path: ["from"],
+	});
+
+/** Puts a person on a project's team for a stretch (TS-115c). */
+async function createProjectMember({ caller, request, now }: Call) {
+	const body = await bodyOf(request, NewProjectMember);
+	if (!body.ok) return body.response;
+	const { project_id, user_id, role, starts_on, ends_on } = body.data;
+	const [project] = await caller.scope.projects.select((p) => eq(p.id, project_id), { limit: 1 });
+	if (!project) return notFound();
+	const refusal = teamRefusal(
+		await teamPowersOf(caller, now),
+		project,
+		role === "delivery_manager",
+	);
+	if (refusal) return refusal;
+	const change = await assignToTeam(
+		caller.scope,
+		{ userId: caller.user.id, source: "api" },
+		{ projectId: project.id, userId: user_id, role, startsOn: starts_on, endsOn: ends_on ?? null },
+	);
+	if (change === null) return notFound();
+	if (!change.ok) return teamRefused(change.problem);
+	return stretchAnswer(caller, change.id, 201);
+}
+
+/**
+ * The stretch `id` and its project, for a change: 404 when it is not of this
+ * organisation, or the caller may not see it.
+ */
+async function stretchToChange(caller: TokenCaller, id: string, powers: TeamPowers) {
+	const stretch = await stretchById(caller, id);
+	if (!stretch || !seesStretch(caller, powers, stretch)) return null;
+	const [project] = await caller.scope.projects.select((p) => eq(p.id, stretch.projectId), {
+		limit: 1,
+	});
+	return project ? { stretch, project } : null;
+}
+
+/**
+ * Ends a stretch, or changes its role from a day: from its first day or
+ * before, the stretch's own; from a later day, it ends the day before and a
+ * new stretch of the new role runs on, which the answer is.
+ */
+async function changeProjectMember({ caller, request, id, now }: Call) {
+	const body = await bodyOf(request, ProjectMemberChange);
+	if (!body.ok) return body.response;
+	const powers = await teamPowersOf(caller, now);
+	const found = await stretchToChange(caller, id, powers);
+	if (!found) return notFound();
+	const { stretch, project } = found;
+	const { ends_on, role, from } = body.data;
+	const refusal = teamRefusal(
+		powers,
+		project,
+		stretch.role === "delivery_manager" || role === "delivery_manager",
+	);
+	if (refusal) return refusal;
+	const actor = { userId: caller.user.id, source: "api" as const };
+	const change = await changeStretch(
+		caller.scope,
+		actor,
+		project.id,
+		id,
+		role !== undefined && from !== undefined ? { role, from } : { endsOn: ends_on ?? null },
+	);
+	if (change === null) return notFound();
+	if (!change.ok) return teamRefused(change.problem);
+	return stretchAnswer(caller, change.id);
+}
+
+/** Takes away a stretch put there in error: one in which its person tracked no time to the project. */
+async function removeProjectMember({ caller, id, now }: Call) {
+	const powers = await teamPowersOf(caller, now);
+	const found = await stretchToChange(caller, id, powers);
+	if (!found) return notFound();
+	const { stretch, project } = found;
+	const refusal = teamRefusal(powers, project, stretch.role === "delivery_manager");
+	if (refusal) return refusal;
+	const change = await removeStretch(
+		caller.scope,
+		{ userId: caller.user.id, source: "api" },
+		project.id,
+		id,
+	);
+	if (change === null) return notFound();
+	if (!change.ok) return teamRefused(change.problem);
+	return json(null, 204);
 }
 
 // ── Time entries ─────────────────────────────────────────────────────────────

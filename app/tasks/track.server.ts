@@ -10,6 +10,7 @@ import { teamChoices, trackingOf } from "~/projects/teams.server";
 import { workPackageChoices } from "~/projects/work-packages.server";
 import { tagOptions, tagsOfEntries } from "~/tags/tags.server";
 import { dayOf } from "~/time/calendar";
+import { zoneOfMember } from "~/time/zones.server";
 import { hasClients } from "~/workspace/work-model";
 import { tasksOfProjects } from "./tasks.server";
 import type { ProjectChoice, TrackChoices } from "./track";
@@ -47,6 +48,7 @@ export async function trackChoices(
 		clients,
 		packages,
 		team,
+		zone,
 	] = await Promise.all([
 		tasksOfProjects(scope),
 		tagOptions(scope),
@@ -63,6 +65,8 @@ export async function trackChoices(
 		trackingOf(scope).then((tracking) =>
 			teamChoices(scope, membership.user.id, membership.role, tracking),
 		),
+		// The person's today, in their own zone, as every writer counts their days (TS-111).
+		zoneOfMember(membership),
 	]);
 	const clientOf = new Map(clients.map((c) => [c.id, { name: c.name, code: c.code }]));
 	return {
@@ -98,7 +102,7 @@ export async function trackChoices(
 			]),
 		),
 		workPackages: packages,
-		team: { ...team, today: dayOf(now, membership.organisation.timeZone) },
+		team: { ...team, today: dayOf(now, zone) },
 	};
 }
 

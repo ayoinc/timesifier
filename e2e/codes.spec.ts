@@ -13,6 +13,7 @@ import { foundInMessageSentBy, newPerson, setName, signIn } from "./auth";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import {
+	chooseAnyone,
 	INVITATION_LINK,
 	invite,
 	newOrganisationName,
@@ -82,6 +83,8 @@ async function newOrganisation(page: Page, model: Model): Promise<string> {
 	// The radio itself is hidden; its label is what a pointer presses.
 	await page.getByText(model, { exact: true }).click();
 	await expect(modelRadio(page, model)).toBeChecked();
+	// Its people track to any project, as these specs' did before teams (TS-115c).
+	if (model !== "Internal work") await chooseAnyone(page);
 	await page.getByRole("button", { name: "Create organisation" }).click();
 	await page.waitForURL(
 		({ pathname, search }) => /^\/app\/(?!new$)[a-z0-9-]+$/.test(pathname) && search === "",
@@ -472,8 +475,22 @@ for (const viewport of [
 					await expect(modelRadio(question, "Internal work")).toBeChecked();
 					await page.keyboard.press("ArrowDown");
 					await expect(modelRadio(question, "Both")).toBeChecked();
+					// An organisation with clients is asked who tracks time to a project,
+					// "Assigned people only" unless it says otherwise (TS-115c, decision 75).
+					const tracking = page.getByRole("radiogroup", { name: "Who tracks time to a project" });
+					const trackingRadio = (name: string) =>
+						tracking.getByRole("radio", { name: new RegExp(`^${name}`) });
+					await expect(trackingRadio("Assigned people only")).toBeChecked();
+					await page.keyboard.press("Tab");
+					await expect(trackingRadio("Assigned people only")).toBeFocused();
+					await page.keyboard.press("ArrowDown");
+					await expect(trackingRadio("Anyone")).toBeChecked();
+					await page.keyboard.press("Shift+Tab");
+					await expect(modelRadio(question, "Both")).toBeFocused();
 					await page.keyboard.press("ArrowUp");
 					await expect(modelRadio(question, "Internal work")).toBeChecked();
+					// Internal work has no client projects, and so no such question.
+					await expect(tracking).toHaveCount(0);
 					await expectNoProblems(page, "on /app/new");
 					// Each ring is centred on its label's first line, not on the label and its meaning together.
 					for (const model of ["Client projects", "Internal work", "Both"] as const) {

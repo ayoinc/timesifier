@@ -83,15 +83,23 @@ export function mayTrackTo(team: TeamChoices, projectId: string, day: Day): bool
 }
 
 /**
+ * Whether a stretch makes its person one of the project's delivery managers
+ * on `today`: a delivery manager's stretch not ended before it. One whose
+ * stretch as delivery manager has ended leads the project no longer.
+ */
+export function leadsFrom(stretch: Stretch & { role: string }, today: Day): boolean {
+	return (
+		stretch.role === "delivery_manager" && (stretch.endsOn === null || stretch.endsOn >= today)
+	);
+}
+
+/**
  * Whether the person behind `team` may add themselves to `projectId`'s team
  * in one step from the picker: an owner or an admin, or one of its delivery
- * managers on another day.
+ * managers, on another day.
  */
-export function mayJoin(team: TeamChoices, projectId: string): boolean {
-	return (
-		team.joinsAny ||
-		(team.mine[projectId] ?? []).some((stretch) => stretch.role === "delivery_manager")
-	);
+export function mayJoin(team: TeamChoices, projectId: string, today: Day): boolean {
+	return team.joinsAny || (team.mine[projectId] ?? []).some((stretch) => leadsFrom(stretch, today));
 }
 
 /** What a refused entry says of the project's team, wherever it came from. */
@@ -112,7 +120,7 @@ export const TEAM_PROBLEMS: Record<TeamProblem, string> = {
 		"They are already on this project's team on some of those days. End that stretch first, or start this one after it.",
 	"ends-before-start": "The last day is on or after the first.",
 	"has-time":
-		"They have tracked time to this project in that stretch, so it is ended, not removed.",
+		"They have tracked time to this project in that stretch, so it cannot be removed. End it instead.",
 };
 
 /** What a person who may not add themselves to a project's team is told. */

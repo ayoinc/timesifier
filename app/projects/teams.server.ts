@@ -13,6 +13,7 @@ import { namesOf } from "./project.server";
 import {
 	type AssignmentSource,
 	covers,
+	leadsFrom,
 	overlaps,
 	type ProjectTracking,
 	type Stretch,
@@ -491,7 +492,8 @@ export async function removeStretch(
 /**
  * Puts `userId` on `projectId`'s team from `day`, in one step from the picker
  * (TS-115c): an owner or an admin on any project, a delivery manager on their
- * own. The stretch runs until the day before their next one starts, or on.
+ * own while they lead it (`leadsFrom` on `today`). The stretch runs until the
+ * day before their next one starts, or on.
  * Nobody else is let in, and nobody is let in silently: the stretch is
  * recorded as any other, marked as their own doing. Null when the project is
  * not of this organisation, or is archived; false when they may not join it.
@@ -501,11 +503,12 @@ export async function joinTeam(
 	who: { userId: string; role: Role },
 	projectId: string,
 	day: Day,
+	today: Day,
 ): Promise<TeamChange | false> {
 	const [project] = await scope.projects.select((p) => eq(p.id, projectId), { limit: 1 });
 	if (!project || project.archivedAt !== null) return null;
 	const stretches = await stretchesOf(scope, who.userId, projectId);
-	const leads = stretches.some((s) => s.role === "delivery_manager");
+	const leads = stretches.some((s) => leadsFrom(s, today));
 	if (!isAdministrator(who.role) && !leads) return false;
 	const covering = stretches.find((s) => covers(s, day));
 	if (covering) return { ok: true, id: covering.id };

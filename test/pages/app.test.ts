@@ -92,14 +92,14 @@ describe("/app/new", () => {
 		expect(two).toMatch(/<a[^>]*href="\/app"[^>]*>Back to your organisations<\/a>/);
 	});
 
-	it("asks a person with no organisation for its name and how it works, and nothing else: creating it accepts the terms and the agreement", async () => {
+	it("asks a person with no organisation for its name, how it works and who tracks time, and nothing else: creating it accepts the terms and the agreement", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 
 		const response = await open("/app/new", ada);
 		expect(response.status).toBe(200);
 		const html = await pageBody(response);
 		expect(textOf(html)).toContain("Create your organisation");
-		expect(html.match(/<input\b(?![^>]*type="hidden")[^>]*>/g)).toHaveLength(4);
+		expect(html.match(/<input\b(?![^>]*type="hidden")[^>]*>/g)).toHaveLength(6);
 		expect(html).toMatch(/<input[^>]*name="name"/);
 		// How you work (TS-115a): one choice of three, Client projects chosen to start with.
 		const choices = html.match(/<input[^>]*type="radio"[^>]*>/g) ?? [];
@@ -107,10 +107,17 @@ describe("/app/new", () => {
 			"client_projects",
 			"internal",
 			"both",
+			// Who tracks time to a project (TS-115c), asked of an organisation with clients:
+			// assigned people only to start with (decision 75).
+			"assigned",
+			"anyone",
 		]);
-		expect(choices.every((input) => input.includes('name="workModel"'))).toBe(true);
+		expect(choices.slice(0, 3).every((input) => input.includes('name="workModel"'))).toBe(true);
+		expect(choices.slice(3).every((input) => input.includes('name="projectTracking"'))).toBe(true);
 		expect(choices[0]).toMatch(/checked/);
+		expect(choices[3]).toMatch(/checked/);
 		expect(textOf(html)).toContain("How you work");
+		expect(textOf(html)).toContain("Who tracks time to a project");
 		// The version the page shows is the one the person accepts (TS-105).
 		expect(html).toMatch(
 			new RegExp(`<input[^>]*type="hidden"[^>]*name="dpaVersion"[^>]*value="${DPA_VERSION.date}"`),
@@ -156,6 +163,28 @@ describe("/app/new", () => {
 			clients_enabled: clientsEnabled,
 		});
 	});
+
+	it.each([
+		["client_projects", undefined, "assigned"],
+		["both", undefined, "assigned"],
+		["internal", undefined, "anyone"],
+		["client_projects", "anyone", "anyone"],
+		["both", "assigned", "assigned"],
+	] as const)(
+		"starts a %s organisation, answered %s, tracking by %s (TS-115c)",
+		async (workModel, projectTracking, stored) => {
+			const ada = await person(mailbox, "ada@example.com");
+			const fields = {
+				name: "Acme",
+				...ACCEPTED,
+				workModel,
+				...(projectTracking ? { projectTracking } : {}),
+			};
+			expect((await submit("/app/new", fields, ada)).status).toBe(302);
+			// Assigned people only unless the person says otherwise, where it has clients (decision 75).
+			expect(await value("select project_tracking from organisations")).toBe(stored);
+		},
+	);
 
 	it.each([
 		["no way of working", {}],

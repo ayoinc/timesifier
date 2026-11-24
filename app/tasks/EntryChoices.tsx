@@ -57,7 +57,7 @@ export function EntryChoices({
 	const assigned = projects.filter((p) => mine(p.id)).map((p) => p.id);
 	const byAssignment = team?.tracking === "assigned";
 	const joinable = byAssignment
-		? projects.filter((p) => !mine(p.id) && mayJoin(team, p.id)).map((p) => p.id)
+		? projects.filter((p) => !mine(p.id) && mayJoin(team, p.id, team.today)).map((p) => p.id)
 		: [];
 	// An entry keeps its own project, whatever its team; a new one is offered what may take it.
 	const offered = byAssignment

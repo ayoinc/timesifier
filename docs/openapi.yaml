@@ -90,6 +90,58 @@ components:
           properties:
             kind: { type: string, enum: [hours, fees] }
             amount: { type: [integer, "null"] }
+    ProjectMember:
+      type: object
+      description: >
+        A stretch of a person on a project's team (TS-115c). No two stretches of
+        one person on one project share a day.
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        user: { $ref: "#/components/schemas/Ref" }
+        role: { type: string, enum: [member, delivery_manager] }
+        starts_on: { type: string, format: date }
+        ends_on:
+          type: [string, "null"]
+          format: date
+          description: Its last day; null while it runs on.
+        source: { type: string, enum: [manual, import, contract], description: What made it. }
+    NewProjectMember:
+      type: object
+      additionalProperties: false
+      required: [project_id, user_id, role, starts_on]
+      properties:
+        project_id: { type: string }
+        user_id: { type: string, description: A member of the organisation. }
+        role:
+          type: string
+          enum: [member, delivery_manager]
+          description: Only owners, admins and the client's account managers name a delivery manager.
+        starts_on: { type: string, format: date }
+        ends_on:
+          type: [string, "null"]
+          format: date
+          description: Left out or null, it runs on.
+    ProjectMemberChange:
+      description: Its last day, or its role from a day.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [ends_on]
+          properties:
+            ends_on: { type: [string, "null"], format: date, description: Null, it runs on. }
+        - type: object
+          additionalProperties: false
+          required: [role, from]
+          properties:
+            role: { type: string, enum: [member, delivery_manager] }
+            from:
+              type: string
+              format: date
+              description: >
+                On or before its first day, the stretch's own role changes;
+                later, it ends the day before and a new stretch of the new role
+                runs on.
     Error:
       type: object
       required: [error]
@@ -237,6 +289,87 @@ paths:
               schema:
                 properties:
                   data: { type: array, items: { $ref: "#/components/schemas/WorkPackage" } }
+        default: { $ref: "#/components/responses/Error" }
+  /project_members:
+    get:
+      summary: Stretches of people on projects' teams, by id
+      description: >
+        Scope projects:read. The whole team to owners, admins, Finance,
+        managers of teams, the client's account managers and the project's
+        delivery managers; anyone else's own stretches alone. A project_id
+        that is not the organisation's answers 404.
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of stretches.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/ProjectMember" } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      summary: Puts a person on a project's team for a stretch
+      description: >
+        Scope projects:write. Owners, admins, the client's account managers and
+        the project's delivery managers. 409 overlaps; 422 ends_before_start or
+        not_member. Recorded in the activity log via API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewProjectMember" }
+      responses:
+        "201":
+          description: The stretch.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectMember" }
+        default: { $ref: "#/components/responses/Error" }
+  /project_members/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: One stretch
+      description: Scope projects:read.
+      responses:
+        "200":
+          description: The stretch.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectMember" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      summary: Ends a stretch, or changes its role from a day
+      description: >
+        Scope projects:write. A delivery manager's stretch only owners, admins
+        and the client's account managers change. Answers the stretch as it is
+        after, the new one when the role changed from a later day.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProjectMemberChange" }
+      responses:
+        "200":
+          description: The stretch.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectMember" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Takes away a stretch put there in error
+      description: Scope projects:write. 409 has_time when its person tracked time to the project in it.
+      responses:
+        "204": { description: Taken away. }
         default: { $ref: "#/components/responses/Error" }
   /time_entries:
     get:

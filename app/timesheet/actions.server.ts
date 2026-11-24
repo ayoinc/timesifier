@@ -30,7 +30,7 @@ import {
 } from "~/time/manual.server";
 import { zoneOfMember } from "~/time/zones.server";
 import { inTerms, type Terms, termsOf } from "~/workspace/work-model";
-import { copyDay, copyWeek, leftOutSentence } from "./copy.server";
+import { copyDay, copyWeek, leftOutSentence, offTeamSentence } from "./copy.server";
 import { TypedHours } from "./durations";
 import { markCookie } from "./getting-started.server";
 import { entryOfUndo, undoToken } from "./undo.server";
@@ -192,6 +192,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				{ userId: user.id, role: membership.role },
 				input.projectId,
 				input.day,
+				dayOf(now, zone),
 			);
 			if (joined === null) return declined(inTerms(REFUSALS["no-project"][0], terms), 400);
 			if (joined === false) return declined(inTerms(NOT_JOINABLE, terms), 403);
@@ -329,13 +330,16 @@ export async function timesheetAction(request: Request, membership: Membership) 
 
 		case "copy-day": {
 			const copied = await copyDay(scope, user.id, input.day, zone, now);
-			if (!copied.ok) return declined(copied.problem, 409);
+			if (!copied.ok) return declined(inTerms(copied.problem, terms), 409);
 			const count = copied.ids.length;
 			return {
 				...done(
 					[
 						`Copied ${count} ${count === 1 ? "entry" : "entries"} from ${formatDay(copied.from, "short")}.`,
 						...(copied.leftOut ? [leftOutSentence(copied.leftOut, { naming: false })] : []),
+						...(copied.offTeam > 0
+							? [inTerms(offTeamSentence(copied.offTeam, input.day, { naming: false }), terms)]
+							: []),
 					].join(" "),
 				),
 				changed: copied.ids,
@@ -345,12 +349,12 @@ export async function timesheetAction(request: Request, membership: Membership) 
 		case "copy-week": {
 			const period = periodContaining(input.startsOn, organisation.weekStartsOn);
 			const copied = await copyWeek(scope, user.id, period, zone, now);
-			if (!copied.ok) return declined(copied.problem, 409);
+			if (!copied.ok) return declined(inTerms(copied.problem, terms), 409);
 			return {
 				...done(
 					[
 						`Copied ${copied.ids.length} ${copied.ids.length === 1 ? "entry" : "entries"} onto ${copied.days} ${copied.days === 1 ? "day" : "days"}.`,
-						...copied.notes,
+						...copied.notes.map((note) => inTerms(note, terms)),
 					].join(" "),
 				),
 				changed: copied.ids,

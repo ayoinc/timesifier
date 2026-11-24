@@ -85,6 +85,21 @@ export async function openOutsideOrganisation(page: Page, path: string) {
 }
 
 /**
+ * Answers /app/new's "Who tracks time to a project" with Anyone (TS-115c): a
+ * new client organisation is otherwise "Assigned people only", and the specs
+ * that track time to a project would be refused it. Specs of teams choose
+ * for themselves.
+ */
+export async function chooseAnyone(page: Page) {
+	const anyone = page
+		.getByRole("radiogroup", { name: "Who tracks time to a project" })
+		.getByRole("radio", { name: /^Anyone/ });
+	// The radio itself is hidden; its label is what a pointer presses.
+	await page.getByText("Anyone", { exact: true }).click();
+	await expect(anyone).toBeChecked();
+}
+
+/**
  * Creates an organisation through the page, as the signed-in person, and
  * arrives at its Timesheet.
  */
@@ -94,6 +109,7 @@ export async function createOrganisation(
 ): Promise<Organisation> {
 	await openOutsideOrganisation(page, NEW_ORGANISATION_PATH);
 	await page.getByLabel("Organisation name").fill(name);
+	await chooseAnyone(page);
 	await page.getByRole("button", { name: "Create organisation" }).click();
 
 	// The server makes the address from the name, and the page arrives there
