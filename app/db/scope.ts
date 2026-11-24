@@ -44,6 +44,7 @@ import {
 	leaveRequests,
 	membershipRemovals,
 	memberships,
+	notifications,
 	organisationDomains,
 	payments,
 	periodEvents,
@@ -409,6 +410,7 @@ export const tenantTables = {
 	organisationDomains,
 	membershipRemovals,
 	supportGrants,
+	notifications,
 } as const;
 
 type Accessors = {

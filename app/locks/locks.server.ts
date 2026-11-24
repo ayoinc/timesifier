@@ -13,10 +13,13 @@ import {
 } from "~/db";
 import { dayStatus } from "~/leave/days";
 import { calendarOf, leaveContext, someoneElseDecides } from "~/leave/leave.server";
+import { notify, weeksSubmitted } from "~/notifications/notify.server";
+import { notificationStatements, timerStopped } from "~/notifications/words";
 import { locksEntries, PeriodStatus, periodContaining, periodOfDay } from "~/periods/periods";
 import { approvedAlone } from "~/periods/submission.server";
 import { addDays, type Day, dayOf, daysFrom, startOfDay } from "~/time/calendar";
 import { stopBySystem } from "~/time/entries.server";
+import { formatDay } from "~/time/format";
 
 import { autoLock, type Deadline, deadlineOf } from "./deadline";
 import { type LockNotice, type LockReason, lockOf, lockReachOf } from "./locks";
@@ -358,7 +361,10 @@ async function stopTimersReached(
 		const ended = startOfDay(addDays(entry.spentOn, 1), zone);
 		if (ended > now) continue;
 		const at = Math.max(movedAt ?? ended, entry.startedAt.getTime());
-		if (await stopBySystem(scope, entry.userId, entry.id, at)) stopped++;
+		if (!(await stopBySystem(scope, entry.userId, entry.id, at))) continue;
+		stopped++;
+		// Its person is told the system stopped it, and why (TS-049).
+		await notify(scope, [timerStopped(entry.userId, entry.spentOn, lockedThrough)]);
 	}
 	return stopped;
 }
@@ -535,6 +541,16 @@ export async function submitUnsubmitted(
 					"system",
 				),
 				...(alone ? approvedAlone(scope, id, userId, at) : []),
+				// Its person is told the system submitted it, and why; its deciders that it waits (TS-049).
+				...notificationStatements(
+					scope,
+					await weeksSubmitted(
+						scope,
+						[{ userId, startsOn: period.startsOn, endsOn: period.endsOn, bySystem: true, alone }],
+						now,
+						`The lock date reached ${formatDay(through)}, and this organisation submits every week the lock date reaches.`,
+					),
+				),
 			]);
 			if (!row) periods.push({ ...period, id, status: "submitted" });
 			submitted++;

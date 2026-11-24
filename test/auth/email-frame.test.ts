@@ -5,8 +5,9 @@ import { invitationEmail } from "~/auth/invitation-email";
 import { signInCodeEmail } from "~/auth/sign-in-code-email";
 import { MADE_WITH } from "~/brand/made-with";
 import { builtInPlatformBrand } from "~/brand/platform-brand.server";
-import { budgetAlertEmail } from "~/budgets/budget.server";
 import { documentMessage } from "~/invoices/mail.server";
+import { notificationEmail } from "~/notifications/email";
+import { NOTIFICATION_KINDS } from "~/notifications/kinds";
 import { EMAIL_COLOURS } from "~/styles/email-colours";
 
 // The look of every message the application sends (docs/design-direction.md,
@@ -52,19 +53,27 @@ const PLATFORM_MESSAGES: Record<string, Case> = {
 		),
 		organisation: null,
 	},
-	"a budget alert": {
-		message: budgetAlertEmail(
+	// A notification's email of every kind (TS-049), the budget alert among them.
+	...Object.fromEntries(
+		NOTIFICATION_KINDS.map((kind) => [
+			`a notification: ${kind}`,
 			{
-				projectName: "Rebrand",
-				organisationName: "Harbour & Sons",
-				percent: 80,
-				threshold: 75,
-				link: "https://timesifier.example/app/harbour/projects/1",
+				message: notificationEmail(
+					{
+						kind,
+						title: "Ada submitted their timesheet for 16–22 November 2026.",
+						body: "The reason given: <b>Tuesday</b> is missing.",
+						path: "/approvals",
+						organisationName: "Harbour & Sons",
+						slug: "harbour",
+						origin: "https://timesifier.example",
+					},
+					PLATFORM,
+				),
+				organisation: null,
 			},
-			PLATFORM,
-		),
-		organisation: null,
-	},
+		]),
+	),
 };
 const CLIENT_MESSAGES: Record<string, Case> = {
 	"an invoice": {

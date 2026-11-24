@@ -346,6 +346,92 @@ export const membershipRemovals = sqliteTable(
 	],
 );
 
+/**
+ * What a person is told in one organisation (TS-049, decisions 68 and 69):
+ * a week or a request waiting for them or decided, what the system did for
+ * them, a budget alert, a reminder. The bell in the shell counts the unread
+ * ones and lists them all. Its words are written once, for the person it is
+ * for, from what they may see in the organisation as it is made, and its
+ * link is a path below the organisation (`/approvals`), so a new slug still
+ * leads there. A reminder carries its `key` ("deadline:2026-11-20"): the
+ * unique index lets one through for each person and period. Its email waits
+ * in `email_state` until the scheduled work sends it, or skips it for a
+ * person who has turned that kind off. It goes with the person's membership,
+ * and is deleted 90 days after it was made (`NOTIFICATION_RETENTION_DAYS`),
+ * by the daily job.
+ */
+export const notifications = sqliteTable(
+	"notifications",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		/** The person it is for. */
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** One of `NOTIFICATION_KINDS` (`app/notifications/kinds.ts`). */
+		kind: text("kind").notNull(),
+		/** What happened, in one sentence. */
+		title: text("title").notNull(),
+		/** What follows it, such as the reason a week was returned; null for nothing. */
+		body: text("body"),
+		/** Where it leads, below the organisation's address: `/approvals`. */
+		path: text("path").notNull(),
+		/** The period a reminder is for, which it is sent once in; null for an event. */
+		key: text("key"),
+		/** `none` for no email, `waiting` until it is sent, then `sent` or `skipped`. */
+		emailState: text("email_state").notNull().default("none"),
+		readAt: integer("read_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("notifications_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("notifications_organisation_id_user_id_created_at_idx").on(
+			table.organisationId,
+			table.userId,
+			table.createdAt,
+		),
+		uniqueIndex("notifications_key_unique")
+			.on(table.organisationId, table.userId, table.key)
+			.where(sql`${table.key} IS NOT NULL`),
+		index("notifications_email_waiting_idx")
+			.on(table.createdAt)
+			.where(sql`${table.emailState} = 'waiting'`),
+		index("notifications_created_at_idx").on(table.createdAt),
+		foreignKey({
+			name: "notifications_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
+		check(
+			"notifications_email_state_known",
+			sql`${table.emailState} IN ('none', 'waiting', 'sent', 'skipped')`,
+		),
+	],
+);
+
+/**
+ * The kinds of notification a person has turned email off for, or back on
+ * (TS-049, decision 69). A kind with no row sends email. The same in every
+ * organisation the person belongs to, as their other mail choices are, and
+ * written only by the person themselves, from My account.
+ */
+export const notificationChoices = sqliteTable(
+	"notification_choices",
+	{
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** One of `NOTIFICATION_KINDS`. */
+		kind: text("kind").notNull(),
+		email: integer("email", { mode: "boolean" }).notNull(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [primaryKey({ columns: [table.userId, table.kind] })],
+);
+
 // The tables of the features under the navigation's headings (TS-053). Each
 // carries an `organisation_id` and is reached through `organisationScope`.
 // A reference from one of them to another is a pair of columns, the

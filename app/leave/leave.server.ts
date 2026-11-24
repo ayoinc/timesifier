@@ -7,6 +7,8 @@ import { leaveRefusersOf } from "~/approvals/refusals.server";
 import { among, type OrganisationScope, type ScopedAccessor, users, uuidv7 } from "~/db";
 import type { LockReason } from "~/locks/locks";
 import { lockDateOf, lockReachFor, lockReasonsOn } from "~/locks/locks.server";
+import { notify, requestWaiting } from "~/notifications/notify.server";
+import { type RequestOf, requestDecided } from "~/notifications/words";
 import {
 	type Access,
 	isAdministrator,
@@ -507,8 +509,28 @@ export async function requestLeave(
 			{ type: "leave", id: made.id, ownerId: userId },
 			changes(null, made, LEAVE_FIELDS),
 		);
+		// What waits is told to those who decide it (TS-049).
+		if (status === "pending") {
+			await notify(
+				scope,
+				await requestWaiting(
+					scope,
+					{ type: "leave", kindName: kind.name, userId, ...span },
+					now.getTime(),
+				),
+			);
+		}
 	}
 	return { ok: true, status, alone };
+}
+
+/** A request for leave as its notifications name it: with its kind's name. */
+async function leaveOf(
+	scope: OrganisationScope,
+	row: { userId: string; kindId: string; startsOn: Day; endsOn: Day },
+): Promise<RequestOf> {
+	const kind = (await leaveKindsOf(scope)).find((k) => k.id === row.kindId);
+	return { type: "leave", kindName: kind?.name ?? "Leave", ...row };
 }
 
 /** What the activity log records of a request for leave: never its note or comment's text. */
@@ -807,6 +829,9 @@ export async function decideLeave(
 		row,
 		decision.action,
 	);
+	await notify(scope, [
+		requestDecided(await leaveOf(scope, row), decision.action, decision.comment),
+	]);
 	return "done";
 }
 
@@ -851,6 +876,7 @@ export async function cancelLeave(
 		"cancelled",
 		begun ? reason : undefined,
 	);
+	await notify(scope, [requestDecided(await leaveOf(scope, row), "cancelled", reason)]);
 	return "done";
 }
 

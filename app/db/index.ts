@@ -16,6 +16,14 @@ export {
 	organisationIdsOf,
 	organisationsWithWebhooks,
 } from "./lookups";
+// Notifications across organisations: emails waiting, old ones deleted, a person's choices (TS-049).
+export {
+	deleteNotificationsBefore,
+	markNotificationEmails,
+	notificationChoicesOf,
+	setNotificationChoice,
+	waitingNotificationEmails,
+} from "./notifications";
 // The platform console's reads and writes across organisations: metadata only (TS-099).
 export * as platformData from "./platform";
 export {
