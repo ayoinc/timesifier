@@ -748,13 +748,19 @@ export async function endContract(
  * Deletes, in every organisation, each contract three years after the end of
  * the tax year it ended in (contracts-model.md section 6), its versions with
  * it; run by the daily job. A contract with no end is kept, as is one that
- * ended since. Returns how many contracts.
+ * ended since. A person's leave adjustments go with the last of their
+ * contracts in the organisation (decision 76). Returns how many contracts.
  */
 export async function deleteExpiredContracts(database: D1Database, now: Date): Promise<number> {
 	// `meta.changes` counts the versions the foreign key deletes too: the rows returned are the contracts alone.
-	const { results } = await database
-		.prepare("delete from contracts where ends_on is not null and ends_on <= ?1 returning id")
-		.bind(deletableEndedBy(dayOf(now.getTime(), "UTC")))
-		.all();
-	return results.length;
+	const [contracts] = await database.batch<{ id: string }>([
+		database
+			.prepare("delete from contracts where ends_on is not null and ends_on <= ?1 returning id")
+			.bind(deletableEndedBy(dayOf(now.getTime(), "UTC"))),
+		// An adjustment is made only to a balance a contract gives, so one with no contract left had its last deleted.
+		database.prepare(
+			"delete from leave_adjustments where not exists (select 1 from contracts c where c.organisation_id = leave_adjustments.organisation_id and c.user_id = leave_adjustments.user_id)",
+		),
+	]);
+	return contracts?.results.length ?? 0;
 }

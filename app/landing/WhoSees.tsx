@@ -26,30 +26,31 @@ export function WhoSeesWhat({ leaving }: WhoSeesWhatProps) {
 				<Row term="Owners and admins">
 					Everyone's time, timesheets, expenses with their receipts, and leave, with its kind; every
 					rate and amount, the invoices and estimates, and the clients' contacts; everyone's
-					contracts with their pay; the whole activity log; the integrations. They invite and remove
-					people, and give, change and end contracts, never their own while another owner or admin
-					could. Only an owner deletes the organisation.
+					contracts with their pay and the adjustments to their leave; the whole activity log; the
+					integrations. They invite and remove people, give, change and end contracts and adjust
+					leave, never their own while another owner or admin could. Only an owner deletes the
+					organisation.
 				</Row>
 				<Row term="Finance">
 					Everyone's time, timesheets, expenses with their receipts, every rate and amount,
-					everyone's contracts with their pay, the invoices and estimates, the clients' contacts and
-					the whole activity log. That a colleague is on leave, but not which kind, unless Finance
-					manages their team. Finance changes no contract, and approves no timesheet or leave except
-					as a manager.
+					everyone's contracts with their pay and the adjustments to their leave, the invoices and
+					estimates, the clients' contacts and the whole activity log. That a colleague is on leave,
+					but not which kind, unless Finance manages their team. Finance changes no contract, and
+					approves no timesheet or leave except as a manager.
 				</Row>
 				<Row term="Managers">
 					Any member of the organisation can be made the manager of a team. A manager sees the time,
-					timesheets, expenses with their receipts, leave with its kind, contracts without their
-					pay, and records in the activity log of the people in the teams they manage, and approves
-					or returns their timesheets and leave, never their own. A manager sees no rate, pay,
-					invoice or estimate.
+					timesheets, expenses with their receipts, leave with its kind, contracts without their pay
+					but with the adjustments to their leave, and records in the activity log of the people in
+					the teams they manage, and approves or returns their timesheets and leave, never their
+					own. A manager sees no rate, pay, invoice or estimate.
 				</Row>
 				<Row term="Members">
-					Their own time, timesheets, expenses, leave and contract with its pay, and the history of
-					their own entries; the organisation's projects; who belongs to the organisation, with
-					their names and email addresses; and that a colleague is on leave, but not which kind. A
-					member can share a report they saved with other members, who see in it only what their own
-					role lets them.
+					Their own time, timesheets, expenses, leave with its adjustments and contract with its
+					pay, and the history of their own entries; the organisation's projects; who belongs to the
+					organisation, with their names and email addresses; and that a colleague is on leave, but
+					not which kind. A member can share a report they saved with other members, who see in it
+					only what their own role lets them.
 				</Row>
 				<Row term="Account managers">
 					Any member an owner or admin names as a client's account manager creates that client's

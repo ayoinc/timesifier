@@ -18,7 +18,7 @@ import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { value } from "../organisations/harness";
 import { open, openData, type Person, pageBody, submit, textOf } from "./harness";
-import { seedLeave } from "./leave-seed";
+import { kindOf, seedLeave } from "./leave-seed";
 import { KINDS, type Roles, seedRoles } from "./roles-seed";
 import { seedSchedule } from "./schedule-seed";
 
@@ -284,6 +284,55 @@ describe("the server", () => {
 		expect(await deleteExpiredContracts(env.DB, new Date("2030-04-05T03:17:00Z"))).toBe(0);
 		expect(await deleteExpiredContracts(env.DB, new Date("2030-04-06T03:17:00Z"))).toBe(1);
 		expect(await count()).toBe(1);
+	});
+
+	it("keeps a person's leave adjustments after they leave, and deletes them with the last of their contracts", async () => {
+		const ada = roles.people.owner.user.id;
+		const hedy = roles.people.manager;
+		const fields = { ...terms(), overtimePay: "unpaid" as const, payBasis: "yearly" as const };
+		// Linus's two contracts end in the tax years 2025 to 2026 and 2026 to 2027; Hedy's has no end.
+		const ended = (startsOn: string, endsOn: string) =>
+			giveContract(
+				scope(),
+				ada,
+				linus.user.id,
+				startsOn,
+				{ ...fields, kind: "fixed_term", endsOn },
+				TODAY,
+			);
+		await ended("2025-01-06", "2026-04-05");
+		await ended("2026-04-06", "2026-06-30");
+		await giveContract(
+			scope(),
+			ada,
+			hedy.user.id,
+			"2025-01-06",
+			{ ...fields, kind: "permanent" },
+			TODAY,
+		);
+		const annual = await kindOf(acme.id, "annual");
+		for (const who of [linus, hedy]) {
+			await env.DB.prepare(
+				"insert into leave_adjustments (id, organisation_id, user_id, kind_id, leave_year, minutes, reason, created_by, created_at, updated_at) values (?, ?, ?, ?, 2025, 450, 'Opening balance', ?, ?, ?)",
+			)
+				.bind(crypto.randomUUID(), acme.id, who.user.id, annual, ada, T0, T0)
+				.run();
+		}
+		const kept = (who: Person) =>
+			value<number>("select count(*) from leave_adjustments where user_id = ?", who.user.id);
+
+		// Linus leaves: his contracts and his adjustment stay, as payroll records.
+		await env.DB.prepare("delete from memberships where organisation_id = ? and user_id = ?")
+			.bind(acme.id, linus.user.id)
+			.run();
+		expect(await kept(linus)).toBe(1);
+		// His first contract goes; the second keeps his adjustment.
+		expect(await deleteExpiredContracts(env.DB, new Date("2029-04-06T03:17:00Z"))).toBe(1);
+		expect(await kept(linus)).toBe(1);
+		// The last goes, and the adjustment with it; Hedy's, whose contract has no end, stays.
+		expect(await deleteExpiredContracts(env.DB, new Date("2030-04-06T03:17:00Z"))).toBe(1);
+		expect(await kept(linus)).toBe(0);
+		expect(await kept(hedy)).toBe(1);
 	});
 });
 

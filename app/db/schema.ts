@@ -3734,8 +3734,8 @@ export const contractVersions = sqliteTable(
  * (TS-098b): an opening balance, carry-over the law gives after sickness or
  * family leave, or a correction. Minutes, more or less; an owner or admin adds
  * one with a reason, and none is changed afterwards: a correction is another.
- * `leave_year` is the calendar year the leave year starts in. It goes with the
- * membership, as the person's leave requests do.
+ * `leave_year` is the calendar year the leave year starts in. It stays when
+ * the person leaves, as their contracts do, and goes with the last of them.
  */
 export const leaveAdjustments = sqliteTable(
 	"leave_adjustments",
@@ -3744,7 +3744,9 @@ export const leaveAdjustments = sqliteTable(
 		organisationId: text("organisation_id")
 			.notNull()
 			.references(() => organisations.id, { onDelete: "cascade" }),
-		userId: text("user_id").notNull(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
 		kindId: text("kind_id").notNull(),
 		leaveYear: integer("leave_year").notNull(),
 		minutes: integer("minutes").notNull(),
@@ -3760,11 +3762,6 @@ export const leaveAdjustments = sqliteTable(
 			table.userId,
 			table.leaveYear,
 		),
-		foreignKey({
-			name: "leave_adjustments_membership_fk",
-			columns: [table.organisationId, table.userId],
-			foreignColumns: [memberships.organisationId, memberships.userId],
-		}).onDelete("cascade"),
 		foreignKey({
 			name: "leave_adjustments_kind_fk",
 			columns: [table.organisationId, table.kindId],

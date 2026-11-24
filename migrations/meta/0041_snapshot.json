@@ -3587,12 +3587,12 @@
 					"onDelete": "set null",
 					"onUpdate": "no action"
 				},
-				"leave_adjustments_membership_fk": {
-					"name": "leave_adjustments_membership_fk",
+				"leave_adjustments_user_id_users_id_fk": {
+					"name": "leave_adjustments_user_id_users_id_fk",
 					"tableFrom": "leave_adjustments",
-					"tableTo": "memberships",
-					"columnsFrom": ["organisation_id", "user_id"],
-					"columnsTo": ["organisation_id", "user_id"],
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
 					"onDelete": "cascade",
 					"onUpdate": "no action"
 				},

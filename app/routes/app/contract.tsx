@@ -156,7 +156,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 		others: earlier,
 		currentContract,
 	} = contractsView(theirs, book, today, seesPay, settings.holidaysFromAllowance);
-	// Their annual leave this leave year, where a contract gives it (TS-098b); a leaver's went with their membership.
+	// Their annual leave this leave year, where a contract gives it (TS-098b); a leaver's is no longer counted, though its adjustments are kept.
 	const year = leaveYearOf(settings.leaveYearStarts, today);
 	const counted = annualLeave && person.isMember ? contractBalance(annualLeave.leave, year) : null;
 	const adjustments =
@@ -402,7 +402,7 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			return answer(change, `The contract ends on ${formatDayWithYear(input.lastDay)}.`);
 		}
 		case "adjust": {
-			// Only a member's balance is adjusted: a leaver's went with their membership.
+			// Only a member's balance is adjusted: a leaver's is no longer counted.
 			const [member] = await scope.memberships.select((m) => eq(m.userId, personId), { limit: 1 });
 			const annualLeave = member ? await annualLeaveOf(scope, personId) : null;
 			if (!annualLeave) return declined(refusal({ change: "missing" }), 404);
