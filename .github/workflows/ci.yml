@@ -18,8 +18,8 @@ concurrency:
 
 jobs:
   # Everything of `checks` but the Workers tests: typecheck, lint, the Node tests
-  # (the `node` project of vitest.config.ts), the build and the audit. About 2
-  # minutes on the runner on 2026-11-24.
+  # (the `node` project of vitest.config.ts), the build and the audit. 1m40s on
+  # the runner on 2026-11-24.
   static-checks:
     name: static checks
     runs-on: ubuntu-24.04
@@ -41,17 +41,17 @@ jobs:
       - name: Dependency audit
         run: pnpm audit --audit-level=moderate
 
-  # The tests in the Workers runtime (the `workers` project), about 5,100 in 195
-  # files, took 23 minutes in one job on 2026-11-24 (main's run 45357831172),
-  # against a limit of 25. So they run in four shards side by side, each with its
-  # own install and Miniflare. Vitest splits the files between them by count
+  # The tests in the Workers runtime (the `workers` project), 4,881 in 195 files,
+  # took 23 minutes in one job on 2026-11-24 (main's run 45357831172), against a
+  # limit of 25. So they run in four shards side by side, each with its own
+  # install and Miniflare. Vitest splits the files between them by count
   # (`--shard`), in the order of a hash of each file's path, so every file runs
-  # in exactly one shard; by that run's times each shard holds 12 to 14 minutes
-  # of tests, run three at a time.
+  # in exactly one shard. Each shard took 4 to 5½ minutes on 2026-11-24.
   unit-shards:
     name: unit shard ${{ matrix.shard }}/4
     runs-on: ubuntu-24.04
-    # About twice the slowest shard measured, so a slow day passes and a hang does not.
+    # About three times the slowest shard measured, so a slow day and a growing
+    # suite pass and a hang does not.
     timeout-minutes: 15
     strategy:
       # Every shard runs to its end, so the log holds every failure at once.
