@@ -5,6 +5,8 @@ import { cellText, formatDuration, formatElapsed, TypedHours } from "~/timesheet
 import {
 	historyRows,
 	isTypable,
+	lineKey,
+	lineOf,
 	periodState,
 	type SheetEntry,
 	totalOf,
@@ -31,7 +33,16 @@ function entry(
 ): SheetEntry {
 	ids += 1;
 	const day = dayOf(startedAt, zone);
-	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt, overtime: false, day };
+	return {
+		id: `e${ids}`,
+		projectId,
+		description: null,
+		startedAt,
+		endedAt,
+		overtime: false,
+		day,
+		workPackageId: null,
+	};
 }
 
 /** A small seeded generator, so a failing case can be run again. */
@@ -178,6 +189,36 @@ describe("the week's sheet", () => {
 		});
 		expect(sheet.days[0]).toEqual({ day: "2026-11-09", total: 9 * HOUR, overtime: HOUR });
 		expect(sheet.total).toBe(9 * HOUR);
+	});
+
+	it("makes a row of each project and work package, its own and each added line apart (TS-115b)", () => {
+		const start = instantAt("2026-11-09", 9 * 60, LONDON);
+		const on = (wp: string | null, from: number) => ({
+			...entry(from, from + HOUR, "a"),
+			workPackageId: wp,
+		});
+		const sheet = weekSheet(
+			[
+				on("wp2", start),
+				on("wp1", start + HOUR),
+				on("wp2", start + 2 * HOUR),
+				on(null, start + 3 * HOUR),
+			],
+			days,
+			start + 5 * HOUR,
+			{ projectOrder: ["a"], addedRows: [lineKey("a", "wp3"), lineKey("a", "wp1")] },
+		);
+
+		expect(sheet.rows.map((row) => [row.projectId, row.workPackageId])).toEqual([
+			["a", null],
+			["a", "wp1"],
+			["a", "wp2"],
+			["a", "wp3"],
+		]);
+		expect(sheet.rows[2]?.cells[0]).toMatchObject({ total: 2 * HOUR, entries: 2 });
+		expect(sheet.rows.reduce((sum, row) => sum + row.total, 0)).toBe(sheet.total);
+		expect(lineOf(lineKey("a", "wp2"))).toEqual({ projectId: "a", workPackageId: "wp2" });
+		expect(lineOf("a")).toEqual({ projectId: "a", workPackageId: null });
 	});
 });
 

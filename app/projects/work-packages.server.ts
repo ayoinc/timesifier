@@ -88,12 +88,8 @@ export async function workPackageChoices(
 	const rows = await scope.workPackages.select(undefined, { orderBy: (w) => [asc(w.codeKey)] });
 	const byProject: Record<string, WorkPackageChoice[]> = {};
 	for (const row of rows) {
-		(byProject[row.projectId] ??= []).push({
-			id: row.id,
-			code: row.code,
-			name: row.name,
-			open: takesTime(row),
-		});
+		const choice = { id: row.id, code: row.code, name: row.name, open: takesTime(row) };
+		byProject[row.projectId] = [...(byProject[row.projectId] ?? []), choice];
 	}
 	return byProject;
 }

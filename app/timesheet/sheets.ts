@@ -21,6 +21,8 @@ export interface SheetEntry {
 	overtime: boolean;
 	/** The day it belongs to, stored when it was tracked (TS-111). */
 	day: Day;
+	/** Its work package (TS-115b), or null. */
+	workPackageId: string | null;
 }
 
 /** How long `entry` has lasted by `now`. */
@@ -48,6 +50,8 @@ export interface GridCell {
 
 export interface GridRow {
 	projectId: string;
+	/** The row's work package (TS-115b): a row is a project and a work package, or a project alone. */
+	workPackageId: string | null;
 	/** Whether the row is the project's overtime, rather than its regular time (TS-095). */
 	overtime: boolean;
 	cells: GridCell[];
@@ -67,11 +71,12 @@ export interface WeekSheet {
 }
 
 /**
- * The week's grid: a row for each project with time on `days`, in the order
- * of `projectOrder` (projects it does not name come last), then a row for
- * each of `addedRows` that has no time yet. A project with overtime has a
- * second row of it, after its regular time (TS-095): a cell is one project and
- * one kind. A day's total and the week's are sums of the cells.
+ * The week's grid: a row for each project and work package with time on
+ * `days` (TS-115b), in the order of `projectOrder` (projects it does not name
+ * come last) and each project's work packages by line, then a row for each
+ * of `addedRows` (lines, `lineKey`) that has no time yet. A line with
+ * overtime has a second row of it, after its regular time (TS-095): a cell is
+ * one line and one kind. A day's total and the week's are sums of the cells.
  */
 export function weekSheet(
 	entries: readonly SheetEntry[],
@@ -83,38 +88,39 @@ export function weekSheet(
 	}: { projectOrder?: readonly string[]; addedRows?: readonly string[] } = {},
 ): WeekSheet {
 	const byRow = new Map<string, Map<Day, SheetEntry[]>>();
-	const projectIds: string[] = [];
+	const lines: string[] = [];
 	for (const entry of entries) {
 		const { day } = entry;
 		if (!days.includes(day)) continue;
-		const key = rowKey(entry.projectId, entry.overtime);
+		const line = lineKey(entry.projectId, entry.workPackageId);
+		const key = rowKey(line, entry.overtime);
 		let ofRow = byRow.get(key);
 		if (!ofRow) {
 			ofRow = new Map();
 			byRow.set(key, ofRow);
 		}
 		ofRow.set(day, [...(ofRow.get(day) ?? []), entry]);
-		if (!projectIds.includes(entry.projectId)) projectIds.push(entry.projectId);
+		if (!lines.includes(line)) lines.push(line);
 	}
 
-	const rank = (id: string) => {
-		const at = projectOrder.indexOf(id);
+	const rank = (line: string) => {
+		const at = projectOrder.indexOf(lineOf(line).projectId);
 		return at === -1 ? Number.MAX_SAFE_INTEGER : at;
 	};
-	projectIds.sort((a, b) => rank(a) - rank(b));
-	// Each project's regular time, then its overtime, where it has each; an added row is regular time.
-	const ordered: { projectId: string; overtime: boolean }[] = [];
-	for (const projectId of projectIds) {
+	lines.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+	// Each line's regular time, then its overtime, where it has each; an added row is regular time.
+	const ordered: { line: string; overtime: boolean }[] = [];
+	for (const line of lines) {
 		for (const overtime of [false, true]) {
-			if (byRow.has(rowKey(projectId, overtime))) ordered.push({ projectId, overtime });
+			if (byRow.has(rowKey(line, overtime))) ordered.push({ line, overtime });
 		}
 	}
-	for (const projectId of addedRows) {
-		if (!projectIds.includes(projectId)) ordered.push({ projectId, overtime: false });
+	for (const line of addedRows) {
+		if (!lines.includes(line)) ordered.push({ line, overtime: false });
 	}
 
 	const rows = ordered.map((row): GridRow => {
-		const ofRow = byRow.get(rowKey(row.projectId, row.overtime));
+		const ofRow = byRow.get(rowKey(row.line, row.overtime));
 		const cells = days.map((day): GridCell => {
 			const inCell = ofRow?.get(day) ?? [];
 			return {
@@ -126,7 +132,7 @@ export function weekSheet(
 			};
 		});
 		return {
-			projectId: row.projectId,
+			...lineOf(row.line),
 			overtime: row.overtime,
 			cells,
 			total: cells.reduce((sum, cell) => sum + cell.total, 0),
@@ -146,9 +152,22 @@ export function weekSheet(
 	return { days: dayTotals, rows, total: dayTotals.reduce((sum, each) => sum + each.total, 0) };
 }
 
-/** A row of the grid by its project and kind, as `data-row` names it. */
-export function rowKey(projectId: string, overtime: boolean): string {
-	return overtime ? `${projectId}:overtime` : projectId;
+/** A line of the grid: a project and its work package, or the project alone (TS-115b). */
+export function lineKey(projectId: string, workPackageId: string | null): string {
+	return workPackageId === null ? projectId : `${projectId}/${workPackageId}`;
+}
+
+/** The project and work package of a line. */
+export function lineOf(line: string): { projectId: string; workPackageId: string | null } {
+	const at = line.indexOf("/");
+	return at === -1
+		? { projectId: line, workPackageId: null }
+		: { projectId: line.slice(0, at), workPackageId: line.slice(at + 1) };
+}
+
+/** A row of the grid by its line and kind, as `data-row` names it. */
+export function rowKey(line: string, overtime: boolean): string {
+	return overtime ? `${line}:overtime` : line;
 }
 
 /** Whether a cell of the grid takes typed hours: one entry or none, not running, on a day not locked. */

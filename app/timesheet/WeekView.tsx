@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, ViewTransition } from "react";
+import { use, useEffect, useId, useRef, useState, ViewTransition } from "react";
 import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/Button";
@@ -9,8 +9,10 @@ import { type DayRule, leftMessage, overLabel, wholeMinutes } from "~/leave/rule
 import { codedName } from "~/lib/codes";
 import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
+import { projectAndPackage } from "~/projects/work-packages";
 import { useTerms } from "~/routes/app/useOrganisation";
 import { TRANSITION, useTravel } from "~/shell/transitions";
+import { type TrackChoices, TrackChoicesContext } from "~/tasks/track";
 import { addDays, type Day } from "~/time/calendar";
 import { nearWord } from "~/time/format";
 
@@ -20,7 +22,15 @@ import { cellText, formatDuration, minutesToMs, TypedHours } from "./durations";
 import { useReportAnswer } from "./feedback";
 import { dayNumber, useDayFormat, usePeriodFormat } from "./format";
 import { PeriodHeader } from "./Submission";
-import { type GridCell, type GridRow, isTypable, rowKey, weekSheet } from "./sheets";
+import {
+	type GridCell,
+	type GridRow,
+	isTypable,
+	lineKey,
+	lineOf,
+	rowKey,
+	weekSheet,
+} from "./sheets";
 import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
 import type { WeekData } from "./timesheet.server";
 import { dayPath, timerAction, weekPath } from "./views";
@@ -34,7 +44,9 @@ import { dayPath, timerAction, weekPath } from "./views";
  * day that takes no time is read-only and says why, and a day over its limit
  * says by how much (TS-090). While any day of the week takes overtime, or a
  * project has some, each project has an overtime row under its regular time,
- * whose cells are its overtime on each day (TS-095).
+ * whose cells are its overtime on each day (TS-095). A row is a project and a
+ * work package (TS-115b): a project with open work packages is added by one of
+ * them, and its time on each is a row of its own.
  */
 export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; aim: Aim | null }) {
 	const { period, days, lockedDays, lockDate, projects, today } = data;
@@ -55,34 +67,33 @@ export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; ai
 	const [addedByWeek, setAddedByWeek] = useState<Record<string, string[]>>({});
 	const added = addedByWeek[period.startsOn] ?? [];
 	const sheet = weekSheet([], days, data.now, { addedRows: added });
+	const lineOfRow = (row: GridRow) => lineKey(row.projectId, row.workPackageId);
 	const rows = withOvertimeRows(
 		[
 			...data.sheet.rows,
-			...sheet.rows.filter((row) => !data.sheet.rows.some((r) => r.projectId === row.projectId)),
+			...sheet.rows.filter((row) => !data.sheet.rows.some((r) => lineOfRow(r) === lineOfRow(row))),
 		],
 		days,
 		data.rules.some((rule) => rule.overtimeOpen),
 	);
-	const inGrid = new Set(rows.map((row) => row.projectId));
-	const addable = projects.filter((p) => !p.archived && !inGrid.has(p.id));
+	const choices = use(TrackChoicesContext);
+	const lineName = useLineName(projects, choices);
+	const inGrid = new Set(rows.map(lineOfRow));
+	const addable = addableLines(projects, choices).filter((line) => !inGrid.has(line));
 	const editable = lockedDays.length < days.length;
 	const shownEnd = addDays(shownStart, 6);
 	const thisWeek = shownStart <= today && today <= shownEnd;
 
 	// N adds a row (taste HT-D): the project chosen to add, or the first not in the grid, with its first open cell focused.
 	const [chosen, setChosen] = useState<string | null>(null);
-	const pick = chosen && addable.some((p) => p.id === chosen) ? chosen : (addable[0]?.id ?? null);
+	const pick = chosen && addable.includes(chosen) ? chosen : (addable[0] ?? null);
 	const addRows = (ids: string[]) => {
 		setAddedByWeek((all) => ({
 			...all,
 			[period.startsOn]: [...added, ...ids.filter((id) => !added.includes(id))],
 		}));
-		const one = projects.find((p) => p.id === ids[0]);
-		setSaid(
-			ids.length === 1 && one
-				? `${codedName(one.code, one.name)} added.`
-				: `${ids.length} rows added.`,
-		);
+		const [one] = ids;
+		setSaid(ids.length === 1 && one ? `${lineName(one)} added.` : `${ids.length} rows added.`);
 		requestAnimationFrame(() =>
 			document
 				.querySelector<HTMLInputElement>(
@@ -150,10 +161,10 @@ export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; ai
 
 					{editable && (
 						<AddRows
-							addable={addable}
+							addable={addable.map((line) => ({ id: line, label: lineName(line) }))}
 							pick={pick}
 							onPick={setChosen}
-							lastWeek={data.lastWeekProjects.filter((id) => !inGrid.has(id))}
+							lastWeek={data.lastWeekLines.filter((line) => !inGrid.has(line))}
 							onAdd={addRows}
 							copyWeekRefusal={data.copyWeekRefusal}
 							copyingWeek={copy.state !== "idle"}
@@ -195,12 +206,8 @@ function Grid({
 	const formatDay = useDayFormat("short");
 	const formatLong = useDayFormat();
 	const terms = useTerms();
-	const nameOf = (id: string) => {
-		const project = projects.find((p) => p.id === id);
-		return project
-			? `${codedName(project.code, project.name)}${project.archived ? " (archived)" : ""}`
-			: "";
-	};
+	const lineName = useLineName(projects, use(TrackChoicesContext));
+	const nameOf = (row: GridRow) => lineName(lineKey(row.projectId, row.workPackageId));
 	const ruleOf = (day: string) => rules.find((rule) => rule.day === day);
 	// The time of one kind on a day, across every row: what a cell's change is checked against.
 	const kindTotal = (day: string, overtime: boolean) => {
@@ -281,17 +288,17 @@ function Grid({
 						)}
 						{rows.map((row) => (
 							<tr
-								key={rowKey(row.projectId, row.overtime)}
-								data-row={rowKey(row.projectId, row.overtime)}
+								key={rowKey(lineKey(row.projectId, row.workPackageId), row.overtime)}
+								data-row={rowKey(lineKey(row.projectId, row.workPackageId), row.overtime)}
 							>
 								<th scope="row" className="max-w-60 truncate px-4 py-2 text-start font-normal">
 									{row.overtime ? (
 										<span className="flex items-center gap-2 ps-4">
-											<span className="sr-only">{nameOf(row.projectId)}, </span>
+											<span className="sr-only">{nameOf(row)}, </span>
 											<OvertimeTag />
 										</span>
 									) : (
-										nameOf(row.projectId)
+										nameOf(row)
 									)}
 								</th>
 								{row.cells.map((cell) => (
@@ -302,8 +309,9 @@ function Grid({
 										<Cell
 											cell={cell}
 											projectId={row.projectId}
+											workPackageId={row.workPackageId}
 											overtime={row.overtime}
-											label={`${nameOf(row.projectId)}, ${row.overtime ? "overtime, " : ""}${formatLong(cell.day)}`}
+											label={`${nameOf(row)}, ${row.overtime ? "overtime, " : ""}${formatLong(cell.day)}`}
 											locked={lockedDays.includes(cell.day)}
 											rule={ruleOf(cell.day)}
 											kindTotal={kindTotal(cell.day, row.overtime)}
@@ -408,6 +416,7 @@ function Grid({
 function Cell({
 	cell,
 	projectId,
+	workPackageId,
 	overtime,
 	label,
 	locked,
@@ -419,6 +428,8 @@ function Cell({
 }: {
 	cell: GridCell;
 	projectId: string;
+	/** The row's work package (TS-115b), or null. */
+	workPackageId: string | null;
 	/** Whether the cell is the project's overtime on its day. */
 	overtime: boolean;
 	label: string;
@@ -487,7 +498,14 @@ function Cell({
 		}
 		setRefused(false);
 		fetcher.submit(
-			{ intent: "cell", projectId, day: cell.day, hours: value, overtime: String(overtime) },
+			{
+				intent: "cell",
+				projectId,
+				workPackageId: workPackageId ?? "",
+				day: cell.day,
+				hours: value,
+				overtime: String(overtime),
+			},
 			{ method: "post" },
 		);
 	};
@@ -558,21 +576,53 @@ function withOvertimeRows(
 	days: readonly Day[],
 	overtimeOpen: boolean,
 ): GridRow[] {
-	const empty = (projectId: string, overtime: boolean): GridRow => ({
-		projectId,
+	const empty = (line: string, overtime: boolean): GridRow => ({
+		...lineOf(line),
 		overtime,
 		cells: days.map((day) => ({ day, total: 0, entries: 0, running: false, entryId: null })),
 		total: 0,
 	});
 	const shown: GridRow[] = [];
-	for (const projectId of new Set(rows.map((row) => row.projectId))) {
+	for (const line of new Set(rows.map((row) => lineKey(row.projectId, row.workPackageId)))) {
 		const of = (overtime: boolean) =>
-			rows.find((row) => row.projectId === projectId && row.overtime === overtime);
-		shown.push(of(false) ?? empty(projectId, false));
-		const extra = of(true) ?? (overtimeOpen ? empty(projectId, true) : undefined);
+			rows.find(
+				(row) => lineKey(row.projectId, row.workPackageId) === line && row.overtime === overtime,
+			);
+		shown.push(of(false) ?? empty(line, false));
+		const extra = of(true) ?? (overtimeOpen ? empty(line, true) : undefined);
 		if (extra) shown.push(extra);
 	}
 	return shown;
+}
+
+/**
+ * The lines a row can be added for (TS-115b): each active project's open
+ * work packages, or the project alone where it has none open.
+ */
+function addableLines(projects: WeekData["projects"], choices: TrackChoices | null): string[] {
+	return projects
+		.filter((p) => !p.archived)
+		.flatMap((p) => {
+			const open = (choices?.workPackages[p.id] ?? []).filter((wp) => wp.open);
+			return open.length === 0 ? [p.id] : open.map((wp) => lineKey(p.id, wp.id));
+		});
+}
+
+/** How a line is named: "ACME-001 · Website rebuild › WP2 Build", with "(archived)" or "(closed)" where it is. */
+function useLineName(projects: WeekData["projects"], choices: TrackChoices | null) {
+	return (line: string): string => {
+		const { projectId, workPackageId } = lineOf(line);
+		const project = projects.find((p) => p.id === projectId);
+		if (!project) return "";
+		const wp =
+			workPackageId === null
+				? null
+				: ((choices?.workPackages[projectId] ?? []).find((each) => each.id === workPackageId) ??
+					null);
+		const named = projectAndPackage(project, wp);
+		if (project.archived) return `${named} (archived)`;
+		return wp && !wp.open ? `${named} (closed)` : named;
+	};
 }
 
 /**
@@ -592,7 +642,7 @@ function AddRows({
 	copyingWeek,
 	onCopyWeek,
 }: {
-	addable: WeekData["projects"];
+	addable: { id: string; label: string }[];
 	pick: string | null;
 	onPick: (id: string) => void;
 	lastWeek: string[];
@@ -612,7 +662,7 @@ function AddRows({
 					<div className="w-72 max-w-full">
 						<Select
 							label={`${terms.Project} to add`}
-							options={addable.map((p) => ({ id: p.id, label: codedName(p.code, p.name) }))}
+							options={addable}
 							value={pick}
 							onChange={(id) => id && onPick(id)}
 						/>
