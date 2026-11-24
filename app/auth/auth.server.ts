@@ -16,7 +16,7 @@
  * `organisations.server.ts` configures.
  */
 
-import { env, waitUntil } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
 import { betterAuth } from "better-auth/minimal";
@@ -37,6 +37,7 @@ import {
 // The two tenant tables are absent from `~/db` on purpose. Better Auth is the
 // one writer that reaches them without `organisationScope`.
 import { invitations, memberships } from "~/db/schema";
+import { inBackground } from "~/lib/background.server";
 import { required, setting } from "~/lib/deployment";
 import { deviceOf } from "~/platform/device";
 import { NEWSLETTER_HEADER } from "~/platform/paths";
@@ -286,7 +287,7 @@ function createAuth(bindings: Bindings) {
 				async sendVerificationOTP({ email, otp, type }) {
 					if (type !== "sign-in") return;
 					// Not awaited: how long the mail takes must not show in the response.
-					waitUntil(
+					inBackground(
 						getPlatformBrand(env).then((brand) =>
 							sendEmail({ to: email, ...signInCodeEmail(otp, brand) }),
 						),

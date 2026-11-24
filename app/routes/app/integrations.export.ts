@@ -3,6 +3,7 @@ import { asc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { among, type OrganisationScope, organisationScope, users } from "~/db";
+import { bodyOf } from "~/lib/background.server";
 import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
@@ -120,18 +121,9 @@ async function* chunks(
 export async function loader({ context }: Route.LoaderArgs) {
 	const { organisation } = context.get(membershipContext);
 	const scope = organisationScope(env.DB, organisation.id);
-	const source = chunks(scope, await namesOf(scope), Date.now());
-	const encoder = new TextEncoder();
-	const body = new ReadableStream<Uint8Array>({
-		async pull(controller) {
-			const next = await source.next();
-			if (next.done) controller.close();
-			else controller.enqueue(encoder.encode(next.value));
-		},
-		async cancel() {
-			await source.return(undefined);
-		},
-	});
+	const body = bodyOf(chunks(scope, await namesOf(scope), Date.now())).pipeThrough(
+		new TextEncoderStream(),
+	);
 	return new Response(body, {
 		headers: {
 			"Content-Type": "text/csv; charset=utf-8; header=present",

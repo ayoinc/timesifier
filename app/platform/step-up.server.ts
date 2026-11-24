@@ -1,10 +1,11 @@
-import { env, waitUntil } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import type { SignedIn } from "~/auth/auth.server";
 import { SIGN_IN_CODE_LENGTH } from "~/auth/code";
 import { sendEmail } from "~/auth/email.server";
 import { isKeyedHash, keyedHash } from "~/auth/keyed-hash.server";
 import { getPlatformBrand } from "~/brand/platform-brand.server";
 import { platformData } from "~/db";
+import { inBackground } from "~/lib/background.server";
 import { required } from "~/lib/deployment";
 
 import { STEP_UP_CODE_SECONDS, stepUpCodeEmail } from "./emails";
@@ -63,7 +64,9 @@ export async function sendStepUpCode(
 		),
 		expiresAt: new Date(now.getTime() + STEP_UP_CODE_SECONDS * 1000),
 	});
-	waitUntil(sendEmail({ to: user.email, ...stepUpCodeEmail(code, await getPlatformBrand(env)) }));
+	inBackground(
+		sendEmail({ to: user.email, ...stepUpCodeEmail(code, await getPlatformBrand(env)) }),
+	);
 	return { ok: true };
 }
 

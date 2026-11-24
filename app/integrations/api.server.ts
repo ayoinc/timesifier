@@ -1,4 +1,4 @@
-import { env, waitUntil } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, gt, gte, lt, lte, or, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
@@ -6,6 +6,7 @@ import * as z from "zod";
 import { among, users } from "~/db";
 import { dayStatus } from "~/leave/days";
 import { calendarOf, leaveContext } from "~/leave/leave.server";
+import { inBackground } from "~/lib/background.server";
 import {
 	type Access,
 	isAdministrator,
@@ -584,7 +585,7 @@ function refused(refusal: { reason: string; message?: string }): Response {
 /** After a write, an organisation's webhooks hear of it now rather than at the next minute. */
 async function tellWebhooks(caller: TokenCaller, now: number) {
 	const [active] = await caller.scope.webhooks.select((w) => eq(w.active, true), { limit: 1 });
-	if (active) waitUntil(dispatchWebhooks({ organisations: [caller.organisation.id], now }));
+	if (active) inBackground(dispatchWebhooks({ organisations: [caller.organisation.id], now }));
 }
 
 /** Hours that round to no minutes write nothing (TR-13). */

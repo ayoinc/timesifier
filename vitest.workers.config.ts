@@ -1,16 +1,19 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-plugin";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig } from "vitest/config";
+import { outbound } from "./test/siteverify";
 
 // Tests run inside the Workers runtime against the bindings in wrangler.jsonc.
 // That file is a developer's machine's; the tests check what ships, so they are
 // given the settings of a deployment of their own. None reaches anything: the
-// hosts are only ever the address of a `Request` handed to the Worker.
+// hosts are only ever the address of a `Request` handed to the Worker, and what
+// the Worker asks of the internet is answered in Node (test/siteverify.ts).
 export default defineConfig({
 	plugins: [
 		cloudflareTest(async () => ({
 			wrangler: { configPath: "./wrangler.jsonc" },
 			miniflare: {
+				outboundService: outbound,
 				bindings: {
 					// The committed SQL migrations, read here in Node and handed to the
 					// runtime as a test-only binding; test/db/database.ts applies them
@@ -50,6 +53,9 @@ export default defineConfig({
 		env: { DEV: "", PROD: "1" },
 		include: ["test/**/*.test.ts", "app/**/*.test.ts"],
 		exclude: ["test/node/**"],
+		// Each test waits for the work its requests left running, and no test can
+		// reach Email Service's binding (test/setup.ts).
+		setupFiles: ["./test/setup.ts"],
 		// The first request in a test file loads the whole application, Better Auth
 		// included, one module at a time. With every file loading at once that can
 		// take several seconds, so the default of five is too close.

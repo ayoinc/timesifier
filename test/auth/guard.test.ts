@@ -187,6 +187,9 @@ describe("with a session", () => {
 		const file = await ask(await addressFor(route, acme.id), {}, cookie);
 		expect(file.status).toBe(200);
 		expect(file.headers.get("Content-Type")).not.toContain("text/html");
+		// Read to its end: a file such as the account's data is read from the
+		// database as it is taken, and the test waits for that (test/setup.ts).
+		await file.arrayBuffer();
 	});
 
 	it("/app sends a person with one organisation on to it", async () => {

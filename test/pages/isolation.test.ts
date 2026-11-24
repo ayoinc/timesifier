@@ -218,7 +218,11 @@ describe("a member of one organisation asking for another organisation's address
 		const address = await addressFor(route, acme.id);
 		// A member is answered the page, or the redirect of a moved address, or,
 		// at an address that holds no page, the 404 drawn in their own shell.
-		expect((await open(address, ada)).status).toBe(memberStatus(route));
+		const mine = await open(address, ada);
+		expect(mine.status).toBe(memberStatus(route));
+		// Read to its end: a file such as the account's data is read from the
+		// database as it is taken, and the test waits for that (test/setup.ts).
+		await mine.arrayBuffer();
 
 		const theirs = await open(address, grace);
 		const nobodys = await open(inNobodys(address), grace);

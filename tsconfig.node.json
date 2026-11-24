@@ -6,7 +6,8 @@
 		"vitest.*.config.ts",
 		"scripts/**/*.ts",
 		"app/components/mark-paths.ts",
-		"app/anatomy/iso.ts"
+		"app/anatomy/iso.ts",
+		"test/siteverify.ts"
 	],
 	"compilerOptions": {
 		"composite": true,

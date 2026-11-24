@@ -1,6 +1,7 @@
 /**
- * These tests call Turnstile's real `siteverify` endpoint with the test secret
- * keys Cloudflare publishes for the purpose. They need the network.
+ * These tests send the test secret keys Cloudflare publishes for the purpose.
+ * `siteverify` is answered in Node with the answer Cloudflare gives to each
+ * (test/siteverify.ts), so they need no network.
  * https://developers.cloudflare.com/turnstile/troubleshooting/testing/
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
