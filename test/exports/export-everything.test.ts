@@ -185,10 +185,15 @@ async function organisationTables(): Promise<string[]> {
 	return found.results.map((r) => r.name);
 }
 
-/** The id of every row the organisation `organisationId` holds, in every table of its own. */
+/**
+ * The id of every row the organisation `organisationId` holds, in every table
+ * of its own that has an `id` (all but `client_managers`, whose rows its own
+ * test follows by their primary key).
+ */
 async function idsOf(organisationId: string): Promise<string[]> {
 	const ids: string[] = [];
-	for (const table of await organisationTables()) {
+	const tables = await organisationTables();
+	for (const table of tables.filter((t) => t !== "client_managers")) {
 		const found = await env.DB.prepare(`select id from ${table} where organisation_id = ?`)
 			.bind(organisationId)
 			.all<{ id: string }>();
@@ -426,6 +431,40 @@ describe("the job", () => {
 		expect(manifest.files.filter((f) => f.table === "tags").map((f) => [f.name, f.rows])).toEqual([
 			["tables/tags.csv", 4],
 		]);
+	});
+
+	it("pages client_managers, which has no id, by its primary key, and loses or repeats no row", async () => {
+		const scope = organisationScope(env.DB, acme.id);
+		const clients = [
+			...(await scope.clients.select()),
+			...(await scope.clients.insert({ name: "Paged Client", nameKey: "paged-client" })),
+		];
+		for (let n = 0; n < 5; n++) {
+			const manager = await seedMember(acme.id, "member", `manager-${n}@example.com`);
+			for (const client of clients) {
+				await scope.clientManagers.insert({ clientId: client.id, userId: manager.userId });
+			}
+		}
+		const { id } = await exportMade(acme.id, ada.user.id, SMALL);
+		const files = await filesOf(await storedZip(acme.id, id));
+		const manifest = manifestOf(files);
+
+		const pairs = manifest.files
+			.filter((f) => f.table === "client_managers")
+			.flatMap(({ name }) => {
+				const [header = [], ...rows] = rowsOf(files.get(name));
+				const client = header.indexOf("client_id");
+				const user = header.indexOf("user_id");
+				return rows.map((r) => [r[client], r[user]]);
+			});
+		const stored = await env.DB.prepare(
+			"select client_id, user_id from client_managers where organisation_id = ? order by client_id, user_id",
+		)
+			.bind(acme.id)
+			.all<{ client_id: string; user_id: string }>();
+		expect(stored.results).toHaveLength(5 * clients.length);
+		expect(pairs).toEqual(stored.results.map((r) => [r.client_id, r.user_id]));
+		expect(manifest.tables.client_managers).toBe(5 * clients.length);
 	});
 
 	it("keeps its place between steps, uploads parts of 5 MiB as it goes, and makes one ZIP of them", async () => {
