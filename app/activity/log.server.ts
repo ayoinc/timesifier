@@ -366,6 +366,14 @@ const FIELD_LABELS: Record<string, string> = {
 	overtimeMultiplier: "Overtime multiplier",
 	restDayMultiplier: "On days off and public holidays",
 	worksNumber: "Works number",
+	carryOverDays: "Days carried over",
+	carryOverExpiresAfterDays: "Carried leave lasts (days)",
+	leaveYear: "Leave year",
+	minutes: "Minutes",
+	leaveYearStarts: "Leave year starts (month-day)",
+	starterMonth: "A starter's first month",
+	holidaysFromAllowance: "Public holidays come out of annual leave",
+	priorDaysAtAllowance: "Earlier this leave year counts at the usual allowance",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */
@@ -592,6 +600,9 @@ function whatOf(r: RecordRow, names: Names): string {
 		const person = r.summary.after?.userId ?? r.summary.before?.userId;
 		const name = typeof person === "string" ? names.people.get(person) : undefined;
 		return `Changed the pay in the contract of ${name ?? "a former member"}`;
+	}
+	if (prefix === "leave_adjustment" && r.ownerId) {
+		return `${verb} a change to the leave of ${names.people.get(r.ownerId) ?? "a former member"}`;
 	}
 	return named && !noun.startsWith("a") ? `${verb} ${noun} ${named}` : `${verb} ${noun}`;
 }

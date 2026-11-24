@@ -403,3 +403,85 @@ describe("the notice each kind of leave asks for (TS-090)", () => {
 		expect(await noticeOf("annual")).toBe(14);
 	});
 });
+
+// Settings › Leave, the leave year (TS-098b, decision 76): the day it starts,
+// the starter month rule and whether public holidays come out of the
+// allowance, through `changeLeaveYearSettings`.
+describe("Settings › Leave: the leave year (TS-098b)", () => {
+	const LEAVE_YEAR = {
+		intent: "leave-year",
+		month: "04",
+		day: "06",
+		starterMonth: "whole",
+		holidaysFromAllowance: "on",
+	};
+	const settings = () =>
+		row<{ leave_year_starts: string; starter_month: string; holidays_from_allowance: number }>(
+			"select leave_year_starts, starter_month, holidays_from_allowance from organisations where id = ?",
+			acme.id,
+		);
+	const recorded = () =>
+		value<string>(
+			"select summary from activity_records where organisation_id = ? and action = 'organisation.settings_changed' order by created_at desc limit 1",
+			acme.id,
+		);
+
+	it("shows the calendar year, starters from their first day and holidays on top until it is changed", async () => {
+		const text = textOf(await pageBody(await open(SETTINGS, ada)));
+		expect(text).toContain("Leave year");
+		expect(text).toContain("1 January Leave year starts on.");
+		expect(text).toContain("From their first day A starter's first month.");
+		expect(text).toContain("On top of the allowance Public holidays.");
+	});
+
+	it("by role: owners and admins change it, recorded in Activity; Finance, a manager and a member cannot", async () => {
+		const hedy = await memberOfAcme("admin", "hedy@example.com");
+		const katherine = await memberOfAcme("finance", "katherine@example.com");
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const mary = await memberOfAcme("member", "mary@example.com");
+		await seedTeam(acme.id, "Design", { members: [linus.user.id], managers: [mary.user.id] });
+		const before = await settings();
+		for (const who of [katherine, mary, linus]) {
+			const answer = await outcome(await submit(SETTINGS, LEAVE_YEAR, who, { byScript: true }));
+			expect([403, 404]).toContain(answer.status);
+			expect(await settings()).toEqual(before);
+		}
+		expect(await recorded()).toBeNull();
+
+		const byAdmin = await outcome(await submit(SETTINGS, LEAVE_YEAR, hedy, { byScript: true }));
+		expect(byAdmin.status).toBe(200);
+		expect(byAdmin.said).toContain("The leave year starts on 6 April.");
+		expect(await settings()).toEqual({
+			leave_year_starts: "04-06",
+			starter_month: "whole",
+			holidays_from_allowance: 1,
+		});
+		expect(JSON.parse((await recorded()) ?? "{}")).toEqual({
+			before: { leaveYearStarts: "01-01", starterMonth: "days", holidaysFromAllowance: false },
+			after: { leaveYearStarts: "04-06", starterMonth: "whole", holidaysFromAllowance: true },
+		});
+		const text = textOf(await pageBody(await open(SETTINGS, ada)));
+		expect(text).toContain("6 April Leave year starts on.");
+		expect(text).toContain("The whole month they start in A starter's first month.");
+		expect(text).toContain("Come out of the allowance Public holidays.");
+
+		// The owner puts it back; an unticked box sends nothing, and holidays are on top again.
+		const { holidaysFromAllowance: _, ...unticked } = LEAVE_YEAR;
+		const byOwner = await outcome(
+			await submit(SETTINGS, { ...unticked, month: "01", day: "01", starterMonth: "days" }, ada, {
+				byScript: true,
+			}),
+		);
+		expect(byOwner.status).toBe(200);
+		expect(await settings()).toEqual(before);
+	});
+
+	it("refuses a day not every year has, 29 February, and changes nothing", async () => {
+		const answer = await outcome(
+			await submit(SETTINGS, { ...LEAVE_YEAR, month: "02", day: "29" }, ada, { byScript: true }),
+		);
+		expect(answer.status).toBe(400);
+		expect(answer.said).toContain("That month has no such day every year.");
+		expect((await settings())?.leave_year_starts).toBe("01-01");
+	});
+});

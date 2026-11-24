@@ -128,6 +128,10 @@ export interface ContractTerms {
 	restDayMultiplierBp: Multiplier | null;
 	/** A year for a full week; null for the kind of leave's allowance. */
 	leaveDays: number | null;
+	/** Days left at the end of a leave year that carry into the next (TS-098b); 0 carries none. */
+	carryOverDays: number;
+	/** Days into the next leave year that carried leave lasts; null to that year's end. */
+	carryOverExpiresAfterDays: number | null;
 }
 
 /** One version of a contract. */
@@ -145,7 +149,44 @@ export interface Contract {
 	endsOn: Day | null;
 	endReason: EndReason | null;
 	worksNumber: string | null;
+	/** Whether, as the person's first, the days of a leave year before it count at the annual kind's allowance (TS-098b, decision 76). */
+	priorDaysAtAllowance: boolean;
 	versions: readonly ContractVersion[];
+}
+
+/** How the days of a leave year before a person's first contract count: at the kind's allowance, or not at all. */
+export const PRIOR_DAYS = ["allowance", "nothing"] as const;
+export type PriorDays = (typeof PRIOR_DAYS)[number];
+
+/** The Give sheet's answers to how the days before a first contract count. */
+export const PRIOR_DAYS_LABELS: Record<PriorDays, string> = {
+	allowance: "Count at the usual allowance",
+	nothing: "Count nothing",
+};
+
+/** What each answer means, under it. */
+export const PRIOR_DAYS_HINTS: Record<PriorDays, string> = {
+	allowance: "They worked here before; their balance stays as it is.",
+	nothing: "They start with this contract.",
+};
+
+/** Days a member joined before their first contract starts from which the Give sheet suggests their earlier days count at the allowance. */
+export const PRIOR_DAYS_SUGGESTED_FROM = 28;
+
+/**
+ * Whether giving a contract from `startsOn` asks how the days of the leave
+ * year before it count, and the answer it suggests: asked only of a first
+ * contract for someone who joined before it starts. It suggests the allowance
+ * when they joined at least 28 days before, and nothing otherwise, as for a
+ * starter invited a few days early. Null when it is not asked.
+ */
+export function priorDaysQuestion(
+	joinedOn: Day | null,
+	hasContracts: boolean,
+	startsOn: Day,
+): PriorDays | null {
+	if (hasContracts || joinedOn === null || joinedOn >= startsOn) return null;
+	return addDays(joinedOn, PRIOR_DAYS_SUGGESTED_FROM) <= startsOn ? "allowance" : "nothing";
 }
 
 /** The one of `contracts` that a contract from `startsOn` to `endsOn` would share a day with, if any; `except` is left out. */
@@ -286,8 +327,23 @@ export function overtimeSentence(
 		: `Overtime is paid${rate}${restDay}.`;
 }
 
-/** The annual leave in a sentence. */
-export function leaveSentence(leaveDays: number | null): string {
-	if (leaveDays === null) return "Annual leave: the allowance of the kind of leave.";
-	return `Annual leave: ${leaveDays} ${leaveDays === 1 ? "day" : "days"} a year for a full week, plus public holidays.`;
+/**
+ * The annual leave in a sentence, and what carries over. Public holidays are
+ * on top of it, or come out of it where the organisation says so (TS-098b).
+ */
+export function leaveSentence(
+	terms: Pick<ContractTerms, "leaveDays" | "carryOverDays" | "carryOverExpiresAfterDays">,
+	holidaysFromAllowance: boolean,
+): string {
+	const { leaveDays, carryOverDays, carryOverExpiresAfterDays } = terms;
+	const leave =
+		leaveDays === null
+			? "Annual leave: the allowance of the kind of leave."
+			: `Annual leave: ${leaveDays} ${leaveDays === 1 ? "day" : "days"} a year for a full week, ${holidaysFromAllowance ? "public holidays included" : "plus public holidays"}.`;
+	if (carryOverDays === 0) return leave;
+	const lasting =
+		carryOverExpiresAfterDays === null
+			? "for the next leave year"
+			: `for ${carryOverExpiresAfterDays} ${carryOverExpiresAfterDays === 1 ? "day" : "days"} of the next leave year`;
+	return `${leave} Up to ${carryOverDays} ${carryOverDays === 1 ? "day" : "days"} left at a year's end carry over, ${lasting}.`;
 }

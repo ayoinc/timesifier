@@ -139,6 +139,7 @@ describe("a person's data", () => {
 			"time-entries.csv",
 			"expenses.csv",
 			"leave.csv",
+			"leave-adjustments.csv",
 			"contracts.csv",
 		]);
 

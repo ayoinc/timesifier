@@ -148,6 +148,8 @@ export const ActivityAction = z.enum([
 	"contract.changed",
 	"contract.ended",
 	"contract_pay.changed",
+	// TS-098b: a change to a person's balance of leave, with its reason.
+	"leave_adjustment.added",
 ]);
 export type ActivityAction = z.infer<typeof ActivityAction>;
 
@@ -185,6 +187,7 @@ export const SubjectType = z.enum([
 	"user",
 	"organisation_export",
 	"contract",
+	"leave_adjustment",
 ]);
 export type SubjectType = z.infer<typeof SubjectType>;
 

@@ -602,11 +602,13 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 			"never their own. A manager sees no rate, pay, invoice or estimate.",
 		);
 		expect(text, path).toContain(
-			"everyone's contracts with their pay; the whole activity log; the integrations. They invite and remove people, and give, change and end contracts, never their own while another owner or admin could.",
+			"everyone's contracts with their pay and the adjustments to their leave; the whole activity log; the integrations. They invite and remove people, give, change and end contracts and adjust leave, never their own while another owner or admin could.",
 		);
 		expect(text, path).toContain("Finance changes no contract");
-		expect(text, path).toContain("contracts without their pay");
-		expect(text, path).toContain("leave and contract with its pay");
+		expect(text, path).toContain(
+			"contracts without their pay but with the adjustments to their leave",
+		);
+		expect(text, path).toContain("leave with its adjustments and contract with its pay");
 		expect(text, path).toContain(`grants support access, for ${SUPPORT_HOURS.join(" or ")} hours`);
 		expect(text, path).toContain(
 			"names as a client's account manager creates that client's projects",

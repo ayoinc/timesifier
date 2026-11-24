@@ -12,6 +12,8 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { type OrganisationScope, organisationScope } from "~/db";
 import { halfDaysTaken, isWorkingDay } from "~/leave/days";
+import { contractBalanceWords } from "~/leave/entitlement";
+import { adjustmentLines, adjustmentsOf } from "~/leave/entitlement.server";
 import {
 	HOLIDAY_KIND,
 	halfDaysLabel,
@@ -123,7 +125,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 	const [mine, timetable, holidays, decidedByOthers, organisationRules, work, teamLeave] =
 		await Promise.all([
-			myLeave(scope, user.id, year),
+			myLeave(scope, user.id, today),
 			timetableFor(scope, user.id),
 			publicHolidaysOf(scope, { first: today, last: `${year + 1}-12-31` }),
 			someoneElseDecides(scope, user.id),
@@ -140,6 +142,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const worksOn = (day: Day) => isWorkingDay(calendar, day);
 	// Their schedule today may carry its own rules for overtime and weekend work (TS-097).
 	const rules = rulesOn({ timetable, rules: organisationRules }, today);
+	// Their annual leave's adjustments this leave year, where a contract gives it: they read their own (TS-098b).
+	const fromContract = mine.balances.find((b) => b.contract !== null);
+	const adjustments = fromContract?.contract
+		? adjustmentLines(
+				await adjustmentsOf(scope, user.id, fromContract.kind.id),
+				mine.year,
+				fromContract.contract,
+				zone,
+			)
+		: [];
 
 	let requests = null;
 	let waiting = 0;
@@ -192,7 +204,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		show,
 		decides,
 		waiting,
-		year,
+		/** The leave year the balances are of, as its heading names it (TS-098b). */
+		year: mine.yearLabel,
 		today,
 		kinds: requestableKinds(mine.kinds).map((kind) => ({
 			id: kind.id,
@@ -211,14 +224,27 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		).filter(worksOn),
 		shortNotice: rules.shortNotice,
 		workRules: { overtime: rules.overtime, weekend: rules.weekend },
-		balances: mine.balances.map(({ kind, balance }) => ({
-			id: kind.id,
-			name: kind.name,
-			allowance: balance.allowance === null ? null : halfDaysLabel(balance.allowance),
-			approved: halfDaysLabel(balance.approved),
-			pending: balance.pending > 0 ? halfDaysLabel(balance.pending) : null,
-			left: balance.left === null ? null : halfDaysLabel(balance.left),
-		})),
+		/** Each kind's balance in the leave year, said on the server: annual leave from a contract in its own unit, with its adjustments (TS-098b). */
+		balances: mine.balances.map(({ kind, balance, contract }) => {
+			if (contract)
+				return {
+					id: kind.id,
+					name: kind.name,
+					...contractBalanceWords(contract, today),
+					adjustments,
+				};
+			const taken = `Taken: ${halfDaysLabel(balance.approved)}${balance.pending > 0 ? `; waiting: ${halfDaysLabel(balance.pending)}` : ""}.`;
+			return {
+				id: kind.id,
+				name: kind.name,
+				detail:
+					balance.allowance === null
+						? `No allowance. ${taken}`
+						: `${halfDaysLabel(balance.allowance)} a year. ${taken}`,
+				value: balance.left === null ? null : `${halfDaysLabel(balance.left)} left`,
+				adjustments: [],
+			};
+		}),
 		requests: mine.requests.map((r) => ({
 			id: r.id,
 			kind: r.kindName,
@@ -748,18 +774,26 @@ function Mine({
 			<Section id="balance" heading={`Your balance, ${year}`} className="max-w-200">
 				<Ledger heading="Kinds of leave" note={`${year}`}>
 					<LedgerRows label={`Your balance, ${year}`}>
-						{balances.map((b) => (
+						{balances.flatMap((b) => [
 							<LedgerRow
 								key={b.id}
 								title={b.name}
-								detail={
-									b.allowance === null
-										? `No allowance. Taken: ${b.approved}${b.pending ? `; waiting: ${b.pending}` : ""}.`
-										: `${b.allowance} a year. Taken: ${b.approved}${b.pending ? `; waiting: ${b.pending}` : ""}.`
-								}
-								value={b.left === null ? undefined : `${b.left} left`}
-							/>
-						))}
+								detail={b.detail}
+								value={b.value ?? undefined}
+							/>,
+							...b.adjustments.map((a) => (
+								<LedgerRow
+									key={a.id}
+									title={`${b.name} ${a.title.charAt(0).toLowerCase()}${a.title.slice(1)}`}
+									detail={
+										<>
+											<span className="block wrap-anywhere">“{a.reason}”</span>
+											{a.by}
+										</>
+									}
+								/>
+							)),
+						])}
 					</LedgerRows>
 				</Ledger>
 			</Section>

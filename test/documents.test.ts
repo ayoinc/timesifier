@@ -104,11 +104,18 @@ it("the privacy notice names contracts and pay: what is stored, who sees it, and
 	// Who sees it.
 	expect(notice).toContain("everyone's contracts with their pay");
 	expect(notice).toContain("contracts without their pay");
-	expect(notice).toContain("leave and contract with its pay");
+	expect(notice).toContain("leave with its adjustments and contract with its pay");
+	// The adjustments to a person's leave (TS-098b): what is stored, and who reads them.
+	expect(notice).toContain(
+		"Adjustments an owner or admin makes to a person's annual leave in a leave year: how much more or less, the reason they give, who made it and when.",
+	);
 	// How long it is kept, and that it stays when the person leaves.
 	expect(notice).toContain("and so do their contracts, which are payroll records.");
 	expect(notice).toContain(
 		"A contract that has ended is kept, with its changes, until three years after the end of the tax year (5 April) in which it ended",
+	);
+	expect(notice).toContain(
+		"Adjustments to a person's leave stay after they leave, as their contracts do, and are deleted with the last of their contracts in the organisation.",
 	);
 });
 

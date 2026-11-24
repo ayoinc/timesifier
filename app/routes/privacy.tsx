@@ -202,8 +202,12 @@ export default function Privacy({
 				Each person's contracts and their changes, each from its day: the kind (permanent, fixed
 				term or contractor), its first and last days and why it ended, the job title, the work
 				schedule that gives its hours, the pay and how it is stated, whether overtime is paid,
-				banked as time off in lieu or not paid and at what multiplier, the days of annual leave, and
-				the person's works number in the organisation's payroll. Who made each change and when.
+				banked as time off in lieu or not paid and at what multiplier, the days of annual leave, how
+				many carry over and for how long, whether the days before a first contract count at the
+				usual allowance, and the person's works number in the organisation's payroll. Who made each
+				change and when. Adjustments an owner or admin makes to a person's annual leave in a leave
+				year: how much more or less, the reason they give, who made it and when. Whoever reads the
+				contract reads its adjustments, and the person reads their own on Time off.
 			</>
 		),
 		"Projects, tasks and budgets": (
@@ -659,7 +663,8 @@ export default function Privacy({
 								A contract that has ended is kept, with its changes, until three years after the end
 								of the tax year (5 April) in which it ended, as HMRC asks of payroll records, and
 								then deleted by a job that runs every day. A contract with no end is kept until it
-								has one.
+								has one. Adjustments to a person's leave stay after they leave, as their contracts
+								do, and are deleted with the last of their contracts in the organisation.
 							</li>
 							<li>
 								A person can delete their own time entry or expense while it is not locked by an

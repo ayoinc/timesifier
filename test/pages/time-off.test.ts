@@ -1,8 +1,13 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { organisationScope } from "~/db";
+import { myLeave, publicHolidaysOf } from "~/leave/leave.server";
+import { timetableFor } from "~/schedules/schedules.server";
+import { contractPath } from "~/shell/destinations";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
+import { balanceOnMain } from "../leave/main-balance";
 import {
 	createOrganisation,
 	type Role,
@@ -12,7 +17,7 @@ import {
 	value,
 } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
-import { kindOf, seedLeave } from "./leave-seed";
+import { kindOf, seedHoliday, seedLeave } from "./leave-seed";
 
 // Time off (TS-061): asking for leave, withdrawing it, deciding it and
 // cancelling it, through the page's own actions, for each role. Ada owns Acme,
@@ -640,5 +645,210 @@ describe("when nobody else can decide", () => {
 		expect((await requestLeave(bob, "annual", "2026-11-16", "2026-11-16")).said).toContain(
 			"Requested.",
 		);
+	});
+});
+
+// Annual leave from the contract (TS-098b, research/contracts-model.md
+// section 9, decision 76): Time off counts it in the organisation's leave
+// year; owners and admins adjust it on the Contract page; leave after the last
+// contract is refused; without a contract, nothing changes. The rules without
+// the database are test/leave/entitlement.test.ts.
+describe("annual leave from the contract (TS-098b)", () => {
+	const contractOf = (who: Person) => contractPath("acme", who.user.id);
+
+	/** Gives `who` a contract as Ada, from the Contract page: permanent, 25 days a year unless `more` says otherwise. */
+	async function giveContract(who: Person, startsOn: string, more: Record<string, string> = {}) {
+		const answer = await ask(
+			ada,
+			{
+				intent: "give",
+				startsOn,
+				kind: "permanent",
+				payBasis: "yearly",
+				pay: "30000",
+				currency: "GBP",
+				overtimePay: "unpaid",
+				leaveDays: "25",
+				...more,
+			},
+			contractOf(who),
+		);
+		expect(answer.status, answer.said).toBe(200);
+	}
+
+	const adjust = (who: Person, of: Person, amount: string, reason: string) =>
+		ask(who, { intent: "adjust", leaveYear: "2026", amount, unit: "days", reason }, contractOf(of));
+	const adjustments = () => value<number>("select count(*) from leave_adjustments");
+	const recordedAdjustments = () =>
+		value<number>(
+			"select count(*) from activity_records where action = 'leave_adjustment.added' and organisation_id = ?",
+			acme.id,
+		);
+
+	it("balance in the leave year: Time off counts the contract's leave in the organisation's leave year", async () => {
+		const { grace } = await seedPeople();
+		await ask(
+			ada,
+			{ intent: "leave-year", month: "04", day: "06", starterMonth: "days" },
+			SETTINGS,
+		);
+		await giveContract(grace, "2026-04-06");
+		const seed = (startsOn: string, endsOn: string, status: "approved" | "pending") =>
+			seedLeave(acme.id, grace.user.id, "annual", startsOn, endsOn, { status });
+		// Before the leave year, and after it: neither is counted in it.
+		await seed("2026-03-25", "2026-03-26", "approved");
+		await seed("2027-04-06", "2027-04-07", "approved");
+		// Its first week and its last day.
+		await seed("2026-04-07", "2026-04-08", "approved");
+		await seed("2027-04-05", "2027-04-05", "pending");
+
+		const text = await textAt(TIME_OFF, grace);
+		expect(text).toContain("Your balance, 6 April 2026 – 5 April 2027");
+		expect(text).toContain(
+			"Annual leave From the contract: 25 days this leave year. Taken: 2 days; waiting: 1 day. 22 days left",
+		);
+		// Kinds a contract does not give keep their allowance in the same leave year.
+		expect(text).toContain("Sick leave No allowance. Taken: 0 days.");
+	});
+
+	it("adjustments by role: owners and admins add them with a reason, recorded; a manager may not; the manager and the person read them", async () => {
+		const { hedy, mona, grace, nils, bob } = await seedPeople();
+		await giveContract(grace, "2026-01-05");
+
+		const byOwner = await adjust(ada, grace, "2", "Opening balance from the old system");
+		expect(byOwner.status, byOwner.said).toBe(200);
+		expect(byOwner.said).toContain("Annual leave in 2026 is adjusted.");
+		const byAdmin = await adjust(hedy, grace, "-0.5", "Correction");
+		expect(byAdmin.status, byAdmin.said).toBe(200);
+		expect(await adjustments()).toBe(2);
+		expect(await recordedAdjustments()).toBe(2);
+
+		// A manager of her team reads the contract but changes nothing.
+		const refused = await adjust(mona, grace, "10", "More");
+		expect(refused.status).toBe(403);
+		expect(refused.said).toContain(NOT_ALLOWED);
+		// Grace herself, a member, is not shown Team; nor are a manager of another team and another member.
+		for (const who of [grace, nils, bob]) {
+			expect((await adjust(who, grace, "10", "More")).status).toBe(404);
+			expect((await open(contractOf(grace), who)).status).toBe(404);
+		}
+		// A reason is needed.
+		expect((await adjust(ada, grace, "1", " ")).status).toBe(400);
+		expect(await adjustments()).toBe(2);
+		expect(await recordedAdjustments()).toBe(2);
+
+		// Her manager reads them on the Contract page, each with its reason, who made it and when.
+		const shown = await textAt(contractOf(grace), mona);
+		expect(shown).toContain("Adjusted: 1.5 days.");
+		// The day it was made is the database's, not the test's clock.
+		expect(shown).toMatch(
+			/Added: 2 days “Opening balance from the old system” ada@example\.com, \w+day \d+ \w+ \d{4}/,
+		);
+		expect(shown).toMatch(
+			/Taken away: half a day “Correction” hedy@example\.com, \w+day \d+ \w+ \d{4}/,
+		);
+		// She reads them on Time off, beside what the contract gives.
+		const hers = await textAt(TIME_OFF, grace);
+		expect(hers).toContain(
+			"Annual leave From the contract: 25 days this leave year. Adjusted: 1.5 days. Taken: 0 days. 26.5 days left",
+		);
+		expect(hers).toMatch(
+			/Annual leave added: 2 days “Opening balance from the old system” ada@example\.com,/,
+		);
+		expect(hers).toMatch(/Annual leave taken away: half a day “Correction” hedy@example\.com,/);
+	});
+
+	it("after the contract: leave after the last contract ends is refused with the sentence", async () => {
+		const { linus } = await seedPeople();
+		await giveContract(linus, "2026-01-05", { kind: "fixed_term", endsOn: "2026-11-30" });
+		const sentence =
+			"Your contract ends on Monday 30 November 2026. Leave after it can't be asked for.";
+		const before = await countRequests();
+		for (const [startsOn, endsOn] of [
+			["2026-12-01", "2026-12-02"],
+			["2026-11-30", "2026-12-01"],
+		] as const) {
+			const refused = await requestLeave(linus, "annual", startsOn, endsOn);
+			expect(refused.status).toBe(400);
+			expect(refused.said).toContain(sentence);
+		}
+		expect(await countRequests()).toBe(before);
+		// Up to its last day, leave is asked for as before.
+		const within = await requestLeave(linus, "annual", "2026-11-23", "2026-11-30");
+		expect(within.said).toContain("Requested.");
+		expect(within.id).not.toBeNull();
+	});
+
+	it("no contract is today: without a contract, or one with no leave days of its own, myLeave's balances are main's on seeded leave", async () => {
+		const { grace, bob } = await seedPeople();
+		// Grace's contract gives the kind's allowance: no leave days of its own.
+		await giveContract(grace, "2026-03-02", { leaveDays: "" });
+		await seedHoliday(acme.id, "2026-12-25", "Christmas Day");
+		await seedHoliday(acme.id, "2026-05-04", "Early May bank holiday");
+		const seeded: {
+			key: "annual" | "sick" | "study";
+			startsOn: string;
+			endsOn: string;
+			status: "approved" | "pending" | "refused" | "withdrawn" | "cancelled";
+			startsHalf?: boolean;
+			endsHalf?: boolean;
+		}[] = [
+			{ key: "annual", startsOn: "2026-02-09", endsOn: "2026-02-13", status: "approved" },
+			{ key: "annual", startsOn: "2026-05-01", endsOn: "2026-05-05", status: "approved" },
+			{
+				key: "annual",
+				startsOn: "2026-07-06",
+				endsOn: "2026-07-08",
+				status: "pending",
+				startsHalf: true,
+			},
+			{ key: "annual", startsOn: "2026-08-03", endsOn: "2026-08-04", status: "refused" },
+			{ key: "annual", startsOn: "2026-09-14", endsOn: "2026-09-14", status: "withdrawn" },
+			{ key: "annual", startsOn: "2026-10-12", endsOn: "2026-10-13", status: "cancelled" },
+			{
+				key: "annual",
+				startsOn: "2026-12-21",
+				endsOn: "2027-01-05",
+				status: "approved",
+				endsHalf: true,
+			},
+			{ key: "annual", startsOn: "2025-12-29", endsOn: "2026-01-02", status: "pending" },
+			{ key: "sick", startsOn: "2026-03-16", endsOn: "2026-03-17", status: "approved" },
+			{
+				key: "study",
+				startsOn: "2026-06-01",
+				endsOn: "2026-06-01",
+				status: "approved",
+				endsHalf: false,
+			},
+		];
+		const scope = organisationScope(env.DB, acme.id);
+		const holidays = await publicHolidaysOf(scope);
+		for (const who of [bob, grace]) {
+			for (const { key, startsOn, endsOn, ...state } of seeded) {
+				await seedLeave(acme.id, who.user.id, key, startsOn, endsOn, state);
+			}
+			const calendar = {
+				timetable: await timetableFor(scope, who.user.id),
+				holidays: new Map(holidays.map((h) => [h.day, h.name])),
+			};
+			const mine = await myLeave(scope, who.user.id, "2026-11-11");
+			expect(mine.yearLabel).toBe("2026");
+			for (const { kind, balance, contract } of mine.balances) {
+				expect(contract, kind.key).toBeNull();
+				const requests = seeded
+					.filter((s) => s.key === kind.key)
+					.map((s) => ({
+						startsOn: s.startsOn,
+						endsOn: s.endsOn,
+						startsHalf: s.startsHalf ?? false,
+						endsHalf: s.endsHalf ?? false,
+						status: s.status,
+					}));
+				expect(balance, kind.key).toEqual(
+					balanceOnMain(kind.allowanceHalfDays, requests, 2026, calendar),
+				);
+			}
+		}
 	});
 });

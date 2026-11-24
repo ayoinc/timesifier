@@ -84,9 +84,10 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 	const expenses: string[][] = [];
 	const leave: string[][] = [];
 	const contracts: string[][] = [];
+	const adjustments: string[][] = [];
 	for (const organisation of account?.organisations ?? []) {
 		const scope = organisationScope(env.DB, organisation.id);
-		const [own, projects, spent, away, kinds, theirs, schedules] = await Promise.all([
+		const [own, projects, spent, away, kinds, theirs, schedules, adjusted] = await Promise.all([
 			scope.timeEntries.select((e) => eq(e.userId, userId), { orderBy: (e) => [asc(e.startedAt)] }),
 			scope.projects.select(),
 			scope.expenses.select((e) => eq(e.userId, userId), { orderBy: (e) => [asc(e.spentOn)] }),
@@ -96,6 +97,9 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 			scope.leaveKinds.select(),
 			contractsOf(scope, [userId]),
 			scope.workSchedules.select(),
+			scope.leaveAdjustments.select((a) => eq(a.userId, userId), {
+				orderBy: (a) => [asc(a.leaveYear), asc(a.createdAt)],
+			}),
 		]);
 		const projectOf = new Map(projects.map((p) => [p.id, p.name]));
 		const kindOf = new Map(kinds.map((k) => [k.id, k.name]));
@@ -120,6 +124,8 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 					v.overtimeMultiplierBp === null ? "" : MULTIPLIER_LABELS[v.overtimeMultiplierBp],
 					v.restDayMultiplierBp === null ? "" : MULTIPLIER_LABELS[v.restDayMultiplierBp],
 					v.leaveDays === null ? "" : String(v.leaveDays),
+					String(v.carryOverDays),
+					v.carryOverExpiresAfterDays === null ? "" : String(v.carryOverExpiresAfterDays),
 				]);
 			}
 		}
@@ -155,6 +161,17 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 				l.note ?? "",
 			]);
 		}
+		// Changes to their balances (TS-098b): minutes, more or less, with the reason given.
+		for (const a of adjusted) {
+			adjustments.push([
+				organisation.name,
+				kindOf.get(a.kindId) ?? "",
+				String(a.leaveYear),
+				String(a.minutes),
+				a.reason,
+				isoInstant(a.createdAt.getTime()),
+			]);
+		}
 	}
 	yield file(
 		"time-entries.csv",
@@ -183,6 +200,11 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 		now,
 	);
 	yield file(
+		"leave-adjustments.csv",
+		csv(["Organisation", "Kind", "Leave year", "Minutes", "Reason", "Made (UTC)"], adjustments),
+		now,
+	);
+	yield file(
 		"contracts.csv",
 		csv(
 			[
@@ -202,6 +224,8 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 				"Overtime at",
 				"On days off and public holidays",
 				"Annual leave (days a year)",
+				"Days carried over",
+				"Carried leave lasts (days)",
 			],
 			contracts,
 		),

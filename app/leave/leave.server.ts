@@ -4,6 +4,8 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { leaveRefusersOf } from "~/approvals/refusals.server";
+import type { Contract } from "~/contracts/contracts";
+import { contractsOf } from "~/contracts/read.server";
 import { among, type OrganisationScope, type ScopedAccessor, users, uuidv7 } from "~/db";
 import type { LockReason } from "~/locks/locks";
 import { lockDateOf, lockReachFor, lockReasonsOn } from "~/locks/locks.server";
@@ -19,6 +21,7 @@ import {
 	maySeeLeaveKindOf,
 } from "~/organisations/access";
 import { nameOrEmail } from "~/organisations/people";
+import type { Timetable } from "~/schedules/schedules";
 import { type Timetables, timetableFor, timetablesOf } from "~/schedules/schedules.server";
 import { type Person, peopleOf } from "~/teams/people.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
@@ -43,7 +46,17 @@ import {
 	personStatus,
 } from "./days";
 import {
+	type ContractBalance,
+	type ContractLeave,
+	contractBalance,
+	type LeaveYearSettings,
+	leaveAmount,
+	shownInDays,
+} from "./entitlement";
+import { contractLeaveOf, leaveYearSettingsOf } from "./entitlement.server";
+import {
 	HOLIDAY_KIND,
+	halfDaysLabel,
 	inKindOrder,
 	KindKey,
 	type LeaveKind,
@@ -65,6 +78,7 @@ import {
 	workingDaysLabel,
 } from "./rules";
 import { rulesCalendarOf, trackedOn } from "./rules.server";
+import { leaveYear, leaveYearLabel, leaveYearOf } from "./years";
 
 /**
  * Leave as the database holds it (TS-061): the organisation's kinds, working
@@ -227,34 +241,58 @@ export async function daysOf(
 	return dayStatuses(calendarOf(context, userId), daysFrom(first, last));
 }
 
-/** A kind's balance for the person, beside the kind. */
+/**
+ * A kind's balance for the person, beside the kind: in half days, as before,
+ * and for annual leave a contract gives, in minutes (TS-098b), which the page
+ * shows instead.
+ */
 export interface KindBalance {
 	kind: LeaveKind;
 	balance: Balance;
+	contract: ContractBalance | null;
 }
 
-/** The person's requests, latest first, and their balance of each kind in `year`. */
+/**
+ * The person's requests, latest first, and their balance of each kind in the
+ * leave year `today` falls in: the organisation's leave year (TS-098b), the
+ * calendar year unless it chose another.
+ */
 export async function myLeave(
 	scope: OrganisationScope,
 	userId: string,
-	year: number,
-): Promise<{ kinds: LeaveKind[]; requests: LeaveRequest[]; balances: KindBalance[] }> {
-	const first = `${year}-01-01`;
-	const last = `${year}-12-31`;
-	const [kinds, timetable, holidays, rows] = await Promise.all([
+	today: Day,
+): Promise<{
+	kinds: LeaveKind[];
+	requests: LeaveRequest[];
+	year: number;
+	yearLabel: string;
+	balances: KindBalance[];
+}> {
+	const [kinds, timetable, holidays, rows, settings] = await Promise.all([
 		leaveKindsOf(scope),
 		timetableFor(scope, userId),
 		publicHolidaysOf(scope),
 		scope.leaveRequests.select((r) => eq(r.userId, userId), {
 			orderBy: (r) => [desc(r.startsOn), desc(r.createdAt)],
 		}),
+		leaveYearSettingsOf(scope.organisationId),
 	]);
+	const starts = settings.leaveYearStarts;
+	const year = leaveYearOf(starts, today);
+	const { first, last } = leaveYear(starts, year);
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
 	const calendar = {
 		timetable,
 		holidays: new Map(holidaysOn ? holidays.map((h) => [h.day, h.name]) : []),
 	};
 	const requests = rows.map((row) => requestOf(row, kinds));
+	const annual = kinds.find((k) => k.key === "annual");
+	const fromContract = annual
+		? contractBalance(
+				await contractLeaveOf(scope, userId, { settings, annual, calendar, requests }),
+				year,
+			)
+		: null;
 	const balances = kinds
 		.filter((kind) => kind.key !== HOLIDAY_KIND)
 		.filter((kind) => kind.enabled || requests.some((r) => r.kindId === kind.id))
@@ -265,24 +303,95 @@ export async function myLeave(
 				requests.filter((r) => r.kindId === kind.id && r.startsOn <= last && r.endsOn >= first),
 				year,
 				calendar,
+				starts,
 			),
+			contract: kind.id === annual?.id ? fromContract : null,
 		}));
-	return { kinds, requests, balances };
+	return { kinds, requests, year, yearLabel: leaveYearLabel(starts, year), balances };
+}
+
+/** A person's annual leave, as `annualLeaveOf` reads it. */
+export interface AnnualLeave {
+	annual: LeaveKind;
+	settings: LeaveYearSettings;
+	leave: ContractLeave;
+	/** Every public holiday while they are on. */
+	holidays: Day[];
 }
 
 /**
- * The half days of a person's working days a span takes, by year: their
- * schedule's days on each day (TS-097). The calendar holds the public holidays of each whole year the span touches, as
- * the balance of those years counts the person's other requests against them.
+ * What a person's annual leave is counted from (TS-098b): the organisation's
+ * leave year settings, the kind, every public holiday while they are on,
+ * their pending and approved annual leave, their contracts and adjustments.
+ * `planned` counts it instead from contracts and a schedule not yet saved, as
+ * the Give sheet's preview does. Null where the organisation has no annual
+ * leave kind.
+ */
+export async function annualLeaveOf(
+	scope: OrganisationScope,
+	userId: string,
+	planned?: { contracts: readonly Contract[]; timetable: Timetable },
+): Promise<AnnualLeave | null> {
+	const [kinds, timetable, holidays, settings] = await Promise.all([
+		leaveKindsOf(scope),
+		planned?.timetable ?? timetableFor(scope, userId),
+		publicHolidaysOf(scope),
+		leaveYearSettingsOf(scope.organisationId),
+	]);
+	const annual = kinds.find((k) => k.key === "annual");
+	if (!annual) return null;
+	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
+	const holidayDays = holidaysOn ? holidays.map((h) => h.day) : [];
+	const calendar = { timetable, holidays: new Map(holidayDays.map((day) => [day, ""])) };
+	const requests = await scope.leaveRequests.select((r) =>
+		and(eq(r.userId, userId), eq(r.kindId, annual.id), inArray(r.status, ["pending", "approved"])),
+	);
+	const leave = await contractLeaveOf(scope, userId, {
+		settings,
+		annual,
+		calendar,
+		requests,
+		contracts: planned?.contracts,
+	});
+	return { annual, settings, leave, holidays: holidayDays };
+}
+
+/**
+ * What is left of a person's annual leave in the leave year `year`, in words,
+ * as Time off counts it: from their contract in its own unit, or the kind's
+ * allowance in days; "… over" where more was taken. Null where the kind has
+ * no allowance and no contract gives the year.
+ */
+export function annualLeftWords(annualLeave: AnnualLeave, year: number): string | null {
+	const { leave, annual, settings } = annualLeave;
+	const counted = contractBalance(leave, year);
+	if (counted) {
+		const amount = leaveAmount(Math.abs(counted.left), shownInDays(counted));
+		return counted.left < 0 ? `${amount} over` : amount;
+	}
+	const { left } = balance(
+		annual.allowanceHalfDays,
+		leave.requests,
+		year,
+		leave.calendar,
+		settings.leaveYearStarts,
+	);
+	if (left === null) return null;
+	return left < 0 ? `${halfDaysLabel(-left)} over` : halfDaysLabel(left);
+}
+
+/**
+ * The half days of a person's working days a span takes, by leave year: their
+ * schedule's days on each day (TS-097). The calendar holds every public
+ * holiday, as the balance of the years the span touches counts the person's
+ * other requests against them, and a contract's carries from year to year.
  */
 async function takenByYear(scope: OrganisationScope, userId: string, span: LeaveSpan) {
-	const [kinds, timetable, holidays] = await Promise.all([
+	const [kinds, timetable, holidays, settings] = await Promise.all([
 		leaveKindsOf(scope),
 		timetableFor(scope, userId),
-		publicHolidaysOf(scope, {
-			first: `${span.startsOn.slice(0, 4)}-01-01`,
-			last: `${span.endsOn.slice(0, 4)}-12-31`,
-		}),
+		publicHolidaysOf(scope),
+		leaveYearSettingsOf(scope.organisationId),
 	]);
 	const holidaysOn = kinds.find((k) => k.key === HOLIDAY_KIND)?.enabled ?? true;
 	const calendar = {
@@ -292,7 +401,8 @@ async function takenByYear(scope: OrganisationScope, userId: string, span: Leave
 	return {
 		kinds,
 		calendar,
-		byYear: halfDaysByYear(span, calendar),
+		settings,
+		byYear: halfDaysByYear(span, calendar, settings.leaveYearStarts),
 		taken: halfDaysTaken(span, calendar),
 	};
 }
@@ -395,7 +505,7 @@ export async function requestLeave(
 			},
 		};
 	}
-	const { kinds, calendar, byYear, taken } = await takenByYear(scope, userId, span);
+	const { kinds, calendar, settings, byYear, taken } = await takenByYear(scope, userId, span);
 	const kind = kinds.find((k) => k.id === request.kindId);
 	if (!kind?.enabled || kind.key === HOLIDAY_KIND) {
 		return { ok: false, problem: { field: "kindId", message: "Choose a kind of leave." } };
@@ -404,6 +514,18 @@ export async function requestLeave(
 		return {
 			ok: false,
 			problem: { field: "endsOn", message: "These days hold no working day to take." },
+		};
+	}
+	// Nobody asks for leave after their last contract ends (TS-098b): they no longer work here then.
+	const contracts = (await contractsOf(scope, [userId])).get(userId) ?? [];
+	const lastDay = contracts.at(-1)?.endsOn ?? null;
+	if (lastDay !== null && span.endsOn > lastDay) {
+		return {
+			ok: false,
+			problem: {
+				field: "endsOn",
+				message: `Your contract ends on ${formatDayWithYear(lastDay)}. Leave after it can't be asked for.`,
+			},
 		};
 	}
 	// Notice runs to the first day the request takes, in working days (TR-16, decision 51).
@@ -449,29 +571,56 @@ export async function requestLeave(
 		};
 	}
 
-	if (kind.allowanceHalfDays !== null) {
+	// Annual leave a contract gives is counted in minutes, with this request in
+	// it, and carry-over from earlier years; any other is the kind's allowance in
+	// half days, as before.
+	const starts = settings.leaveYearStarts;
+	const fromContract =
+		kind.key === "annual"
+			? await contractLeaveOf(scope, userId, {
+					settings,
+					annual: kind,
+					calendar,
+					contracts,
+					requests: [
+						...(await scope.leaveRequests.select((r) =>
+							and(
+								eq(r.userId, userId),
+								eq(r.kindId, kind.id),
+								inArray(r.status, ["pending", "approved"]),
+							),
+						)),
+						{ ...span, kindId: kind.id, status: "pending" },
+					],
+				})
+			: null;
+	if (kind.allowanceHalfDays !== null || fromContract) {
 		const years = [...byYear.keys()];
 		const sameKind = await scope.leaveRequests.select((r) =>
 			and(
 				eq(r.userId, userId),
 				eq(r.kindId, kind.id),
 				inArray(r.status, ["pending", "approved"]),
-				lte(r.startsOn, `${Math.max(...years)}-12-31`),
-				gte(r.endsOn, `${Math.min(...years)}-01-01`),
+				lte(r.startsOn, leaveYear(starts, Math.max(...years)).last),
+				gte(r.endsOn, leaveYear(starts, Math.min(...years)).first),
 			),
 		);
 		const theirs = sameKind.map((row) => ({ ...row, status: LeaveStatus.parse(row.status) }));
+		const tooMuch = (year: number) => ({
+			ok: false as const,
+			problem: {
+				field: "endsOn" as const,
+				message: `That is more ${kind.name.toLowerCase()} than you have left in ${leaveYearLabel(starts, year)}.`,
+			},
+		});
 		for (const [year, halves] of byYear) {
-			const { left } = balance(kind.allowanceHalfDays, theirs, year, calendar);
-			if (left !== null && halves > left) {
-				return {
-					ok: false,
-					problem: {
-						field: "endsOn",
-						message: `That is more ${kind.name.toLowerCase()} than you have left in ${year}.`,
-					},
-				};
+			const counted = fromContract ? contractBalance(fromContract, year) : null;
+			if (counted) {
+				if (counted.left < 0) return tooMuch(year);
+				continue;
 			}
+			const { left } = balance(kind.allowanceHalfDays, theirs, year, calendar, starts);
+			if (left !== null && halves > left) return tooMuch(year);
 		}
 	}
 

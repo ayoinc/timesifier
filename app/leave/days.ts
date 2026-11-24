@@ -2,6 +2,7 @@ import type { Timetable, WorkedDay } from "~/schedules/schedules";
 import { type Day, daysFrom } from "~/time/calendar";
 
 import type { KindKey, LeaveStatus } from "./kinds";
+import { CALENDAR_YEAR, leaveYearOf } from "./years";
 
 /**
  * Working days, leave and expected time (TS-061), worked out from the data on
@@ -95,14 +96,19 @@ export function halfDaysTaken(
 	return sum;
 }
 
-/** The half days a span takes in each calendar year it touches: the leave year is the calendar year. */
+/**
+ * The half days a span takes in each leave year it touches, named by the
+ * calendar year each starts in. The leave year starts on `starts`, `MM-DD`
+ * (TS-098b): 1 January, the calendar year, unless the organisation chose another.
+ */
 export function halfDaysByYear(
 	span: LeaveSpan,
 	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
+	starts: string = CALENDAR_YEAR,
 ): Map<number, number> {
 	const years = new Map<number, number>();
 	for (const [day, halves] of halfDaysByDay(span, calendar)) {
-		const year = Number(day.slice(0, 4));
+		const year = leaveYearOf(starts, day);
 		years.set(year, (years.get(year) ?? 0) + halves);
 	}
 	return years;
@@ -204,21 +210,24 @@ export interface Balance {
 }
 
 /**
- * The balance of one kind in `year` for one person: their allowance less the
- * approved and the pending half days that fall in the year. Nothing carries
- * over from one year to the next.
+ * The balance of one kind in the leave year `year` for one person: their
+ * allowance less the approved and the pending half days that fall in the year.
+ * Nothing carries over from one year to the next. This is the balance of
+ * everyone whose annual leave no contract sets (TS-098b), and of every other
+ * kind with an allowance.
  */
 export function balance(
 	allowance: number | null,
 	requests: readonly (LeaveSpan & { status: LeaveStatus })[],
 	year: number,
 	calendar: Pick<LeaveCalendar, "timetable" | "holidays">,
+	starts: string = CALENDAR_YEAR,
 ): Balance {
 	let approved = 0;
 	let pending = 0;
 	for (const request of requests) {
 		if (request.status !== "approved" && request.status !== "pending") continue;
-		const halves = halfDaysByYear(request, calendar).get(year) ?? 0;
+		const halves = halfDaysByYear(request, calendar, starts).get(year) ?? 0;
 		if (request.status === "approved") approved += halves;
 		else pending += halves;
 	}

@@ -45,6 +45,7 @@ import {
 	invoiceLines,
 	invoiceSettings,
 	invoices,
+	leaveAdjustments,
 	leaveKinds,
 	leaveRequests,
 	membershipRemovals,
@@ -470,6 +471,7 @@ export const tenantTables = {
 	organisationExports,
 	contracts,
 	contractVersions,
+	leaveAdjustments,
 } as const;
 
 type Accessors = {

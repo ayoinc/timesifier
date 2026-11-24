@@ -17,6 +17,8 @@ import { ExpenseCategories } from "~/expenses/ExpenseCategories";
 import { termsOf } from "~/expenses/expenses.server";
 import { EVERYTHING_EXPORT_SEGMENT, EXPORT_KEEP_DAYS } from "~/exports/paths";
 import { DPA_PATH } from "~/landing/Site";
+import { STARTER_MONTHS } from "~/leave/entitlement";
+import { changeLeaveYearSettings, leaveYearSettingsOf } from "~/leave/entitlement.server";
 import { LARGEST_ALLOWANCE_DAYS, LEAVE_NAME_MAX_LENGTH } from "~/leave/kinds";
 import { LeaveSettings } from "~/leave/LeaveSettings";
 import {
@@ -48,6 +50,7 @@ import {
 	setTimesheetRules,
 	timesheetRulesOf,
 } from "~/leave/rules.server";
+import { LeaveYearStarts, startsLabel } from "~/leave/years";
 import { CODE_MAX_LENGTH, PATTERN_PROBLEM, parsePattern } from "~/lib/codes";
 import { parseRequest } from "~/lib/validate";
 import { LockSettings } from "~/locks/LockSettings";
@@ -152,6 +155,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		dpaToSign,
 		codes,
 		projectTracking,
+		leaveYear,
 	] = await Promise.all([
 		scheduleBookOf(scope),
 		leaveKindsOf(scope),
@@ -168,6 +172,7 @@ export async function loader({ context }: Route.LoaderArgs) {
 		isOwner ? dpaToAccept(organisation.id) : false,
 		projectCodeRules(organisation.id),
 		trackingOf(scope),
+		leaveYearSettingsOf(organisation.id),
 	]);
 	return {
 		organisation: {
@@ -193,6 +198,11 @@ export async function loader({ context }: Route.LoaderArgs) {
 			),
 			kinds,
 			holidays,
+			year: {
+				starts: leaveYear.leaveYearStarts,
+				starterMonth: leaveYear.starterMonth,
+				holidaysFromAllowance: leaveYear.holidaysFromAllowance,
+			},
 		},
 		/** Overtime, weekend work and short-notice leave (TS-090). */
 		rules: {
@@ -311,6 +321,14 @@ const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("budget-hours"), countNonBillable: z.literal("on").optional() }),
 	// What the person typed to confirm. It is compared with the name; it is never used as one.
 	z.object({ intent: z.literal("delete"), confirmation: z.string().max(200) }),
+	// The leave year (TS-098b): its first day as a month and a day, the starter month rule, and public holidays.
+	z.object({
+		intent: z.literal("leave-year"),
+		month: z.string().regex(/^\d{2}$/),
+		day: z.string().regex(/^\d{2}$/),
+		starterMonth: z.enum(STARTER_MONTHS),
+		holidaysFromAllowance: Ticked,
+	}),
 	z.object({
 		intent: z.literal("kind"),
 		kindId: z.string().min(1).max(64),
@@ -480,6 +498,20 @@ export async function action({ request, context }: Route.ActionArgs) {
 			);
 		}
 
+		case "leave-year": {
+			// The leave year is the owners' and admins', as the kinds of leave are (TS-098b).
+			if (!isAdministrator(role)) return declined(NOT_ALLOWED, 403);
+			const starts = LeaveYearStarts.safeParse(`${input.month}-${input.day}`);
+			if (!starts.success) {
+				return declined("That month has no such day every year. Choose another day.", 400);
+			}
+			await changeLeaveYearSettings(organisationScope(env.DB, organisation.id), user.id, {
+				leaveYearStarts: starts.data,
+				starterMonth: input.starterMonth,
+				holidaysFromAllowance: input.holidaysFromAllowance,
+			});
+			return done(`The leave year starts on ${startsLabel(starts.data)}.`);
+		}
 		case "kind":
 		case "add-holiday":
 		case "remove-holiday": {
