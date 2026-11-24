@@ -1271,15 +1271,15 @@ Decided on 2026-11-24 for TS-098a (`research/contracts-model.md`, sections 1, 2,
 
 **Keeping.** HMRC asks employers to keep pay records "for 3 years from the end of the tax year they relate to" ([PAYE records](https://www.gov.uk/paye-for-employers/keeping-records)). A contract stays when its person leaves, and the daily job deletes one that has ended three years after the end of the tax year (5 April) in which it ended, its versions with it (`CONTRACT_KEEP_YEARS`, `TAX_YEAR_END`, `deleteExpiredContracts`). One with no end is kept until it has one.
 
-| Option                                                        | Evidence                                                                                                                                                 |
-| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A contract and its dated versions (chosen)                    | A pay rise or a move to three days changes no day before it, and the history is the rows themselves.                                                     |
-| One row per contract, changed in place                        | Simple, but a change would rewrite the terms of days already worked and paid, and the log would be the only history.                                     |
-| The contract points at a named schedule (chosen)              | Schedules already answer every day's hours; the contract owns a person assignment, so Team, Day, Week and Schedules follow it with no second source.       |
-| The contract holds its own weekdays                           | A second place that says a day's hours, which every reader of schedules would have to consult.                                                           |
-| `user_id` references `users` (chosen)                         | A leaver's contracts stay, as payroll records must, while their membership goes.                                                                         |
-| `user_id` references `memberships`                            | Removing a person would delete their contracts with the membership, against HMRC's three years.                                                          |
-| Managers read contracts without pay (chosen)                  | They plan their teams' hours and see the kind and schedule; pay follows the money rule of `docs/security.md` ("Rates and money"), decided on 2026-11-11. |
-| Managers read nothing of a contract                           | They could not see why a person's hours changed, which Team shows them.                                                                                  |
+| Option                                           | Evidence                                                                                                                                                 |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A contract and its dated versions (chosen)       | A pay rise or a move to three days changes no day before it, and the history is the rows themselves.                                                     |
+| One row per contract, changed in place           | Simple, but a change would rewrite the terms of days already worked and paid, and the log would be the only history.                                     |
+| The contract points at a named schedule (chosen) | Schedules already answer every day's hours; the contract owns a person assignment, so Team, Day, Week and Schedules follow it with no second source.     |
+| The contract holds its own weekdays              | A second place that says a day's hours, which every reader of schedules would have to consult.                                                           |
+| `user_id` references `users` (chosen)            | A leaver's contracts stay, as payroll records must, while their membership goes.                                                                         |
+| `user_id` references `memberships`               | Removing a person would delete their contracts with the membership, against HMRC's three years.                                                          |
+| Managers read contracts without pay (chosen)     | They plan their teams' hours and see the kind and schedule; pay follows the money rule of `docs/security.md` ("Rates and money"), decided on 2026-11-11. |
+| Managers read nothing of a contract              | They could not see why a person's hours changed, which Team shows them.                                                                                  |
 
 **What it costs.** Two tables and two triggers. Every reader of a person's schedule and contractor status reads contracts too, a query per page for the people on it. Contracts for leavers stay for up to about four years after they end.
