@@ -480,15 +480,12 @@ export async function setupStandingOf(
 			select (i.status = 'pending' and i.expires_at > ${now.getTime()}) as live
 			from invitation_assignments a join invitations i on i.id = a.invitation_id
 			where a.organisation_id = ${scope.organisationId} and a.setup_import_id = ${id}`),
-		scope.projectMembers.value(
-			() => sql<number>`count(*)`,
-			(m) => and(eq(m.sourceKind, "import"), eq(m.sourceId, id)),
-		),
+		scope.projectMembers.select((m) => and(eq(m.sourceKind, "import"), eq(m.sourceId, id))),
 	]);
 	return {
 		waiting: rows.length,
 		lapsed: rows.filter((r) => !r.live).length,
-		onTeams: Number(onTeams ?? 0),
+		onTeams: onTeams.length,
 	};
 }
 
@@ -703,14 +700,23 @@ const NOT_APPLIED = {
  * team, recorded as made by whoever imported it. One whose project is
  * archived, or that now overlaps a stretch they were given by hand meanwhile,
  * is skipped and recorded with why. Joining never fails because of one.
+ *
+ * Assignments that waited on another invitation to the same address, one
+ * cancelled or run out, never apply: they are dropped now the person is in.
  */
 export async function applyWaitingAssignments(
 	organisationId: string,
 	invitationId: string,
-	user: { id: string },
+	user: { id: string; email: string },
 ): Promise<void> {
 	const scope = organisationScope(env.DB, organisationId);
-	const taken = await scope.invitationAssignments.delete((a) => eq(a.invitationId, invitationId));
+	const [taken] = await scope.batch([
+		scope.invitationAssignments.statements.delete((a) => eq(a.invitationId, invitationId)),
+		scope.invitationAssignments.statements.delete(
+			(a) =>
+				sql`${a.invitationId} in (select id from invitations where organisation_id = ${organisationId} and lower(email) = ${user.email.toLowerCase()} and id <> ${invitationId})`,
+		),
+	]);
 	for (const waiting of taken) {
 		const actor = waiting.createdBy ?? user.id;
 		const role: TeamRole = TEAM_ROLES.includes(waiting.role as TeamRole)
