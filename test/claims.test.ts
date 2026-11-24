@@ -409,7 +409,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 		"../app/auth/organisations.server.ts": [
 			"an invitation, to the address an owner or admin invites",
 		],
-		"../app/budgets/budget.server.ts": [
+		"../app/notifications/mail.server.ts": [
+			"a notification, to the person it is for, unless they turned that kind's email off on My account",
+			"a timesheet or a request waiting for their decision, their own timesheet or request decided",
 			"a budget alert, to the organisation's owners and admins and, for a budget in hours, to the managers",
 		],
 		"../app/integrations/webhooks.server.ts": [
