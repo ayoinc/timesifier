@@ -71,7 +71,7 @@ Builder: an AI session on branch `ts-122-sweep-rest`, pull request #91. Builds S
 
 ### TS-123 · The sweep's small feel details
 
-Builder: an AI session on branch `ts-123-sweep-feel`. From `research/harvest-sweep-2.md`, S2-14, S2-13 and S2-10; decision 66. No migration. In review: pull request #104.
+Builder: an AI session on branch `ts-123-sweep-feel`. From `research/harvest-sweep-2.md`, S2-14, S2-13 and S2-10; decision 66. No migration. In review: the pull request against `main`.
 
 - [x] **1. Where today is (S2-14).** The Day, Week and Calendar steppers, the day picker, the Day view's heading, the Track time sheet's date and History lead with Yesterday, Today, Tomorrow, Last/This/Next week or Last/This/Next month, in the person's zone, the dates kept beneath for every reader (`nearWord`; `test/time/format.test.ts`, "the word a period leads with", over Tokyo, London and Los Angeles across a week's end and both changes of the clocks; `test/pages/sweep-feel.test.ts`, "S2-14", per role and a stranger's 404).
 - [x] **2. An unavailable action says why (S2-13).** "Copy last week with hours" and the Day view's copy are there when they cannot be used: `isUnavailable`, `aria-disabled`, kept in the focus order, described by their reason (`copyWeekRefusal`, `copyRefusal`; `test/pages/sweep-feel.test.ts`, "S2-13", per role, the week and day yet to come, and a stranger's 404; `test/pages/timesheet.test.ts`, "with nothing tracked").
