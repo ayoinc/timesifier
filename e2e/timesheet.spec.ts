@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import type { Locator, Page } from "@playwright/test";
 
 import { organisationPath } from "../app/shell/destinations";
@@ -244,17 +246,28 @@ test.describe("the timer", () => {
 
 		// Two more browsers signed in as the same person, whose clocks read the same.
 		const at = new Date(Date.now() + 10 * 60_000);
-		const open = async () => {
+		const open = async (slowReads = false) => {
 			const context = await browser.newContext({ baseURL, storageState: session });
-			await ownAddress(context, baseURL);
+			const address = await ownAddress(context, baseURL);
 			const other = await context.newPage();
+			if (slowReads) {
+				// Its reads are answered late, as on a loaded machine: the read the clock's
+				// jump starts is still running when the 30 seconds come round.
+				await other.route(/\.data(\?|$)/, async (route) => {
+					const response = await route.fetch({
+						headers: { ...route.request().headers(), "cf-connecting-ip": address },
+					});
+					await delay(1_500);
+					await route.fulfill({ response });
+				});
+			}
 			await other.clock.install();
 			await openShell(other, organisationPath(slug));
 			await other.clock.pauseAt(at);
 			return { context, other };
 		};
 		const one = await open();
-		const two = await open();
+		const two = await open(true);
 		await expect(elapsed(navTimer(one.other))).toHaveText(/^\d+:\d\d:\d\d$/);
 		const shown = (await elapsed(navTimer(one.other)).textContent()) ?? "";
 		await expect(elapsed(navTimer(two.other))).toHaveText(shown);
