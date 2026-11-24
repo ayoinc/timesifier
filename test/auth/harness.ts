@@ -116,8 +116,9 @@ export interface Mailbox {
 }
 
 /**
- * Replaces the `EMAIL` binding's `send` until `vi.restoreAllMocks()`, so no
- * test hands a message to anything.
+ * Spies on the `EMAIL` binding's `send` until `vi.restoreAllMocks()`. The
+ * binding is a stand-in that keeps nothing (test/setup.ts), so no test hands a
+ * message to anything.
  */
 export function captureEmail(): Mailbox {
 	const send = vi.spyOn(env.EMAIL, "send").mockResolvedValue({ messageId: "test" });

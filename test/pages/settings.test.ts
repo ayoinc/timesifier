@@ -323,12 +323,11 @@ describe("the colour scheme, which My account holds in an organisation", () => {
 	});
 });
 
-describe("the general settings: default time zone, week start and Clients (TS-048)", () => {
+describe("the general settings: default time zone, week start and How you work (TS-048, TS-115a)", () => {
 	const organisationRow = () =>
-		row(
-			"select time_zone, week_starts_on, clients_enabled from organisations where id = ?",
-			acme.id,
-		);
+		row("select time_zone, week_starts_on, work_model from organisations where id = ?", acme.id);
+	const INTERNAL = { intent: "work-model", workModel: "internal", internalTerm: "Work codes" };
+	const CLIENT_PROJECTS = { ...INTERNAL, workModel: "client_projects" };
 
 	it.each(["owner", "admin"] as const)(
 		"a %s sees them and changes each, and the page shows the new values",
@@ -337,12 +336,17 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 			let text = textOf(await pageBody(await open(SETTINGS, who)));
 			expect(text).toContain("UTC");
 			expect(text).toContain("Monday");
-			expect(text).toContain("Clients");
+			expect(text).toContain("Client projects");
+			// How you work took the place of the Clients switch (decision 67).
+			expect(await pageBody(await open(SETTINGS, who))).not.toContain('name="clientsEnabled"');
+			expect((await submit(SETTINGS, { intent: "clients" }, who, { byScript: true })).status).toBe(
+				400,
+			);
 
 			for (const [fields, said] of [
 				[{ intent: "time-zone", timeZone: "America/New_York" }, "America/New York"],
 				[{ intent: "week-start", weekStartsOn: "7" }, "Weeks now start on Sunday."],
-				[{ intent: "clients" }, "Clients is off. Nothing was deleted"],
+				[INTERNAL, "How you work is now Internal work."],
 			] as const) {
 				const answer = await outcome(await submit(SETTINGS, fields, who, { byScript: true }));
 				expect(answer.status).toBe(200);
@@ -351,14 +355,15 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 			expect(await organisationRow()).toEqual({
 				time_zone: "America/New_York",
 				week_starts_on: 7,
-				clients_enabled: 0,
+				work_model: "internal",
 			});
 			text = textOf(await pageBody(await open(SETTINGS, who)));
 			expect(text).toContain("America/New York");
 			expect(text).toContain("Sunday");
+			expect(text).toContain("Internal work");
 
-			await submit(SETTINGS, { intent: "clients", clientsEnabled: "on" }, who, { byScript: true });
-			expect((await organisationRow())?.clients_enabled).toBe(1);
+			await submit(SETTINGS, CLIENT_PROJECTS, who, { byScript: true });
+			expect((await organisationRow())?.work_model).toBe("client_projects");
 		},
 	);
 
@@ -372,7 +377,7 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 			for (const fields of [
 				{ intent: "time-zone", timeZone: "Asia/Tokyo" },
 				{ intent: "week-start", weekStartsOn: "3" },
-				{ intent: "clients" },
+				INTERNAL,
 			] as Record<string, string>[]) {
 				expect((await submit(SETTINGS, fields, who, { byScript: true })).status).toBe(404);
 			}
@@ -380,7 +385,7 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 		expect(await organisationRow()).toEqual({
 			time_zone: "UTC",
 			week_starts_on: 1,
-			clients_enabled: 1,
+			work_model: "client_projects",
 		});
 	});
 
@@ -394,7 +399,7 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 		expect(await organisationRow()).toEqual({
 			time_zone: "UTC",
 			week_starts_on: 1,
-			clients_enabled: 1,
+			work_model: "client_projects",
 		});
 	});
 
@@ -477,12 +482,12 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 		expect(await zoneOfMember(membership)).toBe("Asia/Tokyo");
 	});
 
-	it("Clients off hides the link and 404s the page for everyone, and deletes nothing; on brings them back", async () => {
+	it("Internal work hides the link and 404s the page for everyone, and deletes nothing; Both brings them back", async () => {
 		const grace = await memberOfAcme("admin", "grace@example.com");
 		await submit("/app/acme/clients", { intent: "create", name: "Globex" }, ada, {
 			byScript: true,
 		});
-		await submit(SETTINGS, { intent: "clients" }, ada, { byScript: true });
+		await submit(SETTINGS, INTERNAL, ada, { byScript: true });
 
 		for (const who of [ada, grace]) {
 			const html = await pageBody(await open(SETTINGS, who));
@@ -491,7 +496,7 @@ describe("the general settings: default time zone, week start and Clients (TS-04
 		}
 		expect(await value("select count(*) from clients")).toBe(1);
 
-		await submit(SETTINGS, { intent: "clients", clientsEnabled: "on" }, grace, { byScript: true });
+		await submit(SETTINGS, { ...INTERNAL, workModel: "both" }, grace, { byScript: true });
 		expect(await pageBody(await open(SETTINGS, ada))).toMatch(/<a[^>]*href="\/app\/acme\/clients"/);
 		expect(textOf(await pageBody(await open("/app/acme/clients", ada)))).toContain("Globex");
 	});

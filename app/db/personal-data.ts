@@ -64,7 +64,10 @@ export const STORED = [
 					"budget_alerts",
 				],
 			},
-			{ term: "Clients and their contacts", tables: ["clients", "client_contacts"] },
+			{
+				term: "Clients and their contacts",
+				tables: ["clients", "client_contacts", "client_managers"],
+			},
 			{
 				term: "Rates, invoices and estimates",
 				tables: [

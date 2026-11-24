@@ -24,6 +24,8 @@ import { termsLabel } from "./terms";
 export interface InvoiceView {
 	invoice: InvoiceRow;
 	clientName: string;
+	/** The client's code (TS-115a), shown before its name in the app and among the facts of the printed invoice. */
+	clientCode: string | null;
 	lines: InvoiceLineRow[];
 	payments: PaymentRow[];
 	settled: Settled;
@@ -73,11 +75,13 @@ export async function invoiceViews(
 		}),
 		settledOf(scope, ids),
 	]);
-	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const clientById = new Map(clients.map((c) => [c.id, c]));
 	return invoices.map((invoice) => {
 		const lines = allLines.filter((l) => l.invoiceId === invoice.id);
 		const payments = allPayments.filter((p) => p.invoiceId === invoice.id);
-		const clientName = clientNames.get(invoice.clientId) ?? "";
+		const client = clientById.get(invoice.clientId);
+		const clientName = client?.name ?? "";
+		const clientCode = client?.code ?? null;
 		const settled = settledById.get(invoice.id) ?? { paidMinor: 0, writtenOffMinor: 0 };
 		const balanceMinor = balanceOf(invoice.totalMinor, settled);
 		const issued = invoice.status !== "draft";
@@ -93,6 +97,7 @@ export async function invoiceViews(
 			["Terms", termsLabel(daysBetween(invoice.issuedOn, invoice.dueOn))],
 		];
 		if (invoice.poNumber) facts.push(["PO number", invoice.poNumber]);
+		if (clientCode) facts.push(["Client code", clientCode]);
 		const printed = printedDocument({
 			title: "Invoice",
 			number: invoice.number,
@@ -112,6 +117,7 @@ export async function invoiceViews(
 		return {
 			invoice,
 			clientName,
+			clientCode,
 			lines,
 			payments,
 			settled,

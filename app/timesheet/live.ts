@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useRevalidator } from "react-router";
 
 /**
@@ -10,12 +10,28 @@ import { useRevalidator } from "react-router";
 /** How often the pages read what runs again. */
 export const REFRESH_EVERY_MS = 30_000;
 
-/** Reads every loader on screen again on focus and every 30 seconds. Called once, by the navigation's timer. */
+/**
+ * Reads every loader on screen again on focus and every 30 seconds. Called once, by the navigation's timer.
+ * A refresh that comes round while a read is running is not dropped: that read
+ * may have started before the change it should show, so the page reads again
+ * once it ends. The 30 seconds keep their pace whatever the reads do.
+ */
 export function useRefreshEvery30Seconds() {
 	const { revalidate, state } = useRevalidator();
+	const reading = useRef(state !== "idle");
+	const due = useRef(false);
+	useEffect(() => {
+		reading.current = state !== "idle";
+		if (state === "idle" && due.current) {
+			due.current = false;
+			void revalidate();
+		}
+	}, [revalidate, state]);
 	useEffect(() => {
 		const refresh = () => {
-			if (state === "idle" && document.visibilityState === "visible") void revalidate();
+			if (document.visibilityState !== "visible") return;
+			if (reading.current) due.current = true;
+			else void revalidate();
 		};
 		const every = window.setInterval(refresh, REFRESH_EVERY_MS);
 		window.addEventListener("focus", refresh);
@@ -23,7 +39,7 @@ export function useRefreshEvery30Seconds() {
 			window.clearInterval(every);
 			window.removeEventListener("focus", refresh);
 		};
-	}, [revalidate, state]);
+	}, [revalidate]);
 }
 
 const listeners = new Set<() => void>();

@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "react-aria";
 import {
@@ -12,6 +13,7 @@ import * as z from "zod";
 
 import { BudgetBar, budgetFigure } from "~/budgets/BudgetBar";
 import { activeClients } from "~/clients/clients.server";
+import { managedClientIds, mayCreateAnyProject, mayCreateProject } from "~/clients/managers.server";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { FilterBar, FilterField, useApplyFilters } from "~/components/FilterBar";
@@ -21,10 +23,10 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
+import { codedName } from "~/lib/codes";
 import { nameKey, RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import {
-	mayDuplicateProjects,
 	mayManageClients,
 	mayManageIntegrations,
 	maySeeRates,
@@ -37,6 +39,7 @@ import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { PINNED_TITLE } from "~/pins/pins";
 import { pinnedProjectIds, pinProject } from "~/pins/pins.server";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
+import { CodeField } from "~/projects/CodeField";
 import { DuplicateSheet } from "~/projects/DuplicateSheet";
 import { type ListedBudget, listedBudgets } from "~/projects/project.server";
 import {
@@ -64,31 +67,44 @@ import {
 	duplicateProject,
 	listProjects,
 	type ProjectResult,
+	projectCodeRules,
 	projectHours,
 	setProjectArchived,
 } from "~/projects/projects.server";
 import { hoursAndMinutes } from "~/reports/format";
-import { destination } from "~/shell/destinations";
+import { destination, destinationLabel } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { onlyQueryMoved } from "~/shell/revalidation";
+import {
+	hasClients,
+	hasWorkCodes,
+	inTerms,
+	type Terms,
+	termsOf,
+	withArticle,
+} from "~/workspace/work-model";
 
 import type { Route } from "./+types/projects";
 import { FormSheet } from "./FormSheet";
 import { useOrganisation } from "./useOrganisation";
 
 // Projects: what the organisation tracks time against (TS-011a). Every role
-// sees every project, active and archived, and creates, renames, archives and
-// restores them; none is ever deleted. A project's client is shown while the
-// organisation has Clients turned on; only its owners and admins give a
+// sees every project, active and archived, and renames, archives and restores
+// them; none is ever deleted. Only owners, admins and a client's account
+// managers, for that client, create one (decision 42). A project's client is
+// shown while the organisation has clients; only its owners and admins give a
 // project one (TS-011b): Finance, shown Clients, changes none (TS-075). The
-// list is searched by a project's or its client's name, grouped under the
-// clients, and each project shows the hours tracked on it to date by the
-// people whose time the viewer may see (TS-057).
+// list is searched by a project's or its client's name or code, grouped under
+// the clients, and each project shows the hours tracked on it to date by the
+// people whose time the viewer may see (TS-057). Under Internal work the page
+// calls projects by the organisation's term; under Both, work codes are a
+// group of their own (TS-115a).
 
-const { label } = destination("projects");
-
-export function meta() {
+export function meta({ loaderData }: Route.MetaArgs) {
+	const label = loaderData
+		? destinationLabel(destination("projects"), loaderData.terms)
+		: destination("projects").label;
 	return [{ title: `${label} · Timesifier` }];
 }
 
@@ -105,19 +121,22 @@ export type HoursOf = "everyone" | "teams" | "own";
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
-	const scope = organisationScope(env.DB, membership.organisation.id);
-	const showsClients = membership.organisation.clientsEnabled;
-	const givesClients = showsClients && mayManageClients(membership.role);
+	const { organisation, role, user } = membership;
+	const scope = organisationScope(env.DB, organisation.id);
+	const showsClients = hasClients(organisation.workModel);
+	const givesClients = showsClients && mayManageClients(role);
 	const search = new URL(request.url).searchParams;
 	const query = searchIn(search);
 	const access = await accessOf(membership);
 	const whose = timeScopeOf(access);
 	const now = Date.now();
-	const [projects, hours, clients, pinned] = await Promise.all([
+	const [projects, hours, clients, pinned, managed, codes] = await Promise.all([
 		listProjects(scope, { query, byClient: showsClients }),
 		projectHours(scope, whose, now),
-		givesClients ? activeClients(scope) : [],
-		pinnedProjectIds(scope, membership.user.id),
+		showsClients ? activeClients(scope) : [],
+		pinnedProjectIds(scope, user.id),
+		managedClientIds(scope, user.id),
+		projectCodeRules(organisation.id),
 	]);
 	const isPinned = new Set(pinned);
 	const budgets = await listedBudgets(
@@ -128,14 +147,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	);
 	const seesBudgets = maySeeRates(membership.role) || membership.managesTeams;
 	const sort = seesBudgets ? sortIn(search) : BY_NAME;
-	const rows = projects.map((project) => ({
-		...project,
-		client: showsClients ? project.client : null,
-		hours: hoursAndMinutes(hours.get(project.id) ?? 0),
-		budget: budgets.get(project.id) ?? null,
-		pinned: isPinned.has(project.id),
-	}));
+	const rows = projects.map((project) => {
+		// Who may edit and duplicate it follows who may create one for its client (decisions 42 and 65).
+		const keeps = mayCreateProject(role, showsClients ? managed : [], project.client?.id ?? null);
+		return {
+			...project,
+			client: showsClients ? project.client : null,
+			hours: hoursAndMinutes(hours.get(project.id) ?? 0),
+			budget: budgets.get(project.id) ?? null,
+			pinned: isPinned.has(project.id),
+			edits: keeps,
+			duplicates: keeps,
+		};
+	});
 	const hoursOf: HoursOf = whose.everyone ? "everyone" : access.managed.size > 0 ? "teams" : "own";
+	const terms = termsOf(organisation.workModel, organisation.internalTerm);
 	return {
 		projects: sort === NEAREST_LIMIT ? byNearestLimit(rows) : rows,
 		query,
@@ -143,12 +169,21 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		seesBudgets,
 		showsClients,
 		hoursOf,
-		clients: clients.map(({ id, name }) => ({ id, name })),
+		terms,
+		/** The clients Edit may give: every active one, for an owner or admin. */
+		clients: givesClients ? clients.map(({ id, name, code }) => ({ id, name, code })) : [],
 		givesClients,
+		/** Whether Create is offered (decision 42), and the clients it may be for: all, or the account manager's own. */
+		mayCreate: mayCreateAnyProject(role, showsClients ? managed : []),
+		createClients: clients
+			.filter((client) => mayCreateProject(role, managed, client.id))
+			.map(({ id, name, code }) => ({ id, name, code })),
+		/** Whether a project may be created with no client: by an owner or admin, a work code under Both. */
+		createsWithoutClient: mayCreateProject(role, managed, null),
+		/** Whether a project must have a code, and whether the organisation numbers it when none is typed. */
+		codes,
 		/** Whether the default rates are the viewer's to see (TS-067). */
-		seesRates: maySeeRates(membership.role),
-		/** Whether the viewer may duplicate a project: owners and admins (decision 65). */
-		duplicates: mayDuplicateProjects(membership.role),
+		seesRates: maySeeRates(role),
 	};
 }
 
@@ -169,14 +204,22 @@ const Id = z.string().min(1).max(64);
 // Its length is the page's rule, said in the page's words; a body is at most 64 KB.
 const Name = z.string();
 const Client = z.string().max(64).optional();
+// Checked by `typedCode` in the server's words.
+const Code = z.string().max(256).optional();
 
 /** The things this page can ask for. A form says which with its `intent`. */
 const form = z.discriminatedUnion("intent", [
-	z.object({ intent: z.literal("create"), name: Name, clientId: Client }),
-	z.object({ intent: z.literal("rename"), projectId: Id, name: Name, clientId: Client }),
+	z.object({ intent: z.literal("create"), name: Name, clientId: Client, code: Code }),
+	z.object({
+		intent: z.literal("rename"),
+		projectId: Id,
+		name: Name,
+		clientId: Client,
+		code: Code,
+	}),
 	z.object({ intent: z.literal("archive"), projectId: Id }),
 	z.object({ intent: z.literal("restore"), projectId: Id }),
-	z.object({ intent: z.literal("duplicate"), projectId: Id, name: Name }),
+	z.object({ intent: z.literal("duplicate"), projectId: Id, name: Name, code: Code }),
 	z.object({
 		intent: z.literal("pin"),
 		projectId: Id,
@@ -188,56 +231,94 @@ const form = z.discriminatedUnion("intent", [
  * Creates, renames, archives, restores, duplicates or pins a project of the
  * organisation in the address; no form names an organisation, and a project
  * of another is no project here, so it answers 404 and nothing changes.
- * Owners and admins duplicate a project (TS-122, decision 65); anyone pins
- * one to the top of their own lists, and nobody else's (S2-09).
+ * Whoever may create a project for its client edits, archives, restores and
+ * duplicates it (decisions 42 and 65); anyone pins one to the top of their own
+ * lists, and nobody else's (S2-09).
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
 	const membership = context.get(membershipContext);
-	const scope = organisationScope(env.DB, membership.organisation.id);
+	const { organisation, role, user } = membership;
+	const scope = organisationScope(env.DB, organisation.id);
+	const terms = termsOf(organisation.workModel, organisation.internalTerm);
+	/** 404 for no project of this organisation; 403 for one the person may not keep; else null. */
+	const refusal = async (projectId: string) => {
+		const [[project], managed] = await Promise.all([
+			scope.projects.select((p) => eq(p.id, projectId), { limit: 1 }),
+			// An account manager's clients count only while the organisation has clients.
+			hasClients(organisation.workModel) ? managedClientIds(scope, user.id) : [],
+		]);
+		if (!project) throw notFound();
+		return mayCreateProject(role, managed, project.clientId) ? null : declined(NOT_ALLOWED, 403);
+	};
 
 	switch (input.intent) {
-		case "create":
+		case "create": {
+			// Created by an owner or admin, with any client or none, or by a
+			// client's account manager for that client (decision 42). Nobody
+			// gives a client under Internal work.
+			const clientId =
+				input.clientId === undefined || input.clientId === NO_CLIENT ? null : input.clientId;
+			if (clientId !== null && !hasClients(organisation.workModel)) {
+				return declined(NOT_ALLOWED, 403);
+			}
+			const managed = await managedClientIds(scope, user.id);
+			if (!mayCreateProject(role, managed, clientId)) return declined(NOT_ALLOWED, 403);
+			return answer(
+				await createProject(scope, user.id, {
+					name: input.name,
+					clientId,
+					code: input.code,
+					// Under Both, one with no client is a work code: it bills nothing.
+					workCode: hasWorkCodes(organisation.workModel) && clientId === null,
+				}),
+				(name) => `${terms.Project} created: ${name}.`,
+				terms,
+			);
+		}
+
 		case "rename": {
+			const refused = await refusal(input.projectId);
+			if (refused) return refused;
 			// A project's client is given by an owner or admin, and by nobody
-			// while Clients is turned off. Leaving the field out keeps it as it is.
+			// under Internal work. Leaving the field out keeps it as it is.
 			let clientId: string | null | undefined;
 			if (input.clientId !== undefined) {
-				if (!membership.organisation.clientsEnabled || !mayManageClients(membership.role)) {
+				if (!hasClients(organisation.workModel) || !mayManageClients(role)) {
 					return declined(NOT_ALLOWED, 403);
 				}
 				clientId = input.clientId === NO_CLIENT ? null : input.clientId;
 			}
-			if (input.intent === "create") {
-				return answer(
-					await createProject(scope, membership.user.id, { name: input.name, clientId }),
-					(name) => `Project created: ${name}.`,
-				);
-			}
 			return answer(
-				await changeProject(scope, membership.user.id, input.projectId, {
+				await changeProject(scope, user.id, input.projectId, {
 					name: input.name,
 					clientId,
+					code: input.code,
 				}),
-				(name) => `Project saved: ${name}.`,
+				(name) => `${terms.Project} saved: ${name}.`,
+				terms,
 			);
 		}
 
 		case "archive":
+		case "restore": {
+			const refused = await refusal(input.projectId);
+			if (refused) return refused;
+			const archived = input.intent === "archive";
 			return answer(
-				await setProjectArchived(scope, membership.user.id, input.projectId, true),
-				(name) => `${name} is archived. It is under Archived, and the timer no longer offers it.`,
+				await setProjectArchived(scope, user.id, input.projectId, archived),
+				(name) =>
+					archived
+						? `${name} is archived. It is under Archived, and the timer no longer offers it.`
+						: `${name} is restored. The timer offers it again.`,
+				terms,
 			);
-
-		case "restore":
-			return answer(
-				await setProjectArchived(scope, membership.user.id, input.projectId, false),
-				(name) => `${name} is restored. The timer offers it again.`,
-			);
+		}
 
 		case "duplicate": {
-			if (!mayDuplicateProjects(membership.role)) return declined(NOT_ALLOWED, 403);
-			const copy = await duplicateProject(scope, membership.user.id, input.projectId, input.name);
+			const refused = await refusal(input.projectId);
+			if (refused) return refused;
+			const copy = await duplicateProject(scope, user.id, input.projectId, input.name, input.code);
 			if (copy === null) throw notFound();
 			if (!copy.ok) return declined(copy.problem);
 			return { ...done(`Project duplicated: ${copy.name}.`), changed: [copy.id] };
@@ -252,9 +333,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 /** What the page is told: what was done, why nothing was, or 404 for a project that is not here. */
-function answer(result: ProjectResult, said: (name: string) => string) {
+function answer(result: ProjectResult, said: (name: string) => string, terms: Terms) {
 	if (result === null) throw notFound();
-	return result.ok ? done(said(result.name)) : declined(result.problem);
+	return result.ok ? done(said(result.name)) : declined(inTerms(result.problem, terms));
 }
 
 type Project = Route.ComponentProps["loaderData"]["projects"][number];
@@ -277,9 +358,11 @@ function actionsId(projectId: string): string {
 }
 
 export default function Projects({ loaderData }: Route.ComponentProps) {
-	const { clients, givesClients, showsClients, hoursOf } = loaderData;
+	const { clients, givesClients, showsClients, hoursOf, terms, codes } = loaderData;
 	const organisation = useOrganisation();
 	const [search] = useSearchParams();
+	// Every sentence of the page in the organisation's words (TS-115a).
+	const t = (text: string) => inTerms(text, terms);
 	// The words in the address, which the field writes with each key. The list
 	// the server sent is filtered here while they narrow the words it was sent
 	// for; words that do not are asked of the server, and until its answer comes
@@ -298,6 +381,8 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 	// goes on saying the same thing while it leaves.
 	const [project, setProject] = useState<Project | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
+	// The client chosen in Create, null for the first offered: under Both, none makes a work code, which has its own code rule.
+	const [createClient, setCreateClient] = useState<string | null>(null);
 	const close = () => setTask(null);
 	// Every project's name the page holds, for the name a copy is offered.
 	const takenNames = new Set(loaderData.projects.map((each) => nameKey(each.name)));
@@ -314,12 +399,17 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 		pinning.current = null;
 	}, [pinAnswer]);
 
-	const create = <Button onPress={() => setTask("create")}>Create project</Button>;
+	// Only owners, admins and account managers are offered Create (decision 42).
+	const create = loaderData.mayCreate ? (
+		<Button onPress={() => setTask("create")}>{t("Create project")}</Button>
+	) : null;
+	const imports = mayManageIntegrations(organisation.role);
 
-	// A project's name opens its own page (harvest-taste.md item 11); Edit
-	// opens its sheet, which edits it and holds Archive or Restore. Actions
-	// holds Pin or Unpin (TS-122, S2-09), and for owners and admins what makes
-	// another project of it: Duplicate (S2-06).
+	// A project's name opens its own page (harvest-taste.md item 11), its code
+	// first; Edit opens its sheet, which edits it and holds Archive or Restore,
+	// for those who may create a project for its client (decision 42). Actions
+	// holds Pin or Unpin (TS-122, S2-09), and for the same people what makes
+	// another project of it: Duplicate (S2-06, decision 65).
 	const list = (shown: Project[], label: string, withClient = false) => (
 		<LedgerRows label={label}>
 			{shown.map((each) => (
@@ -331,7 +421,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 								to={projectPath(organisation.slug, each.id)}
 								className={cx(ACTION_LINK, "wrap-anywhere")}
 							>
-								{each.name}
+								{codedName(each.code, each.name)}
 							</Link>
 							{each.budget && (
 								<BudgetBar
@@ -347,7 +437,9 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 						(each.budget || (withClient && each.client)) && (
 							<>
 								{withClient && each.client && (
-									<span className="block wrap-anywhere">{each.client.name}</span>
+									<span className="block wrap-anywhere">
+										{codedName(each.client.code, each.client.name)}
+									</span>
 								)}
 								{each.budget && <BudgetLine budget={each.budget} />}
 							</>
@@ -357,17 +449,19 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 						<>
 							{/* React Aria's button presses on key up, as every button that opens a
 							sheet here does, so the sheet's field keeps the focus it is given. */}
-							<Button
-								variant="text"
-								aria-label={`Edit ${each.name}`}
-								onPress={() => {
-									setProject(each);
-									setTask("rename");
-								}}
-							>
-								Edit
-							</Button>
-							{(!each.archived || each.pinned || loaderData.duplicates) && (
+							{each.edits && (
+								<Button
+									variant="text"
+									aria-label={`Edit ${each.name}`}
+									onPress={() => {
+										setProject(each);
+										setTask("rename");
+									}}
+								>
+									Edit
+								</Button>
+							)}
+							{(!each.archived || each.pinned || each.duplicates) && (
 								<MenuTrigger>
 									<Button
 										variant="text"
@@ -396,7 +490,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 										) : (
 											!each.archived && <MenuItem id="pin">Pin</MenuItem>
 										)}
-										{loaderData.duplicates && <MenuItem id="duplicate">Duplicate</MenuItem>}
+										{each.duplicates && <MenuItem id="duplicate">Duplicate</MenuItem>}
 									</Menu>
 								</MenuTrigger>
 							)}
@@ -408,63 +502,74 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 		</LedgerRows>
 	);
 
+	const section = (
+		key: string,
+		name: string,
+		inGroup: Project[],
+		listName: string,
+		withClient = false,
+	) => (
+		<section key={key} className="border-t border-outline-variant">
+			<h2 className="wrap-anywhere px-4 pt-3 text-title-small text-on-surface-variant @sm:px-5">
+				{name}
+			</h2>
+			{list(inGroup, `${listName}: ${name}`, withClient)}
+		</section>
+	);
+
 	const rows = (shown: Project[], archived: boolean) => {
-		const listName = archived ? "Archived projects" : "Active projects";
+		const listName = t(archived ? "Archived projects" : "Active projects");
 		if (shown.length === 0) {
 			return (
 				<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
 					{query !== ""
-						? `No ${archived ? "archived" : "active"} project has “${query}” in its name${showsClients ? " or its client’s" : ""}.`
+						? // The words searched for are the person's own, never put in the organisation's.
+							`${t(`No ${archived ? "archived" : "active"} project has`)} “${query}” in its name or code${showsClients ? ", or its client’s" : ""}.`
 						: archived
-							? "No archived projects. A project you archive is kept here, with its time, and can be restored."
-							: "No active projects. Restore one from Archived, or create one."}
+							? t(
+									"No archived projects. A project you archive is kept here, with its time, and can be restored.",
+								)
+							: t(
+									loaderData.mayCreate
+										? "No active projects. Restore one from Archived, or create one."
+										: "No active projects. Restore one from Archived.",
+								)}
 				</p>
 			);
 		}
 		// The projects the viewer pinned head the active list, in its order (S2-09).
 		const pinned = archived ? [] : shown.filter((each) => each.pinned);
 		const rest = pinned.length === 0 ? shown : shown.filter((each) => !each.pinned);
-		const heading = (text: string) => (
-			<h2 className="wrap-anywhere px-4 pt-3 text-title-small text-on-surface-variant @sm:px-5">
-				{text}
-			</h2>
-		);
-		const pinnedSection = pinned.length > 0 && (
-			<section className="border-t border-outline-variant">
-				{heading(PINNED_TITLE)}
-				{list(pinned, `${listName}: ${PINNED_TITLE}`, showsClients)}
-			</section>
-		);
-		// While Clients is off no project shows a client, so there are no groups;
+		const pinnedSection =
+			pinned.length > 0 && section("pinned", PINNED_TITLE, pinned, listName, showsClients);
+		// Under Internal work no project shows a client, so there are no groups;
 		// nor while the list is ordered by its budgets, an order across clients.
 		if (!showsClients || loaderData.sort === NEAREST_LIMIT) {
 			if (!pinnedSection) return list(rest, listName, showsClients);
 			return (
 				<>
 					{pinnedSection}
-					{rest.length > 0 && (
-						<section className="border-t border-outline-variant">
-							{heading("Other projects")}
-							{list(rest, `${listName}: other projects`, showsClients)}
-						</section>
-					)}
+					{rest.length > 0 && section("others", t("Other projects"), rest, listName, showsClients)}
 				</>
 			);
 		}
+		// Under Both, the work codes are a group of their own, after the clients'.
+		const workCodes = hasWorkCodes(terms.model) ? rest.filter((each) => each.internal) : [];
+		const others = workCodes.length > 0 ? rest.filter((each) => !each.internal) : rest;
 		return (
 			<>
 				{pinnedSection}
-				{groupedByClient(rest).map(({ client, projects: inGroup }) => {
-					const name = client
-						? `${client.name}${client.archived ? " (archived client)" : ""}`
-						: "No client";
-					return (
-						<section key={client?.id ?? NO_CLIENT} className="border-t border-outline-variant">
-							{heading(name)}
-							{list(inGroup, `${listName}: ${name}`)}
-						</section>
-					);
-				})}
+				{groupedByClient(others).map(({ client, projects: inGroup }) =>
+					section(
+						client?.id ?? NO_CLIENT,
+						client
+							? `${codedName(client.code, client.name)}${client.archived ? " (archived client)" : ""}`
+							: "No client",
+						inGroup,
+						listName,
+					),
+				)}
+				{workCodes.length > 0 && section("work-codes", terms.WorkCodes, workCodes, listName)}
 			</>
 		);
 	};
@@ -472,20 +577,36 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 	const active = projects.filter((each) => !each.archived);
 	const archived = projects.filter((each) => each.archived);
 
-	// The client field: the active clients, and a project's own client when it
-	// is archived, so that saving keeps it (TS-011b).
+	// The client field of Edit: the active clients, and a project's own client
+	// when it is archived, so that saving keeps it (TS-011b).
 	const clientOptions = (current: Project | null) => [
 		{ id: NO_CLIENT, label: "No client" },
-		...clients.map(({ id, name }) => ({ id, label: name })),
+		...clients.map(({ id, name, code }) => ({ id, label: codedName(code, name) })),
 		...(current?.client?.archived
 			? [{ id: current.client.id, label: `${current.client.name} (archived)` }]
 			: []),
 	];
+	// The client field of Create: those the person may create for (decision 42),
+	// and none for an owner or admin, which under Both makes a work code.
+	const createOptions = [
+		...(loaderData.createsWithoutClient
+			? [
+					{
+						id: NO_CLIENT,
+						label: hasWorkCodes(terms.model)
+							? `No client: ${withArticle(codes.workCode)}`
+							: "No client",
+					},
+				]
+			: []),
+		...loaderData.createClients.map(({ id, name, code }) => ({ id, label: codedName(code, name) })),
+	];
+	const createsWorkCode = (createClient ?? createOptions[0]?.id ?? NO_CLIENT) === NO_CLIENT;
 
 	return (
 		<>
-			<PageHeading>{label}</PageHeading>
-			<PageLead>{HOURS_SAID[hoursOf]}</PageLead>
+			<PageHeading>{terms.Projects}</PageHeading>
+			<PageLead>{t(HOURS_SAID[hoursOf])}</PageLead>
 			{/* What the last task did. Always here, so what is put in it is read out. */}
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
@@ -500,12 +621,13 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 
 			<div className="mt-10 max-w-200">
 				{projects.length === 0 && query === "" ? (
-					<Ledger heading="Projects" note={0}>
+					<Ledger heading={terms.Projects} note={0}>
 						<div className="flex flex-col items-start gap-4 border-t border-outline-variant px-4 py-6 @sm:px-5">
-							<h2 className="text-title-large">No projects yet</h2>
+							<h2 className="text-title-large">{t("No projects yet")}</h2>
 							<p className="max-w-160 text-body-large text-on-surface-variant">
-								A project is what you track time against, such as a client job or a piece of your
-								own work.
+								{showsClients
+									? "A project is what you track time against, such as a client job or a piece of your own work."
+									: t("A project is what you track time against, such as a team’s running work.")}
 							</p>
 							{create}
 						</div>
@@ -513,18 +635,18 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 				) : (
 					<>
 						{create}
-						{mayManageIntegrations(organisation.role) && (
+						{imports && (
 							<Link
-								className={`ml-4 ${ACTION_LINK}`}
+								className={cx(create && "ml-4", ACTION_LINK)}
 								to={importPath(organisation.slug, "projects")}
 							>
-								Import projects from a CSV
+								{t("Import projects from a CSV")}
 							</Link>
 						)}
-						<div className="mt-6">
-							<FilterBar name="Filter projects" keep={keptTab(search)}>
+						<div className={cx((create || imports) && "mt-6")}>
+							<FilterBar name={t("Filter projects")} keep={keptTab(search)}>
 								<FilterField
-									label={showsClients ? "Search projects or clients" : "Search projects"}
+									label={t(showsClients ? "Search projects or clients" : "Search projects")}
 									param={SEARCH_PARAM}
 									live
 								/>
@@ -533,14 +655,14 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 						</div>
 						<div className="mt-6">
 							<ArchiveTabs
-								label="Projects"
+								label={terms.Projects}
 								active={
-									<Ledger heading="Active projects" note={active.length}>
+									<Ledger heading={t("Active projects")} note={active.length}>
 										{rows(active, false)}
 									</Ledger>
 								}
 								archived={
-									<Ledger heading="Archived projects" note={archived.length}>
+									<Ledger heading={t("Archived projects")} note={archived.length}>
 										{rows(archived, true)}
 									</Ledger>
 								}
@@ -551,16 +673,16 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			</div>
 
 			<FormSheet
-				title="Create a project"
+				title={t("Create a project")}
 				intent="create"
-				submitLabel="Create the project"
+				submitLabel={t("Create the project")}
 				isOpen={task === "create"}
 				onClose={close}
 				onDone={setSaid}
 			>
 				<p>Everyone in {organisation.name} can track time against it.</p>
 				<TextField
-					label="Project name"
+					label={t("Project name")}
 					name="name"
 					autoComplete="off"
 					autoFocus
@@ -568,19 +690,28 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
 				/>
-				{givesClients && (
+				<CodeField rules={codes} workCode={createsWorkCode} />
+				{showsClients && createOptions.length > 0 && (
 					<Select
 						label="Client"
 						name="clientId"
-						options={clientOptions(null)}
-						defaultValue={NO_CLIENT}
-						description={clients.length === 0 ? "Add clients on Clients." : undefined}
+						options={createOptions}
+						defaultValue={createOptions[0]?.id ?? null}
+						onChange={setCreateClient}
+						isRequired
+						description={
+							!loaderData.createsWithoutClient
+								? "You create projects for the clients you are an account manager of."
+								: loaderData.createClients.length === 0
+									? "Add clients on Clients."
+									: undefined
+						}
 					/>
 				)}
 			</FormSheet>
 
 			<FormSheet
-				title={`Edit ${project?.name ?? "this project"}`}
+				title={`Edit ${project?.name ?? t("this project")}`}
 				intent="rename"
 				submitLabel="Save"
 				isOpen={task === "rename"}
@@ -591,7 +722,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 				{/* Keyed by the project, so the fields start at what it has. */}
 				<TextField
 					key={`name-${project?.id}`}
-					label="Project name"
+					label={t("Project name")}
 					name="name"
 					defaultValue={project?.name}
 					autoComplete="off"
@@ -599,6 +730,12 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 					isRequired
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
+				/>
+				<CodeField
+					key={`code-${project?.id}`}
+					rules={codes}
+					workCode={project?.internal ?? false}
+					defaultValue={project?.code}
 				/>
 				{givesClients && (
 					<Select
@@ -620,15 +757,15 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 						variant="outlined"
 						onPress={() => setTask(project?.archived ? "restore" : "archive")}
 					>
-						{project?.archived ? "Restore project" : "Archive project"}
+						{t(project?.archived ? "Restore project" : "Archive project")}
 					</Button>
 				</div>
 			</FormSheet>
 
 			<FormSheet
-				title={`Archive ${project?.name ?? "this project"}?`}
+				title={`Archive ${project?.name ?? t("this project")}?`}
 				intent="archive"
-				submitLabel="Archive project"
+				submitLabel={t("Archive project")}
 				isOpen={task === "archive"}
 				onClose={close}
 				onDone={setSaid}
@@ -641,9 +778,9 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
-				title={`Restore ${project?.name ?? "this project"}?`}
+				title={`Restore ${project?.name ?? t("this project")}?`}
 				intent="restore"
-				submitLabel="Restore project"
+				submitLabel={t("Restore project")}
 				isOpen={task === "restore"}
 				onClose={close}
 				onDone={setSaid}
@@ -654,6 +791,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 
 			<DuplicateSheet
 				project={project}
+				codes={codes}
 				offered={project ? copyName(project.name, takenNames) : ""}
 				isOpen={task === "duplicate"}
 				onClose={close}

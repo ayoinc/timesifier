@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DPA_VERSION } from "~/landing/trust";
 import { captureEmail, type Mailbox, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
-import { ACCEPTED, createOrganisation, row, value } from "../organisations/harness";
+import {
+	ACCEPTED,
+	createOrganisation,
+	NEW_ORGANISATION,
+	row,
+	value,
+} from "../organisations/harness";
 import { open, openData, pageBody, person, submit, textOf } from "./harness";
 
 // `/app`, where a signed-in person goes when no organisation is named, and
@@ -86,15 +92,25 @@ describe("/app/new", () => {
 		expect(two).toMatch(/<a[^>]*href="\/app"[^>]*>Back to your organisations<\/a>/);
 	});
 
-	it("asks a person with no organisation for its name, and nothing else: creating it accepts the terms and the agreement", async () => {
+	it("asks a person with no organisation for its name and how it works, and nothing else: creating it accepts the terms and the agreement", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 
 		const response = await open("/app/new", ada);
 		expect(response.status).toBe(200);
 		const html = await pageBody(response);
 		expect(textOf(html)).toContain("Create your organisation");
-		expect(html.match(/<input\b(?![^>]*type="hidden")[^>]*>/g)).toHaveLength(1);
+		expect(html.match(/<input\b(?![^>]*type="hidden")[^>]*>/g)).toHaveLength(4);
 		expect(html).toMatch(/<input[^>]*name="name"/);
+		// How you work (TS-115a): one choice of three, Client projects chosen to start with.
+		const choices = html.match(/<input[^>]*type="radio"[^>]*>/g) ?? [];
+		expect(choices.map((input) => input.match(/value="([^"]+)"/)?.[1])).toEqual([
+			"client_projects",
+			"internal",
+			"both",
+		]);
+		expect(choices.every((input) => input.includes('name="workModel"'))).toBe(true);
+		expect(choices[0]).toMatch(/checked/);
+		expect(textOf(html)).toContain("How you work");
 		// The version the page shows is the one the person accepts (TS-105).
 		expect(html).toMatch(
 			new RegExp(`<input[^>]*type="hidden"[^>]*name="dpaVersion"[^>]*value="${DPA_VERSION.date}"`),
@@ -110,7 +126,7 @@ describe("/app/new", () => {
 	it("creates the organisation, makes the person its owner and goes to its Today", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 
-		const response = await submit("/app/new", { name: "  Acme Ltd  ", ...ACCEPTED }, ada);
+		const response = await submit("/app/new", { name: "  Acme Ltd  ", ...NEW_ORGANISATION }, ada);
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get("Location")).toBe("/app/acme-ltd?welcome=1");
@@ -126,17 +142,42 @@ describe("/app/new", () => {
 		expect((await open("/app/acme-ltd", ada)).status).toBe(200);
 	});
 
+	it.each([
+		["client_projects", 1],
+		["internal", 0],
+		["both", 1],
+	] as const)("starts it working by %s, as the person chose", async (workModel, clientsEnabled) => {
+		const ada = await person(mailbox, "ada@example.com");
+		const response = await submit("/app/new", { name: "Acme", ...ACCEPTED, workModel }, ada);
+		expect(response.status).toBe(302);
+		// `clients_enabled` is written alongside, unread, until it is dropped (decision 67).
+		expect(await row("select work_model, clients_enabled from organisations")).toEqual({
+			work_model: workModel,
+			clients_enabled: clientsEnabled,
+		});
+	});
+
+	it.each([
+		["no way of working", {}],
+		["one it does not know", { workModel: "freelance" }],
+	])("refuses %s with 400 and creates nothing", async (_case, extra) => {
+		const ada = await person(mailbox, "ada@example.com");
+		const response = await submit("/app/new", { name: "Acme", ...ACCEPTED, ...extra }, ada);
+		expect(response.status).toBe(400);
+		expect(await value("select count(*) from organisations")).toBe(0);
+	});
+
 	it("welcomes the person to the first organisation they create, and to no other", async () => {
 		const ada = await person(mailbox, "ada@example.com");
 
-		const first = await submit("/app/new", { name: "Acme", ...ACCEPTED }, ada);
+		const first = await submit("/app/new", { name: "Acme", ...NEW_ORGANISATION }, ada);
 		expect(first.headers.get("Location")).toBe("/app/acme?welcome=1");
 		const welcomed = textOf(await pageBody(await open("/app/acme?welcome=1", ada)));
 		expect(welcomed).toContain("Acme is ready");
 		// The welcome is for the moment of creating: the page without the mark has none.
 		expect(textOf(await pageBody(await open("/app/acme", ada)))).not.toContain("is ready");
 
-		const second = await submit("/app/new", { name: "Globex", ...ACCEPTED }, ada);
+		const second = await submit("/app/new", { name: "Globex", ...NEW_ORGANISATION }, ada);
 		expect(second.headers.get("Location")).toBe("/app/globex");
 		expect(textOf(await pageBody(await open("/app/new", ada)))).toContain("Create an organisation");
 	});
@@ -145,8 +186,8 @@ describe("/app/new", () => {
 		const ada = await person(mailbox, "ada@example.com");
 		const grace = await person(mailbox, "grace@example.com");
 
-		await submit("/app/new", { name: "Acme", ...ACCEPTED }, ada);
-		const response = await submit("/app/new", { name: "Acme", ...ACCEPTED }, grace);
+		await submit("/app/new", { name: "Acme", ...NEW_ORGANISATION }, ada);
+		const response = await submit("/app/new", { name: "Acme", ...NEW_ORGANISATION }, grace);
 
 		expect(response.headers.get("Location")).toBe("/app/acme-2?welcome=1");
 		expect((await open("/app/acme-2", grace)).status).toBe(200);
@@ -158,7 +199,7 @@ describe("/app/new", () => {
 
 		const response = await submit(
 			"/app/new",
-			{ name: "Acme", slug: "admin", userId: "someone-else", role: "member", ...ACCEPTED },
+			{ name: "Acme", slug: "admin", userId: "someone-else", role: "member", ...NEW_ORGANISATION },
 			ada,
 		);
 
@@ -177,7 +218,7 @@ describe("/app/new", () => {
 	])("refuses a name that is %s with 400 and creates nothing", async (_case, name) => {
 		const ada = await person(mailbox, "ada@example.com");
 
-		const response = await submit("/app/new", { name, ...ACCEPTED }, ada);
+		const response = await submit("/app/new", { name, ...NEW_ORGANISATION }, ada);
 
 		expect(response.status).toBe(400);
 		expect(await value("select count(*) from organisations")).toBe(0);
@@ -191,7 +232,7 @@ describe("/app/new", () => {
 			).toBe(200);
 		}
 
-		const response = await submit("/app/new", { name: "Acme 6", ...ACCEPTED }, ada, {
+		const response = await submit("/app/new", { name: "Acme 6", ...NEW_ORGANISATION }, ada, {
 			byScript: true,
 		});
 
@@ -208,7 +249,7 @@ describe("/app/new", () => {
 			expect((await post("/organization/create", {}, ada)).status).toBe(400);
 		}
 
-		const response = await submit("/app/new", { name: "One too many", ...ACCEPTED }, ada, {
+		const response = await submit("/app/new", { name: "One too many", ...NEW_ORGANISATION }, ada, {
 			byScript: true,
 		});
 

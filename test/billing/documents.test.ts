@@ -1,6 +1,12 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type OrganisationScope, organisationScope } from "~/db";
+import {
+	addEstimateLine,
+	createEstimate,
+	findEstimate,
+	printedEstimate,
+} from "~/estimates/estimates.server";
 import { sendInvoice } from "~/invoices/deliver.server";
 import { invoiceDetailsOf } from "~/invoices/documents.server";
 import {
@@ -34,6 +40,7 @@ import { open, type Person, person, textOf } from "../pages/harness";
 // sending it to the client's billing contacts.
 
 const INVOICES = "/app/acme/invoices";
+const ESTIMATES = "/app/acme/estimates";
 const TODAY = "2026-11-02";
 const NOW = Date.parse("2026-11-02T12:00:00Z");
 /** The locale a page is written in for a browser that names none. */
@@ -453,5 +460,88 @@ describe("sending", () => {
 			}),
 		).toEqual({ ok: false, problem: "A void invoice is not sent." });
 		expect(mailbox.send.mock.calls.length).toBe(before);
+	});
+});
+
+// A client's code (TS-115a, decision 67) on what is billed to it: before its
+// name on the lists and pages of invoices and estimates, and as a "Client
+// code" fact on each printed one and its PDF, which a client without a code
+// does not have.
+describe("the client's code on invoices and estimates", () => {
+	async function coded() {
+		await env.DB.prepare("update clients set code = 'INI', code_key = 'ini' where id = ?")
+			.bind(clientId)
+			.run();
+	}
+
+	async function estimate() {
+		const made = await createEstimate(scope, owner.user.id, {
+			clientId,
+			currency: "GBP",
+			issuedOn: TODAY,
+			poNumber: null,
+			subject: "Website",
+			notes: null,
+			discountBasisPoints: 0,
+		});
+		if (!made?.ok) throw new Error("no estimate");
+		await addEstimateLine(scope, owner.user.id, made.id, {
+			description: "Design",
+			quantityMilli: 1000,
+			unitPriceMinor: 50_000,
+			taxId: null,
+			secondTaxId: null,
+		});
+		return made.id;
+	}
+
+	async function pdfOfPage(path: string) {
+		const response = await open(path, owner);
+		expect(response.status, path).toBe(200);
+		return pdfText(new Uint8Array(await response.arrayBuffer()));
+	}
+
+	it("shows an invoice's client with its code on the list and the page, and prints it", async () => {
+		await coded();
+		const id = await draft([manual(1000)]);
+		expect(textOf(await (await open(`${INVOICES}?show=draft`, owner)).text())).toContain(
+			"INI · Initech",
+		);
+		expect(textOf(await (await open(`${INVOICES}/${id}`, owner)).text())).toContain(
+			"INI · Initech",
+		);
+		expect((await printed(id)).facts).toContainEqual(["Client code", "INI"]);
+		const pdf = await pdfOfPage(`${INVOICES}/${id}/pdf`);
+		expect(pdf).toContain("Client code");
+		expect(pdf).toContain("INI");
+	});
+
+	it("shows an estimate's client with its code on the list and the page, and prints it", async () => {
+		await coded();
+		const id = await estimate();
+		expect(textOf(await (await open(ESTIMATES, owner)).text())).toContain("INI · Initech");
+		expect(textOf(await (await open(`${ESTIMATES}/${id}`, owner)).text())).toContain(
+			"INI · Initech",
+		);
+		const row = await findEstimate(scope, id);
+		if (!row) throw new Error("no estimate");
+		expect((await printedEstimate(scope, "Acme", row, LOCALE)).facts).toContainEqual([
+			"Client code",
+			"INI",
+		]);
+		const pdf = await pdfOfPage(`${ESTIMATES}/${id}/pdf`);
+		expect(pdf).toContain("Client code");
+		expect(pdf).toContain("INI");
+	});
+
+	it("prints no Client code for a client without one", async () => {
+		const invoice = await draft([manual(1000)]);
+		expect((await printed(invoice)).facts.map(([label]) => label)).not.toContain("Client code");
+		const row = await findEstimate(scope, await estimate());
+		if (!row) throw new Error("no estimate");
+		expect(
+			(await printedEstimate(scope, "Acme", row, LOCALE)).facts.map(([label]) => label),
+		).not.toContain("Client code");
+		expect(await pdfOfPage(`${INVOICES}/${invoice}/pdf`)).not.toContain("Client code");
 	});
 });

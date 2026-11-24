@@ -20,8 +20,10 @@ import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { tagOptions } from "~/tags/tags.server";
+import { hasClients, inTerms } from "~/workspace/work-model";
 
 import type { Route } from "./+types/reports.expenses";
+import { useTerms } from "./useOrganisation";
 
 // The Expenses view of Reports (TS-070, B9): the expenses dated in a range,
 // by category, project or person, with what they come to, what is billable and
@@ -96,6 +98,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const expenses = await reportedExpenses(report);
 	const groups = groupExpenses(expenses, expenseGroup);
 	const totals = expenseTotals(expenses);
+	// Under Internal work nothing is billable, so no line says what is (TS-115a).
+	const bills = hasClients(membership.organisation.workModel);
 	const exportSearch = withGroup(frame.tabSearch, expenseGroup, tag);
 
 	return data(
@@ -105,12 +109,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				groups: groups.map((group) => ({
 					key: group.key,
 					label: group.label,
-					detail: `${group.count} ${group.count === 1 ? "expense" : "expenses"} · Billable ${moneyWords(group.billable)} · To pay back ${moneyWords(group.reimbursable)}`,
+					detail: [
+						`${group.count} ${group.count === 1 ? "expense" : "expenses"}`,
+						bills ? `Billable ${moneyWords(group.billable)}` : null,
+						`To pay back ${moneyWords(group.reimbursable)}`,
+					]
+						.filter(Boolean)
+						.join(" · "),
 					total: moneyWords(group.total),
 				})),
 				count: totals.count,
 				total: moneyWords(totals.total),
-				billable: moneyWords(totals.billable),
+				billable: bills ? moneyWords(totals.billable) : null,
 				reimbursable: moneyWords(totals.reimbursable),
 				exportPath: expenseReportExportPath(slug, exportSearch),
 			},
@@ -121,7 +131,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 	const { report, expenseGroup } = loaderData;
-	const by = EXPENSE_GROUP_LABELS[expenseGroup].toLowerCase();
+	// "Project" in the organisation's own word under internal work (TS-115a).
+	const terms = useTerms();
+	const by = inTerms(EXPENSE_GROUP_LABELS[expenseGroup].toLowerCase(), terms);
 
 	return (
 		<>
@@ -136,7 +148,10 @@ export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 			<ReportChoice
 				{...loaderData}
 				ownGroups={{
-					options: EXPENSE_GROUPS.map((id) => ({ id, label: EXPENSE_GROUP_LABELS[id] })),
+					options: EXPENSE_GROUPS.map((id) => ({
+						id,
+						label: inTerms(EXPENSE_GROUP_LABELS[id], terms),
+					})),
 					value: expenseGroup,
 				}}
 			/>
@@ -163,7 +178,7 @@ export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 									No expenses in this range.
 								</p>
 							)}
-							<LedgerTotal label="Billable" value={report.billable} />
+							{report.billable !== null && <LedgerTotal label="Billable" value={report.billable} />}
 							<LedgerTotal label="To pay back" value={report.reimbursable} />
 							<LedgerTotal label="Total" value={report.total} />
 						</Ledger>

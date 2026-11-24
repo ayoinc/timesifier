@@ -65,7 +65,7 @@ describe("an address under the person's own organisation that holds no page", ()
 
 	it("below a destination the person is not shown, is the stranger's 404, with no shell", async () => {
 		const who = await ada();
-		await env.DB.prepare("update organisations set clients_enabled = 0 where slug = ?")
+		await env.DB.prepare("update organisations set work_model = 'internal' where slug = ?")
 			.bind("acme")
 			.run();
 

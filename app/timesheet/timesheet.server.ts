@@ -84,17 +84,23 @@ export function toSheetEntry(row: TimeEntries["$inferSelect"]): SheetEntry {
 	};
 }
 
-/** A project as the views name it. An archived one is still named (TS-013). */
+/** A project as the views name it, its code first (TS-115a). An archived one is still named (TS-013). */
 export interface ProjectName {
 	id: string;
 	name: string;
+	code: string | null;
 	archived: boolean;
 }
 
 /** Every project of the organisation, by name: the active ones are offered, all are named. */
 async function projectsOf(scope: OrganisationScope): Promise<ProjectName[]> {
 	const rows = await scope.projects.select(undefined, { orderBy: (p) => [asc(p.nameKey)] });
-	return rows.map(({ id, name, archivedAt }) => ({ id, name, archived: archivedAt !== null }));
+	return rows.map(({ id, name, code, archivedAt }) => ({
+		id,
+		name,
+		code,
+		archived: archivedAt !== null,
+	}));
 }
 
 /** The period of `userId` that starts on `startsOn`, once it has been submitted; null before. */

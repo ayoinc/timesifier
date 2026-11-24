@@ -20,6 +20,7 @@ import {
 	CSP_REPORT_FIELDS,
 } from "~/browser-errors/report";
 import { BrowserErrorReportSchema } from "~/browser-errors/report.server";
+import { mayCreateProject } from "~/clients/managers.server";
 import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
@@ -494,7 +495,7 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 	const pages = [PRIVACY_PATH, SECURITY_PATH];
 	for (const path of pages) {
 		const html = await page(path);
-		for (const term of [...Object.values(rows), "Managers", "Contractors"]) {
+		for (const term of [...Object.values(rows), "Managers", "Account managers", "Contractors"]) {
 			expect(html, `${path}: ${term}`).toContain(
 				`<dt class="text-title-medium wrap-anywhere">${term}</dt>`,
 			);
@@ -552,6 +553,11 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 		expect(mayChangeExpensesOf(as(role, [colleague]), colleague), role).toBe(false);
 	}
 
+	// An account manager creates that client's projects and no other's (decision 42).
+	expect(mayCreateProject("member", ["globex"], "globex")).toBe(true);
+	expect(mayCreateProject("member", ["globex"], "initech")).toBe(false);
+	expect(mayCreateProject("finance", [], "globex")).toBe(false);
+
 	for (const path of pages) {
 		const text = words(await page(path));
 		expect(text, path).toContain("Nobody changes another person's time entries or expenses");
@@ -560,6 +566,9 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 		);
 		expect(text, path).toContain("never their own. A manager sees no rate, invoice or estimate.");
 		expect(text, path).toContain(`grants support access, for ${SUPPORT_HOURS.join(" or ")} hours`);
+		expect(text, path).toContain(
+			"names as a client's account manager creates that client's projects",
+		);
 	}
 	const notice = words(await page(PRIVACY_PATH));
 	expect(notice).toContain("An owner or admin can give Timesifier an address");

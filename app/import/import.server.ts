@@ -27,12 +27,15 @@ import {
 	weekOf,
 } from "~/leave/rules";
 import { rulesCalendarOf } from "~/leave/rules.server";
+import { type CodeRules, codedName, codeKey, codeRuleFor, typedCode } from "~/lib/codes";
 import { nameKey, recordName } from "~/lib/names";
 import { lockOf, lockReachOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
+import { nextPatternCodes, projectCodeRules } from "~/projects/projects.server";
 import { addDays, type Day, dayOf, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
 import { ENTRY_FIELDS } from "~/time/manual.server";
+import { hasClients, hasWorkCodes, WorkModel } from "~/workspace/work-model";
 
 import { type CsvRow, parseCsv } from "./csv";
 import {
@@ -176,8 +179,14 @@ export interface TimeRow {
 	userId: string;
 	person: string;
 	day: Day;
+	/** The client: as it is named here when it is found, else as the file names it. */
 	client: string | null;
+	/** The client's code (TS-115a): its own when found, else the file's for one the import adds. */
+	clientCode: string | null;
+	/** The project, by the name it has or is to have: found by code first, then by name (TS-115a). */
 	project: string;
+	/** The project's code: its own when found, else the file's for one the import adds. */
+	projectCode: string | null;
 	task: string | null;
 	notes: string | null;
 	minutes: number;
@@ -198,12 +207,18 @@ export interface Preview {
 	missing: string[];
 	/** Time: the rows to import. */
 	rows: TimeRow[];
-	/** Clients and projects: the names to add, with their clients for projects. */
-	records: { line: number; name: string; client: string | null }[];
+	/** Clients and projects: the names to add, with their codes, and their clients for projects. */
+	records: {
+		line: number;
+		name: string;
+		code: string | null;
+		client: string | null;
+		clientCode: string | null;
+	}[];
 	skipped: Skipped[];
 	/** The people the file names who are not members, each with their rows. */
 	unmatched: { person: string; lines: number[] }[];
-	/** What importing would add. */
+	/** What importing would add, each named with its code (`codedName`). */
 	creates: { clients: string[]; projects: string[]; tasks: string[] };
 }
 
@@ -234,17 +249,53 @@ async function membersOf(scope: OrganisationScope, organisationZone: string): Pr
 	}));
 }
 
-/** The organisation's zone and lock date, read for each import. */
-async function organisationOf(organisationId: string) {
-	const [found] = await drizzle(env.DB)
-		.select({ timeZone: organisations.timeZone, lockedThrough: organisations.lockedThrough })
-		.from(organisations)
-		.where(eq(organisations.id, organisationId))
-		.limit(1);
+/** What an import reads of the organisation each time. */
+interface ImportOrganisation {
+	zone: string;
+	lockedThrough: Day | null;
+	/** Whether it has clients: not under Internal work (TS-115a). */
+	clients: boolean;
+	/** Whether a project with no client is a work code, billing nothing: under Both. */
+	workCodes: boolean;
+	/** The organisation's code rules: `codeNeededFor` reads them for a project the import adds. */
+	codeRules: CodeRules;
+}
+
+async function organisationOf(organisationId: string): Promise<ImportOrganisation> {
+	const [[found], codeRules] = await Promise.all([
+		drizzle(env.DB)
+			.select({
+				timeZone: organisations.timeZone,
+				lockedThrough: organisations.lockedThrough,
+				workModel: organisations.workModel,
+			})
+			.from(organisations)
+			.where(eq(organisations.id, organisationId))
+			.limit(1),
+		projectCodeRules(organisationId),
+	]);
+	const model = WorkModel.safeParse(found?.workModel);
 	return {
 		zone: found?.timeZone ?? "UTC",
 		lockedThrough: (found?.lockedThrough ?? null) as Day | null,
+		clients: hasClients(model.success ? model.data : "client_projects"),
+		workCodes: hasWorkCodes(model.success ? model.data : "client_projects"),
+		codeRules,
 	};
+}
+
+/**
+ * Why a project the import adds without a code is skipped, or null: where
+ * every one of its kind has a code and no pattern numbers it. A project with
+ * no client is a work code under Both, with the work codes' rule.
+ */
+function codeNeededFor(organisation: ImportOrganisation, clientless: boolean): string | null {
+	const rule = codeRuleFor(organisation.codeRules, clientless);
+	if (!rule.required || rule.pattern !== null) return null;
+	const { workCode } = organisation.codeRules;
+	return organisation.workCodes && clientless
+		? `No ${workCode} code: every ${workCode} here needs one.`
+		: CODE_NEEDED;
 }
 
 /** The previewed or finished import `id`, or null. */
@@ -284,30 +335,121 @@ export async function previewImport(scope: OrganisationScope, job: ImportSource)
 		creates: { clients: [], projects: [], tasks: [] },
 	};
 	if (preview.missing.length > 0) return preview;
+	const organisation = await organisationOf(scope.organisationId);
 	const cell = (row: CsvRow, field: string) => {
+		// Under Internal work there are no clients (TS-115a): a file's are not read.
+		if (!organisation.clients && (field === "client" || field === "client_code")) return "";
 		const column = mapping[field];
 		return column === undefined ? "" : (row.cells[column] ?? "").trim();
 	};
-	if (kind === "time") await previewTime(scope, body, cell, preview);
-	else await previewRecords(scope, kind, body, cell, preview);
+	if (kind === "time") await previewTime(scope, organisation, body, cell, preview);
+	else await previewRecords(scope, organisation, kind, body, cell, preview);
 	return preview;
 }
 
 type Cell = (row: CsvRow, field: string) => string;
 
+/** A client or project as an import finds it: one here, or one the import is to add. */
+interface Coded {
+	name: string;
+	nameKey: string;
+	code: string | null;
+	codeKey: string | null;
+}
+
+/**
+ * Finds clients or projects by what a row names (TS-115a): by the code in its
+ * code column, then by its name column read as a code, then by name. What the
+ * import is to add is added to it, so two rows naming one new project, one by
+ * its code and one by its name, add it once.
+ */
+interface Finder {
+	find(typedName: string, code: string | null): Coded | null;
+	/** Adds `name` with `code`, as the import is to. */
+	add(name: string, code: string | null): Coded;
+}
+
+function finderOf(existing: readonly Coded[]): Finder {
+	const byCode = new Map<string, Coded>();
+	const byName = new Map<string, Coded>();
+	const add = (found: Coded) => {
+		if (found.codeKey !== null) byCode.set(found.codeKey, found);
+		byName.set(found.nameKey, found);
+	};
+	for (const each of existing) add(each);
+	return {
+		find: (typedName, code) =>
+			(code === null ? undefined : byCode.get(codeKey(code))) ??
+			(typedName
+				? (byCode.get(codeKey(typedName)) ?? byName.get(nameKey(typedName)))
+				: undefined) ??
+			null,
+		add(name, code) {
+			const added = {
+				name,
+				nameKey: nameKey(name),
+				code,
+				codeKey: code === null ? null : codeKey(code),
+			};
+			add(added);
+			return added;
+		},
+	};
+}
+
+const CODE_CELL_PROBLEM =
+	"The code is not 1 to 24 letters, digits, dots, slashes, hyphens or underscores.";
+const CODE_NEEDED = "No project code: every project here needs one.";
+
+/**
+ * A row's client, found or to be added, or why the row is skipped. A client
+ * named in no cell is null.
+ */
+function clientOf(
+	clients: Finder,
+	row: CsvRow,
+	cell: Cell,
+): { client: Coded | null } | { reason: string } {
+	const code = typedCode(cell(row, "client_code"));
+	if (code === false) return { reason: CODE_CELL_PROBLEM };
+	const typed = cell(row, "client");
+	const found = clients.find(typed, code);
+	if (found) return { client: found };
+	const name = recordName(typed);
+	return { client: name === null ? null : clients.add(name, code) };
+}
+
 async function previewRecords(
 	scope: OrganisationScope,
+	organisation: ImportOrganisation,
 	kind: "clients" | "projects",
 	body: CsvRow[],
 	cell: Cell,
 	preview: Preview,
 ) {
 	const [clients, projects] = await Promise.all([scope.clients.select(), scope.projects.select()]);
-	const clientKeys = new Set(clients.map((c) => c.nameKey));
-	const taken = new Set((kind === "clients" ? clients : projects).map((r) => r.nameKey));
+	const clientFinder = finderOf(clients);
+	const finder = kind === "clients" ? clientFinder : finderOf(projects);
+	const knownClients = new Set(clients.map((c) => c.nameKey));
 	const newClients = new Map<string, string>();
 	for (const row of body) {
+		if (kind === "clients" && !organisation.clients) {
+			preview.skipped.push({ line: row.line, reason: "This organisation has no clients." });
+			continue;
+		}
+		const code = typedCode(cell(row, kind === "clients" ? "client_code" : "project_code"));
+		if (code === false) {
+			preview.skipped.push({ line: row.line, reason: CODE_CELL_PROBLEM });
+			continue;
+		}
 		const typed = cell(row, kind === "clients" ? "client" : "project");
+		if (finder.find(typed, code)) {
+			preview.skipped.push({
+				line: row.line,
+				reason: kind === "clients" ? "Already a client." : "Already a project.",
+			});
+			continue;
+		}
 		const name = recordName(typed);
 		if (name === null) {
 			preview.skipped.push({
@@ -318,33 +460,58 @@ async function previewRecords(
 			});
 			continue;
 		}
-		if (taken.has(nameKey(name))) {
-			preview.skipped.push({
-				line: row.line,
-				reason: kind === "clients" ? "Already a client." : "Already a project.",
-			});
+		const client = kind === "projects" ? clientOf(clientFinder, row, cell) : { client: null };
+		if ("reason" in client) {
+			preview.skipped.push({ line: row.line, reason: client.reason });
 			continue;
 		}
-		taken.add(nameKey(name));
-		const client = kind === "projects" ? recordName(cell(row, "client")) : null;
-		if (client !== null && !clientKeys.has(nameKey(client)))
-			newClients.set(nameKey(client), client);
-		preview.records.push({ line: row.line, name, client });
+		const needed =
+			kind === "projects" && code === null && codeNeededFor(organisation, client.client === null);
+		if (needed) {
+			preview.skipped.push({ line: row.line, reason: needed });
+			continue;
+		}
+		finder.add(name, code);
+		const found = client.client;
+		if (found !== null && !knownClients.has(found.nameKey))
+			newClients.set(found.nameKey, codedName(found.code, found.name));
+		preview.records.push({
+			line: row.line,
+			name,
+			code,
+			client: found?.name ?? null,
+			clientCode: found?.code ?? null,
+		});
 	}
-	preview.creates.clients =
-		kind === "clients" ? preview.records.map((r) => r.name) : [...newClients.values()];
-	preview.creates.projects = kind === "projects" ? preview.records.map((r) => r.name) : [];
+	const named = preview.records.map((r) => codedName(r.code, r.name));
+	preview.creates.clients = kind === "clients" ? named : [...newClients.values()];
+	preview.creates.projects = kind === "projects" ? named : [];
 }
 
-async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell, preview: Preview) {
-	const { zone: organisationZone, lockedThrough } = await organisationOf(scope.organisationId);
-	const members = await membersOf(scope, organisationZone);
+async function previewTime(
+	scope: OrganisationScope,
+	organisation: ImportOrganisation,
+	body: CsvRow[],
+	cell: Cell,
+	preview: Preview,
+) {
+	const { zone: organisationZone, lockedThrough } = organisation;
+	const [members, projects, tasks, clients] = await Promise.all([
+		membersOf(scope, organisationZone),
+		scope.projects.select(),
+		scope.tasks.select(),
+		scope.clients.select(),
+	]);
 	const byEmail = new Map(members.map((m) => [m.email, m]));
 	const byName = new Map<string, Member[]>();
 	for (const member of members) {
 		const key = personKey(member.name);
 		byName.set(key, [...(byName.get(key) ?? []), member]);
 	}
+	// A row's project is found by its code first, then by name (TS-115a).
+	const projectFinder = finderOf(projects);
+	const existingProjects = new Set(projects.map((p) => p.nameKey));
+	const clientFinder = finderOf(clients);
 	const unmatched = new Map<string, number[]>();
 	const memberOf = new Map<string, Member>();
 	const candidates: TimeRow[] = [];
@@ -392,11 +559,35 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			});
 			continue;
 		}
-		const project = recordName(cell(row, "project"));
+		const projectCode = typedCode(cell(row, "project_code"));
+		if (projectCode === false) {
+			preview.skipped.push({ line: row.line, reason: CODE_CELL_PROBLEM });
+			continue;
+		}
+		const typedProject = cell(row, "project");
+		const found = projectFinder.find(typedProject, projectCode);
+		const project = found?.name ?? recordName(typedProject);
 		if (project === null) {
 			preview.skipped.push({ line: row.line, reason: "No project, or its name is too long." });
 			continue;
 		}
+		// The client matters only to a project the import adds; each row that
+		// names it carries it, as the first may be skipped.
+		const client =
+			found && existingProjects.has(found.nameKey)
+				? { client: null }
+				: clientOf(clientFinder, row, cell);
+		if ("reason" in client) {
+			preview.skipped.push({ line: row.line, reason: client.reason });
+			continue;
+		}
+		const needed =
+			!found && projectCode === null && codeNeededFor(organisation, client.client === null);
+		if (needed) {
+			preview.skipped.push({ line: row.line, reason: needed });
+			continue;
+		}
+		if (!found) projectFinder.add(project, projectCode);
 		const notes = cell(row, "notes");
 		memberOf.set(member.userId, member);
 		candidates.push({
@@ -404,8 +595,10 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			userId: member.userId,
 			person: member.name,
 			day,
-			client: recordName(cell(row, "client")),
+			client: client.client?.name ?? null,
+			clientCode: client.client?.code ?? null,
 			project,
+			projectCode: found ? found.code : projectCode,
 			task: recordName(cell(row, "task")),
 			notes: notes ? notes.slice(0, 2000) : null,
 			minutes,
@@ -419,11 +612,6 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 	// their locked days; and, for the limits of their days (TS-095), their
 	// rules and the time of each kind on each day of the weeks the file
 	// touches, which the file's rows add to as they are taken.
-	const [projects, tasks, clients] = await Promise.all([
-		scope.projects.select(),
-		scope.tasks.select(),
-		scope.clients.select(),
-	]);
 	const projectKey = new Map(projects.map((p) => [p.id, p.nameKey]));
 	const taskKey = new Map(tasks.map((t) => [t.id, t.nameKey]));
 	const present = new Map<string, number>();
@@ -513,7 +701,6 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 	}
 
 	const knownClients = new Set(clients.map((c) => c.nameKey));
-	const knownProjects = new Set(projects.map((p) => p.nameKey));
 	const knownTasks = new Set(tasks.map((t) => t.nameKey));
 	const newClients = new Map<string, string>();
 	const newProjects = new Map<string, string>();
@@ -558,10 +745,10 @@ async function previewTime(scope: OrganisationScope, body: CsvRow[], cell: Cell,
 			);
 			preview.rows.push(part);
 		}
-		if (!knownProjects.has(nameKey(row.project))) {
-			newProjects.set(nameKey(row.project), row.project);
+		if (!existingProjects.has(nameKey(row.project))) {
+			newProjects.set(nameKey(row.project), codedName(row.projectCode, row.project));
 			if (row.client && !knownClients.has(nameKey(row.client))) {
-				newClients.set(nameKey(row.client), row.client);
+				newClients.set(nameKey(row.client), codedName(row.clientCode, row.client));
 			}
 		}
 		if (row.task && !knownTasks.has(nameKey(row.task))) newTasks.set(nameKey(row.task), row.task);
@@ -721,64 +908,82 @@ interface Known {
 	billable: Map<string, boolean>;
 }
 
-/** The clients, projects, tasks and project tasks the preview says to add, each recorded as from an import. */
+/**
+ * The clients, projects, tasks and project tasks the preview says to add, each
+ * recorded as from an import; clients and projects with their codes (TS-115a).
+ * Under Both, a project added with no client is a work code: it bills nothing.
+ */
 async function recordsToCreate(
 	scope: OrganisationScope,
 	actorId: string,
 	preview: Preview,
 ): Promise<Known> {
-	const [clients, projects, tasks, links] = await Promise.all([
+	const [clients, projects, tasks, links, organisation] = await Promise.all([
 		scope.clients.select(),
 		scope.projects.select(),
 		scope.tasks.select(),
 		scope.projectTasks.select(),
+		organisationOf(scope.organisationId),
 	]);
 	const clientId = new Map(clients.map((c) => [c.nameKey, c.id]));
 	const projectId = new Map(projects.map((p) => [p.nameKey, p.id]));
 	const taskId = new Map(tasks.map((t) => [t.nameKey, t.id]));
 	const billable = new Map(links.map((l) => [`${l.projectId}|${l.taskId}`, l.billable]));
+	const coded = (code: string | null) => ({ code, codeKey: code === null ? null : codeKey(code) });
 
-	const newClients: { id: string; name: string; nameKey: string }[] = [];
-	const ensureClient = (name: string | null) => {
+	const newClients: {
+		id: string;
+		name: string;
+		nameKey: string;
+		code: string | null;
+		codeKey: string | null;
+	}[] = [];
+	const ensureClient = (name: string | null, code: string | null) => {
 		if (name === null) return null;
 		const key = nameKey(name);
 		const known = clientId.get(key);
 		if (known) return known;
 		const id = uuidv7();
 		clientId.set(key, id);
-		newClients.push({ id, name, nameKey: key });
+		newClients.push({ id, name, nameKey: key, ...coded(code) });
 		return id;
 	};
-	const newProjects: { id: string; name: string; nameKey: string; clientId: string | null }[] = [];
+	const newProjects: {
+		id: string;
+		name: string;
+		nameKey: string;
+		clientId: string | null;
+		code: string | null;
+		codeKey: string | null;
+		billingType?: "non_billable";
+	}[] = [];
+	const addProject = (name: string, code: string | null, client: string | null) => {
+		const id = uuidv7();
+		projectId.set(nameKey(name), id);
+		newProjects.push({
+			id,
+			name,
+			nameKey: nameKey(name),
+			clientId: client,
+			...coded(code),
+			...(organisation.workCodes && client === null ? { billingType: "non_billable" } : {}),
+		});
+		return id;
+	};
 	const newTasks: { id: string; name: string; nameKey: string }[] = [];
 	const newLinks: { projectId: string; taskId: string; billable: boolean }[] = [];
 
 	if (preview.kind === "clients") {
-		for (const row of preview.records) ensureClient(row.name);
+		for (const row of preview.records) ensureClient(row.name, row.code);
 	} else if (preview.kind === "projects") {
 		for (const row of preview.records) {
-			const id = uuidv7();
-			newProjects.push({
-				id,
-				name: row.name,
-				nameKey: nameKey(row.name),
-				clientId: ensureClient(row.client),
-			});
-			projectId.set(nameKey(row.name), id);
+			addProject(row.name, row.code, ensureClient(row.client, row.clientCode));
 		}
 	} else {
 		for (const row of preview.rows) {
-			let project = projectId.get(nameKey(row.project));
-			if (!project) {
-				project = uuidv7();
-				projectId.set(nameKey(row.project), project);
-				newProjects.push({
-					id: project,
-					name: row.project,
-					nameKey: nameKey(row.project),
-					clientId: ensureClient(row.client),
-				});
-			}
+			const project =
+				projectId.get(nameKey(row.project)) ??
+				addProject(row.project, row.projectCode, ensureClient(row.client, row.clientCode));
 			if (row.task) {
 				let task = taskId.get(nameKey(row.task));
 				if (!task) {
@@ -793,6 +998,19 @@ async function recordsToCreate(
 				}
 			}
 		}
+	}
+	// A project the file gives no code is numbered by the pattern, as one a
+	// person creates is, passing over the codes the file gives. Under Both, a
+	// work code is not: its code is typed.
+	const uncoded = newProjects.filter(
+		(p) =>
+			p.code === null && codeRuleFor(organisation.codeRules, p.clientId === null).pattern !== null,
+	);
+	if (uncoded.length > 0) {
+		const fileCodes = new Set(newProjects.flatMap((p) => (p.codeKey === null ? [] : [p.codeKey])));
+		const numbered = await nextPatternCodes(scope, uncoded.length, fileCodes);
+		for (const [n, project] of uncoded.entries())
+			Object.assign(project, coded(numbered[n] ?? null));
 	}
 	/** Each chunk's insert with a `<type>.created` record of each row it adds. */
 	const created = <R extends { id: string; name: string }>(

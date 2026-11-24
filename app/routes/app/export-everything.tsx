@@ -1,4 +1,4 @@
-import { env, waitUntil } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { useEffect, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 import * as z from "zod";
@@ -7,6 +7,7 @@ import { Button } from "~/components/Button";
 import { organisationScope } from "~/db";
 import { advanceExport, exportStateOf, requestExport } from "~/exports/job.server";
 import { EXPORT_KEEP_DAYS, everythingDownloadPath } from "~/exports/paths";
+import { inBackground } from "~/lib/background.server";
 import { parseRequest } from "~/lib/validate";
 import { type Membership, membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -89,7 +90,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 	if (!requested.ok) return declined(requested.problem, 409);
 	// The first step runs once the answer is sent; a small organisation's
 	// export is made by it, a large one's by the every-minute trigger after.
-	waitUntil(advanceExport(membership.organisation.id, requested.id, now));
+	inBackground(advanceExport(membership.organisation.id, requested.id, now));
 	return done("Your export is being made. You'll get an email when it's ready.");
 }
 

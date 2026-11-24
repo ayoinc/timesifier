@@ -26,6 +26,7 @@ import {
 	setCellHours,
 } from "~/time/manual.server";
 import { zoneOfMember } from "~/time/zones.server";
+import { inTerms, type Terms, termsOf } from "~/workspace/work-model";
 import { copyDay, copyWeek, leftOutSentence } from "./copy.server";
 import { TypedHours } from "./durations";
 import { markCookie } from "./getting-started.server";
@@ -127,18 +128,21 @@ const REFUSALS: Record<Exclude<NotWritten, "limit" | "invoiced">, [string, numbe
 /**
  * A refused change in words. A day's limit says what it has left (TS-090),
  * and so does a day with no room left before its end or now (TS-091, W08),
- * and an invoice its number and who can let the entry go (TR-09).
+ * and an invoice its number and who can let the entry go (TR-09). A word for
+ * projects is the organisation's own (TS-115a).
  */
 const refusal = (
 	refused:
 		| { reason: Exclude<NotWritten, "limit" | "invoiced"> }
 		| { reason: "limit" | "day-full" | "invoiced"; message: string },
+	terms: Terms,
 ) => {
 	if (refused.reason === "limit" || refused.reason === "invoiced") {
 		return declined(refused.message, 409);
 	}
 	if (refused.reason === "day-full") return declined(refused.message);
-	return declined(...REFUSALS[refused.reason]);
+	const [problem, status] = REFUSALS[refused.reason];
+	return declined(inTerms(problem, terms), status);
 };
 
 /** A typed day and time as an instant in `zone`, or null when the clocks skip that time. */
@@ -155,6 +159,7 @@ const FROM_START = "Type the hours worked from that time.";
 export async function timesheetAction(request: Request, membership: Membership) {
 	const input = await parseRequest(request, TimesheetForm);
 	const { user, organisation } = membership;
+	const terms = termsOf(organisation.workModel, organisation.internalTerm);
 	const scope = organisationScope(env.DB, organisation.id);
 	const zone = await zoneOfMember(membership);
 	const now = Date.now();
@@ -179,7 +184,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				});
 				return started.ok
 					? { ...done("Timer started."), changed: [started.started.id] }
-					: refusal(started);
+					: refusal(started, terms);
 			}
 			const hours = TypedHours.safeParse(input.hours);
 			if (!hours.success) return declined(hours.error.issues[0]?.message ?? "Type hours as 1.5.");
@@ -199,7 +204,9 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				tagIds: input.tagIds,
 				overtime: input.overtime,
 			});
-			return added.ok ? { ...done("Entry saved."), changed: [added.entry.id] } : refusal(added);
+			return added.ok
+				? { ...done("Entry saved."), changed: [added.entry.id] }
+				: refusal(added, terms);
 		}
 
 		// A timer that ran past its day's expected hours is cut there, the rest
@@ -259,12 +266,14 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				},
 				now,
 			);
-			return written.ok ? { ...done("Entry saved."), changed: [input.entryId] } : refusal(written);
+			return written.ok
+				? { ...done("Entry saved."), changed: [input.entryId] }
+				: refusal(written, terms);
 		}
 
 		case "delete": {
 			const deleted = await deleteEntry(scope, user.id, input.entryId);
-			if (!deleted.ok) return refusal(deleted);
+			if (!deleted.ok) return refusal(deleted, terms);
 			const who = { organisationId: organisation.id, userId: user.id };
 			return {
 				...done("Entry deleted."),
@@ -277,7 +286,9 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			const entry = await entryOfUndo(env.BETTER_AUTH_SECRET, input.token, who, now);
 			if (!entry) return declined("That deletion can no longer be undone.", 409);
 			const restored = await restoreEntry(scope, user.id, entry, now);
-			return restored.ok ? { ...done("Entry restored."), changed: [entry.id] } : refusal(restored);
+			return restored.ok
+				? { ...done("Entry restored."), changed: [entry.id] }
+				: refusal(restored, terms);
 		}
 
 		case "copy-day": {
@@ -321,7 +332,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				zone,
 				now,
 			});
-			return set.ok ? done("Saved.") : refusal(set);
+			return set.ok ? done("Saved.") : refusal(set, terms);
 		}
 
 		case "submit": {

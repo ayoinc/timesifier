@@ -6,6 +6,7 @@ import { AddIcon } from "~/components/icons/AddIcon";
 import { RemoveIcon } from "~/components/icons/RemoveIcon";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Tooltip } from "~/components/Tooltip";
+import { codedName } from "~/lib/codes";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { addDays, type Day } from "~/time/calendar";
@@ -68,7 +69,10 @@ export function CalendarView({
 	const formatPeriod = usePeriodFormat();
 	const clock = useClockFormat(zone);
 	const navigate = useNavigate();
-	const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
+	const projectName = (id: string) => {
+		const project = projects.find((p) => p.id === id);
+		return project ? codedName(project.code, project.name) : "";
+	};
 	const canTrack = projects.some((p) => !p.archived);
 
 	const [said, setSaid] = useState<string | null>(null);

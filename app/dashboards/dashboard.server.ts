@@ -1,6 +1,7 @@
 import { budgetKindOf, projectBudgets } from "~/budgets/budget.server";
 import { type Receivable, receivablesOf } from "~/invoices/receivables.server";
 import { type UninvoicedTotal, uninvoicedTotalsOf } from "~/invoices/uninvoiced.server";
+import { codedName } from "~/lib/codes";
 import { maySeeRates } from "~/organisations/access";
 import type { Membership } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
@@ -160,7 +161,8 @@ async function budgetsNearLimit(
 		money,
 		pricing: await pricingOf(scope, money.currency),
 	});
-	const names = new Map(projects.map((p) => [p.id, p.name]));
+	// Each named by its code and name, code first (TS-115a).
+	const names = new Map(projects.map((p) => [p.id, codedName(p.code, p.name)]));
 	const near: BudgetNearLimit[] = [];
 	for (const [projectId, budget] of figures) {
 		if (!budget.total || budget.amount === null || budget.amount <= 0) continue;

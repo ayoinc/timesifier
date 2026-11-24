@@ -15,6 +15,7 @@ import { Overview, overviewData } from "~/invoices/Overview";
 import { invoiceOverview } from "~/invoices/overview.server";
 import { invoicePath, invoiceSettingsPath, newInvoicePath, xeroExportPath } from "~/invoices/paths";
 import { balanceOf, type InvoiceStatus, OWING, STATE_LABELS, stateOf } from "~/invoices/status";
+import { codedName } from "~/lib/codes";
 import { formatMoney } from "~/money/money";
 import { destination } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
@@ -56,7 +57,7 @@ const STATUSES: Record<Shown, readonly InvoiceStatus[] | null> = {
 };
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { scope, organisation, today, locale } = await billingOf(context, request);
+	const { makes, scope, organisation, today, locale } = await billingOf(context, request);
 	const asked = new URL(request.url).searchParams.get("show");
 	const show: Shown = SHOWN.find((each) => each === asked) ?? "overview";
 	const statuses = STATUSES[show];
@@ -72,11 +73,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		scope,
 		rows.map((row) => row.id),
 	);
-	const clientName = new Map(clients.map((c) => [c.id, c.name]));
+	const clientName = new Map(clients.map((c) => [c.id, codedName(c.code, c.name)]));
 	return {
 		slug: organisation.slug,
 		show,
 		hasInvoices: any.length > 0,
+		/** Whether New invoice is offered: never under Internal work (TS-115a). */
+		makes,
 		hasClients: clients.length > 0,
 		overview: overview && overviewData(overview, today, locale),
 		invoices: rows.map((row) => {
@@ -106,11 +109,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Invoices({ loaderData }: Route.ComponentProps) {
-	const { slug, show, invoices, overview, hasInvoices, hasClients } = loaderData;
+	const { slug, show, invoices, overview, hasInvoices, hasClients, makes } = loaderData;
 	// The overview lists the open invoices under its figures.
 	const listed = show === "overview" ? SHOWN_LABELS.open : SHOWN_LABELS[show];
 	const navigate = useNavigate();
-	const create = (
+	// Under Internal work the invoices held stay, and no new one is made (TS-115a).
+	const create = makes && (
 		<Button onPress={() => navigate(newInvoicePath(slug))} isDisabled={!hasClients}>
 			New invoice
 		</Button>
@@ -136,9 +140,11 @@ export default function Invoices({ loaderData }: Route.ComponentProps) {
 						<div className="flex flex-col items-start gap-4 border-t border-outline-variant px-4 py-6 @sm:px-5">
 							<h2 className="text-title-large">No invoices yet</h2>
 							<p className="max-w-160 text-body-large text-on-surface-variant">
-								{hasClients
-									? "Choose a client and a range: the billable time and expenses not yet invoiced become the lines of a draft."
-									: "An invoice is for a client. Add one on Clients, give it projects, and its billable time can be invoiced here."}
+								{!makes
+									? "Under Internal work nothing new is invoiced."
+									: hasClients
+										? "Choose a client and a range: the billable time and expenses not yet invoiced become the lines of a draft."
+										: "An invoice is for a client. Add one on Clients, give it projects, and its billable time can be invoiced here."}
 							</p>
 							{create}
 						</div>

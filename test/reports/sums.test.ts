@@ -55,7 +55,7 @@ async function perEntry(first: string, last: string, people?: readonly string[])
 		drizzle(env.DB).select().from(users),
 	]);
 	const project = new Map(projects.map((p) => [p.id, p]));
-	const client = new Map(clients.map((c) => [c.id, c.name]));
+	const client = new Map(clients.map((c) => [c.id, c]));
 	const name = new Map(accounts.map((a) => [a.id, a.name]));
 	return entries
 		.filter((e) => !people || people.includes(e.userId))
@@ -67,8 +67,10 @@ async function perEntry(first: string, last: string, people?: readonly string[])
 				person: name.get(e.userId) ?? "",
 				projectId: e.projectId,
 				project: project.get(e.projectId)?.name ?? "",
+				projectCode: project.get(e.projectId)?.code ?? null,
 				clientId,
-				client: clientId === null ? null : (client.get(clientId) ?? null),
+				client: clientId === null ? null : (client.get(clientId)?.name ?? null),
+				clientCode: clientId === null ? null : (client.get(clientId)?.code ?? null),
 				description: e.description,
 				day: e.spentOn,
 				startedAt: e.startedAt.getTime(),

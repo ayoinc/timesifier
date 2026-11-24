@@ -1,5 +1,6 @@
 import { MINUTES_PER_HOUR } from "~/billing/billable";
 import type { OrganisationScope } from "~/db";
+import { codedName } from "~/lib/codes";
 import { roundHalfUp, totalsByCurrency } from "~/money/money";
 import { type Day, dayOf } from "~/time/calendar";
 
@@ -14,7 +15,7 @@ import { billableProjectsOf, uninvoicedExpenses, uninvoicedTime } from "./source
  * (TR-09). A project's time is summed exactly and rounded once.
  */
 
-/** One project's uninvoiced work. */
+/** One project's uninvoiced work; the client and the project each named by code and name (TS-115a). */
 export interface UninvoicedProject {
 	clientId: string;
 	clientName: string;
@@ -63,7 +64,7 @@ export async function uninvoicedOf(
 			today,
 		),
 	]);
-	const clientName = new Map(clients.map((c) => [c.id, c.name]));
+	const clientName = new Map(clients.map((c) => [c.id, codedName(c.code, c.name)]));
 
 	const rows = projects.map((project) => {
 		const time = entries.filter((e) => e.projectId === project.id);

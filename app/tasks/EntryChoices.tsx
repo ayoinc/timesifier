@@ -2,13 +2,15 @@ import { use, useState } from "react";
 
 import { Select } from "~/components/Select";
 import { ProjectPicker } from "~/projects/ProjectPicker";
+import { useTerms } from "~/routes/app/useOrganisation";
 import { TagPicker } from "~/tags/TagPicker";
+import { inTerms } from "~/workspace/work-model";
 
 import { OVER_BUDGET, TASK_FIELD, TrackChoicesContext } from "./track";
 
 export interface EntryChoicesProps {
-	/** The projects offered, by name. */
-	projects: readonly { id: string; name: string }[];
+	/** The projects offered, by name, each with its code (TS-115a). */
+	projects: readonly { id: string; name: string; code: string | null }[];
 	/** The project chosen to start with. */
 	defaultProjectId: string | null;
 	/** The entry being changed, whose task and tags the fields start at; absent for a new one. */
@@ -32,6 +34,7 @@ export function EntryChoices({
 	autoFocusProject,
 }: EntryChoicesProps) {
 	const choices = use(TrackChoicesContext);
+	const terms = useTerms();
 	const [projectId, setProjectId] = useState<string | null>(defaultProjectId);
 	const own = entryId === undefined ? undefined : choices?.entries[entryId];
 	const keeps = projectId === defaultProjectId ? (own?.taskId ?? null) : null;
@@ -43,18 +46,27 @@ export function EntryChoices({
 	const [taskId, setTaskId] = useState<string | null>(startsAt);
 	// A task of another project is no choice here: the field moves to this project's first.
 	const shownTask = tasks.some((task) => task.id === taskId) ? taskId : startsAt;
-	const billable = tasks.find((task) => task.id === shownTask)?.billable;
+	// Under Internal work nothing is billable, so nothing says so (TS-115a).
+	const billable = terms.clients
+		? tasks.find((task) => task.id === shownTask)?.billable
+		: undefined;
 	const over = projectId !== null && (choices?.overBudget.includes(projectId) ?? false);
 
 	return (
 		<>
 			<ProjectPicker
 				name="projectId"
-				projects={projects.map((p) => ({
-					id: p.id,
-					name: p.name,
-					clientName: choices?.clients[p.id] ?? null,
-				}))}
+				projects={projects.map((p) => {
+					const choice = choices?.projects[p.id];
+					return {
+						id: p.id,
+						name: p.name,
+						code: p.code,
+						clientName: choice?.client?.name ?? null,
+						clientCode: choice?.client?.code ?? null,
+						workCode: choice?.workCode ?? false,
+					};
+				})}
 				recent={choices?.recent}
 				pinned={choices?.pinned}
 				value={projectId}
@@ -67,7 +79,7 @@ export function EntryChoices({
 					role="note"
 					className="rounded-medium border-2 border-on-surface px-4 py-3 text-body-large"
 				>
-					{OVER_BUDGET} You can still track time to it.
+					{inTerms(OVER_BUDGET, terms)} You can still track time to it.
 				</p>
 			)}
 			{choices && tasks.length > 0 && (

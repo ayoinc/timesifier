@@ -51,6 +51,11 @@ export function RadioGroup({ label, children, ...props }: RadioGroupProps) {
 export interface RadioProps extends Pick<AriaRadioProps, "value" | "isDisabled" | "autoFocus"> {
 	/** The label beside the ring. */
 	children: ReactNode;
+	/**
+	 * What the choice means, under the label in a smaller type. The ring stays
+	 * centred on the label's first line, not on the label and the hint together.
+	 */
+	hint?: ReactNode;
 }
 
 /** One choice of a `RadioGroup`. `value` is what the group holds and submits when this is chosen. */
@@ -83,7 +88,8 @@ export function Radio(props: RadioProps) {
 			data-focus-visible={isFocusVisible || undefined}
 			data-disabled={isDisabled || undefined}
 			className={cx(
-				"group relative inline-flex min-h-12 select-none items-center gap-1 text-body-large",
+				"group relative inline-flex min-h-12 select-none gap-1 text-body-large",
+				props.hint === undefined ? "items-center" : "items-start",
 				isDisabled ? "cursor-not-allowed text-disabled" : "cursor-pointer text-on-surface",
 			)}
 		>
@@ -109,7 +115,15 @@ export function Radio(props: RadioProps) {
 					/>
 				</span>
 			</span>
-			{props.children}
+			{props.hint === undefined ? (
+				props.children
+			) : (
+				// The 48px target's middle is 24px down: half of the 24px first line above it is 12px.
+				<span className="flex flex-col pt-3 pb-2">
+					<span>{props.children}</span>
+					<span className="text-body-medium text-on-surface-variant">{props.hint}</span>
+				</span>
+			)}
 		</label>
 	);
 }

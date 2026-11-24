@@ -1,7 +1,7 @@
 {
 	"version": "6",
 	"dialect": "sqlite",
-	"id": "82949be9-e7b2-473b-9c2b-34814e5eb209",
+	"id": "9bc8dd16-dc71-40af-a79f-c3ae0919ada6",
 	"prevId": "3d7e98ed-c895-4647-881f-50745a1c003a",
 	"tables": {
 		"accounts": {
@@ -821,6 +821,83 @@
 				}
 			}
 		},
+		"client_managers": {
+			"name": "client_managers",
+			"columns": {
+				"organisation_id": {
+					"name": "organisation_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"client_id": {
+					"name": "client_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"user_id": {
+					"name": "user_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"client_managers_organisation_id_user_id_idx": {
+					"name": "client_managers_organisation_id_user_id_idx",
+					"columns": ["organisation_id", "user_id"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {
+				"client_managers_organisation_id_organisations_id_fk": {
+					"name": "client_managers_organisation_id_organisations_id_fk",
+					"tableFrom": "client_managers",
+					"tableTo": "organisations",
+					"columnsFrom": ["organisation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"client_managers_client_fk": {
+					"name": "client_managers_client_fk",
+					"tableFrom": "client_managers",
+					"tableTo": "clients",
+					"columnsFrom": ["organisation_id", "client_id"],
+					"columnsTo": ["organisation_id", "id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"client_managers_membership_fk": {
+					"name": "client_managers_membership_fk",
+					"tableFrom": "client_managers",
+					"tableTo": "memberships",
+					"columnsFrom": ["organisation_id", "user_id"],
+					"columnsTo": ["organisation_id", "user_id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {
+				"client_managers_client_id_user_id_pk": {
+					"columns": ["client_id", "user_id"],
+					"name": "client_managers_client_id_user_id_pk"
+				}
+			},
+			"uniqueConstraints": {},
+			"checkConstraints": {}
+		},
 		"clients": {
 			"name": "clients",
 			"columns": {
@@ -866,6 +943,20 @@
 					"notNull": false,
 					"autoincrement": false
 				},
+				"code": {
+					"name": "code",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"code_key": {
+					"name": "code_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
 				"created_at": {
 					"name": "created_at",
 					"type": "integer",
@@ -890,6 +981,11 @@
 				"clients_organisation_id_name_key_unique": {
 					"name": "clients_organisation_id_name_key_unique",
 					"columns": ["organisation_id", "name_key"],
+					"isUnique": true
+				},
+				"clients_organisation_id_code_key_unique": {
+					"name": "clients_organisation_id_code_key_unique",
+					"columns": ["organisation_id", "code_key"],
 					"isUnique": true
 				}
 			},
@@ -3474,208 +3570,6 @@
 			"uniqueConstraints": {},
 			"checkConstraints": {}
 		},
-		"notification_choices": {
-			"name": "notification_choices",
-			"columns": {
-				"user_id": {
-					"name": "user_id",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"kind": {
-					"name": "kind",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"email": {
-					"name": "email",
-					"type": "integer",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"updated_at": {
-					"name": "updated_at",
-					"type": "integer",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				}
-			},
-			"indexes": {},
-			"foreignKeys": {
-				"notification_choices_user_id_users_id_fk": {
-					"name": "notification_choices_user_id_users_id_fk",
-					"tableFrom": "notification_choices",
-					"tableTo": "users",
-					"columnsFrom": ["user_id"],
-					"columnsTo": ["id"],
-					"onDelete": "cascade",
-					"onUpdate": "no action"
-				}
-			},
-			"compositePrimaryKeys": {
-				"notification_choices_user_id_kind_pk": {
-					"columns": ["user_id", "kind"],
-					"name": "notification_choices_user_id_kind_pk"
-				}
-			},
-			"uniqueConstraints": {},
-			"checkConstraints": {}
-		},
-		"notifications": {
-			"name": "notifications",
-			"columns": {
-				"id": {
-					"name": "id",
-					"type": "text",
-					"primaryKey": true,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"organisation_id": {
-					"name": "organisation_id",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"user_id": {
-					"name": "user_id",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"kind": {
-					"name": "kind",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"title": {
-					"name": "title",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"body": {
-					"name": "body",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": false,
-					"autoincrement": false
-				},
-				"path": {
-					"name": "path",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				},
-				"key": {
-					"name": "key",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": false,
-					"autoincrement": false
-				},
-				"email_state": {
-					"name": "email_state",
-					"type": "text",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false,
-					"default": "'none'"
-				},
-				"read_at": {
-					"name": "read_at",
-					"type": "integer",
-					"primaryKey": false,
-					"notNull": false,
-					"autoincrement": false
-				},
-				"created_at": {
-					"name": "created_at",
-					"type": "integer",
-					"primaryKey": false,
-					"notNull": true,
-					"autoincrement": false
-				}
-			},
-			"indexes": {
-				"notifications_organisation_id_id_unique": {
-					"name": "notifications_organisation_id_id_unique",
-					"columns": ["organisation_id", "id"],
-					"isUnique": true
-				},
-				"notifications_organisation_id_user_id_created_at_idx": {
-					"name": "notifications_organisation_id_user_id_created_at_idx",
-					"columns": ["organisation_id", "user_id", "created_at"],
-					"isUnique": false
-				},
-				"notifications_key_unique": {
-					"name": "notifications_key_unique",
-					"columns": ["organisation_id", "user_id", "key"],
-					"isUnique": true,
-					"where": "\"notifications\".\"key\" IS NOT NULL"
-				},
-				"notifications_email_waiting_idx": {
-					"name": "notifications_email_waiting_idx",
-					"columns": ["created_at"],
-					"isUnique": false,
-					"where": "\"notifications\".\"email_state\" = 'waiting'"
-				},
-				"notifications_created_at_idx": {
-					"name": "notifications_created_at_idx",
-					"columns": ["created_at"],
-					"isUnique": false
-				}
-			},
-			"foreignKeys": {
-				"notifications_organisation_id_organisations_id_fk": {
-					"name": "notifications_organisation_id_organisations_id_fk",
-					"tableFrom": "notifications",
-					"tableTo": "organisations",
-					"columnsFrom": ["organisation_id"],
-					"columnsTo": ["id"],
-					"onDelete": "cascade",
-					"onUpdate": "no action"
-				},
-				"notifications_user_id_users_id_fk": {
-					"name": "notifications_user_id_users_id_fk",
-					"tableFrom": "notifications",
-					"tableTo": "users",
-					"columnsFrom": ["user_id"],
-					"columnsTo": ["id"],
-					"onDelete": "cascade",
-					"onUpdate": "no action"
-				},
-				"notifications_membership_fk": {
-					"name": "notifications_membership_fk",
-					"tableFrom": "notifications",
-					"tableTo": "memberships",
-					"columnsFrom": ["organisation_id", "user_id"],
-					"columnsTo": ["organisation_id", "user_id"],
-					"onDelete": "cascade",
-					"onUpdate": "no action"
-				}
-			},
-			"compositePrimaryKeys": {},
-			"uniqueConstraints": {},
-			"checkConstraints": {
-				"notifications_email_state_known": {
-					"name": "notifications_email_state_known",
-					"value": "\"notifications\".\"email_state\" IN ('none', 'waiting', 'sent', 'skipped')"
-				}
-			}
-		},
 		"organisation_domains": {
 			"name": "organisation_domains",
 			"columns": {
@@ -3988,6 +3882,52 @@
 					"notNull": true,
 					"autoincrement": false,
 					"default": true
+				},
+				"work_model": {
+					"name": "work_model",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'client_projects'"
+				},
+				"internal_term": {
+					"name": "internal_term",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'Work codes'"
+				},
+				"project_code_required": {
+					"name": "project_code_required",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": false
+				},
+				"work_code_required": {
+					"name": "work_code_required",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": false
+				},
+				"project_code_pattern": {
+					"name": "project_code_pattern",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"project_code_next": {
+					"name": "project_code_next",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
 				},
 				"currency": {
 					"name": "currency",
@@ -4586,12 +4526,6 @@
 					"name": "periods_organisation_id_status_starts_on_idx",
 					"columns": ["organisation_id", "status", "starts_on"],
 					"isUnique": false
-				},
-				"periods_submitted_idx": {
-					"name": "periods_submitted_idx",
-					"columns": ["organisation_id"],
-					"isUnique": false,
-					"where": "\"periods\".\"status\" = 'submitted'"
 				}
 			},
 			"foreignKeys": {
@@ -5363,6 +5297,20 @@
 					"autoincrement": false,
 					"default": 1000
 				},
+				"code": {
+					"name": "code",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"code_key": {
+					"name": "code_key",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
 				"created_at": {
 					"name": "created_at",
 					"type": "integer",
@@ -5382,6 +5330,11 @@
 				"projects_organisation_id_id_unique": {
 					"name": "projects_organisation_id_id_unique",
 					"columns": ["organisation_id", "id"],
+					"isUnique": true
+				},
+				"projects_organisation_id_code_key_unique": {
+					"name": "projects_organisation_id_code_key_unique",
+					"columns": ["organisation_id", "code_key"],
 					"isUnique": true
 				},
 				"projects_organisation_id_name_key_unique": {

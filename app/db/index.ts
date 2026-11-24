@@ -8,6 +8,8 @@
 
 // A list of any length as one bound parameter (decision 40).
 export { among, latestAmong, notAmong } from "./among";
+// Whether Invoices and Estimates are there, read with the organisation (TS-115a).
+export { keepsBillingColumn } from "./billing";
 // A share of an invocation's queries, counted as D1 counts them (decision 69).
 export { countedDatabase, isQueriesSpent, QueriesSpent, QueryBudget } from "./budget";
 // Every table of an organisation, a page at a time, for the export of everything (TS-126).

@@ -2,10 +2,18 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { among, type OrganisationScope, organisationScope, organisations, users } from "~/db";
+import {
+	among,
+	keepsBillingColumn,
+	type OrganisationScope,
+	organisationScope,
+	organisations,
+	users,
+} from "~/db";
 import type { Access } from "~/organisations/access";
 import { Role } from "~/organisations/roles";
 import type { Viewer } from "~/shell/destinations";
+import { hasClients, WorkModel } from "~/workspace/work-model";
 
 /**
  * Who something that arrives without a session acts as (TS-081, TS-087,
@@ -22,7 +30,11 @@ export interface Caller {
 		slug: string;
 		timeZone: string;
 		weekStartsOn: number;
-		clientsEnabled: boolean;
+		/** How it works (TS-115a): client projects, internal work or both. */
+		workModel: WorkModel;
+		internalTerm: string;
+		/** Whether its Invoices and Estimates are there: it has clients, or holds one (TS-115a). */
+		keepsBilling: boolean;
 	};
 	user: { id: string; name: string; email: string; timeZone: string | null };
 	role: Role;
@@ -40,7 +52,12 @@ export function zoneOfCaller({
 
 /** What decides the destinations, and so the pages, the caller may reach. */
 export function viewerOfCaller({ role, managesTeams, organisation }: Caller): Viewer {
-	return { role, managesTeams, clientsEnabled: organisation.clientsEnabled };
+	return {
+		role,
+		managesTeams,
+		clientsEnabled: hasClients(organisation.workModel),
+		keepsBilling: organisation.keepsBilling,
+	};
 }
 
 /** `userId` in organisation `organisationId`, or null when they are not a member of it. */
@@ -55,7 +72,9 @@ export async function callerOf(organisationId: string, userId: string): Promise<
 				slug: organisations.slug,
 				timeZone: organisations.timeZone,
 				weekStartsOn: organisations.weekStartsOn,
-				clientsEnabled: organisations.clientsEnabled,
+				workModel: organisations.workModel,
+				internalTerm: organisations.internalTerm,
+				keepsBilling: keepsBillingColumn,
 			})
 			.from(organisations)
 			.where(eq(organisations.id, organisationId))
@@ -75,7 +94,11 @@ export async function callerOf(organisationId: string, userId: string): Promise<
 		managed.length === 0 ? [] : await scope.teamMembers.select((t) => among(t.teamId, managed));
 	return {
 		scope,
-		organisation,
+		organisation: {
+			...organisation,
+			workModel: WorkModel.parse(organisation.workModel),
+			keepsBilling: Boolean(organisation.keepsBilling),
+		},
 		user,
 		role: role.data,
 		managesTeams: managed.length > 0,

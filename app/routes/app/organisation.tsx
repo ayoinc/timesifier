@@ -28,6 +28,7 @@ import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { layoutShouldRevalidate } from "~/shell/revalidation";
 import { finishRunningTransition } from "~/shell/transitions";
 import { navigationTimer } from "~/timesheet/navigation.server";
+import { termsOf } from "~/workspace/work-model";
 
 import type { Route } from "./+types/organisation";
 
@@ -123,6 +124,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 				: logoPath(organisation.slug, organisation.logoVersion),
 		role,
 		destinations: visibleDestinations(viewerOf(membership)),
+		/** What the organisation calls projects and work codes (TS-115a): the navigation and every page read them. */
+		terms: termsOf(organisation.workModel, organisation.internalTerm),
 		/**
 		 * What waits for this person's decision, for the Approvals link: the
 		 * periods (TS-047) and the requests for leave (TS-061).

@@ -644,7 +644,9 @@ describe("the Expenses view of Reports", () => {
 		expect(file.headers.get("Content-Type")).toContain("text/csv");
 		const lines = (await file.text()).trim().split("\r\n");
 		expect(lines).toHaveLength(4);
-		expect(lines[0]).toContain("Expense ID,Date,Person,Project,Client,Category");
+		expect(lines[0]).toContain(
+			"Expense ID,Date,Person,Project code,Project,Client code,Client,Category",
+		);
 		expect(lines.find((line) => line.includes("Travel") && line.includes("GBP"))).toContain(
 			"12.50,GBP,Yes,Yes,No",
 		);

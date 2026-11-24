@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { among, type OrganisationScope, users } from "~/db";
 import { daysOver } from "~/leave/rules.server";
+import { codedName } from "~/lib/codes";
 import { shownName } from "~/organisations/people";
 import { pricingOf } from "~/projects/money.server";
 import { hourlyPrice, MULTIPLIER_ONE, wholeMinutes } from "~/rates/price";
@@ -30,7 +31,7 @@ import {
  * no longer change.
  */
 
-/** A project as the invoice form offers it. */
+/** A project as the invoice form offers it, named by its code and name, code first (TS-115a). */
 export interface OfferedProject {
 	id: string;
 	name: string;
@@ -114,7 +115,7 @@ export async function billableProjectsOf(
 			const billingType = priced?.billingType ?? "hourly";
 			return {
 				id: p.id,
-				name: p.name,
+				name: codedName(p.code, p.name),
 				clientId: p.clientId,
 				currency: priced?.currency ?? organisationCurrency,
 				billingType,
@@ -172,7 +173,8 @@ export async function uninvoicedTime(
 		);
 	const personById = new Map(people.map((p) => [p.id, p]));
 	const taskName = new Map(tasks.map((t) => [t.id, t.name]));
-	const projectName = new Map(projects.map((p) => [p.id, p.name]));
+	// A line made from time names the project by its code and name (TS-115a).
+	const projectName = new Map(projects.map((p) => [p.id, codedName(p.code, p.name)]));
 
 	const items = entries.map((entry) => {
 		const person = personById.get(entry.userId);
@@ -309,7 +311,7 @@ export async function uninvoicedExpenses(
 		scope.projects.select((p) => among(p.id, projectIds)),
 	]);
 	const categoryName = new Map(categories.map((c) => [c.id, c.name]));
-	const projectName = new Map(projects.map((p) => [p.id, p.name]));
+	const projectName = new Map(projects.map((p) => [p.id, codedName(p.code, p.name)]));
 	return rows
 		.map((x) => ({
 			id: x.id,

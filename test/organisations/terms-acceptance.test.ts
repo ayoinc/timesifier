@@ -6,9 +6,9 @@ import { captureEmail, type Mailbox, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { open, type Person, pageBody, person, submit, textOf } from "../pages/harness";
 import {
-	ACCEPTED,
 	answer,
 	createOrganisation,
+	NEW_ORGANISATION,
 	row,
 	seedMembership,
 	seedTeam,
@@ -120,15 +120,18 @@ describe("creating an organisation", () => {
 		expect(page).toContain('href="/dpa"');
 		expect(page).toContain(`name="dpaVersion" value="${DPA_VERSION.date}"`);
 
-		const stale = await submit("/app/new", { name: "Acme", dpaVersion: OLDER }, ada, {
-			byScript: true,
-		});
+		const stale = await submit(
+			"/app/new",
+			{ name: "Acme", ...NEW_ORGANISATION, dpaVersion: OLDER },
+			ada,
+			{ byScript: true },
+		);
 		expect(await stale.text()).toContain(
 			"The data processing agreement has a new version. Read it, then create the organisation again.",
 		);
 		expect(await value("select count(*) from organisations")).toBe(0);
 
-		const created = await submit("/app/new", { name: "Acme", ...ACCEPTED }, ada);
+		const created = await submit("/app/new", { name: "Acme", ...NEW_ORGANISATION }, ada);
 		expect(created.status).toBe(302);
 		expect((await row<Accepted>("select dpa_version from organisations"))?.dpa_version).toBe(
 			DPA_VERSION.date,

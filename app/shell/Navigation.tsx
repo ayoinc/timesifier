@@ -3,11 +3,13 @@ import { Link } from "react-router";
 
 import { cx } from "~/components/cx";
 import { PAGE } from "~/landing/Site";
+import { useTerms } from "~/routes/app/useOrganisation";
 
 import {
 	compactNavigation,
 	type Destination,
 	type DestinationId,
+	destinationLabel,
 	destinationPath,
 	destinations,
 	navigationGroups,
@@ -68,6 +70,8 @@ export function Navigation({
 	counts = {},
 	menuHidden,
 }: NavigationProps) {
+	const terms = useTerms();
+	const label = (each: Destination) => destinationLabel(each, terms);
 	const active = destinations[activeIndex]?.id;
 	const compact = compactNavigation(visible);
 	const inMore = compact.more.flatMap((group) => group.destinations);
@@ -131,6 +135,7 @@ export function Navigation({
 											>
 												<DestinationLink
 													destination={each}
+													label={label(each)}
 													to={destinationPath(organisation, each.id)}
 													isActive={each.id === active}
 													count={counts[each.id] ?? 0}
@@ -151,7 +156,7 @@ export function Navigation({
 								// the page on screen is one of the destinations it holds.
 								aria-label={[
 									moreCount > 0 ? `More ${moreCount} pending` : "More",
-									moreCurrent && `now on ${moreCurrent.label}`,
+									moreCurrent && `now on ${label(moreCurrent)}`,
 								]
 									.filter(Boolean)
 									.join(", ")}
@@ -187,7 +192,7 @@ export function Navigation({
 												{links.map((each) => (
 													<li key={each.id}>
 														<MoreLink
-															destination={each}
+															label={label(each)}
 															to={destinationPath(organisation, each.id)}
 															isActive={each.id === active}
 															count={counts[each.id] ?? 0}
@@ -233,11 +238,14 @@ function Indicator() {
 
 function DestinationLink({
 	destination,
+	label,
 	to,
 	isActive,
 	count,
 }: {
 	destination: Destination;
+	/** Its label in the organisation's words (`destinationLabel`). */
+	label: string;
 	/** Its address in the organisation on screen. */
 	to: string;
 	isActive: boolean;
@@ -258,10 +266,10 @@ function DestinationLink({
 						<span aria-hidden="true" className="medium:hidden">
 							{destination.barLabel}
 						</span>
-						<span className="max-medium:sr-only">{destination.label}</span>
+						<span className="max-medium:sr-only">{label}</span>
 					</>
 				) : (
-					destination.label
+					label
 				)}
 				<Count count={count} />
 			</span>
@@ -272,12 +280,12 @@ function DestinationLink({
 
 /** A destination in the popover "More" opens: a row 48px tall. Choosing it closes the popover. */
 function MoreLink({
-	destination,
+	label,
 	to,
 	isActive,
 	count,
 }: {
-	destination: Destination;
+	label: string;
 	to: string;
 	isActive: boolean;
 	count: number;
@@ -300,7 +308,7 @@ function MoreLink({
 					isActive && "decoration-current",
 				)}
 			>
-				{destination.label}
+				{label}
 				<Count count={count} />
 			</span>
 		</Link>
