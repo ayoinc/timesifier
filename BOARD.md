@@ -107,7 +107,7 @@ Builder: an AI session on branch `ts-115b-work-packages`. Builds the owner's dec
 - [x] The API: `/work_packages`, `work_package_id` and `work_package` on entries; `docs/api.md` and `docs/openapi.yaml` kept in step. Tests: `test/projects/work-packages.test.ts` ("the API"), `test/integrations/api.test.ts`.
 - [x] Owners, admins and the client's account managers manage them; Finance, managers, members and contractors 403, a stranger 404. Test: `test/projects/work-packages.test.ts`.
 - [x] The privacy notice and `docs/security.md` say what is stored and who manages it. Test: `test/claims.test.ts`.
-- [ ] Browser specs with keyboard and axe at 390px and 1280px, light and dark, and screenshots in `cmux-assets/browser/timesifier/TS-115b/`.
+- [x] Browser specs with keyboard and axe at 390px and 1280px, light and dark, and screenshots in `cmux-assets/browser/timesifier/TS-115b/`. Test: `e2e/work-packages.spec.ts` (the picker, the Week grid, the Day view and the calendar, the Work packages tab as an owner, an admin, the client's account manager and a member, and an old entry edited).
 - [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
 
 ### TS-115a · Codes, How you work, and who creates projects

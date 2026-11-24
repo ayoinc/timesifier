@@ -283,14 +283,14 @@ function Grid({
 								key={rowKey(lineKey(row.projectId, row.workPackageId), row.overtime)}
 								data-row={rowKey(lineKey(row.projectId, row.workPackageId), row.overtime)}
 							>
-								<th scope="row" className="max-w-60 truncate px-4 py-2 text-start font-normal">
+								<th scope="row" className="max-w-60 px-4 py-2 text-start font-normal">
 									{row.overtime ? (
 										<span className="flex items-center gap-2 ps-4">
 											<span className="sr-only">{nameOf(row)}, </span>
 											<OvertimeTag />
 										</span>
 									) : (
-										nameOf(row)
+										<RowName name={nameOf(row)} />
 									)}
 								</th>
 								{row.cells.map((cell) => (
@@ -390,6 +390,23 @@ function Grid({
 				</table>
 			</div>
 			<ClosedDays rules={rules} />
+		</>
+	);
+}
+
+/**
+ * A row's name. A work package goes on a line of its own under its project,
+ * so a compact window cuts neither short (TS-115b); each line is cut alone.
+ */
+function RowName({ name }: { name: string }) {
+	const at = name.lastIndexOf(" › ");
+	if (at < 0) return <span className="block truncate">{name}</span>;
+	return (
+		<>
+			<span className="block truncate">{name.slice(0, at)}</span>
+			<span className="block truncate text-body-medium text-on-surface-variant">
+				{name.slice(at)}
+			</span>
 		</>
 	);
 }

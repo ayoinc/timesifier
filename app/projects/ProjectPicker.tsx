@@ -30,7 +30,7 @@ import { PINNED_TITLE } from "~/pins/pins";
 import { useTerms } from "~/routes/app/useOrganisation";
 import { CLIENT_PROJECT_TERMS, inTerms, type Terms } from "~/workspace/work-model";
 
-import { lineKey, lineOf, projectAndPackage } from "./work-packages";
+import { lineKey, lineOf, projectAndPackage, WORK_PACKAGE_REFUSALS } from "./work-packages";
 
 // The project of an entry or an expense, chosen by typing part of its code,
 // its name, or its client's name or code (Harvest's project picker,
@@ -263,6 +263,12 @@ export function ProjectPicker({
 			null)
 		: null;
 	const sections = projectSections(projects, recent, query ?? "", terms, pinned);
+	// Its project chosen but none of its work packages, as an entry tracked before the project had
+	// any is (TS-115b): the field says one must be chosen, and is not sent until one is.
+	const lacksPackage =
+		project !== null && chosen === null && (project.workPackages?.length ?? 0) > 0
+			? `${pickerLabel(project)} has work packages. ${inTerms(WORK_PACKAGE_REFUSALS["no-work-package"], terms)}`
+			: null;
 
 	return (
 		<ComboBox
@@ -281,6 +287,7 @@ export function ProjectPicker({
 			}}
 			allowsEmptyCollection
 			isRequired={isRequired}
+			validate={({ selectedKey }) => (selectedKey === null ? lacksPackage : null)}
 			className="relative flex flex-col gap-1"
 		>
 			{({ isInvalid, isDisabled, isOpen, isRequired: required }) => {
@@ -324,9 +331,9 @@ export function ProjectPicker({
 							</Button>
 							<span className={fieldIndicator(field)} />
 						</div>
-						{description && !isInvalid && (
+						{(lacksPackage ?? description) && !isInvalid && (
 							<Text slot="description" className={fieldSupporting(field)}>
-								{description}
+								{lacksPackage ?? description}
 							</Text>
 						)}
 						<FieldError className={FIELD_ERROR} />

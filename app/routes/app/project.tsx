@@ -672,6 +672,7 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 						to: projectPath(organisation.slug, project.id, id),
 					}))}
 					current={tab}
+					wraps
 				/>
 			</div>
 			<div className="mt-8 max-w-200">
