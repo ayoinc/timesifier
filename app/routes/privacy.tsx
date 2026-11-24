@@ -442,15 +442,12 @@ export default function Privacy({
 								My account: a timesheet or a request waiting for their decision, their own timesheet
 								or request decided, their week submitted or their timer stopped by Timesifier, a
 								reminder of a running timer, of the timesheet deadline or of timesheets still
-								waiting, and a budget alert, to the organisation's owners and admins and, for a
-								budget in hours, to the managers of the teams of the people who tracked time to the
-								project; each with a link that turns its kind off;
+								waiting, a budget alert, to the organisation's owners and admins and, for a budget
+								in hours, to the managers of the teams of the people who tracked time to the
+								project, and a notice that an export of everything is ready, or could not be made,
+								to the owner who asked for it; each with a link that turns its kind off;
 							</li>
 							<li>a notice that a webhook was switched off, to the person who added it;</li>
-							<li>
-								a notice that an export of everything is ready, or could not be made, to the owner
-								who asked for it;
-							</li>
 							<li>
 								a notice that a verified domain's DNS record is missing, to the organisation's
 								owners, once each time it has been missing for {facts.domainWarnDays} days; after{" "}

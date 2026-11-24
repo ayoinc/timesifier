@@ -20,13 +20,18 @@ export const NOTIFICATION_KINDS = [
 	"deadline-reminder",
 	"submit-reminder",
 	"approvals-reminder",
+	"export-ready",
+	"export-failed",
 ] as const;
 
 export const NotificationKind = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKind>;
 
-/** Who may be sent a kind: everyone, or only those who decide or look after budgets. */
-export type KindAudience = "everyone" | "deciders" | "budgets";
+/**
+ * Who may be sent a kind: everyone; only those who decide or look after
+ * budgets; or only owners, of the export of everything they asked for (TS-126b).
+ */
+export type KindAudience = "everyone" | "deciders" | "budgets" | "owners";
 
 export interface KindWords {
 	/** Its row on My account › Notifications. */
@@ -126,6 +131,24 @@ export const KIND_WORDS: Record<NotificationKind, KindWords> = {
 		reason:
 			"You got this email because you approve these timesheets: you manage a team their people are in, or you are an owner or admin and nobody else is there to.",
 		audience: "deciders",
+	},
+	"export-ready": {
+		label: "Your export ready to download",
+		description: "The export of everything you asked for, ready to download.",
+		subject: "Your export of everything is ready on Timesifier",
+		heading: "Your export is ready",
+		reason:
+			"You got this email because you asked for this export, as an owner of the organisation on Timesifier.",
+		audience: "owners",
+	},
+	"export-failed": {
+		label: "Your export could not be made",
+		description: "The export of everything you asked for, when it could not be made.",
+		subject: "Your export of everything could not be made on Timesifier",
+		heading: "Your export could not be made",
+		reason:
+			"You got this email because you asked for this export, as an owner of the organisation on Timesifier.",
+		audience: "owners",
 	},
 };
 

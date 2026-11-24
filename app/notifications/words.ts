@@ -1,9 +1,10 @@
 import type { OrganisationScope, ScopedStatement } from "~/db";
+import { everythingExportPath } from "~/exports/paths";
 import { WORK_KIND_LABELS, type WorkKind } from "~/leave/rules";
 import { projectPath } from "~/projects/projects";
 import { destinationPath, organisationPath } from "~/shell/destinations";
 import type { Day } from "~/time/calendar";
-import { formatDay, formatRange } from "~/time/format";
+import { formatDay, formatDayWithYear, formatRange } from "~/time/format";
 import { dayPath, weekPath } from "~/timesheet/views";
 
 import type { NotificationKind } from "./kinds";
@@ -153,4 +154,32 @@ export function budgetCrossed(
 		body: "You are told once for each budget period. Tracking time to the project is not stopped.",
 		path: pathBelow((slug) => projectPath(slug, project.id)),
 	}));
+}
+
+/**
+ * To the owner who asked for the export of everything `exportId`, and nobody
+ * else, that it is ready to download until `keptUntil` (TS-126b). Once for
+ * each export, however often its last step is run.
+ */
+export function exportReady(userId: string, exportId: string, keptUntil: Day): NewNotification {
+	return {
+		userId,
+		kind: "export-ready",
+		title: "Your export of everything is ready to download, as one ZIP.",
+		body: `It is kept until ${formatDayWithYear(keptUntil)}, then deleted.`,
+		path: pathBelow(everythingExportPath),
+		key: `export:${exportId}`,
+	};
+}
+
+/** To the owner who asked for the export of everything `exportId`, and nobody else, that it could not be made (TS-126b). */
+export function exportFailed(userId: string, exportId: string): NewNotification {
+	return {
+		userId,
+		kind: "export-failed",
+		title: "Your export of everything could not be made.",
+		body: "Make it again; if it fails again, write to us.",
+		path: pathBelow(everythingExportPath),
+		key: `export:${exportId}`,
+	};
 }

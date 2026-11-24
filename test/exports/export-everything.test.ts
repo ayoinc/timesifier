@@ -2,7 +2,13 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { record } from "~/activity/activity.server";
 import { logoFile, saveLogo } from "~/brand/organisation-brand.server";
-import { EXPORTED_TABLES, everyRow, exportedTable, organisationScope } from "~/db";
+import {
+	EXPORTED_TABLES,
+	everyRow,
+	exportedTable,
+	organisationScope,
+	setNotificationChoice,
+} from "~/db";
 import { recordExpense } from "~/expenses/expenses.server";
 import { getReceipt, receiptKey } from "~/expenses/receipts.server";
 import {
@@ -19,6 +25,11 @@ import {
 import { EXPORT_FORMAT_VERSION } from "~/exports/paths";
 import { makeToken } from "~/integrations/api-tokens.server";
 import { zipEnd, zipFile } from "~/lib/zip";
+import { type BellItem, KIND_WORDS } from "~/notifications/kinds";
+import { sendWaitingNotifications } from "~/notifications/mail.server";
+import { notificationsPath } from "~/notifications/paths";
+import { dayOf } from "~/time/calendar";
+import { formatDayWithYear } from "~/time/format";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { png } from "../brand/files";
 import { freshDatabase } from "../db/database";
@@ -237,12 +248,13 @@ describe("the ZIP of everything", () => {
 			expect(rowsOf(files.get(file.name)).length - 1).toBe(file.rows);
 		}
 		// Each count is the table's rows but the record that the export was made,
-		// which is written once the ZIP is.
+		// and the owner's notice of it (TS-126b), which are written once the ZIP is.
 		const made = await value(
 			"select count(*) from activity_records where subject_id = ? and action = 'organisation_export.made'",
 			id,
 		);
 		expect(made).toBe(1);
+		expect(await value("select count(*) from notifications where key = ?", `export:${id}`)).toBe(1);
 		for (const table of expected) {
 			const rows =
 				table === "organisations"
@@ -251,7 +263,7 @@ describe("the ZIP of everything", () => {
 						? await value("select count(*) from memberships where organisation_id = ?", acme.id)
 						: await value(`select count(*) from ${table} where organisation_id = ?`, acme.id);
 			expect(manifest.tables[table], table).toBe(
-				table === "activity_records" ? (rows ?? 0) - 1 : rows,
+				table === "activity_records" || table === "notifications" ? (rows ?? 0) - 1 : rows,
 			);
 		}
 		expect(manifest.tables.time_entries).toBe(3);
@@ -327,7 +339,8 @@ describe("the ZIP of everything", () => {
 			for (const row of rows) expect(row[column], name).toBe(acme.id);
 		}
 		// And Acme's own rows are all there: all but the invitations' secret ids,
-		// the export's own row, and the record that it was made, written after.
+		// the export's own row, and the record that it was made and the owner's
+		// notice of it, written after.
 		for (const row of await idsOf(acme.id)) {
 			if ((await value("select count(*) from invitations where id = ?", row)) === 1) continue;
 			if ((await value("select count(*) from organisation_exports where id = ?", row)) === 1)
@@ -335,6 +348,13 @@ describe("the ZIP of everything", () => {
 			if (
 				(await value(
 					"select count(*) from activity_records where id = ? and action = 'organisation_export.made'",
+					row,
+				)) === 1
+			)
+				continue;
+			if (
+				(await value(
+					"select count(*) from notifications where id = ? and kind = 'export-ready'",
 					row,
 				)) === 1
 			)
@@ -363,7 +383,7 @@ describe("the ZIP of everything", () => {
 		expect(all).not.toContain("leaver@example.com");
 	});
 
-	it("is recorded, and the owner who asked is emailed a link to its page", async () => {
+	it("is recorded: asked for by its owner, made by the system", async () => {
 		const { id } = await exportMade(acme.id, ada.user.id);
 		const actions = await env.DB.prepare(
 			"select action, actor_id, source from activity_records where organisation_id = ? and subject_id = ? order by created_at, id",
@@ -374,12 +394,185 @@ describe("the ZIP of everything", () => {
 			{ action: "organisation_export.requested", actor_id: ada.user.id, source: "web" },
 			{ action: "organisation_export.made", actor_id: null, source: "system" },
 		]);
-		const message = mailbox
-			.sent()
-			.find((m) => m.subject === "Your export of everything is ready on Timesifier");
-		expect(message?.to).toBe("ada@example.com");
-		expect(message?.text).toContain("https://timesifier.example/app/acme/settings/export");
+	});
+});
+
+describe("telling the owner who asked", () => {
+	// TS-126b: what became of an export is a notification for the owner who
+	// asked, and for nobody else, which the bell shows and the every-minute
+	// sender emails once, unless they turned that kind's email off.
+	type Other = "owner" | "admin" | "finance" | "manager" | "member" | "contractor";
+	const OTHERS: Record<Other, string> = {
+		owner: "grace@example.com",
+		admin: "katherine@example.com",
+		finance: "mary@example.com",
+		manager: "hedy@example.com",
+		member: "linus@example.com",
+		contractor: "carl@example.com",
+	};
+	let others: Record<Other, Person>;
+
+	/** Acme gains a second owner and one of every other role; Bob owns Globex. */
+	beforeEach(async () => {
+		const signedIn: Partial<Record<Other, Person>> = {};
+		// One at a time: signing in waits for its code in the shared mailbox.
+		for (const kind of Object.keys(OTHERS) as Other[]) {
+			const who = await person(mailbox, OTHERS[kind]);
+			await seedMembership(
+				acme.id,
+				who.user.id,
+				kind === "manager" || kind === "contractor" ? "member" : kind,
+			);
+			signedIn[kind] = who;
+		}
+		others = signedIn as Record<Other, Person>;
+		await env.DB.prepare(
+			"update memberships set is_contractor = 1 where organisation_id = ? and user_id = ?",
+		)
+			.bind(acme.id, others.contractor.user.id)
+			.run();
+		await seedTeam(acme.id, "Ops", {
+			members: [others.member.user.id, others.contractor.user.id],
+			managers: [others.manager.user.id],
+		});
+	}, 60_000);
+
+	/** Every notification, in any organisation, with whom it is for. */
+	const notices = async () =>
+		(
+			await env.DB.prepare(
+				"select u.email as email, n.organisation_id as organisationId, n.kind as kind, n.title as title, n.body as body, n.path as path, n.email_state as emailState from notifications n join users u on u.id = n.user_id order by n.rowid",
+			).all()
+		).results;
+
+	/** The emails of `kind`'s subject sent so far. */
+	const emailsOf = (kind: "export-ready" | "export-failed") =>
+		mailbox.sent().filter((m) => m.subject === KIND_WORDS[kind].subject);
+
+	const bell = async (who: Person) => {
+		const response = await open(notificationsPath("acme"), who);
+		expect(response.status).toBe(200);
+		return (await response.json<{ items: BellItem[] }>()).items;
+	};
+
+	/** Nobody but Ada has a notification in their bell. */
+	async function nobodyElseTold() {
+		for (const kind of Object.keys(OTHERS) as Other[]) {
+			expect(await bell(others[kind]), kind).toEqual([]);
+		}
+	}
+
+	/** Ada asks for an export, and it fails three steps in a row. */
+	async function exportFailsForAda() {
+		const scope = organisationScope(env.DB, acme.id);
+		const now = new Date();
+		const requested = await requestExport(scope, ada.user.id, now);
+		if (!requested.ok) throw new Error(requested.problem);
+		vi.spyOn(console, "error").mockImplementation(() => {});
+		const away = vi.spyOn(env.RECEIPTS, "get").mockRejectedValue(new Error("R2 is away"));
+		for (const expected of ["running", "running", "failed"]) {
+			expect(await advanceExport(acme.id, requested.id, now)).toBe(expected);
+		}
+		away.mockRestore();
+	}
+
+	it("tells the owner who asked that it is ready, in the bell and in exactly one email, and nobody else", async () => {
+		const made = new Date();
+		await exportMade(acme.id, ada.user.id, EXPORT_LIMITS, made);
+		const zone = String(await value("select time_zone from organisations where id = ?", acme.id));
+		const keptUntil = formatDayWithYear(dayOf(made.getTime() + 7 * DAY_MS, zone));
+		expect(await notices()).toEqual([
+			{
+				email: "ada@example.com",
+				organisationId: acme.id,
+				kind: "export-ready",
+				title: "Your export of everything is ready to download, as one ZIP.",
+				body: `It is kept until ${keptUntil}, then deleted.`,
+				path: "/settings/export",
+				emailState: "waiting",
+			},
+		]);
+		// The job itself emails nobody: the notification's sender does, once, however often it runs.
+		expect(emailsOf("export-ready")).toEqual([]);
+		await sendWaitingNotifications(new Date());
+		await sendWaitingNotifications(new Date());
+		const sent = emailsOf("export-ready");
+		expect(sent.map(({ to }) => to)).toEqual(["ada@example.com"]);
+		const [message] = sent;
 		expect(message?.text).toContain("“Acme”");
+		expect(message?.text).toContain(`It is kept until ${keptUntil}, then deleted.`);
+		expect(message?.text).toContain("https://timesifier.example/app/acme/settings/export");
+
+		// Ada's bell holds it, leading to the export's page; nobody else's holds anything.
+		const [item, ...more] = await bell(ada);
+		expect(more).toEqual([]);
+		expect(item).toMatchObject({
+			kind: "export-ready",
+			title: "Your export of everything is ready to download, as one ZIP.",
+			href: "/app/acme/settings/export",
+			read: false,
+		});
+		await nobodyElseTold();
+	}, 60_000);
+
+	it("tells the owner who asked that it could not be made, in the bell and in exactly one email, and nobody else", async () => {
+		await exportFailsForAda();
+		expect(await notices()).toEqual([
+			{
+				email: "ada@example.com",
+				organisationId: acme.id,
+				kind: "export-failed",
+				title: "Your export of everything could not be made.",
+				body: "Make it again; if it fails again, write to us.",
+				path: "/settings/export",
+				emailState: "waiting",
+			},
+		]);
+		await sendWaitingNotifications(new Date());
+		await sendWaitingNotifications(new Date());
+		const sent = emailsOf("export-failed");
+		expect(sent.map(({ to }) => to)).toEqual(["ada@example.com"]);
+		expect(sent[0]?.text).toContain("https://timesifier.example/app/acme/settings/export");
+		const items = await bell(ada);
+		expect(items.map(({ kind, href }) => [kind, href])).toEqual([
+			["export-failed", "/app/acme/settings/export"],
+		]);
+		await nobodyElseTold();
+	}, 60_000);
+
+	it("emails nothing to an owner who turned that kind's email off, and still shows it in the bell", async () => {
+		await setNotificationChoice(env.DB, ada.user.id, "export-ready", false);
+		await setNotificationChoice(env.DB, ada.user.id, "export-failed", false);
+		await exportMade(acme.id, ada.user.id);
+		await env.DB.prepare("delete from organisation_exports").run();
+		await exportFailsForAda();
+		await sendWaitingNotifications(new Date());
+		expect([...emailsOf("export-ready"), ...emailsOf("export-failed")]).toEqual([]);
+		expect(
+			(await notices()).map(({ email, kind, emailState }) => [email, kind, emailState]),
+		).toEqual([
+			["ada@example.com", "export-ready", "skipped"],
+			["ada@example.com", "export-failed", "skipped"],
+		]);
+		expect((await bell(ada)).map(({ kind }) => kind).sort()).toEqual([
+			"export-failed",
+			"export-ready",
+		]);
+	}, 60_000);
+
+	it("tells nobody when the one who asked is no longer an owner", async () => {
+		const scope = organisationScope(env.DB, acme.id);
+		const requested = await requestExport(scope, ada.user.id, new Date());
+		if (!requested.ok) throw new Error(requested.problem);
+		await env.DB.prepare(
+			"update memberships set role = 'admin' where organisation_id = ? and user_id = ?",
+		)
+			.bind(acme.id, ada.user.id)
+			.run();
+		expect(await advanceExport(acme.id, requested.id, new Date())).toBe("ready");
+		await sendWaitingNotifications(new Date());
+		expect(await notices()).toEqual([]);
+		expect(emailsOf("export-ready")).toEqual([]);
 	});
 });
 
@@ -550,12 +743,21 @@ describe("the job", () => {
 			if (stepped === "ready") break;
 			expect(stepped).toBe("running");
 		}
-		// The same rows as an export made without a failure, the activity log aside, which records them.
+		// The same rows as an export made without a failure, the activity log and
+		// the notifications aside, which record and tell of the first.
 		const retried = manifestOf(await filesOf(await storedZip(acme.id, requested.id)));
 		const again = await exportMade(acme.id, ada.user.id);
 		const clean = manifestOf(await filesOf(await storedZip(acme.id, again.id)));
-		const { activity_records: _retriedLog, ...retriedTables } = retried.tables;
-		const { activity_records: _cleanLog, ...cleanTables } = clean.tables;
+		const {
+			activity_records: _retriedLog,
+			notifications: _retriedNotices,
+			...retriedTables
+		} = retried.tables;
+		const {
+			activity_records: _cleanLog,
+			notifications: _cleanNotices,
+			...cleanTables
+		} = clean.tables;
 		expect(retriedTables).toEqual(cleanTables);
 
 		// Three failures in a row: failed, its work deleted, and the owner told.
@@ -567,11 +769,7 @@ describe("the job", () => {
 		expect(await advanceExport(acme.id, third.id, now)).toBe("running");
 		expect(await advanceExport(acme.id, third.id, now)).toBe("failed");
 		expect(await exportStateOf(scope, now)).toMatchObject({ status: "failed" });
-		expect(
-			mailbox
-				.sent()
-				.some((m) => m.subject === "Your export of everything could not be made on Timesifier"),
-		).toBe(true);
+		expect(await value("select count(*) from notifications where kind = 'export-failed'")).toBe(1);
 		expect(
 			await value(
 				"select count(*) from activity_records where subject_id = ? and action = 'organisation_export.failed'",
@@ -602,7 +800,8 @@ describe("the job", () => {
 		expect(first.ok).toBe(true);
 		expect(await requestExport(scope, ada.user.id, now)).toEqual({
 			ok: false,
-			problem: "An export is being made already. You'll get an email when it's ready.",
+			problem:
+				"An export is being made already. We'll tell you in the bell and by email when it's ready.",
 		});
 		if (!first.ok) return;
 		expect(await advanceExport(acme.id, first.id, now)).toBe("ready");

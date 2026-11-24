@@ -22,7 +22,8 @@ import { expect, openShell, test } from "./fixtures";
 import { createOrganisation } from "./organisation";
 
 // The export of everything (TS-126, decision 71). An owner asks for it, sees
-// it being made, then ready, downloads it, and sees it expire; an admin of the
+// it being made, then ready, is emailed and finds the notice in the bell
+// (TS-126b), downloads it, and sees it expire; an admin of the
 // same organisation is never shown it. The job's later steps are run by the
 // Worker's own scheduled handler, as the every-minute and hourly triggers run
 // it, through Miniflare's trigger endpoint. Every step is done with the
@@ -160,7 +161,7 @@ for (const viewport of [
 				await pressEnterOn(page, sheet.getByRole("button", { name: "Make the export" }));
 				await expect(sheet).toBeHidden();
 				await expect(main.getByRole("status")).toHaveText(
-					"Your export is being made. You'll get an email when it's ready.",
+					"Your export is being made. We'll tell you in the bell and by email when it's ready.",
 				);
 				await expect(main.getByRole("heading", { name: "Being made" })).toBeVisible();
 				await expect(main.getByRole("button", { name: /Export/ })).toHaveCount(0);
@@ -177,11 +178,15 @@ for (const viewport of [
 					)
 					.toBe("1:free");
 
-				// The every-minute trigger's step finishes it, and the owner is emailed.
+				// The every-minute trigger's step finishes it, and its next run, whose
+				// notification emails go before the exports, emails the owner the notice.
 				const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 				await foundInMessageSentBy(
-					() => runTrigger(page, EVERY_MINUTE),
-					new RegExp(`“${escaped}” holds on Timesifier is ready to download`),
+					async () => {
+						await runTrigger(page, EVERY_MINUTE);
+						await runTrigger(page, EVERY_MINUTE);
+					},
+					new RegExp(`“${escaped}”: Your export of everything is ready to download, as one ZIP`),
 					"the export's notice",
 				);
 				// The page, asking again while it is being made, shows it ready.
@@ -191,6 +196,27 @@ for (const viewport of [
 				await expect(main.getByRole("status")).toHaveText("Your export is ready to download.");
 				await expect(main).toContainText("It is kept until");
 				await check(page, `TS-126-ready-${at}`);
+
+				// The bell holds the notice, unread; opened with the keyboard, its item leads to this page.
+				await openShell(page, exportPage);
+				const band = page.getByRole("banner");
+				const bell = band.getByRole("button", { name: "1 unread notification" });
+				await expect(bell).toBeVisible();
+				await pressEnterOn(page, bell);
+				const list = page.getByRole("dialog", { name: "Notifications" });
+				const item = list.getByRole("link", {
+					name: /^Unread: Your export of everything is ready to download, as one ZIP\. It is kept until /,
+				});
+				await expect(item).toBeVisible();
+				await expect(
+					band.getByRole("button", { name: "Notifications", exact: true }),
+				).toBeVisible();
+				// The item's words lie over the list and the page behind it, which axe cannot measure.
+				await check(page, `TS-126-bell-${at}`, [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS]);
+				await pressEnterOn(page, item);
+				await expect(list).toBeHidden();
+				await expect(page).toHaveURL(new RegExp(`${exportPage}$`));
+				await expect(main.getByRole("heading", { name: "Ready to download" })).toBeVisible();
 
 				// Downloaded from the keyboard: one ZIP, named for the organisation and the day.
 				const downloaded = page.waitForEvent("download");

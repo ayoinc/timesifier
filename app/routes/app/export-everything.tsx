@@ -20,8 +20,8 @@ import type { Route } from "./+types/export-everything";
 import { FormSheet } from "./FormSheet";
 
 // Export everything (TS-126, docs/decisions.md entry 71): one ZIP of
-// everything the organisation holds, which an owner asks for here, is emailed
-// about when it is made, and downloads here for 7 days. Only owners open the
+// everything the organisation holds, which an owner asks for here, is told
+// of in the bell and by email when it is made (TS-126b), and downloads here for 7 days. Only owners open the
 // page: it sits below Workspace settings, which admins are shown too, so the
 // loader and the action answer anybody else with the 404 a page they may not
 // open answers.
@@ -91,7 +91,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 	// The first step runs once the answer is sent; a small organisation's
 	// export is made by it, a large one's by the every-minute trigger after.
 	inBackground(advanceExport(membership.organisation.id, requested.id, now));
-	return done("Your export is being made. You'll get an email when it's ready.");
+	return done(
+		"Your export is being made. We'll tell you in the bell and by email when it's ready.",
+	);
 }
 
 export default function ExportEverything({ loaderData, params }: Route.ComponentProps) {
@@ -101,7 +103,7 @@ export default function ExportEverything({ loaderData, params }: Route.Component
 	const running = loaderData.status === "running";
 
 	// While it is being made the page asks again every few seconds, so it shows
-	// the download as soon as there is one; the email says so too.
+	// the download as soon as there is one; the bell and the email say so too.
 	useEffect(() => {
 		if (!running) return;
 		const every = window.setInterval(() => {
@@ -145,12 +147,16 @@ export default function ExportEverything({ loaderData, params }: Route.Component
 			<Section id="state" heading={heading} className="max-w-200">
 				<div className="flex flex-col items-start gap-4 text-body-large">
 					{loaderData.status === "none" && (
-						<p>Make an export, and we'll email you when it's ready to download.</p>
+						<p>
+							Make an export, and we'll tell you in the bell and by email when it's ready to
+							download.
+						</p>
 					)}
 					{loaderData.status === "running" && (
 						<p>
-							Asked for on {loaderData.requestedAt}. We'll email you when it's ready: in a minute or
-							two for most organisations, within the hour for a large one.
+							Asked for on {loaderData.requestedAt}. We'll tell you in the bell and by email when
+							it's ready: in a minute or two for most organisations, within the hour for a large
+							one.
 						</p>
 					)}
 					{loaderData.status === "failed" && (
@@ -229,8 +235,9 @@ export default function ExportEverything({ loaderData, params }: Route.Component
 				onDone={setSaid}
 			>
 				<p>
-					Timesifier makes one ZIP of everything your organisation holds and emails you when it's
-					ready. {loaderData.status === "ready" && "The export you have now is deleted."}
+					Timesifier makes one ZIP of everything your organisation holds and tells you in the bell
+					and by email when it's ready.{" "}
+					{loaderData.status === "ready" && "The export you have now is deleted."}
 				</p>
 			</FormSheet>
 		</>

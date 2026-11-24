@@ -22,7 +22,12 @@ import {
 import { calendarFeedsPath } from "~/integrations/paths";
 import { PRIVACY_EMAIL } from "~/landing/Site";
 import { parseRequest } from "~/lib/validate";
-import { KIND_WORDS, NOTIFICATION_KINDS, NotificationKind } from "~/notifications/kinds";
+import {
+	KIND_WORDS,
+	type KindAudience,
+	NOTIFICATION_KINDS,
+	NotificationKind,
+} from "~/notifications/kinds";
 import { NOTIFICATIONS_ANCHOR } from "~/notifications/paths";
 import { leaveOrganisation, listOrganisations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
@@ -89,8 +94,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		notificationChoicesOf(env.DB, user.id),
 	]);
 	// The kinds that can reach this person here: those for deciders and budgets
-	// only for an owner, an admin or a manager of a team (TS-049).
+	// only for an owner, an admin or a manager of a team (TS-049); those of the
+	// export of everything only for an owner (TS-126b).
 	const decides = role === "owner" || role === "admin" || membership.managesTeams;
+	const reaches: Record<KindAudience, boolean> = {
+		everyone: true,
+		deciders: decides,
+		budgets: decides,
+		owners: role === "owner",
+	};
 	return {
 		role,
 		hasOthers: organisations.ok && organisations.data.length > 1,
@@ -107,9 +119,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		/** Which kinds of mail from Timesifier the person takes (TS-099). */
 		mail: mail ?? { newsletter: false, announcements: false },
 		/** Each kind of notification that can reach them, and whether its email is on (TS-049). */
-		notifications: NOTIFICATION_KINDS.filter(
-			(kind) => decides || KIND_WORDS[kind].audience === "everyone",
-		).map((kind) => ({ kind, email: choices.get(kind) ?? true })),
+		notifications: NOTIFICATION_KINDS.filter((kind) => reaches[KIND_WORDS[kind].audience]).map(
+			(kind) => ({ kind, email: choices.get(kind) ?? true }),
+		),
 	};
 }
 
