@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { uuidv7 } from "~/db";
 import type { BellItem } from "~/notifications/kinds";
+import { sendWaitingNotifications } from "~/notifications/mail.server";
 import { notificationsPath } from "~/notifications/paths";
 
 import { captureEmail, type Mailbox } from "../auth/harness";
@@ -414,6 +415,23 @@ describe("asked to submit (Approvals › Not submitted)", () => {
 		// A second press the same day adds nothing.
 		await post(APPROVALS, remind, "manager");
 		expect(await whoWasTold("submit-reminder")).toEqual(["member"]);
+	});
+
+	it("pressed twice for the same person on the same day, by two deciders, stores one notification and sends one email", async () => {
+		const remind = { intent: "remind", startsOn: LAST_MONDAY, personId: people.member.user.id };
+		await post(APPROVALS, remind, "manager");
+		await post(APPROVALS, remind, "owner");
+		const { results } = await env.DB.prepare(
+			"select key from notifications where kind = 'submit-reminder' and user_id = ?",
+		)
+			.bind(people.member.user.id)
+			.all<{ key: string }>();
+		expect(results).toEqual([{ key: `asked:${LAST_MONDAY}:2026-11-11` }]);
+
+		mailbox.send.mockClear();
+		await sendWaitingNotifications(new Date());
+		await sendWaitingNotifications(new Date());
+		expect(mailbox.sent().map(({ to }) => to)).toEqual([EMAIL.member]);
 	});
 
 	it("Remind all tells everyone the asker decides for who has not submitted", async () => {

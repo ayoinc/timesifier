@@ -1,14 +1,20 @@
-import { env } from "cloudflare:workers";
-import { and, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
+import { env, withEnv } from "cloudflare:workers";
+import { and, asc, eq, gt, gte, isNull, lte, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { onLeaveToday } from "~/approvals/approvals.server";
 import {
 	among,
+	countedDatabase,
+	isQueriesSpent,
+	leaveReminderPass,
 	type OrganisationScope,
 	organisationScope,
 	organisations,
+	QueryBudget,
+	type ReminderPass,
 	remindableOrganisations,
+	takeReminderPass,
 	users,
 } from "~/db";
 import { dayRulesOf } from "~/leave/rules.server";
@@ -25,23 +31,48 @@ import { decidersOf } from "./notify.server";
 import { type NewNotification, notificationStatements, pathBelow } from "./words";
 
 /**
- * The reminders (TS-049, decision 69), run every hour by the scheduled
- * handler. Each goes to a person at most once in its period, the unique key
- * of its row says which: a day (`timer:2026-11-16`), a deadline
- * (`deadline:2026-11-23`) or a day of an approver's (`approvals:2026-11-17`).
- * Each is timed in the person's own zone, and none goes to a person on leave
- * all of today where they are.
+ * The reminders (TS-049, decision 69). Each goes to a person at most once in
+ * its period, the unique key of its row says which: a day
+ * (`timer:2026-11-16`), a deadline (`deadline:2026-11-23`) or a day of an
+ * approver's (`approvals:2026-11-17`). Each is due at or after its moment,
+ * timed in the person's own zone, so one a run did not reach is sent by a
+ * later run in its period; none goes to a person on leave all of today where
+ * they are.
  *
- * - A timer running past the regular hours its day takes, once a day.
- * - The deadline: at the last `REMINDER_HOUR` o'clock where the person is
- *   that falls at least an hour before it, for the weeks it covers that they
- *   have not submitted.
- * - Weeks waiting for an approver since before their today, once a day from
- *   `REMINDER_HOUR` o'clock to `LAST_HOUR` o'clock where they are.
+ * - A timer running past the regular hours its day takes, once for that day.
+ * - The deadline: from the last `REMINDER_HOUR` o'clock where the person is
+ *   that falls at least an hour before it, until the deadline, for the weeks
+ *   it covers that they have not submitted.
+ * - Weeks waiting for an approver since before their today, once that day,
+ *   from `REMINDER_HOUR` o'clock where they are.
+ *
+ * The scheduled work runs them every minute but the hour's first (the hourly
+ * run does, after the duties that come first), each run within its share of
+ * the invocation's queries, `REMINDER_QUERIES_PER_RUN`. A pass checks every
+ * organisation with work once; it starts in each hour once the one before is
+ * finished, and each run goes on from where the last stopped (`reminderPass`).
  */
 
-/** The hour, where an approver is, after which a day's reminder of weeks waiting is no longer sent. */
-const LAST_HOUR = 18;
+/**
+ * The most D1 queries one run of the reminders makes: 400 of the 1,000 one
+ * invocation may make on Workers Paid, so the duties beside it keep 600.
+ */
+export const REMINDER_QUERIES_PER_RUN = 400;
+
+/** How long a run holds the pass: one that dies holding it holds it no longer, and the next run takes it. */
+export const REMINDER_LEASE_MS = 2 * 60 * 1000;
+
+/** How long a run starts new items for: half its lease, so it lets the pass go long before the lease runs out. */
+const RUN_MS = REMINDER_LEASE_MS / 2;
+
+/**
+ * The queries a run keeps for one more item, its write included: one with
+ * fewer left stops before it. Measured on 2026-11-24: an organisation's own
+ * reminders, its deadline and weeks waiting, make about 22, whatever its
+ * size; a running timer about 10 (`test/notifications/reminders-pass.test.ts`).
+ * Should one make more, the first query past the share is refused all the same.
+ */
+const ITEM_QUERIES = 30;
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -55,14 +86,82 @@ interface Organisation {
 	deadlineTime: string | null;
 }
 
+/** Where a pass stands: what is written back when a run lets it go. */
+type Stands = Pick<ReminderPass, "startedAt" | "lastOrganisation" | "lastEntry" | "finishedAt">;
+
 /**
- * Each organisation's reminders at `now`. Only organisations with work are
- * read (decision 69): a timer running or a week waiting, each found through
- * a partial index, or a deadline; and of those with a deadline, only one due
- * within a day reads anything more (`deadlineReminders`).
+ * What a run did: `idle` when it did not take the pass (another run holds
+ * it, or this hour's pass is finished), `stopped` when it used its share or
+ * its time before the pass's end, `finished` when it reached it; and the
+ * queries it made.
  */
-export async function runReminders(now: number): Promise<void> {
+export interface RemindersRun {
+	outcome: "idle" | "stopped" | "finished";
+	queries: number;
+}
+
+/**
+ * One run of the reminders at `now`, making at most `cap` queries. Only
+ * organisations with work are read (decision 69): a timer running or a week
+ * waiting, each found through a partial index, or a deadline; and of those
+ * with a deadline, only one due within a day reads anything more.
+ */
+export async function runReminders(
+	now: number,
+	cap = REMINDER_QUERIES_PER_RUN,
+): Promise<RemindersRun> {
+	// One query is kept back for letting the pass go.
+	const budget = new QueryBudget(cap - 1);
+	const outcome = (await withEnv({ ...env, DB: countedDatabase(env.DB, budget) }, () =>
+		remind(now, budget),
+	)) as RemindersRun["outcome"];
+	return { outcome, queries: budget.spent };
+}
+
+async function remind(now: number, budget: QueryBudget): Promise<RemindersRun["outcome"]> {
+	const token = crypto.randomUUID();
+	const hour = now - (now % HOUR_MS);
+	const pass = await takeReminderPass(env.DB, {
+		token,
+		now,
+		leasedUntil: now + REMINDER_LEASE_MS,
+		hour,
+	});
+	if (!pass) return "idle";
+	const stands: Stands =
+		pass.finishedAt === null
+			? { ...pass, finishedAt: null }
+			: { startedAt: hour, lastOrganisation: null, lastEntry: null, finishedAt: null };
+	const started = Date.now();
+	const room = () => budget.left >= ITEM_QUERIES && Date.now() - started < RUN_MS;
+	let outcome: RemindersRun["outcome"] = "stopped";
+	try {
+		if (await walk(now, stands, room)) {
+			stands.finishedAt = now;
+			outcome = "finished";
+		}
+	} catch (error) {
+		if (!isQueriesSpent(error)) throw error;
+	} finally {
+		budget.extend(1);
+		await leaveReminderPass(env.DB, token, {
+			startedAt: stands.startedAt,
+			lastOrganisation: stands.lastOrganisation,
+			lastEntry: stands.lastEntry,
+			finishedAt: stands.finishedAt,
+		});
+	}
+	return outcome;
+}
+
+/**
+ * Goes on with the pass from where it `stands`, item by item while there is
+ * `room`, moving `stands` past each item done. True when it reached the end.
+ */
+async function walk(now: number, stands: Stands, room: () => boolean): Promise<boolean> {
+	if (!room()) return false;
 	const { timing, waiting } = await remindableOrganisations(env.DB);
+	const from = stands.lastOrganisation;
 	const rows: Organisation[] = await drizzle(env.DB)
 		.select({
 			id: organisations.id,
@@ -74,18 +173,73 @@ export async function runReminders(now: number): Promise<void> {
 		})
 		.from(organisations)
 		.where(
-			or(ne(organisations.deadlineKind, "none"), among(organisations.id, [...timing, ...waiting])),
-		);
+			and(
+				or(
+					ne(organisations.deadlineKind, "none"),
+					among(organisations.id, [...timing, ...waiting]),
+				),
+				from === null ? undefined : gte(organisations.id, from),
+			),
+		)
+		.orderBy(asc(organisations.id));
 	for (const organisation of rows) {
 		const scope = organisationScope(env.DB, organisation.id);
-		const reminders = [
-			...(timing.has(organisation.id) ? await timerReminders(scope, organisation, now) : []),
-			...(await deadlineReminders(scope, organisation, now)),
-			...(waiting.has(organisation.id) ? await approvalsReminders(scope, organisation, now) : []),
-		];
-		const [first, ...rest] = notificationStatements(scope, reminders);
-		if (first) await scope.batch([first, ...rest]);
+		if (organisation.id !== stands.lastOrganisation) {
+			if (!room()) return false;
+			await item(scope, async () => [
+				...(await deadlineReminders(scope, organisation, now)),
+				...(waiting.has(organisation.id) ? await approvalsReminders(scope, organisation, now) : []),
+			]);
+			stands.lastOrganisation = organisation.id;
+			stands.lastEntry = "";
+		}
+		if (!timing.has(organisation.id)) continue;
+		if (!room()) return false;
+		const after = stands.lastEntry ?? "";
+		const timers = await isolated(scope, () => runningTimers(scope, organisation, now, after), []);
+		for (const timer of timers) {
+			if (!room()) return false;
+			await item(scope, () => timerReminder(scope, timer, now));
+			stands.lastEntry = timer.id;
+		}
 	}
+	return true;
+}
+
+/**
+ * `work`, of one organisation: when it fails it is logged and skipped, so
+ * one organisation's failure holds no other back. Running out of queries
+ * stops the run instead.
+ */
+async function isolated<T>(
+	scope: OrganisationScope,
+	work: () => Promise<T>,
+	otherwise: T,
+): Promise<T> {
+	try {
+		return await work();
+	} catch (error) {
+		if (isQueriesSpent(error)) throw error;
+		console.error(
+			`reminders: organisation ${scope.organisationId} failed with ${error instanceof Error ? error.name : "unknown"}`,
+		);
+		return otherwise;
+	}
+}
+
+/** One item of a pass: the reminders `make` makes, written in one batch. */
+async function item(
+	scope: OrganisationScope,
+	make: () => Promise<NewNotification[]>,
+): Promise<void> {
+	await isolated(
+		scope,
+		async () => {
+			const [first, ...rest] = notificationStatements(scope, await make());
+			if (first) await scope.batch([first, ...rest]);
+		},
+		undefined,
+	);
 }
 
 /** Where each of `userIds` is: their own zone, or the organisation's. */
@@ -112,47 +266,75 @@ async function presentOf(
 	return [...new Set(userIds)].filter((id) => !away.has(id));
 }
 
-/** A timer running past the regular hours its day takes, to its person, once for that day. */
-async function timerReminders(
+/** A running timer a pass checks. */
+interface Running {
+	id: string;
+	userId: string;
+	spentOn: Day;
+}
+
+/**
+ * The organisation's running timers after `after`, in the order of their
+ * ids, each one whose person is there today and has not yet been reminded of
+ * it: a timer reminded of costs nothing more for the rest of its day.
+ */
+async function runningTimers(
 	scope: OrganisationScope,
 	organisation: Organisation,
 	now: number,
-): Promise<NewNotification[]> {
-	const running = await scope.timeEntries.select((e) => isNull(e.endedAt));
+	after: string,
+): Promise<Running[]> {
+	const running = await scope.timeEntries.select((e) => and(isNull(e.endedAt), gt(e.id, after)), {
+		orderBy: (e) => [asc(e.id)],
+	});
 	if (running.length === 0) return [];
-	const present = new Set(
-		await presentOf(
-			scope,
-			running.map((e) => e.userId),
-			organisation,
-			now,
+	const people = running.map((e) => e.userId);
+	const [told, present] = await Promise.all([
+		scope.notifications.select((n) =>
+			and(
+				eq(n.kind, "timer-reminder"),
+				among(n.userId, people),
+				among(
+					n.key,
+					running.map((e) => `timer:${e.spentOn}`),
+				),
+			),
 		),
+		presentOf(scope, people, organisation, now),
+	]);
+	const done = new Set(told.map((n) => `${n.userId} ${n.key}`));
+	const here = new Set(present);
+	return running.filter((e) => here.has(e.userId) && !done.has(`${e.userId} timer:${e.spentOn}`));
+}
+
+/** A timer running past the regular hours its day takes, to its person, once for that day. */
+async function timerReminder(
+	scope: OrganisationScope,
+	timer: Running,
+	now: number,
+): Promise<NewNotification[]> {
+	const day = timer.spentOn;
+	const entries = await scope.timeEntries.select((e) =>
+		and(eq(e.userId, timer.userId), eq(e.spentOn, day)),
 	);
-	const made: NewNotification[] = [];
-	for (const entry of running) {
-		if (!present.has(entry.userId)) continue;
-		const day = entry.spentOn;
-		const entries = await scope.timeEntries.select((e) =>
-			and(eq(e.userId, entry.userId), eq(e.spentOn, day)),
-		);
-		const [rule] = await dayRulesOf(
-			scope,
-			entry.userId,
-			[day],
-			entries.map((e) => ({ ...e, day: e.spentOn })),
-			now,
-		);
-		if (!rule || rule.limitMinutes === null || rule.trackedMinutes <= rule.limitMinutes) continue;
-		made.push({
-			userId: entry.userId,
+	const [rule] = await dayRulesOf(
+		scope,
+		timer.userId,
+		[day],
+		entries.map((e) => ({ ...e, day: e.spentOn })),
+		now,
+	);
+	if (!rule || rule.limitMinutes === null || rule.trackedMinutes <= rule.limitMinutes) return [];
+	return [
+		{
+			userId: timer.userId,
 			kind: "timer-reminder",
 			title: `Your timer is still running on ${formatDay(day)}, past the hours the day takes.`,
 			body: `${formatDuration(rule.trackedMinutes * 60)} tracked; the day takes ${formatDuration(rule.limitMinutes * 60)}. Stop it, or correct it, if you have finished.`,
 			path: pathBelow((slug) => dayPath(slug, day)),
 			key: `timer:${day}`,
-		});
-	}
-	return made;
+		},
+	];
 }
 
 /**
@@ -261,7 +443,11 @@ async function deadlineReminders(
 	return made;
 }
 
-/** To each approver with weeks waiting for them since before their today, once that day. */
+/**
+ * To each approver with weeks waiting for them since before their today,
+ * once that day: due from `REMINDER_HOUR` o'clock where they are, so one a
+ * run did not reach goes later that day.
+ */
 async function approvalsReminders(
 	scope: OrganisationScope,
 	organisation: Organisation,
@@ -284,7 +470,6 @@ async function approvalsReminders(
 		const zone = zones.get(approver) ?? organisation.timeZone;
 		const today = dayOf(now, zone);
 		if (now < instantAt(today, REMINDER_HOUR * 60, zone)) continue;
-		if (now >= instantAt(today, LAST_HOUR * 60, zone)) continue;
 		const since = instantAt(today, 0, zone);
 		const theirs = waiting.filter(
 			(p) =>

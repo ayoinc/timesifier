@@ -158,7 +158,7 @@ describe("the deadline's reminder", () => {
 });
 
 describe("the reminder of weeks waiting", () => {
-	it("goes once a day to the approver, from 09:00 to 18:00 where they are, for weeks submitted before their today", async () => {
+	it("goes once a day to the approver, from 09:00 where they are, for weeks submitted before their today", async () => {
 		const kenji = await memberIn("kenji@example.com", ZONES.tokyo);
 		const rosa = await memberIn("rosa@example.com", ZONES.angeles);
 		await seedTeam(acme.id, "Design", { members: [rosa.user.id], managers: [kenji.user.id] });
@@ -260,11 +260,20 @@ describe("the hourly run's reads (decision 69)", () => {
 			expect(results.map(({ detail }) => detail).join(" "), sql).toContain(index);
 		}
 
-		// With no timer, no week waiting and no deadline due, a run is three reads, however many organisations there are.
+		// With no timer, no week waiting and no deadline due, a run that starts the hour's pass
+		// is five queries, however many organisations there are: it takes the pass, reads the
+		// two sets and the organisations, and lets the pass go. Another in that hour is one.
 		await env.DB.prepare("delete from time_entries").run();
 		await env.DB.prepare("delete from periods").run();
 		const prepare = vi.spyOn(env.DB, "prepare");
-		await runReminders(Date.parse("2026-11-25T16:00:00Z"));
-		expect(prepare).toHaveBeenCalledTimes(3);
+		expect(await runReminders(Date.parse("2026-11-25T16:00:00Z"))).toEqual({
+			outcome: "finished",
+			queries: 5,
+		});
+		expect(prepare).toHaveBeenCalledTimes(5);
+		expect(await runReminders(Date.parse("2026-11-25T16:01:00Z"))).toEqual({
+			outcome: "idle",
+			queries: 1,
+		});
 	});
 });

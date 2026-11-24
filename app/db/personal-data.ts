@@ -91,7 +91,7 @@ export const STORED = [
 			{ term: "Pinned projects and people", tables: ["pins"] },
 			{ term: "Support access", tables: ["support_grants"] },
 			{ term: "Verified domains", tables: ["organisation_domains", "membership_removals"] },
-			{ term: "Notifications", tables: ["notifications"] },
+			{ term: "Notifications", tables: ["notifications", "reminder_pass"] },
 		],
 	},
 	{

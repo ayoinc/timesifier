@@ -8,6 +8,8 @@
 
 // A list of any length as one bound parameter (decision 40).
 export { among, latestAmong, notAmong } from "./among";
+// A share of an invocation's queries, counted as D1 counts them (decision 69).
+export { countedDatabase, isQueriesSpent, QueriesSpent, QueryBudget } from "./budget";
 export {
 	activityAfter,
 	apiTokenByHash,
@@ -19,10 +21,13 @@ export {
 // Notifications across organisations: emails waiting, old ones deleted, a person's choices (TS-049).
 export {
 	deleteNotificationsBefore,
+	leaveReminderPass,
 	markNotificationEmails,
 	notificationChoicesOf,
+	type ReminderPass,
 	remindableOrganisations,
 	setNotificationChoice,
+	takeReminderPass,
 	waitingNotificationEmails,
 } from "./notifications";
 // The platform console's reads and writes across organisations: metadata only (TS-099).

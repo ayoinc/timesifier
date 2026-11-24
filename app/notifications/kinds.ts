@@ -135,7 +135,7 @@ export const NOTIFICATION_RETENTION_DAYS = 90;
 /** The most notifications the bell lists. */
 export const BELL_LIMIT = 30;
 
-/** The hour, where the person is, a reminder of the deadline or of weeks waiting goes at. */
+/** The hour, where the person is, from which a reminder of the deadline or of weeks waiting is due. */
 export const REMINDER_HOUR = 9;
 
 /** What the bell lists of one notification. */

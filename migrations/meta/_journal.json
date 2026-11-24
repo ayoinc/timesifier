@@ -232,6 +232,13 @@
 			"when": 1795481819975,
 			"tag": "0034_notifications",
 			"breakpoints": true
+		},
+		{
+			"idx": 33,
+			"version": "6",
+			"when": 1795488733844,
+			"tag": "0037_reminder_pass",
+			"breakpoints": true
 		}
 	]
 }

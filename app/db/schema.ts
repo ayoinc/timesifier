@@ -432,6 +432,30 @@ export const notificationChoices = sqliteTable(
 	(table) => [primaryKey({ columns: [table.userId, table.kind] })],
 );
 
+/**
+ * Where the reminders stand (TS-049, decision 69): one row, `reminders`. A
+ * pass checks every organisation with work once, in the order of their ids,
+ * the organisation's own reminders first and then each running timer in the
+ * order of its id; `last_organisation` and `last_entry` are the ids of the
+ * last it checked, a place in that order and not a reference (an empty
+ * `last_entry`: the organisation's own, no timer yet). A pass starts
+ * in each hour once the one before is finished, and each run of the scheduled
+ * work goes on from where the last stopped. A run holds the row while it
+ * works, by its `lease_token`, until `leased_until`: a run that dies holding
+ * it holds it no longer than that, and the next run takes it.
+ */
+export const reminderPass = sqliteTable("reminder_pass", {
+	name: text("name").primaryKey(),
+	/** The hour the pass started, in milliseconds since the epoch. */
+	startedAt: integer("started_at").notNull(),
+	lastOrganisation: text("last_organisation"),
+	lastEntry: text("last_entry"),
+	/** When the pass checked its last organisation; null while it goes on. */
+	finishedAt: integer("finished_at"),
+	leaseToken: text("lease_token"),
+	leasedUntil: integer("leased_until").notNull().default(0),
+});
+
 // The tables of the features under the navigation's headings (TS-053). Each
 // carries an `organisation_id` and is reached through `organisationScope`.
 // A reference from one of them to another is a pair of columns, the

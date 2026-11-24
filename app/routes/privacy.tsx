@@ -298,7 +298,8 @@ export default function Privacy({
 				opens, when it was made and read, and whether its email waits, was sent or was skipped.
 				Where a person gave a reason, such as a manager returning a week or deciding a request, the
 				notification holds it, as the record it is about does. A notification only tells a person
-				what they may already see in the organisation.
+				what they may already see in the organisation. And how far the reminders have got: the last
+				organisation and running timer they checked, by their numbers alone.
 			</>
 		),
 	};

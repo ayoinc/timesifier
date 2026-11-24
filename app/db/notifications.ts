@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, lte, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { among } from "./among";
@@ -7,6 +7,7 @@ import {
 	notifications,
 	organisations,
 	periods,
+	reminderPass,
 	timeEntries,
 	users,
 } from "./schema";
@@ -35,6 +36,58 @@ export async function remindableOrganisations(
 		timing: new Set(timing.map(({ id }) => id)),
 		waiting: new Set(waiting.map(({ id }) => id)),
 	};
+}
+
+/** Where a pass of the reminders stands: see `reminderPass`. */
+export type ReminderPass = typeof reminderPass.$inferSelect;
+
+const PASS = "reminders";
+
+/**
+ * Takes the pass for one run, until `leasedUntil`, in one statement: when no
+ * run holds it, or the one that did has let its lease run out, and there is
+ * work, a pass going on or none yet in `hour`. Returns where it stands, or
+ * null when it is not taken, for this run has nothing to do.
+ */
+export async function takeReminderPass(
+	database: D1Database,
+	lease: { token: string; now: number; leasedUntil: number; hour: number },
+): Promise<ReminderPass | null> {
+	const [row] = await drizzle(database)
+		.insert(reminderPass)
+		// The first run ever finds a pass finished long ago, so it starts one.
+		.values({
+			name: PASS,
+			startedAt: 0,
+			finishedAt: 0,
+			leaseToken: lease.token,
+			leasedUntil: lease.leasedUntil,
+		})
+		.onConflictDoUpdate({
+			target: reminderPass.name,
+			set: { leaseToken: lease.token, leasedUntil: lease.leasedUntil },
+			setWhere: and(
+				lte(reminderPass.leasedUntil, lease.now),
+				or(isNull(reminderPass.finishedAt), ne(reminderPass.startedAt, lease.hour)),
+			),
+		})
+		.returning();
+	return row ?? null;
+}
+
+/**
+ * Writes where the pass stands and lets it go, only while the run of `token`
+ * still holds it: a run that lost its lease to another writes nothing.
+ */
+export async function leaveReminderPass(
+	database: D1Database,
+	token: string,
+	stands: Pick<ReminderPass, "startedAt" | "lastOrganisation" | "lastEntry" | "finishedAt"> | null,
+): Promise<void> {
+	await drizzle(database)
+		.update(reminderPass)
+		.set({ ...stands, leaseToken: null, leasedUntil: 0 })
+		.where(and(eq(reminderPass.name, PASS), eq(reminderPass.leaseToken, token)));
 }
 
 /**
