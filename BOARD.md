@@ -74,7 +74,7 @@ Builder: an AI session on branch `ts-115c-project-teams`, pull request #112. Bui
 - [x] The API: `project_members` (GET, POST, PATCH, DELETE) under `projects:read` and the new `projects:write`, by the page's rules; `docs/api.md` and `docs/openapi.yaml` kept in step. Tests: `test/integrations/project-members.test.ts`, `test/integrations/api.test.ts`.
 - [x] The privacy notice, Who sees what and `docs/security.md` say what is stored and who sees and manages it. Test: `test/claims.test.ts`.
 - [x] Browser specs with keyboard and axe at 390px and 1280px, light and dark, and screenshots in `cmux-assets/browser/timesifier/TS-115c/`. Test: `e2e/project-teams.spec.ts` (the Team tab as an owner, a delivery manager and a member; "Your projects", "Not on the team" and "Add me to the team" in the picker; a member not on the team, not offered the project and told why), `e2e/organisations-keyboard.spec.ts` and `e2e/codes.spec.ts` (/app/new's tracking question by keyboard).
-- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline (run 45370942980, its second attempt: the first reached the checks job's 25-minute limit with no test failed).
 
 ### TS-098a · Contracts and their changes
 
