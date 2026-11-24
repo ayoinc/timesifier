@@ -80,6 +80,21 @@ Builder: an AI session on branch `ts-123-sweep-feel`. From `research/harvest-swe
 - [x] **5. Browser spec.** Keyboard and axe at 390 and 1280px in both schemes; the strip's 72px and the wider column at 1280px, a reload that arrives hidden, a timer stopped from the strip, the shortcut and the focus, and no transition with reduced motion (`e2e/sweep-feel.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-123/`.
 - [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
 
+### TS-125 · Team's week as a capacity table
+
+Builder: an AI session on branch `ts-125-capacity`. S2-08 of `research/harvest-sweep-2.md`, the last of its top 15; decision 70. No migration. In review: pull request #104.
+
+- [x] **1. The table.** Each person on This week has their logged time (overtime apart), the time expected of them from their schedule less public holidays and approved leave, a bar of logged against expected with leave hatched and the time over in the error colour, and "3:45 under · 89% of capacity" in words; a headline "103:30 of 198:45 expected" leads (`test/pages/capacity.test.ts`, "gives each person their week's expected hours, logged hours, and where they stand", "draws each week as a meter that reads out its figures, leave hatched, overtime past the end", "takes a public holiday off everyone's week, part time or not").
+- [x] **2. The headline equals the sum of the rows, and each row's expected equals Reports' for that person and week** (`test/pages/capacity.test.ts`, "leads with a headline that is the sum of the rows, each row's expected the same as Reports'").
+- [x] **3. Leave shortens the expected week by its hours** (half a day: 33:45 expected, 3:45 hatched; `test/pages/capacity.test.ts`, "gives each person…" and "draws each week as a meter…").
+- [x] **4. Sorted by Name, Most logged, Most of capacity and Most remaining, in `?sort=`**, kept by the week's arrows, the pages and the search; "Most remaining" is expected − logged, most first (`test/pages/capacity.test.ts`, "order by name, logged, share and remaining, ties kept by name", "orders the people by each key, kept in the address").
+- [x] **5. Who sees whom as before**: owner and admin everybody, a manager their teams' people, Finance, member, contractor and stranger 404 (`test/pages/capacity.test.ts`, "who sees whom").
+- [x] **6. #84's paging and #91's pins together**: everyone the search keeps is ordered before the page of 50 is taken, the pinned first on page 1 (`test/pages/capacity.test.ts`, "sorts all of them before taking a page, the pins first on page 1").
+- [x] **7. The figures are #84's SQL sums**: one `SUM … GROUP BY user_id` for the rows, the order and the total, no entry read row by row, the same statements for any order or page (`test/pages/capacity.test.ts`, "adds up everyone's week in SQL, however many pages or whatever order"; `test/organisations/request-memo.test.ts`, Team 36 → 35 statements).
+- [x] **8. Decision 70**, `docs/architecture.md`, `docs/navigation.md`.
+- [x] **9. Browser spec.** Keyboard Sort and the week's arrows, axe at 390 and 1280 px in both schemes (`e2e/capacity.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-125/`.
+- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+
 ### TS-106 · Buyer pages
 
 Builder: AI session on branch `ts-106-buyer-pages`. In review: the pull request against `main`. No migration. Spec: `research/corporate/cards.md`, TS-106, built to the owner's answers 8, 9 and 10 of 23 November 2026. Decision 64.

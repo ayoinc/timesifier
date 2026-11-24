@@ -85,9 +85,11 @@ describe("This week", () => {
 		expect(text).toContain("5–11 January 2026");
 		expect(text).toMatch(/grace@example\.com Submitted 8:30/);
 		expect(text).toMatch(/linus@example\.com Not submitted · Timer running 0:00/);
-		// The week's total is the sheet's footer, under the people (TS-091, W30).
+		// The week's total leads, as a headline (TS-125), and is the sheet's
+		// footer, under the people (TS-091, W30).
+		expect(text).toMatch(/Week's total: 8:30 of \d+:\d\d expected/);
 		expect(text).toContain("Week's total 8:30");
-		expect(text.indexOf("Week's total")).toBeGreaterThan(text.indexOf("linus@example.com"));
+		expect(text.lastIndexOf("Week's total")).toBeGreaterThan(text.indexOf("linus@example.com"));
 		expect(html).toContain('href="/app/acme/team?week=2025-12-29"');
 		expect(html).toContain('href="/app/acme/team?week=2026-01-12"');
 		expect(html).toContain(`href="/app/acme/team?week=${WEEK}&amp;person=${grace.user.id}"`);
