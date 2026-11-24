@@ -5,6 +5,7 @@
 		"e2e/**/*.ts",
 		"app/shell/destinations.ts",
 		"app/integrations/paths.ts",
+		"app/setup-import/paths.ts",
 		"app/contractors/paths.ts",
 		"app/activity/paths.ts",
 		"app/exports/paths.ts",

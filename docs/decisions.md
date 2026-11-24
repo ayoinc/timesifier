@@ -1358,14 +1358,14 @@ An owner or admin sets up projects, their work packages and the people on each p
 
 **Revert** takes away everything the import made: its projects (with everything that hangs from them, including what was added by hand since: tasks, rates, team), its work packages, every assignment it made, at the import or when a person joined, and the assignments still waiting. Invitations stay; the import made none. It is refused whole, naming what is in the way, while any of these exist: time tracked to one of its projects or work packages; time tracked by a person on a project that was already here, in the stretch the import gave them; an expense, invoice line or retainer on one of its projects. Those are records of work done and money owed, which a revert must not remove, and SQLite would refuse to delete a project they name. Then the person changes or removes the import's things by hand. Recorded: `import.imported` and `import.reverted` with counts, and each project, work package and assignment as made or removed.
 
-| Option | Evidence |
-| --- | --- |
-| One file, a Kind column (chosen) | One table any spreadsheet writes; the existing parser; codes resolve across the file in one pass. |
-| Three sections in one file | Not a CSV a spreadsheet writes or reads back; a parser of its own. |
-| Three files | Three uploads and dry runs, and a work package's project in another file cannot be checked against it. |
-| Waiting rows in their own table (chosen) | Tied to the invitation's lifecycle as TS-108's plans are; scoped, cascaded, listed in the privacy notice. |
-| Waiting rows as JSON in `setup_imports.created` | No migration, but nothing ties them to the invitation or the project, and acceptance must search every import. |
-| Revert refused whole while anything has time (chosen) | Time, expenses and invoices keep what they name; all or nothing is easy to say. |
-| Revert taking away what it can and leaving the rest | Leaves an import half there, which the page cannot describe in a line. |
+| Option                                                | Evidence                                                                                                       |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| One file, a Kind column (chosen)                      | One table any spreadsheet writes; the existing parser; codes resolve across the file in one pass.              |
+| Three sections in one file                            | Not a CSV a spreadsheet writes or reads back; a parser of its own.                                             |
+| Three files                                           | Three uploads and dry runs, and a work package's project in another file cannot be checked against it.         |
+| Waiting rows in their own table (chosen)              | Tied to the invitation's lifecycle as TS-108's plans are; scoped, cascaded, listed in the privacy notice.      |
+| Waiting rows as JSON in `setup_imports.created`       | No migration, but nothing ties them to the invitation or the project, and acceptance must search every import. |
+| Revert refused whole while anything has time (chosen) | Time, expenses and invoices keep what they name; all or nothing is easy to say.                                |
+| Revert taking away what it can and leaving the rest   | Leaves an import half there, which the page cannot describe in a line.                                         |
 
 **What it costs.** One table and one line in the acceptance hook. A revert deletes things added by hand to an imported project, which its sheet says before the button.
