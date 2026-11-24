@@ -44,6 +44,12 @@ import { type LeaveYear, leaveYear, leaveYearOf } from "./years";
 export const STARTER_MONTHS = ["days", "whole"] as const;
 export type StarterMonth = (typeof STARTER_MONTHS)[number];
 
+/** The starter month rule in Settings › Leave: gov.uk's two ways of counting a starter's first month. */
+export const STARTER_MONTH_LABELS: Record<StarterMonth, string> = {
+	days: "From their first day",
+	whole: "The whole month they start in",
+};
+
 /** The organisation's settings the leave year is counted by. */
 export interface LeaveYearSettings {
 	/** `MM-DD`, the day the leave year starts. */

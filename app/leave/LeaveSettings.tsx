@@ -4,18 +4,23 @@ import { Link } from "react-router";
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Radio, RadioGroup } from "~/components/Radio";
+import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { ACTION_LINK } from "~/shell/links";
 import { Section } from "~/shell/PageHeading";
 
+import { STARTER_MONTH_LABELS, STARTER_MONTHS, type StarterMonth } from "./entitlement";
 import { halfDaysLabel, type KindKey, LEAVE_NAME_MAX_LENGTH } from "./kinds";
 import { heldToNotice, LONGEST_NOTICE_DAYS, noticeLabel } from "./rules";
 import { spanLabel } from "./words";
+import { startsLabel } from "./years";
 
 // Workspace settings for leave (TS-061): the default work schedule (TS-097,
-// set on its own page), the kinds of leave, and the public holidays. Only owners
-// and admins are shown Workspace settings; the page's action asks again.
+// set on its own page), the leave year (TS-098b), the kinds of leave, and the
+// public holidays. Only owners and admins are shown Workspace settings; the
+// page's action asks again.
 
 export interface LeaveSettingsData {
 	/** The organisation's default work schedule today (TS-097), and the address of the schedules page. */
@@ -31,9 +36,37 @@ export interface LeaveSettingsData {
 		noticeDays: number;
 	}[];
 	holidays: { id: string; day: string; name: string }[];
+	/** The organisation's leave year and how it counts (TS-098b, decision 76). */
+	year: {
+		/** `MM-DD`. */
+		starts: string;
+		starterMonth: StarterMonth;
+		holidaysFromAllowance: boolean;
+	};
 }
 
-type Task = "kind" | "add-holiday" | "remove-holiday";
+type Task = "kind" | "add-holiday" | "remove-holiday" | "leave-year";
+
+/** The months, for the day a leave year starts on. */
+const MONTHS = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December",
+].map((label, index) => ({ id: String(index + 1).padStart(2, "0"), label }));
+/** The days of a month, for the day a leave year starts on; the server refuses one a month lacks. */
+const MONTH_DAYS = Array.from({ length: 31 }, (_, index) => {
+	const id = String(index + 1).padStart(2, "0");
+	return { id, label: String(index + 1) };
+});
 
 /** The notice a kind asks for, as its row reads: "14 working days' notice", "No notice", "Never needs notice". */
 const noticeText = (kind: { key: KindKey; noticeDays: number }) => {
@@ -74,6 +107,47 @@ export function LeaveSettings({
 						Work schedules
 					</Link>
 				</div>
+			</Section>
+
+			<Section
+				id="leave-year"
+				heading="Leave year"
+				lead="The year annual leave is counted in, and how a contract's leave counts a starter's first month and the public holidays."
+				className="max-w-200"
+			>
+				<Ledger heading="Leave year">
+					<LedgerRows label="Leave year">
+						<LedgerRow
+							title={startsLabel(data.year.starts)}
+							detail="Leave year starts on. Time off shows each balance for the leave year today falls in."
+							action={
+								<Button
+									variant="text"
+									aria-label="Change the leave year"
+									onPress={() => setTask("leave-year")}
+								>
+									Change
+								</Button>
+							}
+						/>
+						<LedgerRow
+							title={STARTER_MONTH_LABELS[data.year.starterMonth]}
+							detail="A starter's first month. From a contract's first day, or the whole month it starts in, as gov.uk allows."
+						/>
+						<LedgerRow
+							title={
+								data.year.holidaysFromAllowance
+									? "Come out of the allowance"
+									: "On top of the allowance"
+							}
+							detail={
+								data.year.holidaysFromAllowance
+									? "Public holidays. Each one on a person's working day is taken from the annual leave their contract gives."
+									: "Public holidays. Nobody's annual leave is taken for them."
+							}
+						/>
+					</LedgerRows>
+				</Ledger>
 			</Section>
 
 			<Section
@@ -121,7 +195,11 @@ export function LeaveSettings({
 			<Section
 				id="public-holidays"
 				heading="Public holidays"
-				lead="Days off for everyone in the organisation. Nobody is expected to work on them, and they take nothing from anybody's allowance."
+				lead={
+					data.year.holidaysFromAllowance
+						? "Days off for everyone in the organisation. Nobody is expected to work on them, and each one on a working day comes out of the annual leave a contract gives."
+						: "Days off for everyone in the organisation. Nobody is expected to work on them, and they take nothing from anybody's allowance."
+				}
 				className="max-w-200"
 			>
 				{data.holidays.length === 0 ? (
@@ -257,6 +335,60 @@ export function LeaveSettings({
 			>
 				<input type="hidden" name="holidayId" value={holiday?.id ?? ""} />
 				<p>The day becomes a working day again for everyone.</p>
+			</FormSheet>
+
+			<FormSheet
+				title="Change the leave year"
+				intent="leave-year"
+				submitLabel="Save"
+				isOpen={task === "leave-year"}
+				onClose={close}
+				onDone={onDone}
+			>
+				<p>
+					Balances are counted again from the new settings. Leave already asked for and adjustments
+					stay as they are.
+				</p>
+				<div className="flex flex-wrap gap-4 *:min-w-0 *:grow *:basis-44">
+					<Select
+						label="Starts in"
+						name="month"
+						options={MONTHS}
+						defaultValue={data.year.starts.slice(0, 2)}
+						isRequired
+					/>
+					<Select
+						label="On day"
+						name="day"
+						options={MONTH_DAYS}
+						defaultValue={data.year.starts.slice(3)}
+						isRequired
+					/>
+				</div>
+				<RadioGroup
+					label="A starter's first month"
+					name="starterMonth"
+					defaultValue={data.year.starterMonth}
+					isRequired
+				>
+					{STARTER_MONTHS.map((id) => (
+						<Radio key={id} value={id}>
+							{STARTER_MONTH_LABELS[id]}
+						</Radio>
+					))}
+				</RadioGroup>
+				<Checkbox
+					name="holidaysFromAllowance"
+					value="on"
+					defaultSelected={data.year.holidaysFromAllowance}
+				>
+					Public holidays come out of the allowance
+				</Checkbox>
+				<p>
+					Ticked, each public holiday on a person's working day is taken from the annual leave their
+					contract gives, so a part-timer gets the same share as everyone. UK law lets the 5.6 weeks
+					include them.
+				</p>
 			</FormSheet>
 		</>
 	);
