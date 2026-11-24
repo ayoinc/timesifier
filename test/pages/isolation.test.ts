@@ -133,6 +133,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/integrations/invoices-export",
 				"/app/acme/team",
 				"/app/acme/team/members",
+				// A person's contract, beside their Week (TS-098a).
+				"/app/acme/team/people/x/contract",
 				"/app/acme/team/invitations",
 				// Importing people from a CSV (TS-108).
 				"/app/acme/team/invitations/import",
@@ -180,6 +182,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/approvals",
 			"routes/app/calendar-feeds",
 			"routes/app/clients",
+			"routes/app/contract",
 			"routes/app/estimates",
 			"routes/app/estimates.$estimate",
 			"routes/app/expenses",
@@ -351,6 +354,16 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/sign-in-settings": { intent: "add-domain", domain: "acme-works.com" },
 		// An import of people a stranger would revert in another organisation; none is.
 		"routes/app/invitations.import": { intent: "revert", importId: "i-theirs" },
+		// A contract a stranger would give a person of another organisation; none is given.
+		"routes/app/contract": {
+			intent: "give",
+			startsOn: "2026-12-01",
+			kind: "permanent",
+			payBasis: "yearly",
+			pay: "32000",
+			currency: "GBP",
+			overtimePay: "unpaid",
+		},
 	};
 
 	it.each(withAction)(
@@ -387,6 +400,7 @@ describe("a member of one organisation asking for another organisation's address
 			);
 			expect(await value("select count(*) from support_grants")).toBe(0);
 			expect(await value("select count(*) from organisation_domains")).toBe(0);
+			expect(await value("select count(*) from contracts")).toBe(0);
 		},
 	);
 

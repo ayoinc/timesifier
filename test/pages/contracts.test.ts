@@ -1,0 +1,518 @@
+import { env } from "cloudflare:workers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+	changeContract,
+	deleteExpiredContracts,
+	endContract,
+	giveContract,
+} from "~/contracts/contracts.server";
+import { contractsOf } from "~/contracts/read.server";
+import { organisationScope } from "~/db";
+import { versionOn, weekOfMinutes } from "~/schedules/schedules";
+import { assignSchedule } from "~/schedules/schedules.server";
+import { contractPath } from "~/shell/destinations";
+import { captureEmail, type Mailbox } from "../auth/harness";
+import { freshDatabase } from "../db/database";
+import { value } from "../organisations/harness";
+import { open, openData, type Person, pageBody, submit, textOf } from "./harness";
+import { KINDS, type Roles, seedRoles } from "./roles-seed";
+import { seedSchedule } from "./schedule-seed";
+
+// Contracts and their changes (TS-098a, research/contracts-model.md sections
+// 2, 6 and 9): what the server does when one is given, changed from a day and
+// ended, and the Contract page of Team that asks it to, by role. The rules
+// without the database are test/contracts/contracts.test.ts.
+
+/** Monday 9 November 2026, noon in London. */
+const T0 = Date.parse("2026-11-09T12:00:00Z");
+const TODAY = "2026-11-09";
+
+let mailbox: Mailbox;
+let roles: Roles;
+let acme: Roles["acme"];
+/** Linus, a member of Design, whom Hedy manages. */
+let linus: Person;
+/** Monday to Wednesday, 09:00 to 14:00: 15 hours a week. */
+let threeDays: string;
+
+beforeEach(async () => {
+	await freshDatabase();
+	mailbox = captureEmail();
+	roles = await seedRoles(mailbox);
+	acme = roles.acme;
+	linus = roles.people.member;
+	vi.spyOn(Date, "now").mockReturnValue(T0);
+	threeDays = await seedSchedule(acme.id, "Three days", weekOfMinutes([300, 300, 300, 0, 0, 0, 0]));
+}, 60_000);
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
+const scope = () => organisationScope(env.DB, acme.id);
+const page = (who: Person = linus) => contractPath(acme.slug, who.user.id);
+
+/** What a contract sheet sends: permanent, £32,000 a year, overtime not paid. */
+function terms(more: Record<string, string> = {}) {
+	return {
+		kind: "permanent",
+		payBasis: "yearly",
+		pay: "32000",
+		currency: "GBP",
+		overtimePay: "unpaid",
+		...more,
+	};
+}
+
+const ask = async (who: Person, fields: Record<string, string>, of: Person = linus) => {
+	const response = await submit(page(of), fields, who, { byScript: true });
+	return { status: response.status, said: await response.text() };
+};
+
+const give = (who: Person, more: Record<string, string> = {}, of: Person = linus) =>
+	ask(who, { intent: "give", startsOn: "2026-01-05", ...terms(more) }, of);
+
+const theirs = async (who: Person = linus) =>
+	(await contractsOf(scope(), [who.user.id])).get(who.user.id) ?? [];
+
+const text = async (path: string, who: Person) => {
+	const response = await open(path, who);
+	expect(response.status, path).toBe(200);
+	return textOf(await pageBody(response));
+};
+
+const recorded = (action: string) =>
+	value<number>(
+		"select count(*) from activity_records where organisation_id = ? and action = ?",
+		acme.id,
+		action,
+	);
+
+describe("the server", () => {
+	it("changes from a day: the days before keep their terms, and each change is recorded", async () => {
+		const ada = roles.people.owner.user.id;
+		const fields = { ...terms(), kind: "permanent" as const, overtimePay: "unpaid" as const };
+		const given = await giveContract(
+			scope(),
+			ada,
+			linus.user.id,
+			"2026-01-05",
+			{ ...fields, payBasis: "yearly", jobTitle: "Designer" },
+			TODAY,
+		);
+		expect(given.change).toBe("done");
+		const id = given.change === "done" ? given.id : "";
+		expect(
+			(
+				await changeContract(
+					scope(),
+					ada,
+					id,
+					"2026-04-06",
+					{ ...fields, payBasis: "yearly", pay: "34000", jobTitle: "Designer" },
+					TODAY,
+				)
+			).change,
+		).toBe("done");
+		const [contract] = await theirs();
+		if (!contract) throw new Error("No contract.");
+		expect(contract.versions.map((v) => [v.effectiveFrom, v.payMinor])).toEqual([
+			["2026-01-05", 3_200_000],
+			["2026-04-06", 3_400_000],
+		]);
+		expect(versionOn(contract, "2026-04-05").payMinor).toBe(3_200_000);
+		expect(versionOn(contract, "2026-04-06").payMinor).toBe(3_400_000);
+		// A second change from the same day replaces it, and leaves the first alone.
+		await changeContract(
+			scope(),
+			ada,
+			id,
+			"2026-04-06",
+			{ ...fields, payBasis: "yearly", pay: "35000", jobTitle: "Designer" },
+			TODAY,
+		);
+		const [again] = await theirs();
+		expect(again?.versions.map((v) => v.payMinor)).toEqual([3_200_000, 3_500_000]);
+		expect(await recorded("contract.created")).toBe(1);
+		// The pay changed twice, and nothing a manager reads did.
+		expect(await recorded("contract_pay.changed")).toBe(3);
+		expect(await recorded("contract.changed")).toBe(2);
+	});
+
+	it("ends and starts again: a contract ends, the next begins the day after, and none overlaps", async () => {
+		const ada = roles.people.owner.user.id;
+		const fields = { ...terms(), kind: "fixed_term" as const, overtimePay: "unpaid" as const };
+		const first = await giveContract(
+			scope(),
+			ada,
+			linus.user.id,
+			"2026-01-05",
+			{ ...fields, payBasis: "yearly", endsOn: "2026-12-31" },
+			TODAY,
+		);
+		const id = first.change === "done" ? first.id : "";
+		// Another sharing a day is refused, by the server and, were it raced, by the trigger.
+		const clash = await giveContract(
+			scope(),
+			ada,
+			linus.user.id,
+			"2026-12-31",
+			{ ...fields, kind: "permanent", payBasis: "yearly" },
+			TODAY,
+		);
+		expect(clash.change).toBe("overlap");
+		await expect(
+			env.DB.prepare(
+				"insert into contracts (id, organisation_id, user_id, kind, starts_on, created_at, updated_at) values ('raced', ?, ?, 'permanent', '2026-06-01', 0, 0)",
+			)
+				.bind(acme.id, linus.user.id)
+				.run(),
+		).rejects.toThrow(/contracts never overlap/);
+
+		expect((await endContract(scope(), ada, id, "2026-11-30", "resigned", TODAY)).change).toBe(
+			"done",
+		);
+		expect((await endContract(scope(), ada, id, "2026-11-30", "resigned", TODAY)).change).toBe(
+			"ended",
+		);
+		const next = await giveContract(
+			scope(),
+			ada,
+			linus.user.id,
+			"2026-12-01",
+			{ ...fields, kind: "permanent", payBasis: "yearly" },
+			TODAY,
+		);
+		expect(next.change).toBe("done");
+		expect((await theirs()).map((c) => [c.kind, c.startsOn, c.endsOn, c.endReason])).toEqual([
+			["fixed_term", "2026-01-05", "2026-11-30", "resigned"],
+			["permanent", "2026-12-01", null, null],
+		]);
+		// A change of kind from a day ends the one and starts the next, as "replaced".
+		const nextId = next.change === "done" ? next.id : "";
+		expect(
+			(
+				await changeContract(
+					scope(),
+					ada,
+					nextId,
+					"2027-03-01",
+					{ ...fields, kind: "contractor", payBasis: "daily", pay: "400" },
+					TODAY,
+				)
+			).change,
+		).toBe("done");
+		expect((await theirs()).map((c) => [c.kind, c.startsOn, c.endsOn, c.endReason])).toEqual([
+			["fixed_term", "2026-01-05", "2026-11-30", "resigned"],
+			["permanent", "2026-12-01", "2027-02-28", "replaced"],
+			["contractor", "2027-03-01", null, null],
+		]);
+	});
+
+	it("the contract gives the hours, and a manual assignment on those days is refused", async () => {
+		const ada = roles.people.owner.user.id;
+		const fields = { ...terms(), kind: "permanent" as const, overtimePay: "unpaid" as const };
+		await giveContract(
+			scope(),
+			ada,
+			linus.user.id,
+			"2026-01-05",
+			{ ...fields, payBasis: "yearly", scheduleId: threeDays },
+			TODAY,
+		);
+		// Written from today, as the contract's own; the days gone keep theirs.
+		const rows = await env.DB.prepare(
+			"select schedule_id, effective_from, source_kind from schedule_assignments where organisation_id = ? and target_kind = 'person' and target_id = ?",
+		)
+			.bind(acme.id, linus.user.id)
+			.all();
+		expect(rows.results).toEqual([
+			{ schedule_id: threeDays, effective_from: TODAY, source_kind: "contract" },
+		]);
+		const standard = await value<string>(
+			"select id from work_schedules where organisation_id = ? and name = 'Standard'",
+			acme.id,
+		);
+		expect(
+			await assignSchedule(
+				scope(),
+				ada,
+				{ kind: "person", id: linus.user.id },
+				standard,
+				"2026-11-16",
+				TODAY,
+			),
+		).toBe("contract");
+	});
+
+	it("keeps a contract three years after the end of the tax year it ended in, then deletes it with its versions", async () => {
+		const ada = roles.people.owner.user.id;
+		const hedy = roles.people.manager;
+		const fields = { ...terms(), overtimePay: "unpaid" as const, payBasis: "yearly" as const };
+		// Ended Sunday 5 April 2026, the last day of the tax year 2025 to 2026.
+		await giveContract(
+			scope(),
+			ada,
+			linus.user.id,
+			"2025-01-06",
+			{ ...fields, kind: "fixed_term", endsOn: "2026-04-05" },
+			TODAY,
+		);
+		// Ended Monday 6 April 2026, the first day of the next.
+		await giveContract(
+			scope(),
+			ada,
+			hedy.user.id,
+			"2025-01-06",
+			{ ...fields, kind: "fixed_term", endsOn: "2026-04-06" },
+			TODAY,
+		);
+		// No end: kept.
+		await giveContract(scope(), ada, ada, "2025-01-06", { ...fields, kind: "permanent" }, TODAY);
+		const count = () => value<number>("select count(*) from contracts");
+		const versions = () => value<number>("select count(*) from contract_versions");
+
+		expect(await deleteExpiredContracts(env.DB, new Date("2029-04-05T03:17:00Z"))).toBe(0);
+		expect(await count()).toBe(3);
+		expect(await deleteExpiredContracts(env.DB, new Date("2029-04-06T03:17:00Z"))).toBe(1);
+		expect(await count()).toBe(2);
+		expect(await versions()).toBe(2);
+		expect(await deleteExpiredContracts(env.DB, new Date("2030-04-05T03:17:00Z"))).toBe(0);
+		expect(await deleteExpiredContracts(env.DB, new Date("2030-04-06T03:17:00Z"))).toBe(1);
+		expect(await count()).toBe(1);
+	});
+});
+
+describe("the Contract page, by role", () => {
+	it("is read by owners, admins, Finance and the person's manager; anybody else gets the organisation's 404", async () => {
+		expect((await give(roles.people.owner, { worksNumber: "W-17" })).status).toBe(200);
+		const expected = { owner: 200, admin: 200, finance: 200, manager: 200, member: 404 } as const;
+		for (const kind of KINDS) {
+			const who = roles.people[kind];
+			expect((await open(page(), who)).status, kind).toBe(expected[kind]);
+			expect((await openData(page(), who)).status, kind).toBe(expected[kind]);
+		}
+		// The member column is Linus himself: members are not shown Team, and read their own on My account.
+		expect(roles.people.member).toBe(linus);
+		// A manager reads the people of their teams alone: not Grace's.
+		expect((await open(page(roles.people.admin), roles.people.manager)).status).toBe(404);
+	});
+
+	it("sends a manager no pay, multiplier or works number, not even in its data", async () => {
+		await give(roles.people.owner, {
+			worksNumber: "W-17",
+			overtimePay: "paid",
+			overtimeMultiplier: "15000",
+		});
+		const manager = roles.people.manager;
+		for (const response of [await open(page(), manager), await openData(page(), manager)]) {
+			const body = await response.text();
+			expect(response.status).toBe(200);
+			expect(body).toContain("Overtime is paid.");
+			expect(body).not.toMatch(/£|32,000|32000|payMinor|"pay"|W-17|time and a half/i);
+		}
+		// Finance reads it all, and is offered no change.
+		const finance = await text(page(), roles.people.finance);
+		expect(finance).toContain("Paid £32,000.00 a year.");
+		expect(finance).toContain("Works number W-17.");
+		expect(finance).not.toContain("Change contract");
+		const data = await (await openData(page(), roles.people.finance)).text();
+		expect(data).not.toContain('"sheets",{');
+		expect((await give(roles.people.finance)).status).toBe(403);
+		expect((await give(manager)).status).toBe(403);
+	});
+
+	it("is not one's own: an admin cannot give, change or end their own while another could; a sole owner can, and it says so", async () => {
+		const grace = roles.people.admin;
+		const ada = roles.people.owner;
+		expect((await give(grace, {}, grace)).status).toBe(403);
+		expect((await give(ada, {}, ada)).status).toBe(403);
+		expect(await value<number>("select count(*) from contracts")).toBe(0);
+		// Ada gives Grace hers; Grace still cannot change it.
+		expect((await give(ada, {}, grace)).status).toBe(200);
+		const [contract] = await theirs(grace);
+		expect(
+			(
+				await ask(
+					grace,
+					{ intent: "end", contractId: contract?.id ?? "", lastDay: TODAY, reason: "resigned" },
+					grace,
+				)
+			).status,
+		).toBe(403);
+
+		// With Grace an admin no longer, Ada is the only one who could: she changes her own.
+		await env.DB.prepare("update memberships set role = 'member' where user_id = ?")
+			.bind(grace.user.id)
+			.run();
+		expect((await give(ada, {}, ada)).status).toBe(200);
+		expect(await text(page(ada), ada)).toContain(
+			"Nobody else here can change your contract, so you change it yourself",
+		);
+		const summary = await value<string>(
+			"select summary from activity_records where action = 'contract.created' and owner_id = ?",
+			ada.user.id,
+		);
+		expect(JSON.parse(summary ?? "{}").after.changedAlone).toBe(true);
+	});
+
+	it("keeps a leaver's contract: removed from the organisation, their contract stays for those who read pay", async () => {
+		const ada = roles.people.owner;
+		expect((await give(ada, { endsOn: "2026-11-30", kind: "fixed_term" })).status).toBe(200);
+		const memberId = await value<string>(
+			"select id from memberships where user_id = ?",
+			linus.user.id,
+		);
+		const removed = await submit(
+			`/app/${acme.slug}/team/members`,
+			{ intent: "remove", memberId: memberId ?? "" },
+			ada,
+			{ byScript: true },
+		);
+		expect(removed.status).toBe(200);
+		expect(
+			await value<number>("select count(*) from contracts where user_id = ?", linus.user.id),
+		).toBe(1);
+		const shown = await text(page(), ada);
+		expect(shown).toContain("No longer a member. Their contracts are kept as payroll records.");
+		expect(shown).toContain("Fixed term, from Monday 5 January 2026 to Monday 30 November 2026.");
+		expect((await open(page(), roles.people.finance)).status).toBe(200);
+		// Their manager no longer manages them.
+		expect((await open(page(), roles.people.manager)).status).toBe(404);
+	});
+
+	it("gives, changes from a day and ends through its sheets, and says why it refuses", async () => {
+		const ada = roles.people.owner;
+		expect((await give(ada, { kind: "fixed_term" })).said).toContain(
+			"A fixed term needs its last day.",
+		);
+		expect((await give(ada, { pay: "lots" })).said).toContain("Enter the pay as an amount");
+		expect((await give(ada, { scheduleId: threeDays, jobTitle: "Designer" })).status).toBe(200);
+		expect((await give(ada, { startsOn: "2026-06-01" })).said).toContain(
+			"That shares days with their contract from Monday 5 January 2026.",
+		);
+		const [contract] = await theirs();
+		const id = contract?.id ?? "";
+		const changed = await ask(ada, {
+			intent: "change",
+			contractId: id,
+			from: "2026-12-01",
+			...terms({ pay: "34000", scheduleId: threeDays, jobTitle: "Designer" }),
+		});
+		expect(changed.said).toContain("The contract is changed, from Tuesday 1 December 2026.");
+		const shown = await text(page(), ada);
+		expect(shown).toContain("Permanent, part time, from Monday 5 January 2026.");
+		expect(shown).toContain("Works 15:00 a week on Three days.");
+		expect(shown).toContain("From Tuesday 1 December 2026: £34,000.00 a year.");
+		const ended = await ask(ada, {
+			intent: "end",
+			contractId: id,
+			lastDay: "2026-12-31",
+			reason: "resigned",
+		});
+		expect(ended.said).toContain("The contract ends on Thursday 31 December 2026.");
+		// A contract of somebody else's, named at this person's address, is nobody's here.
+		const hedy = roles.people.manager;
+		await give(ada, {}, hedy);
+		const [hers] = await theirs(hedy);
+		expect(
+			(
+				await ask(ada, {
+					intent: "end",
+					contractId: hers?.id ?? "",
+					lastDay: TODAY,
+					reason: "resigned",
+				})
+			).status,
+		).toBe(404);
+	});
+});
+
+describe("what a contract changes elsewhere", () => {
+	it("the contract gives the hours: Team's week, Schedules and My account follow it, and Schedules refuses a manual assignment", async () => {
+		const ada = roles.people.owner;
+		expect((await give(ada, { scheduleId: threeDays })).status).toBe(200);
+		const week = await text(`/app/${acme.slug}/team?person=${linus.user.id}`, roles.people.manager);
+		expect(week).toContain("15:00 expected");
+		expect(week).toContain("Work schedule: Three days");
+		expect(week).toContain("From their contract");
+		expect(await text(`/app/${acme.slug}/settings/schedules`, ada)).toContain(
+			"From their contract",
+		);
+		expect(await text(`/app/${acme.slug}/account`, linus)).toContain("From your contract");
+
+		const standard = await value<string>(
+			"select id from work_schedules where organisation_id = ? and name = 'Standard'",
+			acme.id,
+		);
+		const assign = await submit(
+			`/app/${acme.slug}/settings/schedules`,
+			{
+				intent: "assign",
+				targetKind: "person",
+				targetId: linus.user.id,
+				scheduleId: standard ?? "",
+				from: "2026-11-16",
+			},
+			ada,
+			{ byScript: true },
+		);
+		expect(assign.status).toBe(409);
+		expect(await assign.text()).toContain("Their hours come from their contract on that day.");
+	});
+
+	it("Team's person view has Week and Contract tabs for those who read contracts", async () => {
+		const week = await (
+			await open(`/app/${acme.slug}/team?person=${linus.user.id}`, roles.people.manager)
+		).text();
+		expect(week).toContain('aria-label="Their pages"');
+		expect(week).toContain(`href="${page()}"`);
+		const contract = await (await open(page(), roles.people.manager)).text();
+		expect(contract).toContain(`href="/app/${acme.slug}/team?person=${linus.user.id}"`);
+		// Finance reads the contract without Team: no Week tab, no way back to Everyone's week.
+		const finance = await (await open(page(), roles.people.finance)).text();
+		expect(finance).not.toContain(`team?person=${linus.user.id}`);
+		expect(finance).not.toContain("Everyone's week");
+	});
+
+	it("Members says No contract, or when a fixed term ends, links each contract, and hides Mark as contractor while a contract covers today", async () => {
+		const ada = roles.people.owner;
+		const members = `/app/${acme.slug}/team/members`;
+		expect(await text(members, ada)).toContain("No contract");
+		await give(ada, { kind: "fixed_term", endsOn: "2026-12-31" });
+		const shown = await (await open(members, ada)).text();
+		expect(textOf(shown)).toContain("Contract ends Thu 31 December");
+		expect(shown).toContain(`href="${page()}"`);
+		// The manager sees neither.
+		expect(await text(members, roles.people.manager)).not.toContain("No contract");
+
+		const memberId = await value<string>(
+			"select id from memberships where user_id = ?",
+			linus.user.id,
+		);
+		const marking = await submit(
+			members,
+			{ intent: "contractor", memberId: memberId ?? "", isContractor: "true" },
+			ada,
+			{ byScript: true },
+		);
+		expect(marking.status).toBe(409);
+		expect(await marking.text()).toContain("Their contract says whether they are a contractor.");
+		expect(
+			await value<number>("select is_contractor from memberships where id = ?", memberId),
+		).toBe(0);
+	});
+
+	it("My account shows the person their own contract, pay included, and their data export holds it", async () => {
+		await give(roles.people.owner, { worksNumber: "W-17", jobTitle: "Designer" });
+		const account = await text(`/app/${acme.slug}/account`, linus);
+		expect(account).toContain("Your contract");
+		expect(account).toContain("Paid £32,000.00 a year.");
+		expect(account).toContain("Works number W-17.");
+		// Hedy, with none, is told so.
+		expect(await text(`/app/${acme.slug}/account`, roles.people.manager)).toContain(
+			"You have no contract here.",
+		);
+	});
+});

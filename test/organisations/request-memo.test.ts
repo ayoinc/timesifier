@@ -88,11 +88,13 @@ describe("a page as a manager of 120 of 150 people", () => {
 	// TS-049, each reads the person's unread notifications once, for the bell.
 	// Since TS-115b, Timesheet day reads the projects' work packages once, for
 	// Track time's choices and the names of the day's entries.
+	// Since TS-098a, each reads the contracts twice: `placesOf` reads them with
+	// the places, for whether a person is a contractor on a day.
 	it("Timesheet day reads the manager's membership and their teams once", async () => {
 		const counts = await statementsOf(`/app/acme?day=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 58,
+			total: 60,
 			memberships: 4,
 			teamMembers: 3,
 			ownMembership: 1,
@@ -108,8 +110,9 @@ describe("a page as a manager of 120 of 150 people", () => {
 			status: 200,
 			// 36 before TS-125: each page's entries were read row by row, and the
 			// total past one page summed apart. Now one sum serves the rows, the
-			// order and the total. One more since TS-049, the bell's unread count.
-			total: 36,
+			// order and the total. One more since TS-049, the bell's unread count,
+			// and two since TS-098a, the contracts with the people's places.
+			total: 38,
 			memberships: 5,
 			teamMembers: 3,
 			ownMembership: 1,

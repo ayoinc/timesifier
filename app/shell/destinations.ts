@@ -315,6 +315,21 @@ export function peopleImportPath(slug: string, importId?: string): string {
 	return importId ? `${path}?${new URLSearchParams({ import: importId })}` : path;
 }
 
+/** The address parameter that names the person of a contract page. */
+export const CONTRACT_PERSON_PARAM = "person";
+
+/**
+ * What follows the organisation in the address of a person's contracts
+ * (TS-098a): a page of Team, which Finance also reads, as it reads pay. The
+ * page decides who sees it; the layout lets Finance through to it alone.
+ */
+export const CONTRACT_SEGMENT = `${destination("team").segment}/people/:${CONTRACT_PERSON_PARAM}/contract`;
+
+/** The address of `personId`'s contracts in the organisation with this slug. */
+export function contractPath(slug: string, personId: string): string {
+	return `${organisationPath(slug)}/${destination("team").segment}/people/${encodeURIComponent(personId)}/contract`;
+}
+
 /**
  * What follows the organisation in the address of My account: the person's
  * own name, colour scheme, sign-out and leaving. It is a utility item, not a

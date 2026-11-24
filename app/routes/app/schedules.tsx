@@ -218,6 +218,8 @@ const REFUSALS: Record<Exclude<ScheduleChange, "done">, string> = {
 		"This schedule is given to someone today or from a later day. Give them another before archiving it.",
 	past: "Choose today or a later day. Days already gone keep the schedule they had.",
 	"no-days": "Choose at least one day worked, each with a start before its finish.",
+	contract:
+		"Their hours come from their contract on that day. Change the contract instead, from Team.",
 };
 
 export async function action({ request, context }: Route.ActionArgs) {

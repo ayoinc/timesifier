@@ -2,6 +2,14 @@ import { env } from "cloudflare:workers";
 import { asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
+import {
+	END_REASON_LABELS,
+	KIND_LABELS,
+	MULTIPLIER_LABELS,
+	OVERTIME_PAY_LABELS,
+	PAY_BASIS_LABELS,
+} from "~/contracts/contracts";
+import { contractsOf } from "~/contracts/read.server";
 import { notificationChoicesOf, organisationScope, platformData, users } from "~/db";
 import { type ZipEntry, zip } from "~/lib/zip";
 import { minorDigits } from "~/money/money";
@@ -10,8 +18,8 @@ import { BYTE_ORDER_MARK, csvLine, isoInstant } from "~/reports/csv";
 // A person's data, as one ZIP of JSON and CSV files (TS-099, data requests).
 // It holds what is about the person: their account, their organisations and
 // roles, their sign-ins, and in each organisation their own time entries,
-// expenses and leave, each read through that organisation's scope and
-// filtered to the person. Nothing of anybody else's. A person downloads it
+// expenses, leave and contracts, each read through that organisation's scope
+// and filtered to the person. Nothing of anybody else's. A person downloads it
 // from My account; a platform owner can only send them the link, and never
 // sees it.
 
@@ -75,9 +83,10 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 	const entries: string[][] = [];
 	const expenses: string[][] = [];
 	const leave: string[][] = [];
+	const contracts: string[][] = [];
 	for (const organisation of account?.organisations ?? []) {
 		const scope = organisationScope(env.DB, organisation.id);
-		const [own, projects, spent, away, kinds] = await Promise.all([
+		const [own, projects, spent, away, kinds, theirs, schedules] = await Promise.all([
 			scope.timeEntries.select((e) => eq(e.userId, userId), { orderBy: (e) => [asc(e.startedAt)] }),
 			scope.projects.select(),
 			scope.expenses.select((e) => eq(e.userId, userId), { orderBy: (e) => [asc(e.spentOn)] }),
@@ -85,9 +94,35 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 				orderBy: (l) => [asc(l.startsOn)],
 			}),
 			scope.leaveKinds.select(),
+			contractsOf(scope, [userId]),
+			scope.workSchedules.select(),
 		]);
 		const projectOf = new Map(projects.map((p) => [p.id, p.name]));
 		const kindOf = new Map(kinds.map((k) => [k.id, k.name]));
+		const scheduleOf = new Map(schedules.map((s) => [s.id, s.name]));
+		// Their contracts (TS-098a), pay included: one row for each version, from its day.
+		for (const c of theirs.get(userId) ?? []) {
+			for (const v of c.versions) {
+				contracts.push([
+					organisation.name,
+					KIND_LABELS[c.kind],
+					c.startsOn,
+					c.endsOn ?? "",
+					c.endReason ? END_REASON_LABELS[c.endReason] : "",
+					c.worksNumber ?? "",
+					v.effectiveFrom,
+					v.jobTitle ?? "",
+					v.scheduleId ? (scheduleOf.get(v.scheduleId) ?? "") : "",
+					(v.payMinor / 10 ** minorDigits(v.currency)).toFixed(minorDigits(v.currency)),
+					v.currency,
+					PAY_BASIS_LABELS[v.payBasis],
+					OVERTIME_PAY_LABELS[v.overtimePay],
+					v.overtimeMultiplierBp === null ? "" : MULTIPLIER_LABELS[v.overtimeMultiplierBp],
+					v.restDayMultiplierBp === null ? "" : MULTIPLIER_LABELS[v.restDayMultiplierBp],
+					v.leaveDays === null ? "" : String(v.leaveDays),
+				]);
+			}
+		}
 		for (const e of own) {
 			entries.push([
 				organisation.name,
@@ -145,6 +180,31 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 	yield file(
 		"leave.csv",
 		csv(["Organisation", "Kind", "From", "To", "Status", "Note"], leave),
+		now,
+	);
+	yield file(
+		"contracts.csv",
+		csv(
+			[
+				"Organisation",
+				"Kind",
+				"First day",
+				"Last day",
+				"Why it ended",
+				"Works number",
+				"Terms from",
+				"Job title",
+				"Work schedule",
+				"Pay",
+				"Currency",
+				"Paid",
+				"Overtime",
+				"Overtime at",
+				"On days off and public holidays",
+				"Annual leave (days a year)",
+			],
+			contracts,
+		),
 		now,
 	);
 }

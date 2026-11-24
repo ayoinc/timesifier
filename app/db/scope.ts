@@ -29,6 +29,8 @@ import {
 	clientContacts,
 	clientManagers,
 	clients,
+	contracts,
+	contractVersions,
 	entryTags,
 	estimateLines,
 	estimates,
@@ -462,6 +464,8 @@ export const tenantTables = {
 	supportGrants,
 	notifications,
 	organisationExports,
+	contracts,
+	contractVersions,
 } as const;
 
 type Accessors = {

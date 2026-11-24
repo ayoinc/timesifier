@@ -61,11 +61,16 @@ for (const viewport of [
 			// The move puts the focus on the page's heading; Tab goes on from there.
 			await expect(page.getByRole("heading", { level: 1, name: "Members" })).toBeFocused();
 
-			// The member's actions, after the tabs and the owner's own, which mark
-			// them a contractor (TS-079): a menu the arrow keys move through.
+			// The member's actions, after the tabs and the owner's row: each row's
+			// contract link (TS-098a), then its actions, which mark them a contractor
+			// (TS-079): a menu the arrow keys move through.
 			const actions = page.getByRole("button", { name: `Actions for ${member.name}` });
+			const contractOf = (person: string) =>
+				page.getByRole("link", { name: `No contract: the contract of ${person}` });
 			await tabThroughTeamTabs(page);
+			await tabTo(page, contractOf(owner.name));
 			await tabTo(page, page.getByRole("button", { name: `Actions for ${owner.name}` }));
+			await tabTo(page, contractOf(member.name));
 			await tabTo(page, actions);
 			await page.keyboard.press("Enter");
 			const changeRole = page.getByRole("menuitem", { name: "Change role" });

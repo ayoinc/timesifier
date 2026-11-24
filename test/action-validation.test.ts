@@ -210,6 +210,12 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	// The export of everything (TS-126) is asked for with the intent `export`; this asks for another.
 	"routes/app/export-everything": () =>
 		formFromAMember("/app/acme/settings/export", "intent=delete"),
+	// A contract ends with a reason a person gives (TS-098a); "replaced" is the server's own, never typed.
+	"routes/app/contract": () =>
+		formFromAMember(
+			"/app/acme/team/people/x/contract",
+			"intent=end&contractId=c1&lastDay=2026-12-01&reason=replaced",
+		),
 	// An unsubscribe post is empty or a mail client's one-click; this is neither.
 	// The link is a real one, so only the input is wrong.
 	// A browser error report (TS-107d) whose route is an address, not a pattern.

@@ -165,6 +165,9 @@ for (const viewport of [
 				// Back, and most remaining: Grace, 2:00 over, comes last.
 				await page.goBack();
 				await expect(page).toHaveURL(new RegExp(`week=${WEEK}.*sort=share`));
+				// The address changes before the week's people are read again, and the
+				// bar sends the week it shows: choose once this week is on the page.
+				await expect(row("Grace Hopper")).toContainText("2:00 over · 105% of capacity");
 				await choose(page, main.getByRole("button", { name: /Sort/ }), "Most remaining");
 				await expect(page).toHaveURL(/[?&]sort=remaining(&|$)/);
 				await expect(people.getByRole("listitem").last()).toContainText("Grace Hopper");

@@ -1,5 +1,5 @@
 import * as z from "zod";
-
+import { type ContractSpan, contractorOn } from "~/contracts/spans";
 import { type NonWorkingRule, OVERTIME_RULE_LABELS, OvertimeRule } from "~/leave/rules";
 import type { Role } from "~/organisations/roles";
 import { type Day, isoWeekday } from "~/time/calendar";
@@ -121,14 +121,17 @@ const weekdays = (day: WorkedDay): ScheduleWeek => [day, day, day, day, day, nul
 export const STANDARD_WEEK: ScheduleWeek = weekdays(STANDARD_DAY);
 export const LONG_WEEK: ScheduleWeek = weekdays(LONG_DAY);
 
-/** The version of `schedule` that holds on `day`: the latest from it or before; the first, for a day before them all. */
-export function versionOn(schedule: Pick<Schedule, "versions">, day: Day): ScheduleVersion {
-	let found = schedule.versions[0];
-	for (const version of schedule.versions) {
+/** The version of `owner` that holds on `day`: the latest from it or before; the first, for a day before them all. A contract's versions are read the same way (TS-098a). */
+export function versionOn<V extends { effectiveFrom: Day }>(
+	owner: { readonly versions: readonly V[] },
+	day: Day,
+): V {
+	let found = owner.versions[0];
+	for (const version of owner.versions) {
 		if (version.effectiveFrom <= day) found = version;
 		else break;
 	}
-	if (!found) throw new Error("A schedule has at least one version.");
+	if (!found) throw new Error("A schedule or contract has at least one version.");
 	return found;
 }
 
@@ -195,7 +198,10 @@ export interface Assignment {
 export interface PersonPlace {
 	userId: string;
 	role: Role;
+	/** Whether their membership is marked as a contractor's: what holds on a day no contract covers. */
 	contractor: boolean;
+	/** Their contracts (TS-098a): on a day one covers, its kind says whether they are a contractor. */
+	contracts?: readonly ContractSpan[];
 	/** Whether they manage a team. */
 	manager: boolean;
 	teams: readonly { id: string; name: string }[];
@@ -228,12 +234,19 @@ export function assignmentOn(
 	return found;
 }
 
-/** The roles of a person that a schedule may be given to, the most specific first: contractor, manager, then their role. */
+/**
+ * The roles of a person that a schedule may be given to, the most specific
+ * first: contractor, manager, then their role. On `day`, a contract that
+ * covers it decides whether they are a contractor (TS-098a).
+ */
 export function rolesOf(
-	place: Pick<PersonPlace, "role" | "contractor" | "manager">,
+	place: Pick<PersonPlace, "role" | "contractor" | "contracts" | "manager">,
+	day?: Day,
 ): ScheduleRole[] {
+	const contractor =
+		day === undefined ? place.contractor : contractorOn(place.contracts, place.contractor, day);
 	return [
-		...(place.contractor ? (["contractor"] as const) : []),
+		...(contractor ? (["contractor"] as const) : []),
 		...(place.manager ? (["manager"] as const) : []),
 		place.role,
 	];
@@ -241,7 +254,8 @@ export function rolesOf(
 
 /** Why a person has the schedule they have on a day. */
 export type ScheduleSource =
-	| { level: "person" }
+	/** Their own; `fromContract` when a contract gave it (TS-098a). */
+	| { level: "person"; fromContract: boolean }
 	| {
 			level: "team";
 			teamId: string;
@@ -280,8 +294,14 @@ export function resolve(book: ScheduleBook, place: PersonPlace, day: Day): Resol
 		const schedule = book.schedules.get(assignment.scheduleId);
 		return schedule ? { schedule, version: versionOn(schedule, day) } : null;
 	};
-	const own = scheduled(assignmentOn(book.assignments, "person", place.userId, day));
-	if (own) return { ...own, source: { level: "person" } };
+	const ownAssignment = assignmentOn(book.assignments, "person", place.userId, day);
+	const own = scheduled(ownAssignment);
+	if (own) {
+		return {
+			...own,
+			source: { level: "person", fromContract: ownAssignment?.sourceKind === "contract" },
+		};
+	}
 
 	const ofTeams = place.teams
 		.flatMap((team) => {
@@ -312,7 +332,7 @@ export function resolve(book: ScheduleBook, place: PersonPlace, day: Day): Resol
 		};
 	}
 
-	for (const role of rolesOf(place)) {
+	for (const role of rolesOf(place, day)) {
 		const found = scheduled(assignmentOn(book.assignments, "role", role, day));
 		if (found) return { ...found, source: { level: "role", role } };
 	}
@@ -328,6 +348,7 @@ export function resolve(book: ScheduleBook, place: PersonPlace, day: Day): Resol
 export function sourceLabel(source: ScheduleSource, you = false): string {
 	switch (source.level) {
 		case "person":
+			if (source.fromContract) return you ? "From your contract" : "From their contract";
 			return you ? "Assigned to you" : "Assigned to them";
 		case "team": {
 			const lead = `From the team ${source.teamName}`;

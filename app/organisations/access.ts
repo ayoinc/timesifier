@@ -180,3 +180,32 @@ export function timeScopeOf(access: Access): TimeScope {
 export function activityScopeOf(access: Access): TimeScope {
 	return timeScopeOf(access);
 }
+
+/**
+ * Whether `access` may read `personId`'s contracts (TS-098a): their kind,
+ * dates, job title, schedule, overtime method and leave days. Their own; every
+ * contract, for owners, admins and Finance; the people of the teams they
+ * manage, for a manager. Nobody else learns there is one.
+ */
+export function maySeeContractOf(access: Access, personId: string): boolean {
+	return access.userId === personId || maySeeRates(access.role) || access.managed.has(personId);
+}
+
+/**
+ * Whether `access` may read the pay in `personId`'s contracts: the amount, the
+ * multipliers and the works number. Their own, and owners, admins and
+ * Finance, as with any rate: never a manager as such.
+ */
+export function maySeePayOf(access: Access, personId: string): boolean {
+	return access.userId === personId || maySeeRates(access.role);
+}
+
+/**
+ * Whether `access` may give, change and end `personId`'s contracts: owners
+ * and admins, and never their own while `others` owners or admins could
+ * (contracts-model.md section 6, D5's rule for approvals). A sole owner
+ * changes their own, and the page says so.
+ */
+export function mayChangeContractOf(access: Access, personId: string, others: number): boolean {
+	return isAdministrator(access.role) && (access.userId !== personId || others === 0);
+}

@@ -10,9 +10,9 @@ import { seedMember, seedMembership, seedOrganisation } from "../organisations/h
 import { person } from "../pages/harness";
 
 // A person's data (TS-099, data requests): one ZIP of their account, their
-// sign-ins, and in each of their organisations their own entries, expenses and
-// leave. Nothing of anybody else's: not another member's description, not
-// another person's address.
+// sign-ins, and in each of their organisations their own entries, expenses,
+// leave and contracts (TS-098a). Nothing of anybody else's: not another
+// member's description, not another person's address.
 
 const NOW = new Date("2026-11-12T12:00:00Z");
 const HOUR = 3_600_000;
@@ -61,7 +61,7 @@ async function unzip(file: Uint8Array<ArrayBuffer>): Promise<Map<string, string>
 	return files;
 }
 
-/** One organisation's records of one person: an entry, an expense and leave, each named with `mark`. */
+/** One organisation's records of one person: an entry, an expense, leave and a contract, each named with `mark`. */
 async function records(organisationId: string, userId: string, mark: string, day: string) {
 	const scope = organisationScope(env.DB, organisationId);
 	let [project] = await scope.projects.select();
@@ -97,6 +97,21 @@ async function records(organisationId: string, userId: string, mark: string, day
 		status: "approved",
 		note: `${mark} leave`,
 	});
+	const [contract] = await scope.contracts.insert({
+		userId,
+		kind: "permanent",
+		startsOn: day,
+		worksNumber: "W-1",
+	});
+	if (!contract) throw new Error("seed failed");
+	await scope.contractVersions.insert({
+		contractId: contract.id,
+		effectiveFrom: day,
+		jobTitle: `${mark} contract`,
+		payBasis: "yearly",
+		payMinor: 3_200_000,
+		currency: "GBP",
+	});
 }
 
 describe("a person's data", () => {
@@ -124,6 +139,7 @@ describe("a person's data", () => {
 			"time-entries.csv",
 			"expenses.csv",
 			"leave.csv",
+			"contracts.csv",
 		]);
 
 		const account = JSON.parse(files.get("account.json") ?? "");
@@ -137,6 +153,7 @@ describe("a person's data", () => {
 			["time-entries.csv", "entry"],
 			["expenses.csv", "expense"],
 			["leave.csv", "leave"],
+			["contracts.csv", "contract"],
 		] as const) {
 			const text = files.get(file) ?? "";
 			expect(text).toContain(`Ada at Acme ${kind}`);

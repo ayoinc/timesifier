@@ -43,4 +43,5 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	work_request: "Requests for work",
 	user: "People's time zones",
 	organisation_export: "Exports of everything",
+	contract: "Contracts",
 };

@@ -92,6 +92,26 @@ it("the home page links to both", async () => {
 	expect(html).toContain(`href="${TERMS_PATH}"`);
 });
 
+it("the privacy notice names contracts and pay: what is stored, who sees it, and how long it is kept", async () => {
+	const notice = wordsOf(await page(PRIVACY_PATH), "main").replace(/&#x27;/g, "'");
+
+	// What is stored (TS-098a).
+	expect(notice).toContain("Contracts and pay");
+	expect(notice).toContain(
+		"Each person's contracts and their changes, each from its day: the kind (permanent, fixed term or contractor), its first and last days and why it ended, the job title, the work schedule that gives its hours, the pay and how it is stated,",
+	);
+	expect(notice).toContain("the person's works number in the organisation's payroll.");
+	// Who sees it.
+	expect(notice).toContain("everyone's contracts with their pay");
+	expect(notice).toContain("contracts without their pay");
+	expect(notice).toContain("leave and contract with its pay");
+	// How long it is kept, and that it stays when the person leaves.
+	expect(notice).toContain("and so do their contracts, which are payroll records.");
+	expect(notice).toContain(
+		"A contract that has ended is kept, with its changes, until three years after the end of the tax year (5 April) in which it ended",
+	);
+});
+
 it("the terms' Price section says what the pricing page says, from the same prices", async () => {
 	const terms = wordsOf(await page(TERMS_PATH), "main");
 	const pricing = wordsOf(await page(PRICING_PATH), "main");

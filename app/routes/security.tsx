@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
+import { CONTRACT_KEEP_YEARS } from "~/contracts/contracts";
 import { EXPORT_KEEP_DAYS } from "~/exports/paths";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import { deploymentOperator, icoReference, OperatorDetails } from "~/landing/operator";
@@ -138,6 +139,10 @@ export default function Security({
 					<Row term="Cloudflare's logs and traces">At most {WORKERS_LOGS_DAYS} days.</Row>
 					<Row term="Exports of everything">
 						Each is deleted {EXPORT_KEEP_DAYS} days after it is made, by a job that runs every hour.
+					</Row>
+					<Row term="Contracts">
+						Each that has ended is deleted, with its changes, {CONTRACT_KEEP_YEARS} years after the
+						end of the tax year (5 April) in which it ended, by a job that runs every day.
 					</Row>
 					<Row term="What is deleted">
 						Gone from the database at once; gone for good {TIME_TRAVEL_DAYS} days later, when Time

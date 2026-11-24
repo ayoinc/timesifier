@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { uuidv7 } from "~/db";
+import { contractPath } from "~/shell/destinations";
 import { addDays, dayOf, isoWeekday } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
@@ -119,6 +120,54 @@ describe("who reads what", () => {
 		const csv = await (await open(`${log}/export`, kath)).text();
 		expect(csv).toContain("Grace Hopper");
 		expect(csv).not.toContain("Alan Turing");
+	});
+
+	// TS-098a: a contract's records are its person's, so their manager reads them;
+	// the pay's are the organisation's own, as a rate is, so no manager does.
+	it("contract records by role: a manager reads contract.created, never contract_pay.changed", async () => {
+		const kath = await joined("kath@example.com", "member", "Katherine Johnson");
+		const kate = await joined("kate@example.com", "finance", "Kate Finance");
+		await seedTeam(acme.id, "Survey", { members: [grace.user.id], managers: [kath.user.id] });
+		expect(
+			await post(
+				contractPath(acme.slug, grace.user.id),
+				{
+					intent: "give",
+					startsOn: "2030-01-07",
+					kind: "permanent",
+					payBasis: "yearly",
+					pay: "32000",
+					currency: "GBP",
+					overtimePay: "unpaid",
+				},
+				ada,
+			),
+		).toBe(200);
+		expect(
+			await value<string>(
+				"select group_concat(action, ' ') from (select action from activity_records where subject_type = 'contract' order by action)",
+			),
+		).toBe("contract.created contract_pay.changed");
+
+		const created = "Created the contract of Grace Hopper";
+		const pay = "Changed the pay in the contract of Grace Hopper";
+		for (const reader of [ada, kate]) {
+			const text = textOf(await (await open(log, reader)).text());
+			expect(text).toContain(created);
+			expect(text).toContain(pay);
+		}
+		const managers = textOf(await (await open(log, kath)).text());
+		expect(managers).toContain(created);
+		expect(managers).not.toContain(pay);
+		// Not in the page's data, nor in the export, either.
+		const data = await (await openData(log, kath)).text();
+		expect(data).toContain(created);
+		expect(data).not.toContain("the pay in the contract");
+		const csv = await (await open(`${log}/export`, kath)).text();
+		expect(csv).toContain(created);
+		expect(csv).not.toContain("the pay in the contract");
+		// A member reads no log at all, their own contract's records neither.
+		expect((await open(log, grace)).status).toBe(404);
 	});
 
 	it("a member is not shown the log, nor its export", async () => {

@@ -59,6 +59,7 @@ export const STORED = [
 					"schedule_assignments",
 				],
 			},
+			{ term: "Contracts and pay", tables: ["contracts", "contract_versions"] },
 			{
 				term: "Projects, tasks and budgets",
 				tables: [

@@ -3421,3 +3421,149 @@ export const rateLimits = sqliteTable("rate_limits", {
 	count: integer("count").notNull(),
 	lastRequest: integer("last_request").notNull(),
 });
+
+/**
+ * A person's contract with the organisation (TS-098a): what kind of worker
+ * they are, from `starts_on` until `ends_on` (null while open, required for a
+ * fixed term). It names the user, not the membership, so it stays after the
+ * person leaves (docs/security.md, "Contracts"). Two contracts of one person
+ * never overlap: the server says so first, and the triggers
+ * `contracts_no_overlap_*` of `0039_contracts` refuse what a race lets
+ * through. Its terms are its versions.
+ */
+export const contracts = sqliteTable(
+	"contracts",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** `permanent`, `fixed_term`, `contractor`, or `irregular` (zero hours, not offered yet). */
+		kind: text("kind").notNull(),
+		startsOn: text("starts_on").notNull(),
+		endsOn: text("ends_on"),
+		/** Why it ended: `resigned`, `dismissed`, `end_of_term`, or `replaced` by the next. */
+		endReason: text("end_reason"),
+		/** The person's number in the payroll software, which an export matches on. */
+		worksNumber: text("works_number"),
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("contracts_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("contracts_organisation_id_user_id_starts_on_index").on(
+			table.organisationId,
+			table.userId,
+			table.startsOn,
+		),
+		check(
+			"contracts_kind_known",
+			sql`${table.kind} IN ('permanent', 'fixed_term', 'contractor', 'irregular')`,
+		),
+		check("contracts_starts_on_is_a_day", sql`date(${table.startsOn}) IS ${table.startsOn}`),
+		check(
+			"contracts_ends_on_is_a_day",
+			sql`${table.endsOn} IS NULL OR (date(${table.endsOn}) IS ${table.endsOn} AND ${table.endsOn} >= ${table.startsOn})`,
+		),
+		check(
+			"contracts_fixed_term_ends",
+			sql`${table.kind} <> 'fixed_term' OR ${table.endsOn} IS NOT NULL`,
+		),
+		check(
+			"contracts_end_reason_known",
+			sql`${table.endReason} IS NULL OR ${table.endReason} IN ('resigned', 'dismissed', 'end_of_term', 'replaced')`,
+		),
+		check(
+			"contracts_works_number_length",
+			sql`${table.worksNumber} IS NULL OR length(${table.worksNumber}) BETWEEN 1 AND 35`,
+		),
+	],
+);
+
+/**
+ * A contract's terms from `effective_from` until its next version (TS-098a):
+ * a change is a version from a day, and days before keep the terms they had.
+ * The first is from the contract's first day. A schedule gives the person that
+ * schedule from this day (a person assignment of `source_kind` `contract`);
+ * none leaves their team's, role's or the organisation's. Pay is minor units
+ * of `currency`; multipliers are basis points, 15000 for time and a half.
+ */
+export const contractVersions = sqliteTable(
+	"contract_versions",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		contractId: text("contract_id").notNull(),
+		effectiveFrom: text("effective_from").notNull(),
+		jobTitle: text("job_title"),
+		scheduleId: text("schedule_id"),
+		/** `yearly`, `hourly` or `daily`. */
+		payBasis: text("pay_basis").notNull(),
+		payMinor: integer("pay_minor").notNull(),
+		currency: text("currency").notNull(),
+		/** What recorded overtime earns: `unpaid`, `paid`, or `toil`, time off in lieu. */
+		overtimePay: text("overtime_pay").notNull().default("unpaid"),
+		overtimeMultiplierBp: integer("overtime_multiplier_bp"),
+		/** On a day not worked or a public holiday; null means the overtime multiplier. */
+		restDayMultiplierBp: integer("rest_day_multiplier_bp"),
+		/** Annual leave a year for a five-day week, before pro rata; null means the kind's allowance. */
+		leaveDays: integer("leave_days"),
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("contract_versions_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("contract_versions_contract_id_effective_from_unique").on(
+			table.organisationId,
+			table.contractId,
+			table.effectiveFrom,
+		),
+		foreignKey({
+			name: "contract_versions_contract_fk",
+			columns: [table.organisationId, table.contractId],
+			foreignColumns: [contracts.organisationId, contracts.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "contract_versions_schedule_fk",
+			columns: [table.organisationId, table.scheduleId],
+			foreignColumns: [workSchedules.organisationId, workSchedules.id],
+		}),
+		check(
+			"contract_versions_effective_from_is_a_day",
+			sql`date(${table.effectiveFrom}) IS ${table.effectiveFrom}`,
+		),
+		check(
+			"contract_versions_job_title_length",
+			sql`${table.jobTitle} IS NULL OR length(${table.jobTitle}) BETWEEN 1 AND 100`,
+		),
+		check(
+			"contract_versions_pay_basis_known",
+			sql`${table.payBasis} IN ('yearly', 'hourly', 'daily')`,
+		),
+		check("contract_versions_pay_not_negative", sql`${table.payMinor} >= 0`),
+		check("contract_versions_currency_is_a_code", isCurrencyCode(table.currency)),
+		check(
+			"contract_versions_overtime_pay_known",
+			sql`${table.overtimePay} IN ('unpaid', 'paid', 'toil')`,
+		),
+		check(
+			"contract_versions_overtime_multiplier_known",
+			sql`${table.overtimeMultiplierBp} IS NULL OR ${table.overtimeMultiplierBp} IN (10000, 12500, 13333, 15000, 20000, 30000, 40000)`,
+		),
+		check(
+			"contract_versions_rest_day_multiplier_known",
+			sql`${table.restDayMultiplierBp} IS NULL OR ${table.restDayMultiplierBp} IN (10000, 12500, 13333, 15000, 20000, 30000, 40000)`,
+		),
+		check(
+			"contract_versions_leave_days_in_range",
+			sql`${table.leaveDays} IS NULL OR ${table.leaveDays} BETWEEN 0 AND 366`,
+		),
+	],
+);

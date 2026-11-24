@@ -235,7 +235,10 @@ describe("which schedule a person has", () => {
 		const shelf = book([STANDARD, LONG], assignments);
 		expect(resolve(shelf, ada, "2026-11-10").schedule.name).toBe("Standard");
 		expect(resolve(shelf, ada, WEDNESDAY).schedule.name).toBe("Long");
-		expect(resolve(shelf, ada, "2026-11-12").source).toEqual({ level: "person" });
+		expect(resolve(shelf, ada, "2026-11-12").source).toEqual({
+			level: "person",
+			fromContract: false,
+		});
 		expect(resolve(shelf, ada, "2026-11-13").schedule.name).toBe("Standard");
 	});
 

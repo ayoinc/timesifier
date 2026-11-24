@@ -197,6 +197,15 @@ export default function Privacy({
 				organisation) and from which day.
 			</>
 		),
+		"Contracts and pay": (
+			<>
+				Each person's contracts and their changes, each from its day: the kind (permanent, fixed
+				term or contractor), its first and last days and why it ended, the job title, the work
+				schedule that gives its hours, the pay and how it is stated, whether overtime is paid,
+				banked as time off in lieu or not paid and at what multiplier, the days of annual leave, and
+				the person's works number in the organisation's payroll. Who made each change and when.
+			</>
+		),
 		"Projects, tasks and budgets": (
 			<>
 				The organisation's projects, tasks and tags, how each project bills, and its budgets,
@@ -631,14 +640,22 @@ export default function Privacy({
 					<Row term="Your organisation's work">
 						<p>
 							Until it is deleted in Timesifier, or the organisation is. Nothing in it is deleted
-							for its age, except the activity log, notifications and the exports of everything.
+							for its age, except the activity log, notifications, the exports of everything and
+							contracts.
 						</p>
 						<ul className="mt-2 list-disc ps-6">
 							<li>
 								When a person leaves an organisation or is removed from it, their time entries and
-								expenses stay with it, so that its totals still add up. Their requests for leave and
-								for overtime, their places in teams, their saved reports and their calendar feeds
-								are deleted with their membership.
+								expenses stay with it, so that its totals still add up, and so do their contracts,
+								which are payroll records. Their requests for leave and for overtime, their places
+								in teams, their saved reports and their calendar feeds are deleted with their
+								membership.
+							</li>
+							<li>
+								A contract that has ended is kept, with its changes, until three years after the end
+								of the tax year (5 April) in which it ended, as HMRC asks of payroll records, and
+								then deleted by a job that runs every day. A contract with no end is kept until it
+								has one.
 							</li>
 							<li>
 								A person can delete their own time entry or expense while it is not locked by an

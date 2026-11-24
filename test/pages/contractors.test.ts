@@ -183,9 +183,11 @@ describe("marking a member as an employee or a contractor", () => {
 		await mark(ada, linus, true);
 
 		const html = await pageBody(await open(MEMBERS, ada));
-		expect(textOf(html)).toContain("Linus Torvalds linus@example.com Member · Contractor");
-		expect(textOf(html)).toContain("mallory@example.com Member");
-		expect(textOf(html)).not.toContain("mallory@example.com Member · Contractor");
+		expect(textOf(html)).toContain(
+			"Linus Torvalds linus@example.com · No contract Member · Contractor",
+		);
+		expect(textOf(html)).toContain("mallory@example.com No contract Member");
+		expect(textOf(html)).not.toContain("mallory@example.com No contract Member · Contractor");
 		// The owner's own row has Actions, to mark themselves.
 		expect(html).toContain('aria-label="Actions for ada@example.com"');
 
@@ -496,6 +498,56 @@ describe("the Contractors report", () => {
 		const backwards = "range=custom&from=2026-10-11&to=2026-10-05";
 		expect((await open(`${REPORT}?${backwards}`, ada)).status).toBe(400);
 		expect((await open(`${EXPORT}?${backwards}`, ada)).status).toBe(400);
+	});
+});
+
+describe("a contract (TS-098a)", () => {
+	const terms = {
+		payBasis: "daily",
+		pay: "400",
+		currency: "GBP",
+		overtimePay: "unpaid",
+	} as const;
+
+	it("a contractor contract makes a contractor: on the days it covers, and over the mark on the membership", async () => {
+		const [site] = await scope.projects.insert([{ name: "Site", nameKey: "site" }]);
+		if (!site) throw new Error("seed failed");
+		const track = (who: Person, from: string, to: string) =>
+			scope.timeEntries.insert({
+				userId: who.user.id,
+				projectId: site.id,
+				startedAt: new Date(from),
+				spentOn: dayOf(Date.parse(from), "UTC"),
+				endedAt: new Date(to),
+			});
+		// Mallory, marked nothing, works under a contractor's contract from Thursday 8 October.
+		await track(mallory, "2026-10-06T09:00:00Z", "2026-10-06T11:00:00Z");
+		await track(mallory, "2026-10-08T09:00:00Z", "2026-10-08T10:00:00Z");
+		// Linus, marked a contractor, is given a permanent contract from Friday 9 October.
+		await track(linus, "2026-10-07T09:00:00Z", "2026-10-07T09:30:00Z");
+		await track(linus, "2026-10-09T09:00:00Z", "2026-10-09T12:00:00Z");
+		expect((await mark(ada, linus, true)).status).toBe(200);
+		const contract = (who: Person, kind: "contractor" | "permanent", startsOn: string) =>
+			submit(
+				`/app/acme/team/people/${who.user.id}/contract`,
+				{ intent: "give", kind, startsOn, ...terms },
+				ada,
+				{ byScript: true },
+			);
+		expect((await contract(mallory, "contractor", "2026-10-08")).status).toBe(200);
+		expect((await contract(linus, "permanent", "2026-10-09")).status).toBe(200);
+
+		const text = textOf(await pageBody(await open(`${REPORT}?${WEEK}`, katherine)));
+		// Mallory's hour after her contract began, and not the two before it.
+		expect(text).toContain("mallory@example.com 1:00 hours");
+		// Linus's half hour as a marked contractor, and not the three hours under his permanent contract.
+		expect(text).toContain("Linus Torvalds 0:30 hours");
+		expect(text).toContain("Total, 1:30 hours");
+
+		// Today the contracts decide what Members says, whatever the mark.
+		const members = textOf(await pageBody(await open(MEMBERS, ada)));
+		expect(members).toContain("mallory@example.com Contract Member · Contractor");
+		expect(members).toContain("Linus Torvalds linus@example.com · Contract Member Actions");
 	});
 });
 

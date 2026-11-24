@@ -32,6 +32,7 @@ import {
 } from "~/organisations/access";
 import type { Role } from "~/organisations/roles";
 import { saveReport } from "~/reports/saved.server";
+import { contractPath } from "~/shell/destinations";
 import { dayOf } from "~/time/calendar";
 import { captureEmail, type Mailbox } from "../auth/harness";
 import { png } from "../brand/files";
@@ -402,6 +403,26 @@ const ROLE_TABLE: Record<string, Row> = {
 				(await value<string>("select role from memberships where id = ?", w.grace.memberId)) ===
 				"admin",
 			post: by<Post>("done", "done", 404, 403, 404),
+		},
+	},
+	// A person's contract (TS-098a): read by owners, admins, Finance and the
+	// person's manager; given, changed and ended by owners and admins alone.
+	"routes/app/contract": {
+		address: (w) => contractPath("acme", w.grace.userId),
+		page: by(200, 200, 200, 200, 404),
+		form: {
+			fields: () => ({
+				intent: "give",
+				startsOn: "2030-01-07",
+				kind: "permanent",
+				payBasis: "yearly",
+				pay: "32000",
+				currency: "GBP",
+				overtimePay: "unpaid",
+			}),
+			made: async (w) =>
+				(await count("select count(*) from contracts where user_id = ?", w.grace.userId)) === 1,
+			post: by<Post>("done", "done", 403, 403, 404),
 		},
 	},
 	"routes/app/invitations": {
@@ -897,6 +918,23 @@ describe("the role table", () => {
 			},
 			60_000,
 		);
+	});
+
+	// The columns beyond the table's five (TS-098a): a contractor, who sees what
+	// their role lets them, and somebody of another organisation.
+	it("answers a colleague's Contract page with 404 to a contractor and to a stranger", async () => {
+		const w = await world("member");
+		await env.DB.prepare("update memberships set is_contractor = 1 where user_id = ?")
+			.bind(w.who.user.id)
+			.run();
+		const stranger = await person(mailbox, "mallory@example.com");
+		await createOrganisation(stranger.cookie, "Initrode");
+		const theirs = contractPath("acme", w.grace.userId);
+
+		for (const who of [w.who, stranger]) {
+			expect(await statusOf(open(theirs, who))).toBe(404);
+			expect(await statusOf(openData(theirs, who))).toBe(404);
+		}
 	});
 });
 
