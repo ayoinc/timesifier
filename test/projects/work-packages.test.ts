@@ -638,7 +638,7 @@ describe("who manages work packages", () => {
 		return someone;
 	}
 
-	const PAGE = () => `/app/acme/projects/${site}?tab=work-packages`;
+	const tabPath = () => `/app/acme/projects/${site}?tab=work-packages`;
 
 	it.each<[Who, number]>([
 		["owner", 200],
@@ -653,7 +653,7 @@ describe("who manages work packages", () => {
 	])("answers a %s adding, closing and archiving one with %i", async (who, status) => {
 		const them = await as(who);
 		const add = await submit(
-			PAGE(),
+			tabPath(),
 			{ intent: "wp-save", code: "WP9", name: "Support", billable: "on" },
 			them,
 			{ byScript: true },
@@ -663,7 +663,7 @@ describe("who manages work packages", () => {
 			status === 200 ? 1 : 0,
 		);
 		const close = await submit(
-			PAGE(),
+			tabPath(),
 			{ intent: "wp-state", workPackageId: wp1, state: "closed" },
 			them,
 			{ byScript: true },
@@ -673,7 +673,7 @@ describe("who manages work packages", () => {
 			status === 200 ? "closed" : "open",
 		);
 		const archive = await submit(
-			PAGE(),
+			tabPath(),
 			{ intent: "wp-archive", workPackageId: wp2, archived: "true" },
 			them,
 			{ byScript: true },
@@ -683,7 +683,7 @@ describe("who manages work packages", () => {
 
 	it("lists work packages to every member, with Add for those who manage them alone", async () => {
 		const page = async (who: Person) => {
-			const response = await open(PAGE(), who);
+			const response = await open(tabPath(), who);
 			expect(response.status).toBe(200);
 			return textOf((await pageBody(response)).match(/<main[\s\S]*<\/main>/)?.[0] ?? "");
 		};
@@ -696,7 +696,7 @@ describe("who manages work packages", () => {
 
 	it("refuses a second code of the project in any case, and an end before the start", async () => {
 		const save = (fields: Record<string, string>) =>
-			submit(PAGE(), { intent: "wp-save", name: "Again", ...fields }, ada, { byScript: true });
+			submit(tabPath(), { intent: "wp-save", name: "Again", ...fields }, ada, { byScript: true });
 		expect((await save({ code: "wp2" })).status).toBe(409);
 		expect((await save({ code: "WP3", startsOn: "2026-11-10", endsOn: "2026-11-01" })).status).toBe(
 			409,
@@ -721,7 +721,7 @@ describe("who manages work packages", () => {
 			.run();
 		const edit = (fields: Record<string, string>) =>
 			submit(
-				PAGE(),
+				tabPath(),
 				{ intent: "wp-save", workPackageId: wp1, code: "WP1", name: "Renamed", ...fields },
 				manager,
 				{ byScript: true },
