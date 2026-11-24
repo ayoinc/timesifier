@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { and, desc, eq, gte, lte, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { data } from "react-router";
-
+import { type ContractSpan, contractorOn, overlaps } from "~/contracts/spans";
 import {
 	among,
 	notAmong,
@@ -37,10 +37,12 @@ import {
  * a manager included, gets the organisation's 404 (docs/security.md, "Rates
  * and money"). Every read of the organisation's rows goes through its scope.
  *
- * Who is a contractor: a member whose membership is marked so, and a person who
- * is no longer a member but tracked time in the range, if the last record of
- * their leaving (`membership.removed`) says they were one then. A person's
- * entries stay when their membership goes, so their time is still there.
+ * Who is a contractor, day by day (TS-098a): on a day a contract covers, the
+ * person whose contract is a contractor's; on a day none covers, a member
+ * whose membership is marked so, and a person who is no longer a member but
+ * tracked time in the range, if the last record of their leaving
+ * (`membership.removed`) says they were one then. A person's entries stay
+ * when their membership goes, so their time is still there.
  */
 
 /** Throws the organisation's 404 unless the person sees money. The report's routes run it before anything else. */
@@ -93,19 +95,43 @@ export async function contractorReport(
 	// The organisation was read for the membership on this request; gone since, it is the 404.
 	if (!held) throw notFound();
 	const memberIds = members.map(({ userId }) => userId);
-	const contractorsNow = members.filter((m) => m.isContractor).map(({ userId }) => userId);
+	const today = dayOf(now, organisation.timeZone);
+	const contractRows = await scope.contracts.select();
+	const spans = new Map<string, ContractSpan[]>();
+	for (const c of contractRows) {
+		const span = { startsOn: c.startsOn, endsOn: c.endsOn, contractor: c.kind === "contractor" };
+		spans.set(c.userId, [...(spans.get(c.userId) ?? []), span]);
+	}
+	const range = { startsOn: days.first, endsOn: days.last };
+	const flagged = members.filter((m) => m.isContractor).map(({ userId }) => userId);
+	// Those whose time may be a contractor's: marked so, or with a contractor's contract in the range.
+	const candidates = [
+		...new Set([
+			...flagged,
+			...contractRows
+				.filter((c) => c.kind === "contractor" && overlaps(c, range))
+				.map((c) => c.userId),
+		]),
+	];
 
-	const [time, rates] = await Promise.all([
-		timeOn(scope, days, contractorsNow, memberIds, now),
+	const [read, rates] = await Promise.all([
+		timeOn(scope, days, candidates, memberIds, now),
 		scope.rates.select((r) => eq(r.kind, "cost")),
 	]);
 
 	const stillMembers = new Set(memberIds);
-	const departed = await leftAsContractors(scope, [
-		...new Set(time.map(({ userId }) => userId).filter((userId) => !stillMembers.has(userId))),
+	const gone = [...new Set(read.map(({ userId }) => userId))].filter((id) => !stillMembers.has(id));
+	const departed = await leftAsContractors(scope, gone);
+	const marked = new Set([...flagged, ...departed]);
+	// Each day's time is a contractor's when a contract that covers the day says so, or none does and they were marked.
+	const time = read.filter((t) => contractorOn(spans.get(t.userId), marked.has(t.userId), t.day));
+	const listed = new Set([
+		...time.map(({ userId }) => userId),
+		...members
+			.filter((m) => contractorOn(spans.get(m.userId), m.isContractor, today))
+			.map(({ userId }) => userId),
 	]);
-	const left = new Set(departed);
-	const contractors = await peopleOf([...contractorsNow, ...departed], left);
+	const contractors = await peopleOf([...listed], new Set(gone));
 	const costRates: RateRow[] = rates.map((r) => ({
 		kind: "cost",
 		userId: r.userId,
@@ -119,7 +145,7 @@ export async function contractorReport(
 	return {
 		query,
 		days,
-		// The time of people who left as employees is read, and listed by nobody.
+		// The time of people who were employees on its day is read, and listed by nobody.
 		lines: contractorLines(contractors, time, costRates, days),
 		hasContractors: contractors.length > 0,
 		currency: held.currency,

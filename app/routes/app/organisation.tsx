@@ -14,6 +14,7 @@ import {
 } from "~/organisations/membership.server";
 import { signedInContext } from "~/routes/auth/session.server";
 import {
+	CONTRACT_SEGMENT,
 	canSee,
 	destinationIndex,
 	destinationPath,
@@ -78,7 +79,11 @@ const requireDestination: Route.MiddlewareFunction = ({ pattern, params, context
 	const path = matched.startsWith("/") ? matched : `/${matched}`;
 	const at = destinations[destinationIndex(PATTERN_SLUG, path)];
 	const membership = context.get(membershipContext);
-	if (at && !canSee(viewerOf(membership), at.id)) throw notFound();
+	// A person's contracts (TS-098a) are read by Finance too, who is not shown Team; the page decides who else.
+	const financeReads =
+		path === `${organisationPath(PATTERN_SLUG)}/${CONTRACT_SEGMENT}` &&
+		maySeeRates(membership.role);
+	if (at && !financeReads && !canSee(viewerOf(membership), at.id)) throw notFound();
 	// A page of a destination that shows money is refused the same way to anyone who does not see rates.
 	const rest = path.slice(organisationPath(PATTERN_SLUG).length);
 	if (RATES_ONLY.some((page) => rest.startsWith(page)) && !maySeeRates(membership.role)) {

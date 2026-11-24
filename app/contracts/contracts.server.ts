@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { among, type OrganisationScope, type ScopedStatement, uuidv7 } from "~/db";
@@ -576,26 +576,4 @@ export async function endContract(
 		contract.userId,
 		{ startsOn: contract.startsOn, endsOn: lastDay },
 	);
-}
-
-/** Whether a contract of `userId`'s gives their hours on `day`: a manual person assignment from it is refused. */
-export async function contractGivesHours(
-	scope: OrganisationScope,
-	userId: string,
-	day: Day,
-): Promise<boolean> {
-	const theirs = (await contractsOf(scope, [userId])).get(userId) ?? [];
-	return contractOwnsHours(theirs, day);
-}
-
-/** The contracts of everyone with one that covers a day from `first` to `last`, each with all their others. */
-export async function contractsCovering(
-	scope: OrganisationScope,
-	first: Day,
-	last: Day,
-): Promise<Map<string, Contract[]>> {
-	const rows = await scope.contracts.select((c) =>
-		and(lte(c.startsOn, last), or(isNull(c.endsOn), gte(c.endsOn, first))),
-	);
-	return contractsOf(scope, [...new Set(rows.map((c) => c.userId))]);
 }
