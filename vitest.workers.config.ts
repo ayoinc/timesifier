@@ -56,6 +56,9 @@ export default defineConfig({
 		// Each test waits for the work its requests left running, and no test can
 		// reach Email Service's binding (test/setup.ts).
 		setupFiles: ["./test/setup.ts"],
+		// Vite transforms the whole application before the first file starts, so no
+		// file's first request waits on that (test/warm-up.ts).
+		globalSetup: ["./test/warm-up.ts"],
 		// The first request in a test file loads the whole application, Better Auth
 		// included, one module at a time. With every file loading at once that can
 		// take several seconds, so the default of five is too close.
