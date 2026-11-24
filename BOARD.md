@@ -92,7 +92,7 @@ Builder: an AI session on branch `ts-098a-contracts`, pull request #111. Decisio
 
 ### TS-098b · Leave from the contract
 
-Builder: an AI session on branch `ts-098b-leave-from-contract`, pull request #PR_NUMBER. Decision 76; `research/contracts-model.md` section 9. Migration `0041_leave_from_contract`, kept at 0041 for the merge train to renumber. A day of the leave year no contract covers counts nothing, but for the days before a first contract, which count at the kind's allowance where the giver says the person worked here before it (decision 76).
+Builder: an AI session on branch `ts-098b-leave-from-contract`, pull request #114. Decision 76; `research/contracts-model.md` section 9. Migration `0041_leave_from_contract`, kept at 0041 for the merge train to renumber. A day of the leave year no contract covers counts nothing, but for the days before a first contract, which count at the kind's allowance where the giver says the person worked here before it (decision 76).
 
 - [x] The organisation's leave year starts on a chosen day (default 1 January), changed in Settings › Leave, and Time off shows balances for it. Tests: `test/leave/entitlement.test.ts`, "leave year"; `test/pages/time-off.test.ts`, "balance in the leave year"; `test/pages/settings-rules.test.ts`, "Settings › Leave: the leave year (TS-098b)".
 - [x] A year's entitlement is `leave_days ÷ 5 × weekly hours`, by version and pro rata for the days it covers, rounded up to half an average day: 25 days on 22:30 a week is 112:30; a starter on 13 January gets the days left; a version change mid-year counts each part. Tests: `test/leave/entitlement.test.ts`, "entitlement" (the worked examples, gov.uk's starter example, and the properties that the year's sum never passes the full-year figure).
