@@ -7,6 +7,7 @@ import { configuredProviders, PROVIDER_NAMES, type Provider } from "~/auth/provi
 import { CODE_LIFETIME_SECONDS } from "~/auth/sign-in-code-email";
 import { browserErrorNotice } from "~/browser-errors/report";
 import { PROCESSED_FOR_ORGANISATIONS, STORED, type StoredTerm } from "~/db/personal-data";
+import { EXPORT_KEEP_DAYS } from "~/exports/paths";
 import { ENTRY_DAYS_BACK, LEAVE_DAYS_BACK } from "~/integrations/feeds.server";
 import { EVENT_LABELS } from "~/integrations/scopes";
 import { SWITCH_OFF_AFTER } from "~/integrations/webhooks.server";
@@ -23,7 +24,7 @@ import {
 	SECURITY_EMAIL,
 	TERMS_PATH,
 } from "~/landing/Site";
-import { IcoRegistration, TIME_TRAVEL_DAYS } from "~/landing/trust";
+import { IcoRegistration, R2_HOLDS, TIME_TRAVEL_DAYS } from "~/landing/trust";
 import { WhoSeesWhat } from "~/landing/WhoSees";
 
 import { setting } from "~/lib/deployment";
@@ -284,6 +285,13 @@ export default function Privacy({
 				until when, and who ended it early, if anyone did.
 			</>
 		),
+		"Exports of everything": (
+			<>
+				Each export of everything an owner asks for: who asked, when, how far it has been made, and
+				when it was made and is deleted. The ZIP itself is kept in R2 beside the receipts, under the
+				organisation's own prefix.
+			</>
+		),
 		"Verified domains": (
 			<>
 				Each domain an owner adds, such as acme.com: the random value its TXT record must hold, when
@@ -367,8 +375,8 @@ export default function Privacy({
 			<DocumentSection id="where" title="Where it is kept">
 				<p>
 					In one database, Cloudflare D1, restricted to the European Union: it runs and stores its
-					data only inside the EU. Receipts and organisations' logos are kept in Cloudflare R2, in
-					buckets restricted to the EU, whose files are stored only inside the EU.
+					data only inside the EU. Cloudflare R2 holds the {R2_HOLDS}, in buckets restricted to the
+					EU, whose files are stored only inside the EU.
 				</p>
 				<p>
 					The application runs on Cloudflare Workers in Frankfurt, near the database. Your request
@@ -394,7 +402,7 @@ export default function Privacy({
 				<Rows>
 					<Row term="Hosting, the database and files">
 						Cloudflare Workers answers every request, Cloudflare D1 holds the database and
-						Cloudflare R2 holds the receipts and the organisations' logos.
+						Cloudflare R2 holds the {R2_HOLDS}.
 					</Row>
 					<Row term="Email">
 						<p>
@@ -427,6 +435,10 @@ export default function Privacy({
 								project; each with a link that turns its kind off;
 							</li>
 							<li>a notice that a webhook was switched off, to the person who added it;</li>
+							<li>
+								a notice that an export of everything is ready, or could not be made, to the owner
+								who asked for it;
+							</li>
 							<li>
 								a notice that a verified domain's DNS record is missing, to the organisation's
 								owners, once each time it has been missing for {facts.domainWarnDays} days; after{" "}
@@ -596,10 +608,17 @@ export default function Privacy({
 					<Row term="An invitation">
 						It can be accepted for {INVITATION_DAYS} days. Its record stays with the organisation.
 					</Row>
+					<Row term="An export of everything">
+						An owner's export of everything the organisation holds is kept for {EXPORT_KEEP_DAYS}{" "}
+						days from when it is made, then its file and its record are deleted by a job that runs
+						every hour. Asking for another deletes the one before. It is a copy as it stood when it
+						was made, so something deleted since, such as the receipts of a deleted account, stays
+						in it until it is deleted.
+					</Row>
 					<Row term="Your organisation's work">
 						<p>
 							Until it is deleted in Timesifier, or the organisation is. Nothing in it is deleted
-							for its age, except the activity log and notifications.
+							for its age, except the activity log, notifications and the exports of everything.
 						</p>
 						<ul className="mt-2 list-disc ps-6">
 							<li>
@@ -630,15 +649,16 @@ export default function Privacy({
 					</Row>
 					<Row term="Deleting an organisation">
 						An owner can delete an organisation. Everything in it goes at once: its memberships,
-						invitations and all its work, and first its receipts and its logo. If a receipt or the
-						logo cannot be deleted, the organisation is not deleted, and the owner is asked to try
-						again. The accounts of the people in it are not deleted.
+						invitations and all its work, and first its receipts, its logo and its exports of
+						everything. If any of those files cannot be deleted, the organisation is not deleted,
+						and the owner is asked to try again. The accounts of the people in it are not deleted.
 					</Row>
 					<Row term="Copies">
 						Cloudflare keeps the means to restore the database to any minute of the last{" "}
 						{TIME_TRAVEL_DAYS} days, so what is deleted from the database is gone for good{" "}
-						{TIME_TRAVEL_DAYS} days later. Timesifier keeps no other copy, of the database, a
-						receipt or a logo.
+						{TIME_TRAVEL_DAYS} days later. Timesifier keeps no other copy of the database, a receipt
+						or a logo, besides the export of everything an owner asks for, which is deleted{" "}
+						{EXPORT_KEEP_DAYS} days after it is made.
 					</Row>
 				</Rows>
 			</DocumentSection>
@@ -665,7 +685,10 @@ export default function Privacy({
 						every invoice as a PDF in one ZIP, from Integrations. Owners, admins and Finance can
 						download the reports of invoices, the Contractors report and a file for Xero, as CSV.
 						Anyone can download everything Timesifier holds about them, as one ZIP of JSON and CSV
-						files, from My account.
+						files, from My account. An owner, and nobody else, can export everything the
+						organisation holds, as one ZIP of every table as CSV, every receipt and the logo, from
+						Workspace settings; it is kept for {EXPORT_KEEP_DAYS} days, and each export and each
+						download is written in the activity log.
 					</Row>
 					<Row term="Corrections">
 						You can change your name and your time zone in My account, and your own time entries and

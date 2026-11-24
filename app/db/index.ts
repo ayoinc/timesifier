@@ -10,6 +10,14 @@
 export { among, latestAmong, notAmong } from "./among";
 // A share of an invocation's queries, counted as D1 counts them (decision 69).
 export { countedDatabase, isQueriesSpent, QueriesSpent, QueryBudget } from "./budget";
+// Every table of an organisation, a page at a time, for the export of everything (TS-126).
+export {
+	EXPORTED_TABLES,
+	type ExportedTable,
+	exportedPage,
+	exportedTable,
+	WITHHELD_COLUMNS,
+} from "./everything";
 export {
 	activityAfter,
 	apiTokenByHash,
@@ -53,6 +61,12 @@ export {
 	type SelectOptions,
 	type TenantRow,
 } from "./scope";
-export { dueRecurringInvoices, estimateForLink, reminderOrganisations } from "./unscoped";
+export {
+	dueRecurringInvoices,
+	estimateForLink,
+	expiredExports,
+	reminderOrganisations,
+	runningExports,
+} from "./unscoped";
 export { uuidv7 } from "./uuidv7";
 export { waitingFor } from "./waiting";

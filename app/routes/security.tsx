@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 
 import { ACTIVITY_RETENTION_DAYS } from "~/activity/activity.server";
+import { EXPORT_KEEP_DAYS } from "~/exports/paths";
 import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import { deploymentOperator, icoReference, OperatorDetails } from "~/landing/operator";
 import {
@@ -118,8 +119,9 @@ export default function Security({
 			<DocumentSection id="backups" title="Backups">
 				<p>
 					Cloudflare D1's Time Travel is always on: it can restore the database to any minute of the
-					last {TIME_TRAVEL_DAYS} days. It is the only copy. Timesifier keeps no other copy of the
-					database, a receipt or a logo.
+					last {TIME_TRAVEL_DAYS} days. It is the only backup. Timesifier keeps no other copy of the
+					database, a receipt or a logo, besides the export of everything an owner asks for, which
+					is deleted {EXPORT_KEEP_DAYS} days after it is made.
 				</p>
 				<p>A restore has not been rehearsed yet.</p>
 			</DocumentSection>
@@ -134,6 +136,9 @@ export default function Security({
 						Each is deleted {NOTIFICATION_RETENTION_DAYS} days after it was made, read or not.
 					</Row>
 					<Row term="Cloudflare's logs and traces">At most {WORKERS_LOGS_DAYS} days.</Row>
+					<Row term="Exports of everything">
+						Each is deleted {EXPORT_KEEP_DAYS} days after it is made, by a job that runs every hour.
+					</Row>
 					<Row term="What is deleted">
 						Gone from the database at once; gone for good {TIME_TRAVEL_DAYS} days later, when Time
 						Travel no longer reaches it. That includes a whole organisation, which its owner can

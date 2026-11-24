@@ -3,6 +3,7 @@ import { ACTIVITY_EXPORT_SEGMENT, HISTORY_SEGMENT } from "./activity/paths";
 import { LOGO_SEGMENT } from "./brand/paths";
 import { CONTRACTORS_EXPORT_SEGMENT } from "./contractors/paths";
 import { EXPENSE_REPORT_EXPORT_SEGMENT, RECEIPT_SEGMENT } from "./expenses/paths";
+import { EVERYTHING_DOWNLOAD_SEGMENT, EVERYTHING_EXPORT_SEGMENT } from "./exports/paths";
 import {
 	API_PATH,
 	CALENDAR_FEEDS_SEGMENT,
@@ -110,6 +111,9 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(PERSONAL_DATA_SEGMENT, "routes/app/account.data.ts"),
 	route(SUPPORT_ACCESS_SEGMENT, "routes/app/support-access.tsx"),
 	route(WELLBEING_SEGMENT, "routes/app/wellbeing.tsx"),
+	// TS-126: the export of everything, and its ZIP.
+	route(EVERYTHING_EXPORT_SEGMENT, "routes/app/export-everything.tsx"),
+	route(EVERYTHING_DOWNLOAD_SEGMENT, "routes/app/export-everything.download.ts"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	route(MENU_SEGMENT, "routes/app/menu.ts"),
 	// TS-049: the bell's list, and marking it read.

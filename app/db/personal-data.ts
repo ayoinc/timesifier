@@ -90,6 +90,7 @@ export const STORED = [
 			{ term: "Saved reports", tables: ["saved_reports", "saved_report_shares"] },
 			{ term: "Pinned projects and people", tables: ["pins"] },
 			{ term: "Support access", tables: ["support_grants"] },
+			{ term: "Exports of everything", tables: ["organisation_exports"] },
 			{ term: "Verified domains", tables: ["organisation_domains", "membership_removals"] },
 			{ term: "Notifications", tables: ["notifications", "reminder_pass"] },
 		],

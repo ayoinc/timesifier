@@ -1,5 +1,6 @@
 import { deleteExpiredActivity } from "~/activity/activity.server";
 import { platformData } from "~/db";
+import { advanceExports, deleteExpiredExports } from "~/exports/job.server";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
 import { runBillingSchedule } from "~/invoices/schedule.server";
 import { runAutoLock, runLockReach } from "~/locks/locks.server";
@@ -16,13 +17,15 @@ import { sendWaitingMail } from "~/platform/mail.server";
  *
  * - Every minute: the webhooks' deliveries that are due are sent (TS-087),
  *   the next mailings to account holders, within the day's cap (TS-099), and
- *   the emails of notifications that wait (TS-049); then, but in the hour's
+ *   the emails of notifications that wait (TS-049); then one step of the
+ *   oldest export of everything being made (TS-126); then, but in the hour's
  *   first minute, the reminders go on from where the last run stopped.
  * - Every hour: auto-lock (TS-065), then the lock date reaching the days that
  *   have ended since (D7: timers on them stopped, weeks auto-submitted); recurring invoices that are due are issued
- *   and overdue invoices are reminded (TS-074, TS-078); then the reminders
- *   of running timers, the deadline and weeks waiting (TS-049): the hour's
- *   pass starts here, after the duties before it.
+ *   and overdue invoices are reminded (TS-074, TS-078). Exports of everything
+ *   7 days old are deleted, file and row (TS-126). Then the reminders of
+ *   running timers, the deadline and weeks waiting (TS-049): the hour's pass
+ *   starts here, after the duties before it.
  * - Every day at 03:17 UTC: rows past their retention are deleted: activity
  *   records after 730 days (TS-072), sign-ins after 90 (TS-099),
  *   notifications after 90 (TS-049). TS-033 adds the other tables here.
@@ -64,6 +67,7 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 			webhooks: () => dispatchWebhooks({ now }),
 			mail: () => sendWaitingMail(new Date(now)),
 			notificationEmails: () => sendWaitingNotifications(new Date(now)),
+			exports: () => advanceExports(new Date(now)),
 			...(hoursFirst ? {} : { reminders: () => runReminders(now) }),
 		});
 	}
@@ -72,6 +76,7 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 			autoLock: () => runAutoLock(now),
 			lockReach: () => runLockReach(now),
 			billing: () => runBillingSchedule(now),
+			expiredExports: () => deleteExpiredExports(new Date(now)),
 			reminders: () => runReminders(now),
 		});
 	}

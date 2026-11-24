@@ -227,6 +227,9 @@ const STEPS: Record<string, string> = {
 	verified: "Verified",
 	unverified: "Stopped verifying",
 	joined: "Joined",
+	made: "Made",
+	failed: "Could not make",
+	downloaded: "Downloaded",
 };
 
 /** What each kind of thing an action names is called in a sentence. */
@@ -264,6 +267,7 @@ const NOUNS: Record<string, string> = {
 	dpa: "the data processing agreement",
 	sign_in_policy: "the sign-in policy",
 	organisation_domain: "domain",
+	organisation_export: "an export of everything",
 };
 
 /** How a changed field is named. Any other is shown by its own name. */

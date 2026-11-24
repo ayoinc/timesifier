@@ -93,8 +93,8 @@ async function reminders(kind: string) {
 }
 
 describe("a run's share of the invocation's queries", () => {
-	it("is 400 of the 1,000 one invocation may make", () => {
-		expect(REMINDER_QUERIES_PER_RUN).toBe(400);
+	it("is 300 of the 1,000 one invocation may make", () => {
+		expect(REMINDER_QUERIES_PER_RUN).toBe(300);
 	});
 
 	it("stops cleanly at its cap; the next runs send the rest, and nobody gets two", async () => {

@@ -7,6 +7,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deleteExpiredActivity } from "~/activity/activity.server";
+import { advanceExports, deleteExpiredExports } from "~/exports/job.server";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
 import { runBillingSchedule } from "~/invoices/schedule.server";
 import { runAutoLock, runLockReach } from "~/locks/locks.server";
@@ -20,6 +21,7 @@ import { DAILY, EVERY_MINUTE, HOURLY } from "../../workers/scheduled";
 import { freshDatabase } from "../db/database";
 
 vi.mock("~/activity/activity.server", { spy: true });
+vi.mock("~/exports/job.server", { spy: true });
 vi.mock("~/integrations/webhooks.server", { spy: true });
 vi.mock("~/invoices/schedule.server", { spy: true });
 vi.mock("~/locks/locks.server", { spy: true });
@@ -55,9 +57,11 @@ function stubbed(failing: string[]) {
 	stub("webhooks", dispatchWebhooks);
 	stub("mail", sendWaitingMail);
 	stub("notificationEmails", sendWaitingNotifications);
+	stub("exports", advanceExports);
 	stub("autoLock", runAutoLock);
 	stub("lockReach", runLockReach);
 	stub("billing", runBillingSchedule);
+	stub("expiredExports", deleteExpiredExports);
 	stub("reminders", runReminders);
 	stub("activity", deleteExpiredActivity);
 	stub("notifications", deleteExpiredNotifications);
@@ -76,7 +80,7 @@ describe("the scheduled duties", () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const ran = stubbed(["autoLock"]);
 		await trigger(HOURLY, HOUR_TWO);
-		expect(ran).toEqual(["autoLock", "lockReach", "billing", "reminders"]);
+		expect(ran).toEqual(["autoLock", "lockReach", "billing", "expiredExports", "reminders"]);
 		expect(error).toHaveBeenCalledWith("scheduled: autoLock failed with Error");
 	});
 
@@ -84,7 +88,7 @@ describe("the scheduled duties", () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const ran = stubbed(["billing", "reminders"]);
 		await trigger(HOURLY, HOUR_TWO);
-		expect(ran).toEqual(["autoLock", "lockReach", "billing", "reminders"]);
+		expect(ran).toEqual(["autoLock", "lockReach", "billing", "expiredExports", "reminders"]);
 		expect(error.mock.calls).toEqual([
 			["scheduled: billing failed with Error"],
 			["scheduled: reminders failed with Error"],
@@ -95,12 +99,12 @@ describe("the scheduled duties", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const ran = stubbed(["webhooks"]);
 		await trigger(EVERY_MINUTE, HOUR_TWO + 60_000);
-		expect(ran).toEqual(["webhooks", "mail", "notificationEmails", "reminders"]);
+		expect(ran).toEqual(["webhooks", "mail", "notificationEmails", "exports", "reminders"]);
 		expect(vi.mocked(runReminders)).toHaveBeenCalledWith(HOUR_TWO + 60_000);
 
 		ran.length = 0;
 		await trigger(EVERY_MINUTE, HOUR_TWO);
-		expect(ran).toEqual(["webhooks", "mail", "notificationEmails"]);
+		expect(ran).toEqual(["webhooks", "mail", "notificationEmails", "exports"]);
 	});
 
 	it("daily: one failing stops none of the others", async () => {

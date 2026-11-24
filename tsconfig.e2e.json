@@ -7,6 +7,7 @@
 		"app/integrations/paths.ts",
 		"app/contractors/paths.ts",
 		"app/activity/paths.ts",
+		"app/exports/paths.ts",
 		"app/projects/projects.ts",
 		"app/lib/names.ts",
 		"app/invoices/paths.ts",

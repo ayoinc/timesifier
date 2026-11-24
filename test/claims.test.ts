@@ -24,6 +24,7 @@ import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
 import { MILEAGE_RATE_CURRENCY, USUAL_CATEGORIES } from "~/expenses/starter";
+import { EXPORT_KEEP_DAYS } from "~/exports/paths";
 import { IMPORT_MAX_ROWS } from "~/import/import.server";
 import { API_RATE_LIMIT } from "~/integrations/api-tokens.server";
 import { ENTRY_DAYS_BACK, LEAVE_DAYS_BACK } from "~/integrations/feeds.server";
@@ -58,6 +59,7 @@ import {
 import { homeStructuredData } from "~/landing/structured-data";
 import {
 	BREACH_NOTICE_HOURS,
+	R2_HOLDS,
 	SUB_PROCESSOR_NOTICE_DAYS,
 	SUB_PROCESSORS,
 	TIME_TRAVEL_DAYS,
@@ -90,7 +92,7 @@ import { GETTING_STARTED_COOKIE } from "~/timesheet/getting-started.server";
 // The pipeline, read as text: a directory whose name starts with a dot is not globbed.
 import ci from "../.github/workflows/ci.yml?raw";
 import worker from "../workers/app";
-import { DAILY } from "../workers/scheduled";
+import { DAILY, HOURLY } from "../workers/scheduled";
 
 import {
 	CODE_COOKIE,
@@ -346,7 +348,7 @@ it("deleting an organisation deletes everything in it, as the notice says: every
 		).toContain("cascade");
 	}
 	expect(words(await page(PRIVACY_PATH))).toContain(
-		"Everything in it goes at once: its memberships, invitations and all its work, and first its receipts and its logo.",
+		"Everything in it goes at once: its memberships, invitations and all its work, and first its receipts, its logo and its exports of everything.",
 	);
 });
 
@@ -415,6 +417,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 			"a timesheet or a request waiting for their decision, their own timesheet or request decided",
 			"a budget alert, to the organisation's owners and admins and, for a budget in hours, to the managers",
 		],
+		"../app/exports/job.server.ts": [
+			"a notice that an export of everything is ready, or could not be made, to the owner who asked for it",
+		],
 		"../app/integrations/webhooks.server.ts": [
 			"a notice that a webhook was switched off, to the person who added it",
 		],
@@ -457,15 +462,22 @@ it("the notice says what a webhook is sent and when it stops, and how far a cale
 	expect(text).toContain(`of the last ${ENTRY_DAYS_BACK} days`);
 });
 
-it("the pages say receipts and logos are kept in the EU because their buckets have the EU jurisdiction", async () => {
+it("the pages say receipts, logos and exports are kept in the EU because their buckets have the EU jurisdiction", async () => {
 	const buckets = [...(wrangler ?? "").matchAll(/\{ "binding": "(?:RECEIPTS|BRAND)",[^}]*\}/g)].map(
 		([b]) => b,
 	);
 	expect(buckets.length).toBe(4);
 	for (const bucket of buckets) expect(bucket).toContain('"jurisdiction": "eu"');
-	expect(words(await page(PRIVACY_PATH))).toContain(
-		"Receipts and organisations' logos are kept in Cloudflare R2, in buckets restricted to the EU",
+	// The exports of everything (TS-126) are in the receipts' bucket.
+	expect(source("../app/exports/job.server.ts")).toContain(
+		"env.RECEIPTS.createMultipartUpload(exportKey(",
 	);
+	for (const path of [PRIVACY_PATH, SECURITY_PATH, DPA_PATH]) {
+		expect(words(await page(path)), path).toContain(
+			`Cloudflare R2 holds the ${R2_HOLDS}, in buckets restricted to the EU`,
+		);
+	}
+	expect(words(await page(PRIVACY_PATH))).toContain(`Cloudflare R2 holds the ${R2_HOLDS}.`);
 	expect(words(await page("/"))).toContain("Receipts are kept in storage restricted to the EU.");
 });
 
@@ -975,6 +987,7 @@ const sources = import.meta.glob<string>(
 		"../e2e/landing.spec.ts",
 		"../app/db/platform.ts",
 		"../app/**/*.server.ts",
+		"../workers/scheduled.ts",
 		"../workers/security-headers.ts",
 	],
 	{ eager: true, query: "?raw", import: "default" },
@@ -1034,6 +1047,22 @@ it("the security page says how long each thing is kept from the constant that ke
 	expect(wrangler).toMatch(/"traces": \{ "enabled": true/);
 	expect(retention).toContain(`Cloudflare's logs and traces At most ${WORKERS_LOGS_DAYS} days.`);
 	expect(retention).toContain(`gone for good ${TIME_TRAVEL_DAYS} days later`);
+	// Exports of everything (TS-126): each expires EXPORT_KEEP_DAYS after it is
+	// made, and the hourly trigger deletes it.
+	expect(R2_HOLDS).toContain(`each export for ${EXPORT_KEEP_DAYS} days`);
+	expect(source("../app/exports/job.server.ts")).toContain(
+		"expiresAt: new Date(now.getTime() + EXPORT_KEEP_DAYS * DAY_MS)",
+	);
+	expect(wrangler).toContain(`"${HOURLY}"`);
+	expect(source("../workers/scheduled.ts").match(/cron === HOURLY\) \{[^}]*\}/)?.[0]).toContain(
+		"deleteExpiredExports(",
+	);
+	expect(retention).toContain(
+		`Exports of everything Each is deleted ${EXPORT_KEEP_DAYS} days after it is made, by a job that runs every hour.`,
+	);
+	const copies = `Timesifier keeps no other copy of the database, a receipt or a logo, besides the export of everything an owner asks for, which is deleted ${EXPORT_KEEP_DAYS} days after it is made.`;
+	expect(words(await page(SECURITY_PATH))).toContain(copies);
+	expect(words(await page(PRIVACY_PATH))).toContain(copies);
 });
 
 it("the security page's hashed secrets are the ones docs/security.md lists, and the code hashes them so", async () => {

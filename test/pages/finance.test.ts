@@ -763,6 +763,23 @@ const ROLE_TABLE: Record<string, Row> = {
 		},
 	},
 	"routes/app/wellbeing": { page: by(200, 404, 404, 404, 404) },
+	// The export of everything (TS-126), below Workspace settings, is the
+	// owners' alone. Its download is 404 to everyone here, an owner too, as
+	// nothing has been made; test/exports/export-everything.test.ts downloads
+	// a made one as each role.
+	"routes/app/export-everything": {
+		page: by(200, 404, 404, 404, 404),
+		form: {
+			fields: () => ({ intent: "export" }),
+			made: async (w) =>
+				(await count(
+					"select count(*) from organisation_exports where organisation_id = ?",
+					w.acme.id,
+				)) === 1,
+			post: by<Post>("done", 404, 404, 404, 404),
+		},
+	},
+	"routes/app/export-everything.download": { page: every(404) },
 	// Settings › Sign-in (TS-104): owners and admins open it and choose the
 	// policy; its domains are the owners' alone, so an admin who posts one is
 	// answered 404 too (test/organisations/company-sign-in.test.ts and

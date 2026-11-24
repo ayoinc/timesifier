@@ -2970,6 +2970,54 @@ export const supportGrants = sqliteTable(
 	],
 );
 
+/**
+ * An export of everything the organisation holds (TS-126, docs/decisions.md
+ * entry 71): one ZIP, made a step at a time by `app/exports/job.server.ts`
+ * into an R2 multipart upload, and deleted with its row 7 days after it is
+ * ready. `progress` is where the next step starts, as JSON; `parts` the parts
+ * uploaded so far, which completing the upload names. A step holds the row by
+ * `lease_until`, so two never run at once. An owner asks for it; deleting
+ * their account empties `requested_by` and keeps the export.
+ */
+export const organisationExports = sqliteTable(
+	"organisation_exports",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		requestedBy: text("requested_by").references(() => users.id, { onDelete: "set null" }),
+		status: text("status", { enum: ["running", "ready", "failed"] })
+			.notNull()
+			.default("running"),
+		progress: text("progress", { mode: "json" }).notNull(),
+		uploadId: text("upload_id"),
+		parts: text("parts", { mode: "json" })
+			.$type<{ partNumber: number; etag: string }[]>()
+			.notNull()
+			.default(sql`'[]'`),
+		size: integer("size"),
+		failures: integer("failures").notNull().default(0),
+		leaseUntil: integer("lease_until", { mode: "timestamp_ms" }),
+		finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+		expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("organisation_exports_organisation_id_id_unique").on(
+			table.organisationId,
+			table.id,
+		),
+		index("organisation_exports_status_expires_at_idx").on(table.status, table.expiresAt),
+		// One export at a time is made for an organisation: a second request while one runs fails here.
+		uniqueIndex("organisation_exports_running_unique")
+			.on(table.organisationId)
+			.where(sql`status = 'running'`),
+		check("organisation_exports_status", sql`${table.status} in ('running', 'ready', 'failed')`),
+	],
+);
+
 /** One sign-in: when, and the browser's kind in two words. Kept for 90 days. */
 export const signIns = sqliteTable(
 	"sign_ins",

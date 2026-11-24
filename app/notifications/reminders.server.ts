@@ -54,10 +54,12 @@ import { type NewNotification, notificationStatements, pathBelow } from "./words
  */
 
 /**
- * The most D1 queries one run of the reminders makes: 400 of the 1,000 one
- * invocation may make on Workers Paid, so the duties beside it keep 600.
+ * The most D1 queries one run of the reminders makes: 300 of the 1,000 one
+ * invocation may make on Workers Paid. The duties before it keep 700: in the
+ * every-minute run, a step of an export of everything takes up to 400 of
+ * them (TS-126, decision 71), the webhooks and the mail the rest.
  */
-export const REMINDER_QUERIES_PER_RUN = 400;
+export const REMINDER_QUERIES_PER_RUN = 300;
 
 /** How long a run holds the pass: one that dies holding it holds it no longer, and the next run takes it. */
 export const REMINDER_LEASE_MS = 2 * 60 * 1000;

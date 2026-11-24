@@ -1,8 +1,8 @@
 {
 	"version": "6",
 	"dialect": "sqlite",
-	"id": "2aeb5213-efa5-4f7f-af3e-b88881182fc9",
-	"prevId": "b2a72d3e-bea9-4a86-b944-9337aadd7db1",
+	"id": "c5b3555e-1292-4db6-94a9-f44cf52722de",
+	"prevId": "82949be9-e7b2-473b-9c2b-34814e5eb209",
 	"tables": {
 		"accounts": {
 			"name": "accounts",
@@ -3772,6 +3772,158 @@
 				"organisation_domains_domain_lower_case": {
 					"name": "organisation_domains_domain_lower_case",
 					"value": "\"organisation_domains\".\"domain\" = lower(\"organisation_domains\".\"domain\")"
+				}
+			}
+		},
+		"organisation_exports": {
+			"name": "organisation_exports",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"organisation_id": {
+					"name": "organisation_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"requested_by": {
+					"name": "requested_by",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"status": {
+					"name": "status",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'running'"
+				},
+				"progress": {
+					"name": "progress",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"upload_id": {
+					"name": "upload_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"parts": {
+					"name": "parts",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'[]'"
+				},
+				"size": {
+					"name": "size",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"failures": {
+					"name": "failures",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"lease_until": {
+					"name": "lease_until",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"finished_at": {
+					"name": "finished_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"expires_at": {
+					"name": "expires_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"organisation_exports_organisation_id_id_unique": {
+					"name": "organisation_exports_organisation_id_id_unique",
+					"columns": ["organisation_id", "id"],
+					"isUnique": true
+				},
+				"organisation_exports_status_expires_at_idx": {
+					"name": "organisation_exports_status_expires_at_idx",
+					"columns": ["status", "expires_at"],
+					"isUnique": false
+				},
+				"organisation_exports_running_unique": {
+					"name": "organisation_exports_running_unique",
+					"columns": ["organisation_id"],
+					"isUnique": true,
+					"where": "status = 'running'"
+				}
+			},
+			"foreignKeys": {
+				"organisation_exports_organisation_id_organisations_id_fk": {
+					"name": "organisation_exports_organisation_id_organisations_id_fk",
+					"tableFrom": "organisation_exports",
+					"tableTo": "organisations",
+					"columnsFrom": ["organisation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"organisation_exports_requested_by_users_id_fk": {
+					"name": "organisation_exports_requested_by_users_id_fk",
+					"tableFrom": "organisation_exports",
+					"tableTo": "users",
+					"columnsFrom": ["requested_by"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {
+				"organisation_exports_status": {
+					"name": "organisation_exports_status",
+					"value": "\"organisation_exports\".\"status\" in ('running', 'ready', 'failed')"
 				}
 			}
 		},
