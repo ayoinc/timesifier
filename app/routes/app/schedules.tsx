@@ -144,15 +144,12 @@ export async function loader({ context }: Route.LoaderArgs) {
 		counts.set(resolved.schedule.id, (counts.get(resolved.schedule.id) ?? 0) + 1);
 		const view = scheduleView(book, place, today);
 		const own = targetState(book, "person", person.id, today);
-		const fromContract =
-			view.level === "person" &&
-			assignmentOn(book.assignments, "person", person.id, today)?.sourceKind === "contract";
 		return {
 			id: person.id,
 			name: person.name,
 			schedule: view.name,
 			weekLabel: view.weekLabel,
-			reason: fromContract ? "From their contract" : view.reason,
+			reason: view.reason,
 			next: view.next && { from: formatDayWithYear(view.next.from), name: view.next.name },
 			ownScheduleId: own.scheduleId,
 		};

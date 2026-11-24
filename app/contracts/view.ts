@@ -118,7 +118,11 @@ function changeWords(
 		) {
 			words.push(`overtime at ${multiplierWords(after.overtimeMultiplierBp)}`);
 		}
-		if (before.restDayMultiplierBp !== after.restDayMultiplierBp) {
+		// Overtime no longer paid or banked drops its multipliers: the overtime words above say so.
+		if (
+			before.restDayMultiplierBp !== after.restDayMultiplierBp &&
+			after.overtimePay !== "unpaid"
+		) {
 			words.push(
 				after.restDayMultiplierBp === null
 					? "days off at the overtime rate"

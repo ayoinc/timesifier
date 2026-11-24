@@ -5,7 +5,7 @@ import { among, type OrganisationScope, type ScopedStatement, uuidv7 } from "~/d
 import { parseMoney } from "~/money/typed";
 import { assignmentOn, versionOn } from "~/schedules/schedules";
 import { scheduleBookOf } from "~/schedules/schedules.server";
-import { addDays, type Day } from "~/time/calendar";
+import { addDays, type Day, dayOf } from "~/time/calendar";
 
 import {
 	type Contract,
@@ -13,6 +13,7 @@ import {
 	type ContractTerms,
 	contractAssignments,
 	contractOwnsHours,
+	deletableEndedBy,
 	type EndReason,
 	MULTIPLIER_LABELS,
 	type Multiplier,
@@ -576,4 +577,19 @@ export async function endContract(
 		contract.userId,
 		{ startsOn: contract.startsOn, endsOn: lastDay },
 	);
+}
+
+/**
+ * Deletes, in every organisation, each contract three years after the end of
+ * the tax year it ended in (contracts-model.md section 6), its versions with
+ * it; run by the daily job. A contract with no end is kept, as is one that
+ * ended since. Returns how many contracts.
+ */
+export async function deleteExpiredContracts(database: D1Database, now: Date): Promise<number> {
+	// `meta.changes` counts the versions the foreign key deletes too: the rows returned are the contracts alone.
+	const { results } = await database
+		.prepare("delete from contracts where ends_on is not null and ends_on <= ?1 returning id")
+		.bind(deletableEndedBy(dayOf(now.getTime(), "UTC")))
+		.all();
+	return results.length;
 }

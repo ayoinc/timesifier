@@ -116,9 +116,10 @@ describe("what the page shows", () => {
 		const html = await pageBody(await open(MEMBERS, ada));
 		const text = textOf(html);
 
-		expect(text).toContain("Grace Hopper grace@example.com Admin");
-		expect(text).toContain("ada@example.com (you) Owner");
-		expect(text).toContain("linus@example.com Member");
+		// An owner is also told who has no contract (TS-098a).
+		expect(text).toContain("Grace Hopper grace@example.com · No contract Admin");
+		expect(text).toContain("ada@example.com (you) No contract Owner");
+		expect(text).toContain("linus@example.com No contract Member");
 		expect(text).not.toContain("undefined");
 		expect(text).not.toContain("null");
 		expect(html).toContain('aria-label="Actions for Grace Hopper"');

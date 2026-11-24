@@ -93,6 +93,26 @@ export const CHOSEN_END_REASONS = ["resigned", "dismissed", "end_of_term"] as co
 export const JOB_TITLE_MAX_LENGTH = 100;
 export const WORKS_NUMBER_MAX_LENGTH = 35;
 
+/**
+ * How long an ended contract is kept (contracts-model.md section 6, "Keeping"):
+ * HMRC asks for payroll records "for 3 years from the end of the tax year they
+ * relate to", and the UK tax year ends on 5 April.
+ */
+export const CONTRACT_KEEP_YEARS = 3;
+export const TAX_YEAR_END = "04-05";
+
+/**
+ * The last day a contract may have ended on and be deleted on `today`: the
+ * end of the latest tax year whose three years were over before `today`. A
+ * contract that ended on Sunday 5 April 2026 is kept until Thursday 5 April
+ * 2029 and deleted from Friday 6 April 2029.
+ */
+export function deletableEndedBy(today: Day): Day {
+	const year = Number(today.slice(0, 4));
+	const lastOver = today > `${year}-${TAX_YEAR_END}` ? year : year - 1;
+	return `${lastOver - CONTRACT_KEEP_YEARS}-${TAX_YEAR_END}`;
+}
+
 /** The terms of one version: what a change from a day sets. */
 export interface ContractTerms {
 	jobTitle: string | null;

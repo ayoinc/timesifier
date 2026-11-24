@@ -13,6 +13,8 @@ import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
+import { contractsOf } from "~/contracts/read.server";
+import { contractsView } from "~/contracts/view";
 import {
 	notificationChoicesOf,
 	organisationScope,
@@ -80,19 +82,24 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { role, user, organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
-	const [organisations, ownZone, zone, book, places, owners, mail, choices] = await Promise.all([
-		listOrganisations(request),
-		ownZoneOf(membership),
-		zoneOfMember(membership),
-		scheduleBookOf(scope),
-		placesOf(scope, [user.id]),
-		// The only owner cannot leave (the auth server refuses it), so is not offered to.
-		role === "owner"
-			? organisationScope(env.DB, organisation.id).memberships.select((m) => eq(m.role, "owner"))
-			: [],
-		platformData.mailChoices(env.DB, user.id),
-		notificationChoicesOf(env.DB, user.id),
-	]);
+	const [organisations, ownZone, zone, book, places, owners, mail, choices, contracts] =
+		await Promise.all([
+			listOrganisations(request),
+			ownZoneOf(membership),
+			zoneOfMember(membership),
+			scheduleBookOf(scope),
+			placesOf(scope, [user.id]),
+			// The only owner cannot leave (the auth server refuses it), so is not offered to.
+			role === "owner"
+				? organisationScope(env.DB, organisation.id).memberships.select((m) => eq(m.role, "owner"))
+				: [],
+			platformData.mailChoices(env.DB, user.id),
+			notificationChoicesOf(env.DB, user.id),
+			contractsOf(scope, [user.id]),
+		]);
+	const today = dayOf(Date.now(), zone);
+	// Their own contracts in full, pay included (TS-098a).
+	const contract = contractsView(contracts.get(user.id) ?? [], book, today, true);
 	// The kinds that can reach this person here: those for deciders and budgets
 	// only for an owner, an admin or a manager of a team (TS-049); those of the
 	// export of everything only for an owner (TS-126b).
@@ -110,12 +117,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		person: { name: user.name?.trim() || null, email: user.email },
 		timeZone: { own: ownZone, organisation: organisation.timeZone },
 		/** Their work schedule today, why it is theirs, and the next change due (TS-097). */
-		schedule: scheduleView(
-			book,
-			places.get(user.id) ?? formerPlace(user.id),
-			dayOf(Date.now(), zone),
-			true,
-		),
+		schedule: scheduleView(book, places.get(user.id) ?? formerPlace(user.id), today, true),
+		/** Their contract today or the next to begin, its changes, and their others (TS-098a). */
+		contract: { current: contract.current, others: contract.others },
 		/** Which kinds of mail from Timesifier the person takes (TS-099). */
 		mail: mail ?? { newsletter: false, announcements: false },
 		/** Each kind of notification that can reach them, and whether its email is on (TS-049). */
@@ -265,7 +269,7 @@ const SCHEMES: { value: ColorSchemeChoice; label: string }[] = [
 type Task = "name" | "time-zone" | "leave";
 
 export default function Account({ loaderData }: Route.ComponentProps) {
-	const { person, role, hasOthers, onlyOwner, timeZone, schedule } = loaderData;
+	const { person, role, hasOthers, onlyOwner, timeZone, schedule, contract } = loaderData;
 	const organisation = useOrganisation();
 	const [task, setTask] = useState<Task | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
@@ -342,6 +346,51 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 			</Section>
 
 			<Section
+				id="contract"
+				heading="Your contract"
+				lead={
+					contract.current
+						? "The terms you work on here, pay included, and each change from its day. Owners and admins change it."
+						: "You have no contract here. Your hours come from your team, role or the organisation's default."
+				}
+				className="max-w-200"
+			>
+				{contract.current && (
+					<div className="flex flex-col gap-6">
+						<Ledger heading={contract.current.heading}>
+							<LedgerRows label="Your contract">
+								{contract.current.lines.map((line) => (
+									<LedgerRow key={line} title={line} />
+								))}
+							</LedgerRows>
+						</Ledger>
+						{contract.current.changes.length > 0 && (
+							<Ledger heading="Its changes">
+								<LedgerRows label="Its changes">
+									{contract.current.changes.map((line) => (
+										<LedgerRow key={line} title={line} />
+									))}
+								</LedgerRows>
+							</Ledger>
+						)}
+					</div>
+				)}
+				{contract.others.length > 0 && (
+					<div className="mt-6 flex flex-col gap-6">
+						{contract.others.map((each) => (
+							<Ledger key={each.id} heading={each.heading}>
+								<LedgerRows label={each.heading}>
+									{[...each.lines, ...each.changes].map((line) => (
+										<LedgerRow key={line} title={line} />
+									))}
+								</LedgerRows>
+							</Ledger>
+						))}
+					</div>
+				)}
+			</Section>
+
+			<Section
 				id="calendar-feeds"
 				heading="Calendar feeds"
 				lead="Subscribe your own calendar to your approved time off, and your entries if you like."
@@ -407,7 +456,8 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 				<div className="flex flex-col items-start gap-4 text-body-large">
 					<p>
 						It holds your account, when and from which browser you signed in, and your own time,
-						expenses and leave in every organisation you belong to. Nobody else's is in it.
+						expenses, leave and contracts in every organisation you belong to. Nobody else's is in
+						it.
 					</p>
 					<a
 						href={`${organisationPath(organisation.slug)}/${PERSONAL_DATA_SEGMENT}`}

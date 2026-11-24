@@ -254,7 +254,8 @@ export function rolesOf(
 
 /** Why a person has the schedule they have on a day. */
 export type ScheduleSource =
-	| { level: "person" }
+	/** Their own; `fromContract` when a contract gave it (TS-098a). */
+	| { level: "person"; fromContract: boolean }
 	| {
 			level: "team";
 			teamId: string;
@@ -293,8 +294,14 @@ export function resolve(book: ScheduleBook, place: PersonPlace, day: Day): Resol
 		const schedule = book.schedules.get(assignment.scheduleId);
 		return schedule ? { schedule, version: versionOn(schedule, day) } : null;
 	};
-	const own = scheduled(assignmentOn(book.assignments, "person", place.userId, day));
-	if (own) return { ...own, source: { level: "person" } };
+	const ownAssignment = assignmentOn(book.assignments, "person", place.userId, day);
+	const own = scheduled(ownAssignment);
+	if (own) {
+		return {
+			...own,
+			source: { level: "person", fromContract: ownAssignment?.sourceKind === "contract" },
+		};
+	}
 
 	const ofTeams = place.teams
 		.flatMap((team) => {
@@ -341,6 +348,7 @@ export function resolve(book: ScheduleBook, place: PersonPlace, day: Day): Resol
 export function sourceLabel(source: ScheduleSource, you = false): string {
 	switch (source.level) {
 		case "person":
+			if (source.fromContract) return you ? "From your contract" : "From their contract";
 			return you ? "Assigned to you" : "Assigned to them";
 		case "team": {
 			const lead = `From the team ${source.teamName}`;

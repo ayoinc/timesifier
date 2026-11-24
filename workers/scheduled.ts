@@ -1,4 +1,5 @@
 import { deleteExpiredActivity } from "~/activity/activity.server";
+import { deleteExpiredContracts } from "~/contracts/contracts.server";
 import { platformData } from "~/db";
 import { advanceExports, deleteExpiredExports } from "~/exports/job.server";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
@@ -32,7 +33,9 @@ import { sendWaitingMail } from "~/platform/mail.server";
  *   starts here, after the duties before it.
  * - Every day at 03:17 UTC: rows past their retention are deleted: activity
  *   records after 730 days (TS-072), sign-ins after 90 (TS-099),
- *   notifications after 90 (TS-049). TS-033 adds the other tables here.
+ *   notifications after 90 (TS-049), and contracts three years after the end
+ *   of the tax year (5 April) they ended in (TS-098a). TS-033 adds the other
+ *   tables here.
  *   Every organisation's domains are looked up again (TS-104): the owners
  *   are told once after 7 days without the record, and the domain is
  *   unverified after 14.
@@ -94,6 +97,7 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 			activity: () => deleteExpiredActivity(env.DB, new Date(now)),
 			signIns: () => platformData.deleteOldSignIns(env.DB, new Date(now)),
 			notifications: () => deleteExpiredNotifications(new Date(now)),
+			contracts: () => deleteExpiredContracts(env.DB, new Date(now)),
 			domains: () => recheckDomains(new Date(now)),
 		});
 	}

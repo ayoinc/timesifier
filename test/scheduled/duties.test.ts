@@ -7,6 +7,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deleteExpiredActivity } from "~/activity/activity.server";
+import { deleteExpiredContracts } from "~/contracts/contracts.server";
 import { advanceExports, deleteExpiredExports } from "~/exports/job.server";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
 import { runBillingSchedule } from "~/invoices/schedule.server";
@@ -22,6 +23,7 @@ import { DAILY, EVERY_MINUTE, HOURLY } from "../../workers/scheduled";
 import { freshDatabase } from "../db/database";
 
 vi.mock("~/activity/activity.server", { spy: true });
+vi.mock("~/contracts/contracts.server", { spy: true });
 vi.mock("~/exports/job.server", { spy: true });
 vi.mock("~/integrations/webhooks.server", { spy: true });
 vi.mock("~/invoices/schedule.server", { spy: true });
@@ -68,6 +70,7 @@ function stubbed(failing: string[]) {
 	stub("reminders", runReminders);
 	stub("activity", deleteExpiredActivity);
 	stub("notifications", deleteExpiredNotifications);
+	stub("contracts", deleteExpiredContracts);
 	stub("domains", recheckDomains);
 	return ran;
 }
@@ -121,6 +124,18 @@ describe("the scheduled duties", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const ran = stubbed(["activity", "notifications"]);
 		await trigger(DAILY, Date.parse("2026-11-24T03:17:00Z"));
-		expect(ran).toEqual(["activity", "notifications", "domains"]);
+		expect(ran).toEqual(["activity", "notifications", "contracts", "domains"]);
+	});
+
+	it("daily: the contracts' deletion is a duty of its own, whose failing is logged and stops nothing", async () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const ran = stubbed(["contracts"]);
+		await trigger(DAILY, Date.parse("2026-11-24T03:17:00Z"));
+		expect(ran).toEqual(["activity", "notifications", "contracts", "domains"]);
+		expect(error).toHaveBeenCalledWith("scheduled: contracts failed with Error");
+		expect(vi.mocked(deleteExpiredContracts)).toHaveBeenCalledWith(
+			env.DB,
+			new Date("2026-11-24T03:17:00Z"),
+		);
 	});
 });

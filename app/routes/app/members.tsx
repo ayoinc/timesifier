@@ -9,6 +9,9 @@ import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { mayMarkContractor } from "~/contractors/contractors";
+import { type Contract, spansOf } from "~/contracts/contracts";
+import { contractsOf } from "~/contracts/read.server";
+import { type ContractSpan, contractorOn, spanOn } from "~/contracts/spans";
 import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
 import { isAdministrator } from "~/organisations/access";
@@ -18,11 +21,14 @@ import { declined, done, refused } from "~/organisations/outcome.server";
 import { AS_ROLE, nameOrEmail, ROLE_LABELS } from "~/organisations/people";
 import { NEEDS_AN_OWNER, NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { allows, mayRemove, Role, rolesToGive } from "~/organisations/roles";
-import { invitationsPath } from "~/shell/destinations";
+import { contractPath, invitationsPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { membersByJoining } from "~/teams/people.server";
 import { TeamTabs } from "~/teams/TeamTabs";
+import { addDays, type Day, dayOf } from "~/time/calendar";
+import { formatDayOfMonth, formatWeekday } from "~/time/format";
+import { zoneOfMember } from "~/time/zones.server";
 
 import type { Route } from "./+types/members";
 import { FormSheet } from "./FormSheet";
@@ -42,30 +48,63 @@ export function meta() {
 
 /** Everyone in the organisation, each with what the person may do to them. */
 export async function loader({ context }: Route.LoaderArgs) {
-	const { organisation, role, user } = context.get(membershipContext);
+	const membership = context.get(membershipContext);
+	const { organisation, role, user } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
-	const [members, rows] = await Promise.all([membersByJoining(scope), scope.memberships.select()]);
+	const seesContracts = isAdministrator(role);
+	const [members, rows, contracts, zone] = await Promise.all([
+		membersByJoining(scope),
+		scope.memberships.select(),
+		seesContracts ? contractsOf(scope) : new Map<string, Contract[]>(),
+		zoneOfMember(membership),
+	]);
 	const contractors = new Set(rows.filter((row) => row.isContractor).map(({ id }) => id));
+	const today = dayOf(Date.now(), zone);
 
 	return {
 		canInvite: allows(role, { invitation: ["create"] }),
 		members: members.map((member) => {
 			const isYou = member.userId === user.id;
+			// A contract that covers today says whether they are a contractor (TS-098a); the mark, when none does.
+			const theirs = spansOf(contracts.get(member.userId) ?? []);
+			const covering = spanOn(theirs, today);
 			return {
 				id: member.id,
+				userId: member.userId,
 				name: nameOrEmail(member.user),
 				email: member.user.email,
 				role: member.role,
 				isYou,
-				isContractor: contractors.has(member.id),
+				isContractor: contractorOn(theirs, contractors.has(member.id), today),
+				contract: seesContracts ? contractWords(covering, today) : null,
 				// A person's own way out is leaving, and their own role is another's to change.
 				rolesToGive: isYou ? [] : rolesToGive(role, member.role),
 				canRemove: !isYou && mayRemove(role, member.role),
-				canMarkContractor: mayMarkContractor(role, member.role, isYou),
+				canMarkContractor: !covering && mayMarkContractor(role, member.role, isYou),
 			};
 		}),
 	};
 }
+
+/**
+ * What Members says of a person's contract to those who change contracts, as
+ * the link to it: none today, a fixed term's end within 60 days, or that
+ * there is one.
+ */
+function contractWords(covering: ContractSpan | undefined, today: Day): string {
+	if (!covering) return "No contract";
+	if (covering.endsOn && covering.endsOn <= addDays(today, CONTRACT_ENDS_WITHIN_DAYS)) {
+		return `Contract ends ${formatWeekday(covering.endsOn, "short")} ${formatDayOfMonth(covering.endsOn)}`;
+	}
+	return "Contract";
+}
+
+/** How near the end of a contract Members says when it ends. */
+const CONTRACT_ENDS_WITHIN_DAYS = 60;
+
+/** Why a person a contract covers today is not marked by hand. */
+const CONTRACT_DECIDES =
+	"Their contract says whether they are a contractor. Change it on their Contract page.";
 
 const Id = z.string().min(1).max(64);
 
@@ -89,7 +128,8 @@ const form = z.discriminatedUnion("intent", [
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation, role, user } = context.get(membershipContext);
+	const membership = context.get(membershipContext);
+	const { organisation, role, user } = membership;
 	const { id } = organisation;
 	const scope = organisationScope(env.DB, id);
 	const [member] = await scope.memberships.select((m) => eq(m.id, input.memberId), { limit: 1 });
@@ -139,6 +179,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 			if (!mayMarkContractor(role, Role.parse(member.role), member.userId === user.id)) {
 				return declined(NOT_ALLOWED, 403);
 			}
+			// While a contract covers today, its kind says whether they are a contractor.
+			const today = dayOf(Date.now(), await zoneOfMember(membership));
+			const theirs = (await contractsOf(scope, [member.userId])).get(member.userId) ?? [];
+			if (spanOn(theirs, today)) return declined(CONTRACT_DECIDES, 409);
 			if (member.isContractor !== input.isContractor) {
 				await scope.batch([
 					scope.memberships.statements.update(
@@ -207,7 +251,21 @@ export default function Members({ loaderData }: Route.ComponentProps) {
 										</span>
 									}
 									detail={
-										each.name !== each.email && <span className="wrap-anywhere">{each.email}</span>
+										(each.name !== each.email || each.contract) && (
+											<span className="wrap-anywhere">
+												{each.name !== each.email && each.email}
+												{each.name !== each.email && each.contract && " · "}
+												{each.contract && (
+													<Link
+														to={contractPath(organisation.slug, each.userId)}
+														className={TEXT_LINK}
+														aria-label={`${each.contract}: the contract of ${each.name}`}
+													>
+														{each.contract}
+													</Link>
+												)}
+											</span>
+										)
 									}
 									value={
 										<span className="text-label-large text-on-surface-variant">

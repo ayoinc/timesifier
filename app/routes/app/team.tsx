@@ -27,7 +27,7 @@ import {
 	queryOf,
 } from "~/lib/paging";
 import { parseRequest } from "~/lib/validate";
-import { isAdministrator } from "~/organisations/access";
+import { isAdministrator, maySeeContractOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -50,6 +50,7 @@ import {
 	SORT_PARAM,
 	sortByCapacity,
 } from "~/teams/capacity";
+import { PERSON_PARAM, PersonTabs } from "~/teams/PersonTabs";
 import { peopleOf, teamPeopleOf } from "~/teams/people.server";
 import { TeamTabs } from "~/teams/TeamTabs";
 import {
@@ -95,9 +96,6 @@ import { useOrganisation } from "./useOrganisation";
 // delete, fill and give managers. Members and Invitations are pages of their own.
 
 const { label } = destination("team");
-
-/** The query that opens one person's week. */
-const PERSON_PARAM = "person";
 
 export function meta({ loaderData }: Route.MetaArgs) {
 	const title =
@@ -164,6 +162,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			view: "person" as const,
 			week,
 			person: { id: person.id, name: person.name, timeZone: person.timeZone },
+			/** Their pages: the Contract tab for those who may read it (TS-098a). */
+			tabs: maySeeContractOf(access, person.id)
+				? (["week", "contract"] as const)
+				: (["week"] as const),
 			/** Their work schedule and why it is theirs (TS-097): seen, not changed, here. */
 			schedule: schedules.get(person.id) ?? null,
 			status: shown.status,
@@ -665,7 +667,7 @@ function SortField({ sort }: { sort: CapacitySort }) {
 
 function PersonWeek({ data }: { data: PersonData }) {
 	const organisation = useOrganisation();
-	const { week, person, days, seconds, split, status, comment, expected, schedule } = data;
+	const { week, person, tabs, days, seconds, split, status, comment, expected, schedule } = data;
 	return (
 		<>
 			<p>
@@ -693,7 +695,7 @@ function PersonWeek({ data }: { data: PersonData }) {
 					Work schedule: {schedule.name}, {schedule.weekLabel}. {schedule.reason}.
 				</p>
 			)}
-			<TeamTabs slug={organisation.slug} current="week" />
+			<PersonTabs slug={organisation.slug} personId={person.id} current="week" tabs={tabs} />
 			<WeekStepper week={week} extra={`&${PERSON_PARAM}=${person.id}`} />
 			<div className="mt-6 flex max-w-200 flex-col gap-6">
 				{days.map((d) => (
