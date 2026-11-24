@@ -35,6 +35,14 @@ import { finishRunningTransition, INDICATOR_NAME, TRANSITION } from "./transitio
 // Each destination is its label in label-large (label-medium in the bar); the
 // current one is marked by an ink rule, under its label in the bar and before
 // it in the column, and by `aria-current`. Nothing is filled and nothing is amber.
+//
+// From 600px the column can be tucked away for wide work (sweep S2-10,
+// decision 66): "Hide menu" in the band (`MenuToggle`), or Ctrl+\ (⌘\ on a
+// Mac), narrows it to a 72px strip that holds a running timer, its time and
+// Stop; "Menu" brings it back. The choice is the browser's, kept in a cookie
+// the server reads (`app/shell/menu.ts`), so the page arrives in its shape.
+// The strip's width changes over 200ms, and at once with reduced motion; the
+// page takes its new width at once either way. Under 600px the bar is unchanged.
 
 export interface NavigationProps {
 	/** The slug of the organisation whose destinations these are. */
@@ -45,13 +53,21 @@ export interface NavigationProps {
 	activeIndex: number;
 	/** A number to show beside a destination's label, such as the periods waiting on Approvals; none when 0. */
 	counts?: Partial<Record<DestinationId, number>>;
+	/** Whether the column is tucked away into its strip, from 600px (`MenuToggle`, in the band). */
+	menuHidden: boolean;
 }
 
 /** The id of the popover "More" opens under 600px. */
 export const MORE_ID = "navigation-more";
 
 /** The shell's navigation: the timer's control, then every destination the person is shown, as links. */
-export function Navigation({ organisation, visible, activeIndex, counts = {} }: NavigationProps) {
+export function Navigation({
+	organisation,
+	visible,
+	activeIndex,
+	counts = {},
+	menuHidden,
+}: NavigationProps) {
 	const active = destinations[activeIndex]?.id;
 	const compact = compactNavigation(visible);
 	const inMore = compact.more.flatMap((group) => group.destinations);
@@ -66,18 +82,36 @@ export function Navigation({ organisation, visible, activeIndex, counts = {} }: 
 			<div className={`${PAGE} max-medium:contents medium:h-full`}>
 				<nav
 					aria-label="Main"
-					className={
-						"z-10 bg-surface " +
-						"max-medium:fixed max-medium:inset-x-0 max-medium:bottom-0 max-medium:flex max-medium:h-16 max-medium:border-t-2 max-medium:border-on-surface max-medium:px-1 " +
-						"medium:pointer-events-auto medium:max-h-full medium:w-24 medium:overflow-y-auto medium:pt-6"
-					}
+					data-menu={menuHidden ? "hidden" : "shown"}
+					className={cx(
+						"z-10 bg-surface",
+						"max-medium:fixed max-medium:inset-x-0 max-medium:bottom-0 max-medium:flex max-medium:h-16 max-medium:border-t-2 max-medium:border-on-surface max-medium:px-1",
+						"medium:pointer-events-auto medium:max-h-full medium:overflow-y-auto medium:pt-6 medium:motion-safe:transition-rail",
+						menuHidden ? "medium:w-18" : "medium:w-24",
+					)}
 				>
-					<NavigationTimer organisation={organisation} onTimesheet={active === "timesheet"} />
-					<ul className="max-medium:contents medium:flex medium:flex-col medium:gap-3">
+					<NavigationTimer
+						organisation={organisation}
+						onTimesheet={active === "timesheet"}
+						inStrip={menuHidden}
+					/>
+					{/* While the column grows back from the strip it is narrower than its
+					    links for 200ms: each group is at least 80px, the column's width inside
+					    its scroll bar, so its labels are uncovered, not wrapped again, and the
+					    list clips them across meanwhile. The clip is the list's, not the
+					    column's, so the column scrolls only up and down: `overflow-x: hidden`
+					    on it makes it `hidden auto`, and axe cannot measure the text it cuts
+					    at its foot against what it scrolls to. */}
+					<ul
+						className={cx(
+							"max-medium:contents medium:flex medium:flex-col medium:gap-3 medium:overflow-x-clip",
+							menuHidden && "medium:hidden",
+						)}
+					>
 						{navigationGroups(visible).map(({ heading, destinations: links }) => {
 							const headingId = heading ? `navigation-${heading.toLowerCase()}` : undefined;
 							return (
-								<li key={heading ?? "none"} className="max-medium:contents">
+								<li key={heading ?? "none"} className="max-medium:contents medium:min-w-20">
 									{heading && (
 										<span
 											id={headingId}

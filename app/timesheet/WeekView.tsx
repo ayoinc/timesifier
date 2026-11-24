@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, ViewTransition } from "react";
+import { useEffect, useId, useRef, useState, ViewTransition } from "react";
 import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/Button";
@@ -10,6 +10,7 @@ import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { addDays, type Day } from "~/time/calendar";
+import { nearWord } from "~/time/format";
 
 import { type Aim, stepsAround } from "./aim";
 import { ClosedDays, OvertimeTag, RuleLine } from "./DayRules";
@@ -108,6 +109,7 @@ export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; ai
 				<PeriodStepper
 					label="Weeks"
 					period={formatPeriod(shownStart, shownEnd)}
+					near={nearWord(shownStart, shownEnd, today)}
 					previous={{ to: steps.previous, label: "Previous week" }}
 					next={{ to: steps.next, label: "Next week" }}
 					current={thisWeek ? undefined : { to: weekPath(slug), label: "Back to this week" }}
@@ -150,7 +152,7 @@ export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; ai
 							onPick={setChosen}
 							lastWeek={data.lastWeekProjects.filter((id) => !inGrid.has(id))}
 							onAdd={addRows}
-							canCopyWeek={data.canCopyWeek}
+							copyWeekRefusal={data.copyWeekRefusal}
 							copyingWeek={copy.state !== "idle"}
 							onCopyWeek={() =>
 								copy.submit(
@@ -570,7 +572,9 @@ function withOvertimeRows(
 /**
  * "Add row" for a project with no time yet, and the copies of the last week
  * with time: its rows alone (TS-052), or its hours too (taste HT-F), which
- * never touch a day that has time or is locked.
+ * never touch a day that has time or is locked. The copy with hours is there
+ * whether or not it can be done; when it cannot, it is drawn disabled, kept in
+ * the focus order, and says why under the row (sweep S2-13).
  */
 function AddRows({
 	addable,
@@ -578,7 +582,7 @@ function AddRows({
 	onPick,
 	lastWeek,
 	onAdd,
-	canCopyWeek,
+	copyWeekRefusal,
 	copyingWeek,
 	onCopyWeek,
 }: {
@@ -587,11 +591,13 @@ function AddRows({
 	onPick: (id: string) => void;
 	lastWeek: string[];
 	onAdd: (ids: string[]) => void;
-	canCopyWeek: boolean;
+	/** Why the hours cannot be copied; null when they can. */
+	copyWeekRefusal: string | null;
 	/** Whether "Copy last week with hours" is on its way. */
 	copyingWeek: boolean;
 	onCopyWeek: () => void;
 }) {
+	const whyId = useId();
 	return (
 		<div className="mt-4 flex flex-wrap items-end gap-4">
 			{addable.length > 0 && (
@@ -614,10 +620,19 @@ function AddRows({
 					Copy last week's rows
 				</Button>
 			)}
-			{canCopyWeek && (
-				<Button variant="text" isPending={copyingWeek} onPress={onCopyWeek}>
-					Copy last week with hours
-				</Button>
+			<Button
+				variant="text"
+				isPending={copyingWeek}
+				isUnavailable={copyWeekRefusal !== null}
+				aria-describedby={copyWeekRefusal ? whyId : undefined}
+				onPress={onCopyWeek}
+			>
+				Copy last week with hours
+			</Button>
+			{copyWeekRefusal && (
+				<p id={whyId} className="basis-full text-body-medium text-on-surface-variant">
+					{copyWeekRefusal}
+				</p>
 			)}
 		</div>
 	);

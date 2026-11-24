@@ -18,7 +18,7 @@ import type { loader as monthLoader } from "~/routes/app/timesheet.month";
 import { READ_AHEAD } from "~/shell/PendingBar";
 import { finishRunningTransition } from "~/shell/transitions";
 import type { Day } from "~/time/calendar";
-import { formatDay, formatMonth } from "~/time/format";
+import { formatDay, formatMonth, nearWord } from "~/time/format";
 
 import { calendarDays, monthAfter, monthOf } from "./calendar-sheets";
 import { formatDuration } from "./durations";
@@ -142,6 +142,7 @@ export function DayPicker({
 										const isShown = each === day;
 										const isToday = each === today;
 										const total = totalOf.get(each);
+										const near = nearWord(each, each, today);
 										return (
 											<td key={each} className="p-0">
 												<Link
@@ -152,7 +153,7 @@ export function DayPicker({
 														setOpen(false);
 													}}
 													aria-current={isShown ? "date" : undefined}
-													aria-label={`${isToday ? "Today, " : ""}${formatDay(each)}${
+													aria-label={`${near ? `${near}, ` : ""}${formatDay(each)}${
 														total === undefined
 															? ""
 															: total > 0

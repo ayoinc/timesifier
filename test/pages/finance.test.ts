@@ -708,6 +708,18 @@ const ROLE_TABLE: Record<string, Row> = {
 		},
 	},
 	"routes/app/moved/settings/members": { page: every(301) },
+	// Each person's own navigation column, hidden or shown in their browser (TS-123).
+	// The choice is a cookie the browser keeps, not a row: test/pages/sweep-feel.test.ts
+	// reads what the answer sets.
+	"routes/app/menu": {
+		page: every(200),
+		form: {
+			fields: () => ({ menu: "hidden", back: "/app/acme" }),
+			made: async () => true,
+			post: every<Post>("done"),
+			doneStatus: 202,
+		},
+	},
 	// Each person's own calendar feeds, whatever their role.
 	"routes/app/calendar-feeds": {
 		page: every(200),

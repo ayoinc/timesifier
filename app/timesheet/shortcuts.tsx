@@ -30,6 +30,7 @@ export const SHORTCUTS: readonly { keys: string; does: string }[] = [
 	{ keys: "]", does: "The day, week or month after" },
 	{ keys: "T", does: "Back to today" },
 	{ keys: "+ and -", does: "Zoom in and out of the calendar" },
+	{ keys: "Ctrl+\\", does: "Hide or show the menu (⌘\\ on a Mac), on any page" },
 	{ keys: "?", does: "This list" },
 	{ keys: "Esc", does: "Close a sheet, a menu or a list" },
 ];

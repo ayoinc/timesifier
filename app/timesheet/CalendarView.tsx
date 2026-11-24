@@ -8,14 +8,15 @@ import { PeriodStepper } from "~/components/PeriodStepper";
 import { Tooltip } from "~/components/Tooltip";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TRANSITION, useTravel } from "~/shell/transitions";
-import type { Day } from "~/time/calendar";
-import { formatMonth } from "~/time/format";
+import { addDays, type Day } from "~/time/calendar";
+import { formatMonth, nearWord } from "~/time/format";
 
 import { type Aim, stepsAround } from "./aim";
 import { CalendarMonth } from "./CalendarMonth";
 import { CalendarWeek } from "./CalendarWeek";
 import {
 	calendarDays,
+	monthAfter,
 	monthSheet,
 	ZOOM_LABELS,
 	type ZoomLevel,
@@ -138,6 +139,11 @@ export function CalendarView({
 				<PeriodStepper
 					label={aimedMonth ? "Months" : "Weeks"}
 					period={aimedMonth ? formatMonth(aimedMonth) : formatPeriod(aimedFirst, aimedLast)}
+					near={
+						aimedMonth
+							? nearWord(aimedMonth, addDays(monthAfter(aimedMonth, 1), -1), today)
+							: nearWord(aimedFirst, aimedLast, today)
+					}
 					previous={{ to: steps.previous, label: aimedMonth ? "Previous month" : "Previous week" }}
 					next={{ to: steps.next, label: aimedMonth ? "Next month" : "Next week" }}
 					current={

@@ -69,6 +69,17 @@ Builder: an AI session on branch `ts-122-sweep-rest`, pull request #91. Builds S
 - [x] S2-09 · Pin and Unpin in the row Actions of Projects and of Team's This week, for the person alone: pinned projects head Projects under "Pinned" and Track time's picker above Recent, pinned people head This week. The table `pins` (migration `0033_pins`, decision 65) loses a pin when the pinner or the pinned person leaves, or the project goes. By keyboard, the row's Actions keeps the focus after it moves. Tests: `test/pages/pins.test.ts` (each role and stranger on Projects and the picker, owner, admin and manager on Team, Finance, member, contractor and stranger refused, leaving, the check), `test/projects/project-picker.test.ts`; `e2e/sweep-rest.spec.ts`.
 - [x] Browser spec `e2e/sweep-rest.spec.ts`: each item by keyboard, scanned with axe, at 390 and 1280 px, light and dark; screenshots in `cmux-assets/browser/timesifier/TS-122/`.
 
+### TS-123 · The sweep's small feel details
+
+Builder: an AI session on branch `ts-123-sweep-feel`. From `research/harvest-sweep-2.md`, S2-14, S2-13 and S2-10; decision 66. No migration. In review: the pull request against `main`.
+
+- [x] **1. Where today is (S2-14).** The Day, Week and Calendar steppers, the day picker, the Day view's heading, the Track time sheet's date and History lead with Yesterday, Today, Tomorrow, Last/This/Next week or Last/This/Next month, in the person's zone, the dates kept beneath for every reader (`nearWord`; `test/time/format.test.ts`, "the word a period leads with", over Tokyo, London and Los Angeles across a week's end and both changes of the clocks; `test/pages/sweep-feel.test.ts`, "S2-14", per role and a stranger's 404).
+- [x] **2. An unavailable action says why (S2-13).** "Copy last week with hours" and the Day view's copy are there when they cannot be used: `isUnavailable`, `aria-disabled`, kept in the focus order, described by their reason (`copyWeekRefusal`, `copyRefusal`; `test/pages/sweep-feel.test.ts`, "S2-13", per role, the week and day yet to come, and a stranger's 404; `test/pages/timesheet.test.ts`, "with nothing tracked").
+- [x] **3. The menu tucks away (S2-10).** "Hide menu" in the band from 600px, or Ctrl+\ / ⌘\, folds the column to a 72px strip that keeps a running timer stoppable; the page's column takes the page's width; kept per browser in `__Host-menu`, read on the server; a form that works without script (`/app/<slug>/menu`); 200ms on `motion-safe:` only; the focus on a link that leaves goes to the toggle (`test/pages/sweep-feel.test.ts`, "S2-10", per role, the way back kept inside the organisation, and a stranger's 404; `test/action-validation.test.ts`).
+- [x] **4. Decision 66**, `docs/design-system.md`, `docs/navigation.md`, `docs/security.md` ("The menu cookie").
+- [x] **5. Browser spec.** Keyboard and axe at 390 and 1280px in both schemes; the strip's 72px and the wider column at 1280px, a reload that arrives hidden, a timer stopped from the strip, the shortcut and the focus, and no transition with reduced motion (`e2e/sweep-feel.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-123/`.
+- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+
 ### TS-106 · Buyer pages
 
 Builder: AI session on branch `ts-106-buyer-pages`. In review: the pull request against `main`. No migration. Spec: `research/corporate/cards.md`, TS-106, built to the owner's answers 8, 9 and 10 of 23 November 2026. Decision 64.

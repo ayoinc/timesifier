@@ -13,6 +13,7 @@
 		"app/auth/code.ts",
 		"app/auth/person-name.ts",
 		"app/shell/color-scheme.server.ts",
+		"app/shell/menu.ts",
 		"app/platform/paths.ts",
 		"app/browser-errors/report.ts"
 	],

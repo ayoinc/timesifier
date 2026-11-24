@@ -376,6 +376,13 @@ html {
 		border-radius var(--md-sys-motion-spring-duration) var(--md-sys-motion-spring-easing);
 }
 
+/* The navigation's column narrowing to its strip and back (decision 66): its
+   width alone, 200ms on the standard curve. Used under `motion-safe:` only, so
+   with reduced motion the column takes its new width at once. */
+@utility transition-rail {
+	transition: width var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
+}
+
 /* A link's hover: its underline comes in, thickens or takes the ink, on the same
    short curve a control's state layer does. The line is always drawn, so the
    change is one of colour and thickness, which can move; with reduced motion the

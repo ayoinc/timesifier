@@ -227,6 +227,13 @@ export interface DayData extends TimesheetBase {
 	 * time, is locked or takes none, or there is nothing to copy.
 	 */
 	copyFrom: Day | null;
+	/**
+	 * Why an empty day that takes time has nothing to copy (sweep S2-13): it is
+	 * yet to come, or no working day of the three weeks before has time. Null
+	 * when it can copy, and when it has time or takes none, where the copy is
+	 * not offered at all.
+	 */
+	copyRefusal: string | null;
 }
 
 export interface WeekData extends TimesheetBase, PeriodSubmission {
@@ -235,8 +242,12 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	sheet: WeekSheet;
 	/** The active projects with time in the week before, which "Copy last week's rows" adds (TS-052). */
 	lastWeekProjects: string[];
-	/** Whether a week of the three before has time to copy with its hours (taste HT-F). */
-	canCopyWeek: boolean;
+	/**
+	 * Why the week's hours cannot be copied from a week of the three before
+	 * (taste HT-F, sweep S2-13): it has not begun, its days so far are locked, or
+	 * none of the three has time. Null when it can.
+	 */
+	copyWeekRefusal: string | null;
 	/** The days of the week in a submitted or approved period, or on or before the lock date. */
 	lockedDays: Day[];
 	/** Why each of them is locked. */
@@ -435,15 +446,21 @@ async function dayData(
 	const entries = ofPeriod.filter((entry) => entry.day === day);
 	const { days, total } = weekSheet(ofPeriod, daysFrom(period.startsOn, period.endsOn), now);
 	const rule = rules.find((r) => r.day === day);
-	const open =
+	const fits =
 		entries.length === 0 &&
 		!reasons.has(day) &&
 		rule?.closedReason == null &&
-		rule?.leftMinutes !== 0 &&
-		day <= dayOf(now, zone);
-	const source = open ? await copySourceDay(scope, userId, day) : null;
+		rule?.leftMinutes !== 0;
+	const begun = day <= dayOf(now, zone);
+	const source = fits && begun ? await copySourceDay(scope, userId, day) : null;
 	return {
 		copyFrom: source?.day ?? null,
+		copyRefusal:
+			!fits || source
+				? null
+				: begun
+					? "No working day in the last three weeks has time to copy."
+					: "A day's entries can be copied once the day has come.",
 		view: "day" as const,
 		day,
 		entries,
@@ -477,11 +494,19 @@ async function weekData(
 		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
-	const open = days.some((day) => !reasons.has(day) && day <= dayOf(now, zone));
+	const today = dayOf(now, zone);
+	const open = days.some((day) => !reasons.has(day) && day <= today);
 	const source = open ? await copySourceWeek(scope, userId, period) : null;
 	return {
 		view: "week" as const,
-		canCopyWeek: source !== null,
+		copyWeekRefusal:
+			period.startsOn > today
+				? "Hours can be copied once the week has begun."
+				: !open
+					? "The week's days so far are locked."
+					: source === null
+						? "No week in the last three has time to copy."
+						: null,
 		...submission,
 		days,
 		sheet: weekSheet(entries, days, now, { projectOrder: projects.map((p) => p.id) }),
