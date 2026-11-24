@@ -10,7 +10,7 @@ import * as z from "zod";
  *   client that are not billable, grouped apart in the picker.
  *
  * Existing organisations became `both` where Clients was on and `internal`
- * where it was off, there still calling them "Projects" (migration 0033), so
+ * where it was off, there still calling them "Projects" (migration 0034), so
  * nothing they saw changed.
  */
 export const WORK_MODELS = ["client_projects", "internal", "both"] as const;

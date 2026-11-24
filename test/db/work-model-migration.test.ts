@@ -5,7 +5,7 @@ import { captureEmail, type Mailbox } from "../auth/harness";
 import { row, seedMembership } from "../organisations/harness";
 import { open, type Person, pageBody, person, textOf } from "../pages/harness";
 
-// Migration 0033_codes_and_work_model (TS-115a, decision 67) on a database
+// Migration 0034_codes_and_work_model (TS-115a, decision 67) on a database
 // built up to the migration before it. The owner's decision 8
 // (research/projects-model.md) promised that nothing an organisation sees
 // changes: one with Clients on becomes Client projects, where a project with
@@ -22,7 +22,7 @@ import { open, type Person, pageBody, person, textOf } from "../pages/harness";
 // invoice and no estimate is no longer shown the empty Invoices and Estimates.
 
 const MIGRATIONS = (env as Cloudflare.Env & { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
-const MIGRATION = "0033_codes_and_work_model.sql";
+const MIGRATION = "0034_codes_and_work_model.sql";
 
 /** The main navigation's links with Clients on: the bar's, then the same again in its More menu. */
 const NAVIGATION_ON = [
@@ -35,7 +35,7 @@ const NAVIGATION_ON = [
 	...["Dashboards", "Activity log", "Integrations", "Workspace settings"],
 ];
 
-/** What the owner was shown before 0033: the navigation, the Projects page's groups, which pages answer. */
+/** What the owner was shown before 0034: the navigation, the Projects page's groups, which pages answer. */
 const BEFORE = {
 	on: {
 		navigation: NAVIGATION_ON,
@@ -65,12 +65,12 @@ afterEach(() => {
 });
 
 /**
- * An organisation as it was before 0033, with Clients on or off: a client's
+ * An organisation as it was before 0034, with Clients on or off: a client's
  * project, and two with no client, one billing by the hour and one billing
  * nothing (which Both would have moved under its work codes); and, if asked,
  * an invoice or an estimate for its client.
  */
-async function seedBefore0033(
+async function seedBefore0034(
 	slug: string,
 	clientsEnabled: boolean,
 	holds: "invoice" | "estimate" | null = null,
@@ -153,10 +153,10 @@ async function shown(slug: string, email: string) {
 	};
 }
 
-describe("migration 0033 on a database at the migration before it", () => {
+describe("migration 0034 on a database at the migration before it", () => {
 	it("makes an organisation with Clients on Client projects, and one with Clients off Internal work saying Projects", async () => {
-		await seedBefore0033("on", true);
-		await seedBefore0033("off", false);
+		await seedBefore0034("on", true);
+		await seedBefore0034("off", false);
 		await applyD1Migrations(env.DB, MIGRATIONS);
 		const settings = (id: string) =>
 			row(
@@ -182,7 +182,7 @@ describe("migration 0033 on a database at the migration before it", () => {
 	});
 
 	it("shows the organisation that had Clients on exactly what it was shown before", async () => {
-		await seedBefore0033("on", true);
+		await seedBefore0034("on", true);
 		await applyD1Migrations(env.DB, MIGRATIONS);
 		const { text, ...after } = await shown("on", "ada@example.com");
 		expect(after).toEqual(BEFORE.on);
@@ -194,7 +194,7 @@ describe("migration 0033 on a database at the migration before it", () => {
 	it.each(["invoice", "estimate"] as const)(
 		"shows the organisation that had Clients off and holds an %s exactly what it was shown before",
 		async (holds) => {
-			await seedBefore0033("off", false, holds);
+			await seedBefore0034("off", false, holds);
 			await applyD1Migrations(env.DB, MIGRATIONS);
 			const { text, ...after } = await shown("off", "grace@example.com");
 			expect(after).toEqual(BEFORE.off);
@@ -205,7 +205,7 @@ describe("migration 0033 on a database at the migration before it", () => {
 	);
 
 	it("shows the organisation that had Clients off and holds none what it was shown before, but the empty Invoices and Estimates", async () => {
-		await seedBefore0033("off", false);
+		await seedBefore0034("off", false);
 		await applyD1Migrations(env.DB, MIGRATIONS);
 		const { text, ...after } = await shown("off", "grace@example.com");
 		const billing = ["Invoices", "Estimates"];

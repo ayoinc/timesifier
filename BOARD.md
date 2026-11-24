@@ -80,7 +80,7 @@ Builder: an AI session on branch `ts-126-export-everything`, pull request #105. 
 
 ### TS-115a · Codes, How you work, and who creates projects
 
-Builder: an AI session on branch `ts-115a-codes`, pull request #100. Builds the owner's decisions 1 (codes), 5 (who creates projects) and 8 (How you work) of `research/projects-model.md`; work packages, project teams and the time share are later cards. Decisions 42 and 67 are this card's, and it amends decisions 25 and 65. Migration `0033_codes_and_work_model`, after #91's `0032_pins`. It waits only on the owner's screenshots. Left over: dropping `clients_enabled` (Backlog, "Drop `clients_enabled` (after TS-115a)").
+Builder: an AI session on branch `ts-115a-codes`, pull request #100. Builds the owner's decisions 1 (codes), 5 (who creates projects) and 8 (How you work) of `research/projects-model.md`; work packages, project teams and the time share are later cards. Decisions 42 and 67 are this card's, and it amends decisions 25 and 65. Migration `0034_codes_and_work_model`, after #91's `0032_pins` and #105's `0033_organisation_exports`. It waits only on the owner's screenshots. Left over: dropping `clients_enabled` (Backlog, "Drop `clients_enabled` (after TS-115a)").
 
 - [x] A client and a project each have an optional code, shown first wherever they appear (`ACME-001 · Website`): on the Timesheet and in the picker, which finds a project by its code or its client's, on Projects, Clients and a project's page, in Reports and their export, on invoices and estimates, and in the API and the import. Tests: `test/pages/codes-timesheet.test.ts`, `test/reports/codes.test.ts`, `test/billing/documents.test.ts`, `test/integrations/codes.test.ts`.
 - [x] Two codes that differ only in capitals or in how the letters are written are the same in an organisation, archived ones included, and the unique index refuses the second even when two writes pass the check at once; another organisation may use it. Test: `test/pages/codes-unique.test.ts`.
@@ -96,7 +96,7 @@ Builder: an AI session on branch `ts-115a-codes`, pull request #100. Builds the 
 - [x] Editing, archiving, restoring and Duplicate follow the same rule as creating a project for that client, on the page and at the server; a stranger gets 404. Test: `test/pages/project-creators.test.ts` ("who edits, archives and duplicates projects (decisions 42 and 65)").
 - [x] A copy's code is never its source's: none, the pattern's next, or one typed that no other project has; a work code's copy follows the work codes' rule. Test: `test/pages/projects-duplicate.test.ts` ("the copy's code (TS-115a)").
 - [x] The Code field's example is OPS-01 for a work code and anything under Internal work, and ACME-001 for a client project. Test: `e2e/codes.spec.ts` ("2. Create on Projects gives a client project's code as its example…", "4. …Projects page is Work codes…", "3. the account manager is offered Create…").
-- [x] Migration 0033 makes an organisation with Clients on Client projects and one with Clients off Internal work called "Projects", and shows each what it was shown before, but the empty Invoices and Estimates of one with Clients off holding none. Test: `test/db/work-model-migration.test.ts`.
+- [x] Migration 0034 makes an organisation with Clients on Client projects and one with Clients off Internal work called "Projects", and shows each what it was shown before, but the empty Invoices and Estimates of one with Clients off holding none. Test: `test/db/work-model-migration.test.ts`.
 - [x] Each part works by the keyboard alone and axe finds nothing, at 390px and 1280px in light and dark; on `/app/new` each radio's ring is centred on its label's first line. Test: `e2e/codes.spec.ts`.
 - [ ] The owner has accepted the screenshots at 390px and 1280px in both colour schemes, in `cmux-assets/browser/timesifier/TS-115a/`.
 
@@ -706,9 +706,9 @@ Cards TS-064 to TS-089 come from `docs/research/harvest-b2b.md`, observed in Har
 
 ### Drop `clients_enabled` (after TS-115a)
 
-From TS-115a (decision 67). Waits until the release with migration 0033 has run in production long enough that no Worker of an earlier release can be rolled back to.
+From TS-115a (decision 67). Waits until the release with migration 0034 has run in production long enough that no Worker of an earlier release can be rolled back to.
 
-- [ ] A migration that ships alone drops `organisations.clients_enabled`, which nothing reads since 0033 (`hasClients(work_model)` decides), and `changeGeneral` and `startWorkModel` in `app/workspace/general.server.ts` stop writing it; `docs/architecture.md` and `docs/security.md` lose their lines about it, and `test/db/work-model-migration.test.ts` stops reading it.
+- [ ] A migration that ships alone drops `organisations.clients_enabled`, which nothing reads since 0034 (`hasClients(work_model)` decides), and `changeGeneral` and `startWorkModel` in `app/workspace/general.server.ts` stop writing it; `docs/architecture.md` and `docs/security.md` lose their lines about it, and `test/db/work-model-migration.test.ts` stops reading it.
 
 ### TS-113b · Fast at company size, the rest
 
