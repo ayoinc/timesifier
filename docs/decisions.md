@@ -1004,6 +1004,7 @@ Decided by the owner on 2026-11-23 for TS-122 (research/harvest-sweep-2.md, S2-0
 
 **What it costs.** One more table, read once per page by Projects, Team and the Timesheet. A person who may no longer see someone on Team keeps the pin, unused, until either of them leaves. A member who used to be able to duplicate a project no longer can.
 
+<<<<<<< HEAD
 ### 66. The sweep's feel details: where today is, why an action waits, and a menu that tucks away
 
 Decided for TS-123, from the harvest sweep 2 (S2-14, S2-13, S2-10, `research/harvest-sweep-2.md`), with the owner's direction of 2026-11-23 that hiding the menu is remembered per browser, with a cookie like the colour scheme's, and not per account.
@@ -1025,3 +1026,53 @@ Decided for TS-123, from the harvest sweep 2 (S2-14, S2-13, S2-10, `research/har
 | `[` for the menu, as the sweep proposed                     | Already the Timesheet's key for the period before (taste HT-D).                                                                                                                                                 |
 
 **What it costs.** One more cookie, which identifies nobody and grants nothing. Pages are drawn at two widths of column from 600px, so a page is checked at both. A disabled button in the focus order is one more Tab stop on the Week and Day views while there is nothing to copy.
+=======
+### 68. Notifications: who is told, nobody of their own, a manager away skipped, and one store the bell reads
+
+TS-049, 2026-11-24. Builds on entries 47 (D5) and 48 (D6); the reminders, the emails and the keeping are entry 69.
+
+**What tells whom.** Each kind is in `NOTIFICATION_KINDS` (`app/notifications/kinds.ts`); `test/notifications/events.test.ts` holds each one role by role (owner, admin, Finance, manager, member, contractor, and a stranger from another organisation).
+
+- A week submitted (`week-waiting`): its deciders, told the person's name, which Approvals shows them, and nothing of its hours.
+- A week the system submitted at the lock date (TR-01): its deciders, as above, and its person (`system`), with why. A timer the lock date stopped (TR-02, `system`): its person alone.
+- A week approved, returned or reopened (`week-decided`): its person, with the reason given; the decider is not named.
+- A request for leave or extra work (`request-waiting`): its deciders, by `mayDecideLeaveOf`. A decider who may not see that kind of leave (`maySeeLeaveKindOf`) is told "leave", never the kind; no decider is told the request's reason.
+- A request approved, refused or cancelled (`request-decided`): its person.
+- A project's budget past its alert (TS-069, `budget`): those TS-069 tells, now in the bell as well as by email.
+- Asked to submit (`submit-reminder`): the person an owner, admin or manager asks from Approvals › Not submitted, one at a time or "Remind all", with the asker's name. Only those the asker decides for and the list shows, once the week has ended; once a day for each week, however often it is pressed.
+- The reminders of a running timer, the deadline and weeks waiting: entry 69.
+
+**Deciders** (`decidersOf` in `app/notifications/notify.server.ts`): the managers of the teams the person is in. A manager on leave all of today is skipped (D6, entry 48). Where no manager of theirs is there, the fallback is the organisation's owners and admins. Each is kept only where `mayDecidePeriodOf` or `mayDecideLeaveOf` says they decide it.
+
+**Nobody is told of their own** (D5, entry 47). The decider's own week or request is never theirs to be told of, so a manager who is also a member of their team is not told of their own week; their week goes to the other managers, or to the owners and admins. A person nobody else may decide for has their week approved by the system as they submit it, and nobody is told it waits; where the system submitted it, they are told it was "submitted and approved by the system".
+
+**What a notification says.** Only what its person may already see, in words the server writes: no notification copies a reason someone else typed, except to the person it was given to, which their timesheet and Time off already show. Its address is kept below the organisation's (`?view=week&start=…`, `/approvals`), so it still leads to its page after the organisation's address changes.
+
+**The store.** `notifications` (migration `0034_notifications`): one row for one person in one organisation, with its kind, words, address, an optional key, its email state and when it was read. It is a tenant table, reached only through `organisationScope`, and its rows go with the membership (a foreign key to `memberships`, on delete cascade) and with the organisation. A reminder's key is unique for the person in the organisation, so it is written once however many runs reach it (`insertIfAbsent`).
+
+**The bell** (`app/shell/NotificationBell.tsx`): a 40px circle beside the profile menu, with a 48px target, so the band stays 80px (TS-123). Its badge is the unread count, which the organisation's loader reads in one statement on each page and every 30 seconds (`test/organisations/request-memo.test.ts`), shown up to "99+". Opening it posts "read" to `/app/:organisation/notifications`, which answers the latest 30 (`BELL_LIMIT`) as they stood and marks every one read, so the count goes to 0. Each item is a link to its page. It is a button and a dialog: Enter or Space opens it, Tab reaches its links, Escape closes it and gives the focus back (`e2e/notifications.spec.ts`).
+
+**Not chosen.** Marking each item read on its own: the count is of what is new since the person last looked, and an item is read when it is seen in the list. A push to the browser (a Durable Object or a WebSocket): entry 7 keeps D1 alone until a feature needs real-time coordination, and the count a page reads every 30 seconds is soon enough for news that waits days for a decision.
+
+### 69. Reminders where each person is, once in each period; email by choice, 100 a run, a day at most; kept 90 days; the hourly run reads only organisations with work
+
+TS-049, 2026-11-24. With entry 68. `app/notifications/reminders.server.ts`, `app/notifications/mail.server.ts`, `workers/scheduled.ts`.
+
+**Reminders, in each person's zone** (their own, else the organisation's), from the hourly run (`test/notifications/reminders.test.ts`, London, Tokyo and Los Angeles across the end of a week):
+
+- The deadline: at the last 09:00 (`REMINDER_HOUR`) where the person is that is at least an hour before the organisation's deadline, for each week it covers that they have not submitted, and not for a week that ended before they joined.
+- Weeks waiting: once a day to each approver, from 09:00 to 18:00 where they are, for the weeks submitted before their today. An approver on leave all of their today is skipped, and the owners and admins are told in their place (D6).
+- A running timer: once a day, when the timer has run past the regular hours its day takes (`dayRulesOf`).
+
+None goes to a person on leave all of today. Each goes once in its period, by its key: `deadline:<the deadline's day>`, `approvals:<the approver's day>`, `timer:<the entry's day>`; a second run in the same hour, or the hour coming round again, adds nothing. Asked to submit (entry 68) is keyed `asked:<the week>:<the asker's day>`.
+
+**Email by choice.** Every notification is in the bell. Each kind also comes by email unless its person turned that kind off on My account › Notifications: one switch per kind, theirs alone, the same in every organisation (`notification_choices`, keyed by person and kind; a kind with no row sends email). A person who decides nobody's week, request or budget is not offered those kinds (`test/notifications/choices.test.ts`). The choices are in the person's data export.
+
+**Sending: 100 a run, a day at most.** The scheduled work sends waiting emails every minute, oldest first, at most 100 a run (`NOTIFICATION_EMAILS_PER_RUN`), so one busy minute cannot use a run's whole budget of requests. One whose kind its person has turned off since, or that has waited more than a day, is marked skipped and never sent: a reminder of a deadline that has passed, or of a week since decided, is wrong news. The first email that cannot be sent stops the run, and it and the rest wait for the next (`test/notifications/mail.test.ts`).
+
+**Kept 90 days.** The daily job deletes every notification older than `NOTIFICATION_RETENTION_DAYS`, read or not, in every organisation; the privacy notice and `/security` say so from that constant (`test/claims.test.ts`).
+
+**The hourly run reads only organisations with work.** `remindableOrganisations` reads the organisations with a timer running, from the partial index of running entries, and with a week waiting, from a new partial index of submitted weeks (`periods_submitted_idx`, migration `0034`). An organisation with a deadline is read as one row, and only one whose deadline is due within 25 hours reads its members. An organisation with none of these costs the run nothing.
+
+**The scale limit that remains.** The hourly run is one Worker invocation for every organisation, after auto-lock, the lock date's reach and billing in the same invocation. Cloudflare's D1 limits page gives, for "Queries per Worker invocation", "1000 (Workers Paid) / 50 (Free)", and says a `db.batch()` call counts as a single query against it (<https://developers.cloudflare.com/d1/platform/limits/>, modified 2026-11-20, read 2026-11-24). Measured on this branch on 2026-11-24, by counting the statements `runReminders` prepares in the Workers test runtime (a throwaway test, not kept): 3 queries for a run with nothing to remind; 9 for an organisation of 11 people whose deadline reminder is due; about 15 for each running timer, which is checked against its day's rules on its own; 154 for one organisation with 10 timers running and 10 weeks waiting. About 65 timers running at once across every organisation, fewer with the other hourly steps, would pass the limit; the run would then fail with "Too many API requests by single Worker invocation", and the organisations after that point would go unreminded that hour. TS-049b moves each organisation's reminders onto a Queue, so each has an invocation, and its 1,000 queries, of its own.
+>>>>>>> 8061119 (TS-049 Step 9: decisions 68 and 69, with D1's query limit per invocation measured; /security and docs/security.md say how notifications and their emails are kept)
