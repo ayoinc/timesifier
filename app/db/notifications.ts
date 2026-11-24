@@ -1,8 +1,41 @@
-import { and, asc, eq, lt } from "drizzle-orm";
+import { and, asc, eq, isNull, lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { among } from "./among";
-import { notificationChoices, notifications, organisations, users } from "./schema";
+import {
+	notificationChoices,
+	notifications,
+	organisations,
+	periods,
+	timeEntries,
+	users,
+} from "./schema";
+
+/**
+ * The organisations the hourly reminders have work in (TS-049, decision 69):
+ * those with a timer running, read from the partial index of running timers,
+ * and those with a week waiting, from the partial index of submitted weeks.
+ * Neither reads more than the rows it returns.
+ */
+export async function remindableOrganisations(
+	database: D1Database,
+): Promise<{ timing: Set<string>; waiting: Set<string> }> {
+	const db = drizzle(database);
+	const [timing, waiting] = await Promise.all([
+		db
+			.selectDistinct({ id: timeEntries.organisationId })
+			.from(timeEntries)
+			.where(isNull(timeEntries.endedAt)),
+		db
+			.selectDistinct({ id: periods.organisationId })
+			.from(periods)
+			.where(eq(periods.status, "submitted")),
+	]);
+	return {
+		timing: new Set(timing.map(({ id }) => id)),
+		waiting: new Set(waiting.map(({ id }) => id)),
+	};
+}
 
 /**
  * Notifications' reads and writes that cross organisations (TS-049): the

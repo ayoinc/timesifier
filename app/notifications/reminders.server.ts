@@ -1,9 +1,16 @@
 import { env } from "cloudflare:workers";
-import { and, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { onLeaveToday } from "~/approvals/approvals.server";
-import { among, type OrganisationScope, organisationScope, organisations, users } from "~/db";
+import {
+	among,
+	type OrganisationScope,
+	organisationScope,
+	organisations,
+	remindableOrganisations,
+	users,
+} from "~/db";
 import { dayRulesOf } from "~/leave/rules.server";
 import { deadlineOf, latestDeadlinePassed, nextDeadline } from "~/locks/deadline";
 import { locksEntries, PeriodStatus, periodContaining, periodOfWeek } from "~/periods/periods";
@@ -48,8 +55,14 @@ interface Organisation {
 	deadlineTime: string | null;
 }
 
-/** Each organisation's reminders at `now`. */
+/**
+ * Each organisation's reminders at `now`. Only organisations with work are
+ * read (decision 69): a timer running or a week waiting, each found through
+ * a partial index, or a deadline; and of those with a deadline, only one due
+ * within a day reads anything more (`deadlineReminders`).
+ */
 export async function runReminders(now: number): Promise<void> {
+	const { timing, waiting } = await remindableOrganisations(env.DB);
 	const rows: Organisation[] = await drizzle(env.DB)
 		.select({
 			id: organisations.id,
@@ -59,13 +72,16 @@ export async function runReminders(now: number): Promise<void> {
 			deadlineDay: organisations.deadlineDay,
 			deadlineTime: organisations.deadlineTime,
 		})
-		.from(organisations);
+		.from(organisations)
+		.where(
+			or(ne(organisations.deadlineKind, "none"), among(organisations.id, [...timing, ...waiting])),
+		);
 	for (const organisation of rows) {
 		const scope = organisationScope(env.DB, organisation.id);
 		const reminders = [
-			...(await timerReminders(scope, organisation, now)),
+			...(timing.has(organisation.id) ? await timerReminders(scope, organisation, now) : []),
 			...(await deadlineReminders(scope, organisation, now)),
-			...(await approvalsReminders(scope, organisation, now)),
+			...(waiting.has(organisation.id) ? await approvalsReminders(scope, organisation, now) : []),
 		];
 		const [first, ...rest] = notificationStatements(scope, reminders);
 		if (first) await scope.batch([first, ...rest]);
@@ -182,6 +198,8 @@ async function deadlineReminders(
 	if (day === null) return [];
 	const [hours, minutes] = deadline.time.split(":").map(Number) as [number, number];
 	const at = instantAt(day, hours * 60 + minutes, organisation.timeZone);
+	// No reminder is due more than a day and an hour before its deadline, wherever its person is.
+	if (at - now > 25 * HOUR_MS) return [];
 	const previous = latestDeadlinePassed(deadline, organisation.timeZone, at - 1);
 	const weeks = weeksDue(organisation, day, previous);
 	const first = weeks[0];

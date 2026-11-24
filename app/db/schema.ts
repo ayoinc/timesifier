@@ -698,6 +698,11 @@ export const periods = sqliteTable(
 			table.status,
 			table.startsOn,
 		),
+		// The organisations with a week waiting, read across all of them by the
+		// hourly reminders (TS-049): it holds the submitted weeks alone.
+		index("periods_submitted_idx")
+			.on(table.organisationId)
+			.where(sql`${table.status} = 'submitted'`),
 		check(
 			"periods_status_known",
 			sql`${table.status} IN ('submitted', 'withdrawn', 'approved', 'returned')`,

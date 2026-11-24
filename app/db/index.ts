@@ -21,6 +21,7 @@ export {
 	deleteNotificationsBefore,
 	markNotificationEmails,
 	notificationChoicesOf,
+	remindableOrganisations,
 	setNotificationChoice,
 	waitingNotificationEmails,
 } from "./notifications";

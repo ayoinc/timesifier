@@ -29,4 +29,5 @@ CREATE UNIQUE INDEX `notifications_organisation_id_id_unique` ON `notifications`
 CREATE INDEX `notifications_organisation_id_user_id_created_at_idx` ON `notifications` (`organisation_id`,`user_id`,`created_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `notifications_key_unique` ON `notifications` (`organisation_id`,`user_id`,`key`) WHERE "notifications"."key" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX `notifications_email_waiting_idx` ON `notifications` (`created_at`) WHERE "notifications"."email_state" = 'waiting';--> statement-breakpoint
-CREATE INDEX `notifications_created_at_idx` ON `notifications` (`created_at`);
+CREATE INDEX `notifications_created_at_idx` ON `notifications` (`created_at`);--> statement-breakpoint
+CREATE INDEX `periods_submitted_idx` ON `periods` (`organisation_id`) WHERE "periods"."status" = 'submitted';

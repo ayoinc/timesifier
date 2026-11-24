@@ -5087,6 +5087,14 @@
             "starts_on"
           ],
           "isUnique": false
+        },
+        "periods_submitted_idx": {
+          "name": "periods_submitted_idx",
+          "columns": [
+            "organisation_id"
+          ],
+          "isUnique": false,
+          "where": "\"periods\".\"status\" = 'submitted'"
         }
       },
       "foreignKeys": {
