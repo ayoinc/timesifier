@@ -25,6 +25,7 @@ import {
 	PAY_BASES,
 	PAY_BASIS_LABELS,
 	PRIOR_DAYS,
+	PRIOR_DAYS_HINTS,
 	PRIOR_DAYS_LABELS,
 	type PriorDays,
 	priorDaysQuestion,
@@ -906,7 +907,7 @@ function TermsSheet({
 					isRequired
 				>
 					{PRIOR_DAYS.map((id) => (
-						<Radio key={id} value={id}>
+						<Radio key={id} value={id} hint={PRIOR_DAYS_HINTS[id]}>
 							{PRIOR_DAYS_LABELS[id]}
 						</Radio>
 					))}

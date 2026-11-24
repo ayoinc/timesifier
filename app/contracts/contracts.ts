@@ -160,8 +160,14 @@ export type PriorDays = (typeof PRIOR_DAYS)[number];
 
 /** The Give sheet's answers to how the days before a first contract count. */
 export const PRIOR_DAYS_LABELS: Record<PriorDays, string> = {
-	allowance: "Count at the usual allowance (they worked here before; their balance stays as it is)",
-	nothing: "Count nothing (they start with this contract)",
+	allowance: "Count at the usual allowance",
+	nothing: "Count nothing",
+};
+
+/** What each answer means, under it. */
+export const PRIOR_DAYS_HINTS: Record<PriorDays, string> = {
+	allowance: "They worked here before; their balance stays as it is.",
+	nothing: "They start with this contract.",
 };
 
 /** Days a member joined before their first contract starts from which the Give sheet suggests their earlier days count at the allowance. */

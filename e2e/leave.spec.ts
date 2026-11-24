@@ -320,18 +320,16 @@ for (const viewport of [
 const SHOTS = process.env.TS098B_SHOTS;
 
 /**
- * Scans the page, and photographs it first when shots are asked for: a page
- * whole, a sheet as the window shows it, since a sheet does not scroll with
- * the page.
+ * Scans the page, and photographs it first when shots are asked for, as the
+ * window shows it with the view's subject scrolled into it. Not the whole page:
+ * a whole-page shot draws the bars fixed to the window where the window was,
+ * across the page's middle.
  */
 async function scanned(page: Page, shot: string, unmeasurable: string[] = []) {
 	const found = await problems(page, unmeasurable);
 	if (SHOTS) {
 		mkdirSync(SHOTS, { recursive: true });
-		await page.screenshot({
-			path: join(SHOTS, `${shot}.png`),
-			fullPage: unmeasurable !== IN_A_SHEET,
-		});
+		await page.screenshot({ path: join(SHOTS, `${shot}.png`) });
 	}
 	expect(found, `problems in ${shot}`).toEqual([]);
 }
@@ -341,8 +339,21 @@ const PARTLY_SCROLLED_AWAY = "elmPartiallyObscured";
 const IN_A_SHEET = [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS, EMPTY_INPUT, PARTLY_SCROLLED_AWAY];
 
 /**
- * Presses Tab until `element` holds the focus. A button's focus shows as an
- * outline; a field's as its own indicator, which the screenshots show.
+ * Scrolls `subject` to the middle of the window, or of the sheet it is in, so
+ * all of it shows between the bars fixed to the window's top and bottom.
+ * Playwright's scrollIntoViewIfNeeded leaves alone a subject already partly in view.
+ */
+async function centre(subject: Locator) {
+	await subject.evaluate((e) => e.scrollIntoView({ block: "center" }));
+}
+
+/**
+ * Presses Tab until `element` holds the focus, and checks the focus shows as
+ * docs/design-system.md draws it. A text field: the line along its bottom
+ * thickens to 2px (`fieldIndicator`; e2e/field-label.spec.ts measures the same
+ * line). A radio: the 40px circle around it takes the focus ring, an outline,
+ * since the input itself is hidden. A button, a select's among them: the ring
+ * on the button.
  */
 async function tabTo(page: Page, element: Locator) {
 	for (let presses = 0; presses < 60; presses += 1) {
@@ -350,10 +361,25 @@ async function tabTo(page: Page, element: Locator) {
 		await page.keyboard.press("Tab");
 	}
 	await expect(element).toBeFocused();
-	const shown = await element.evaluate(
-		(e) => e.tagName !== "BUTTON" || getComputedStyle(e).outlineStyle !== "none",
-	);
-	expect(shown, "the focus is shown").toBe(true);
+	await expect
+		.poll(
+			() =>
+				element.evaluate((e) => {
+					const ringed = (shown: Element | null | undefined) =>
+						shown != null && getComputedStyle(shown).outlineStyle !== "none";
+					if (e instanceof HTMLInputElement && e.type === "radio") {
+						return ringed(e.closest("label")?.querySelector(":scope > span"));
+					}
+					if (e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement) {
+						const lines = e.parentElement?.querySelectorAll(":scope > span");
+						const line = lines?.[lines.length - 1];
+						return line !== undefined && Math.round(line.getBoundingClientRect().height) === 2;
+					}
+					return ringed(e);
+				}),
+			{ message: "the focus is shown" },
+		)
+		.toBe(true);
 }
 
 /** Chooses `option` in the select labelled `label`, with the keyboard: Enter opens it, typing finds the option. */
@@ -405,7 +431,7 @@ for (const viewport of [
 					"The leave year starts on 6 April.",
 				);
 				await expect(leaveYear).toContainText("6 April");
-				await leaveYear.scrollIntoViewIfNeeded();
+				await centre(leaveYear);
 				await scanned(page, `settings-leave-${at}`);
 
 				// Team › Ada › Contract: she has none, and gives herself one from tomorrow.
@@ -435,6 +461,7 @@ for (const viewport of [
 				const preview = give.getByRole("status").filter({ hasText: /^This year/ });
 				await expect(preview).toHaveText(/^This year: 25 days → \d+(\.5)? days?$/);
 				await expect(preview).not.toHaveText("This year: 25 days → 25 days");
+				await centre(question);
 				await scanned(page, `contract-give-question-nothing-${at}`, IN_A_SHEET);
 				// The arrow keys move the answer, and the preview follows it.
 				await tabTo(page, nothing);
@@ -450,7 +477,7 @@ for (const viewport of [
 				const balance = page.getByRole("list", { name: `Annual leave, ${label}`, exact: true });
 				await expect(balance).toContainText("From the contract: 25 days this leave year.");
 				await expect(balance).toContainText("25 days left");
-				await balance.scrollIntoViewIfNeeded();
+				await centre(balance);
 				await scanned(page, `contract-balance-${at}`);
 
 				// The adjustment sheet: two days more, with a reason, by keyboard.
@@ -473,7 +500,7 @@ for (const viewport of [
 				await expect(balance).toContainText(
 					"Added: 2 days“Opening balance from the old system”Ada Lovelace,",
 				);
-				await balance.scrollIntoViewIfNeeded();
+				await centre(balance);
 				await scanned(page, `contract-adjusted-${at}`);
 
 				// Time off: the balance of the leave year, from the contract, with the adjustment.
@@ -489,6 +516,7 @@ for (const viewport of [
 				await expect(balances).toContainText(
 					"Annual leave added: 2 days“Opening balance from the old system”",
 				);
+				await centre(balances);
 				await scanned(page, `time-off-balance-${at}`);
 			});
 		});
