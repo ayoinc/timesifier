@@ -44,7 +44,7 @@ describe("My account › Notifications", () => {
 		expect(await choices()).toEqual([]);
 	});
 
-	it("shows a member the kinds about their own work, and none for deciders or budgets until they manage a team", async () => {
+	it("shows a member the kinds about their own work, none for deciders or budgets until they manage a team, and none of the export but to an owner", async () => {
 		const own = NOTIFICATION_KINDS.filter((kind) => KIND_WORDS[kind].audience === "everyone");
 		const others = NOTIFICATION_KINDS.filter((kind) => KIND_WORDS[kind].audience !== "everyone");
 		const text = textOf(await pageBody(await open(ACCOUNT, linus)));
@@ -53,7 +53,20 @@ describe("My account › Notifications", () => {
 
 		await seedTeam(acme.id, "Design", { managers: [linus.user.id] });
 		const managing = textOf(await pageBody(await open(ACCOUNT, linus)));
-		for (const kind of NOTIFICATION_KINDS) expect(managing).toContain(KIND_WORDS[kind].label);
+		for (const kind of NOTIFICATION_KINDS) {
+			if (KIND_WORDS[kind].audience === "owners")
+				expect(managing).not.toContain(KIND_WORDS[kind].label);
+			else expect(managing).toContain(KIND_WORDS[kind].label);
+		}
+
+		// An admin decides, but the export of everything is an owner's alone.
+		await env.DB.prepare("update memberships set role = 'admin' where user_id = ?")
+			.bind(linus.user.id)
+			.run();
+		const admin = textOf(await pageBody(await open(ACCOUNT, linus)));
+		expect(admin).toContain(KIND_WORDS["approvals-reminder"].label);
+		expect(admin).not.toContain(KIND_WORDS["export-ready"].label);
+		expect(admin).not.toContain(KIND_WORDS["export-failed"].label);
 	});
 
 	it("turns one kind's email off and on for the signed-in person alone", async () => {

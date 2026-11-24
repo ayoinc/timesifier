@@ -4,8 +4,6 @@ import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
 import { record, recordStatement } from "~/activity/activity.server";
-import { sendEmail } from "~/auth/email.server";
-import { compose } from "~/auth/email-frame";
 import { EXTENSIONS } from "~/brand/images";
 import { MADE_WITH } from "~/brand/made-with";
 import {
@@ -13,7 +11,6 @@ import {
 	logoRenditionFile,
 	organisationBrandOf,
 } from "~/brand/organisation-brand.server";
-import { getPlatformBrand } from "~/brand/platform-brand.server";
 import {
 	among,
 	EXPORTED_TABLES,
@@ -25,19 +22,24 @@ import {
 	organisationScope,
 	organisations,
 	runningExports,
+	type ScopedStatement,
 	type TenantRow,
 	users,
 	uuidv7,
 } from "~/db";
 import { getReceipt } from "~/expenses/receipts.server";
-import { setting } from "~/lib/deployment";
 import { type ZipEntry, zipEnd, zipFile } from "~/lib/zip";
+import {
+	exportFailed,
+	exportReady,
+	type NewNotification,
+	notificationStatements,
+} from "~/notifications/words";
 import { exportFilename } from "~/organisations/export-filename";
 import { BYTE_ORDER_MARK, csvLine } from "~/reports/csv";
 import { dayOf } from "~/time/calendar";
-import { formatDayWithYear } from "~/time/format";
 
-import { EXPORT_FORMAT_VERSION, EXPORT_KEEP_DAYS, everythingExportPath } from "./paths";
+import { EXPORT_FORMAT_VERSION, EXPORT_KEEP_DAYS } from "./paths";
 
 /**
  * The export of everything an organisation holds (TS-126, docs/decisions.md
@@ -66,8 +68,9 @@ import { EXPORT_FORMAT_VERSION, EXPORT_KEEP_DAYS, everythingExportPath } from ".
  *   one ended, and uploads the same parts again under the same numbers.
  * - A step holds the row by `lease_until`, so two never run at once; one that
  *   fails three times running fails the export, and the owner is told.
- * - Once made, the owner who asked is emailed. The file is kept for
- *   `EXPORT_KEEP_DAYS` days, then deleted with its row by the hourly trigger.
+ * - Once made, or failed, the owner who asked is told, in the bell and by
+ *   email (TS-126b). The file is kept for `EXPORT_KEEP_DAYS` days, then
+ *   deleted with its row by the hourly trigger.
  */
 
 export interface ExportLimits {
@@ -120,7 +123,7 @@ const RECEIPT_EXTENSIONS: Record<string, string> = {
 
 /** What a person is told when an export is asked for while one is being made. */
 export const ALREADY_RUNNING =
-	"An export is being made already. You'll get an email when it's ready.";
+	"An export is being made already. We'll tell you in the bell and by email when it's ready.";
 
 type ExportRow = TenantRow<"organisationExports">;
 
@@ -559,12 +562,11 @@ function manifestOf(
 	};
 }
 
-/** The organisation's name, slug and zone, which the ZIP's comment, the email and the file's name use. */
+/** The organisation's name and zone, which the ZIP's comment, the notice's day and the file's name use. */
 async function organisationOf(organisationId: string) {
 	const [row] = await drizzle(env.DB)
 		.select({
 			name: organisations.name,
-			slug: organisations.slug,
 			timeZone: organisations.timeZone,
 		})
 		.from(organisations)
@@ -618,6 +620,7 @@ async function finish(
 	await zip.close();
 	const object = await upload.complete(zip.parts);
 	const subject = { type: "organisation_export" as const, id: row.id };
+	const keptUntil = dayOf(now.getTime() + EXPORT_KEEP_DAYS * DAY_MS, organisation.timeZone);
 	await scope.batch([
 		scope.organisationExports.statements.update(
 			{
@@ -634,9 +637,9 @@ async function finish(
 			(e) => and(eq(e.id, row.id), eq(e.leaseUntil, lease)),
 		),
 		recordStatement(scope, null, "organisation_export.made", subject, {}, "system"),
+		...(await toldOwner(scope, row, (userId) => exportReady(userId, row.id, keptUntil))),
 	]);
 	await deleteUnder(`${exportsPrefix(scope.organisationId)}${row.id}/`);
-	await tellOwner(scope, row, "made", now);
 }
 
 /** One step of the export `row`, which this invocation holds until `lease`. */
@@ -763,8 +766,8 @@ export async function advanceExport(
 				{},
 				"system",
 			),
+			...(await toldOwner(scope, row, (userId) => exportFailed(userId, row.id))),
 		]);
-		await tellOwner(scope, row, "failed", now);
 		return "failed";
 	}
 }
@@ -961,70 +964,20 @@ export async function deleteOrganisationExports(organisationId: string): Promise
 // Telling the owner.
 
 /**
- * The email of an export made, or failed. Its subject holds nothing anybody
- * typed; the link is to the export's page, behind sign-in, not to the file.
+ * The write of the notice of what became of `row`, to the owner who asked for
+ * it and nobody else, if they are an owner still (TS-126b). The bell shows it,
+ * and the every-minute sender emails it unless they turned that kind's email
+ * off (`app/notifications/mail.server.ts`), so the owner is emailed once.
  */
-export function exportEmail(
-	outcome: "made" | "failed",
-	{
-		organisation,
-		keptUntil,
-		link,
-	}: { organisation: string; keptUntil: string; link: string | null },
-	platform: Parameters<typeof compose>[1],
-) {
-	const made = outcome === "made";
-	return compose(
-		{
-			subject: made
-				? "Your export of everything is ready on Timesifier"
-				: "Your export of everything could not be made on Timesifier",
-			heading: made ? "Your export is ready" : "Your export could not be made",
-			parts: [
-				made
-					? `The export of everything “${organisation}” holds on Timesifier is ready to download, as one ZIP. It is kept until ${keptUntil}, then deleted.`
-					: `The export of everything “${organisation}” holds on Timesifier could not be made. Ask for it again; if it fails again, reply to this email.`,
-				...(link ? [{ action: made ? "Download it" : "Open the export", link }] : []),
-			],
-			reason:
-				"You got this email because you asked for this export, as an owner of the organisation on Timesifier.",
-		},
-		platform,
-	);
-}
-
-/** Emails the owner who asked for `row` what became of it, if they are an owner still. */
-async function tellOwner(
+async function toldOwner(
 	scope: OrganisationScope,
 	row: ExportRow,
-	outcome: "made" | "failed",
-	now: Date,
-): Promise<void> {
+	notice: (userId: string) => NewNotification,
+): Promise<ScopedStatement<unknown>[]> {
 	const requestedBy = row.requestedBy;
-	if (!requestedBy) return;
+	if (!requestedBy) return [];
 	const [owner] = await scope.memberships.select((m) =>
 		and(eq(m.userId, requestedBy), eq(m.role, "owner")),
 	);
-	const organisation = await organisationOf(scope.organisationId);
-	if (!owner || !organisation) return;
-	const [account] = await drizzle(env.DB)
-		.select({ email: users.email })
-		.from(users)
-		.where(eq(users.id, requestedBy))
-		.limit(1);
-	if (!account) return;
-	const host = setting(env, "APP_HOST");
-	const keptUntil = formatDayWithYear(
-		dayOf(now.getTime() + EXPORT_KEEP_DAYS * DAY_MS, organisation.timeZone),
-	);
-	const message = exportEmail(
-		outcome,
-		{
-			organisation: organisation.name,
-			keptUntil,
-			link: host ? `https://${host}${everythingExportPath(organisation.slug)}` : null,
-		},
-		await getPlatformBrand(env),
-	);
-	await sendEmail({ to: account.email, ...message });
+	return owner ? notificationStatements(scope, [notice(requestedBy)]) : [];
 }

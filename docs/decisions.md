@@ -1108,6 +1108,8 @@ TS-049, 2026-11-24. Builds on entries 47 (D5) and 48 (D6); the reminders, the em
 
 **Not chosen.** Marking each item read on its own: the count is of what is new since the person last looked, and an item is read when it is seen in the list. A push to the browser (a Durable Object or a WebSocket): entry 7 keeps D1 alone until a feature needs real-time coordination, and the count a page reads every 30 seconds is soon enough for news that waits days for a decision.
 
+_Note, 2026-11-24 (TS-126b):_ A further event. An export of everything ready (`export-ready`) or not made (`export-failed`): the owner who asked for it alone, if an owner still; no other owner, nor any other role, is told. See entry 71's note.
+
 ### 69. Reminders where each person is, due at or after their moment, once in each period; 300 queries a run, every minute, from where the last stopped; email by choice, 100 a run, a day at most; kept 90 days
 
 TS-049, 2026-11-24. With entry 68. `app/notifications/reminders.server.ts`, `app/notifications/mail.server.ts`, `app/db/budget.ts`, `workers/scheduled.ts`, migration `0036_reminder_pass`.
@@ -1201,6 +1203,8 @@ Decided on 2026-11-24 for TS-126 (`research/corporate-readiness.md`, gap 18: "Ex
 | Separate files in R2, downloaded one by one                            | Not one ZIP, which is what was asked: a person leaving with their data wants one file.                                                                                                                |
 
 **What it costs.** Exports share one step a minute: while several are being made, each moves once in so many minutes, and a very large one may take hours. A ZIP can hold at most 10,000 parts of 5 MiB, about 48.8 GiB; an organisation past that would fail at the 10,001st part, three times, and be told. An export still unfinished after 7 days would find its upload aborted by R2, fail the same way, and be told. Both are far past what Timesifier's largest organisation holds. Until the bell (TS-049) is merged, the owner is told by email alone.
+
+_Note, 2026-11-24 (TS-126b):_ The bell is merged, and the export now tells the owner through it. What became of an export is a notification, of the kind `export-ready` or `export-failed`, for the owner who asked and nobody else, if they are an owner still; it is written in the same batch that marks the export made or failed, keyed by the export (`export:<id>`), so a step run again adds no second one. Its words are the email's of before: ready to download, as one ZIP, kept until the day 7 days on, or could not be made; it leads to Workspace settings › Export everything. `tellOwner` and its direct email are gone: the every-minute sender of entry 69 sends the one email, by the owner's choice for that kind, so it arrives a minute later than before, on the run after the step that made it. **Default: email on**, as before this note, as for every kind (a kind with no row in `notification_choices` sends email); the two switches are on My account › Notifications for owners alone (a new audience, `owners`). `test/exports/export-everything.test.ts` ("telling the owner who asked") holds it; the privacy notice now names the notice among the notifications.
 
 ### 72. Inviting many: one batch, as many as the seats, emails paced within the shared cap, and a revert with no time limit
 

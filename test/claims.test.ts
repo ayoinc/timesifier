@@ -417,9 +417,7 @@ it("the notice names every email the application sends, and whom it goes to", as
 			"a notification, to the person it is for, unless they turned that kind's email off on My account",
 			"a timesheet or a request waiting for their decision, their own timesheet or request decided",
 			"a budget alert, to the organisation's owners and admins and, for a budget in hours, to the managers",
-		],
-		"../app/exports/job.server.ts": [
-			"a notice that an export of everything is ready, or could not be made, to the owner who asked for it",
+			"a notice that an export of everything is ready, or could not be made, to the owner who asked for it; each with a link that turns its kind off",
 		],
 		"../app/integrations/webhooks.server.ts": [
 			"a notice that a webhook was switched off, to the person who added it",
