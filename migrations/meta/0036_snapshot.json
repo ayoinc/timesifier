@@ -1,7 +1,7 @@
 {
 	"version": "6",
 	"dialect": "sqlite",
-	"id": "c1a06471-a635-437a-b2aa-e063515ff5bb",
+	"id": "3983157f-61b5-4bce-93cf-8683d6532cbc",
 	"prevId": "4ee9401c-d5cb-4d8e-bc63-7036dd517324",
 	"tables": {
 		"accounts": {
@@ -2024,7 +2024,7 @@
 			"checkConstraints": {
 				"import_jobs_kind_known": {
 					"name": "import_jobs_kind_known",
-					"value": "\"import_jobs\".\"kind\" IN ('time', 'clients', 'projects', 'expenses', 'people')"
+					"value": "\"import_jobs\".\"kind\" IN ('time', 'clients', 'projects', 'expenses')"
 				},
 				"import_jobs_status_known": {
 					"name": "import_jobs_status_known",
@@ -2192,7 +2192,7 @@
 				"invitation_plans_import_fk": {
 					"name": "invitation_plans_import_fk",
 					"tableFrom": "invitation_plans",
-					"tableTo": "import_jobs",
+					"tableTo": "people_imports",
 					"columnsFrom": ["organisation_id", "import_id"],
 					"columnsTo": ["organisation_id", "id"],
 					"onDelete": "cascade",
@@ -4200,6 +4200,157 @@
 				"payments_method_known": {
 					"name": "payments_method_known",
 					"value": "\"payments\".\"method\" IS NULL OR (\"payments\".\"kind\" = 'payment' AND \"payments\".\"method\" IN ('bank_transfer', 'card', 'cash', 'cheque', 'other'))"
+				}
+			}
+		},
+		"people_imports": {
+			"name": "people_imports",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"organisation_id": {
+					"name": "organisation_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"status": {
+					"name": "status",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'previewed'"
+				},
+				"file_name": {
+					"name": "file_name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"row_count": {
+					"name": "row_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"imported_count": {
+					"name": "imported_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"skipped_count": {
+					"name": "skipped_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"source": {
+					"name": "source",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"mapping": {
+					"name": "mapping",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"skipped": {
+					"name": "skipped",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_by": {
+					"name": "created_by",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"imported_at": {
+					"name": "imported_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"reverted_at": {
+					"name": "reverted_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"people_imports_organisation_id_id_unique": {
+					"name": "people_imports_organisation_id_id_unique",
+					"columns": ["organisation_id", "id"],
+					"isUnique": true
+				},
+				"people_imports_organisation_id_created_at_idx": {
+					"name": "people_imports_organisation_id_created_at_idx",
+					"columns": ["organisation_id", "created_at"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {
+				"people_imports_organisation_id_organisations_id_fk": {
+					"name": "people_imports_organisation_id_organisations_id_fk",
+					"tableFrom": "people_imports",
+					"tableTo": "organisations",
+					"columnsFrom": ["organisation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"people_imports_created_by_users_id_fk": {
+					"name": "people_imports_created_by_users_id_fk",
+					"tableFrom": "people_imports",
+					"tableTo": "users",
+					"columnsFrom": ["created_by"],
+					"columnsTo": ["id"],
+					"onDelete": "no action",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {
+				"people_imports_status_known": {
+					"name": "people_imports_status_known",
+					"value": "\"people_imports\".\"status\" IN ('previewed', 'imported', 'reverted')"
+				},
+				"people_imports_counts_not_negative": {
+					"name": "people_imports_counts_not_negative",
+					"value": "\"people_imports\".\"row_count\" >= 0 AND \"people_imports\".\"imported_count\" >= 0 AND \"people_imports\".\"skipped_count\" >= 0"
 				}
 			}
 		},

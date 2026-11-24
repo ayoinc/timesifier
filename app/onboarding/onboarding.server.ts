@@ -16,8 +16,8 @@ import {
 	type ScopedStatement,
 	users,
 	uuidv7,
+	verifications,
 } from "~/db";
-import { findImport } from "~/import/import.server";
 import { InvitedRole } from "~/organisations/roles";
 import { planStanding } from "~/plans/plans.server";
 import { MAIL_BATCH } from "~/platform/limits";
@@ -153,7 +153,7 @@ export async function sendInvitations(
 		and (select count(*) from verifications where identifier = ${key} and expires_at > ${now.getTime()})
 		+ ${rows.length} <= ${room.cap}`;
 	const stillWaiting = fromImport
-		? sql` and ${scope.importJobs.exists((j) => and(eq(j.id, fromImport.id), eq(j.status, "previewed")))}`
+		? sql` and ${scope.peopleImports.exists((j) => and(eq(j.id, fromImport.id), eq(j.status, "previewed")))}`
 		: sql``;
 
 	const statements: [ScopedStatement<unknown>, ...ScopedStatement<unknown>[]] = [
@@ -185,13 +185,16 @@ export async function sendInvitations(
 			})),
 			wrote,
 		),
+		// A built `insert`, not `db.run`: a raw statement has nothing for D1's
+		// batch to bind, and the batch fails with a TypeError before it is sent.
 		{
-			query: drizzle(
-				env.DB,
-			).run(sql`insert into verifications (id, identifier, value, expires_at, created_at, updated_at)
-				select value, ${key}, '', ${now.getTime() + INVITATIONS_PER_SENDER.seconds * 1000}, ${now.getTime()}, ${now.getTime()}
-				from ${jsonTable(rows.map(() => uuidv7()))} where ${wrote}`),
-		},
+			query: drizzle(env.DB)
+				.insert(verifications)
+				.select(
+					sql`select value, ${key}, '', ${now.getTime() + INVITATIONS_PER_SENDER.seconds * 1000}, ${now.getTime()}, ${now.getTime()}
+					from ${jsonTable(rows.map(() => uuidv7()))} where ${wrote}`,
+				),
+		} as unknown as ScopedStatement<never>,
 		scope.activityRecords.statements.insertMany(
 			rows.map(({ id, plan }) => ({
 				actorId: senderId,
@@ -208,7 +211,7 @@ export async function sendInvitations(
 	];
 	if (fromImport) {
 		statements.push(
-			scope.importJobs.statements.update(
+			scope.peopleImports.statements.update(
 				{
 					status: "imported",
 					importedAt: now,
@@ -234,7 +237,7 @@ export async function sendInvitations(
 
 	const [written] = await scope.invitations.select((i) => eq(i.id, firstId), { limit: 1 });
 	if (!written) {
-		if (fromImport && (await findImport(scope, fromImport.id))?.status !== "previewed") {
+		if (fromImport && (await findPeopleImport(scope, fromImport.id))?.status !== "previewed") {
 			return { ok: false, problem: "This import is no longer waiting to be imported." };
 		}
 		const again = await roomFor(scope.organisationId, senderId, new Date());
@@ -365,7 +368,7 @@ export async function applyInvitationPlan(
 	}
 	if (plan.importId) {
 		// Others in the same import whose manager this person is.
-		const [job] = await scope.importJobs.select((j) => eq(j.id, plan.importId ?? ""), { limit: 1 });
+		const job = await findPeopleImport(scope, plan.importId);
 		if (job?.status === "imported") {
 			const managed = await scope.invitationPlans.select((p) =>
 				and(eq(p.importId, job.id), eq(p.managerEmail, email)),
@@ -439,9 +442,8 @@ export async function startPeopleImport(
 	const read = readPeopleFile(text);
 	if (!read.ok) return read;
 	const id = uuidv7();
-	await scope.importJobs.insert({
+	await scope.peopleImports.insert({
 		id,
-		kind: "people",
 		status: "previewed",
 		fileName: fileName.slice(0, 200),
 		rowCount: read.rows.length,
@@ -500,8 +502,8 @@ export async function runPeopleImport(
 	id: string,
 	origin: string,
 ): Promise<Sent> {
-	const job = await findImport(scope, id);
-	if (job?.kind !== "people" || job.status !== "previewed" || job.source === null) {
+	const job = await findPeopleImport(scope, id);
+	if (job?.status !== "previewed" || job.source === null) {
 		return { ok: false, problem: "This import is no longer waiting to be imported." };
 	}
 	const preview = await previewPeopleImport(scope, senderId, job.source);
@@ -561,8 +563,8 @@ export async function revertPeopleImport(
 	id: string,
 	now: Date,
 ): Promise<Reverted> {
-	const job = await findImport(scope, id);
-	if (job?.kind !== "people" || job.status !== "imported") {
+	const job = await findPeopleImport(scope, id);
+	if (job?.status !== "imported") {
 		return { ok: false, problem: "Only a people import that was imported can be reverted." };
 	}
 	const ofImport = (column: SQLWrapper) =>
@@ -572,7 +574,7 @@ export async function revertPeopleImport(
 	);
 	const { joined } = await standingOf(scope, id);
 	const statements: [ScopedStatement<unknown>, ...ScopedStatement<unknown>[]] = [
-		scope.importJobs.statements.update({ status: "reverted", revertedAt: now }, (j) =>
+		scope.peopleImports.statements.update({ status: "reverted", revertedAt: now }, (j) =>
 			and(eq(j.id, id), eq(j.status, "imported")),
 		),
 	];
@@ -612,9 +614,23 @@ export async function revertPeopleImport(
 	return { ok: true, withdrawn: waiting.length, joined };
 }
 
+/** The people import `id`, or null. */
+export async function findPeopleImport(scope: OrganisationScope, id: string) {
+	const [job] = await scope.peopleImports.select((j) => eq(j.id, id), { limit: 1 });
+	return job ?? null;
+}
+
+/** Drops a people import still a dry run, and the file it kept. */
+export async function discardPeopleImport(scope: OrganisationScope, id: string) {
+	const [dropped] = await scope.peopleImports.delete((j) =>
+		and(eq(j.id, id), eq(j.status, "previewed")),
+	);
+	return dropped !== undefined;
+}
+
 /** The organisation's people imports, newest first. */
 export async function peopleImports(scope: OrganisationScope) {
-	return scope.importJobs.select((j) => eq(j.kind, "people"), {
+	return scope.peopleImports.select(undefined, {
 		orderBy: (j) => [desc(j.createdAt)],
 		limit: 50,
 	});

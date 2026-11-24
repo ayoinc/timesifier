@@ -1,7 +1,8 @@
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { sendWaitingInvitations } from "~/onboarding/onboarding.server";
+import { organisationScope } from "~/db";
+import { sendInvitations, sendWaitingInvitations } from "~/onboarding/onboarding.server";
 import {
 	decidePeople,
 	type Known,
@@ -70,8 +71,25 @@ beforeEach(async () => {
 	// The real clock throughout: invitations expire by it, as Better Auth reads them.
 }, 60_000);
 
-afterEach(() => {
-	vi.restoreAllMocks();
+afterEach(async () => {
+	// A send hands its emails to `waitUntil`, which outlives the response. Let
+	// its run finish before the next test empties the database under it: none
+	// is being sent, and none waits unless a run has sent its batch already.
+	try {
+		await vi.waitFor(async () =>
+			expect(
+				await row(
+					`select
+						(select count(*) from invitation_plans where mail_state = 'sending') as sending,
+						(select count(*) from invitation_plans p join invitations i on i.id = p.invitation_id
+							where p.mail_state = 'waiting' and i.status = 'pending'
+							and not exists (select 1 from invitation_plans where mail_state = 'sent')) as unsent`,
+				),
+			).toEqual({ sending: 0, unsent: 0 }),
+		);
+	} finally {
+		vi.restoreAllMocks();
+	}
 });
 
 const ask = async (path: string, who: Person, fields: Record<string, string>) => {
@@ -359,9 +377,13 @@ describe("Invite many", () => {
 		expect(await count("select count(*) from invitations where organisation_id = ?", acme.id)).toBe(
 			0,
 		);
-		expect(await count("select count(*) from verifications where identifier like 'quota:%'")).toBe(
-			0,
-		);
+		// The sender's invitations alone: signing in took uses of other caps.
+		expect(
+			await count(
+				"select count(*) from verifications where identifier = ?",
+				`quota:invitations:${admin.user.id}`,
+			),
+		).toBe(0);
 
 		const fits = await ask(INVITATIONS, admin, {
 			intent: "many",
@@ -408,6 +430,49 @@ describe("Invite many", () => {
 		).toBe(21);
 	});
 
+	it("writes the invitations, what each brings and the sender's uses of the cap in one batch", async () => {
+		// The uses of the cap were once a raw `db.run` in the batch: D1's batch
+		// found no prepared statement to bind, and every send threw a TypeError.
+		const { owner } = roles.people;
+		const plan = {
+			name: null,
+			role: "member" as const,
+			team: { id: designId, name: "Design" },
+			manager: null,
+			managerInFile: false,
+			schedule: null,
+			startsOn: null,
+		};
+		const sent = await sendInvitations(
+			organisationScope(env.DB, acme.id),
+			owner.user.id,
+			[
+				{ ...plan, email: "a@x.example" },
+				{ ...plan, email: "b@x.example", name: "Bea" },
+			],
+			{ origin: ORIGIN },
+		);
+		expect(sent).toEqual({ ok: true, sent: 2 });
+		expect(
+			(
+				await env.DB.prepare(
+					"select i.email, i.status, p.name, p.team_id from invitations i join invitation_plans p on p.invitation_id = i.id where i.organisation_id = ? order by i.email",
+				)
+					.bind(acme.id)
+					.all()
+			).results,
+		).toEqual([
+			{ email: "a@x.example", status: "pending", name: null, team_id: designId },
+			{ email: "b@x.example", status: "pending", name: "Bea", team_id: designId },
+		]);
+		expect(
+			await count(
+				"select count(*) from verifications where identifier = ?",
+				`quota:invitations:${owner.user.id}`,
+			),
+		).toBe(2);
+	});
+
 	it("is refused to every role but owners and admins", async () => {
 		const { finance, manager, member } = roles.people;
 		const contractor = await contractorOf();
@@ -425,23 +490,20 @@ describe("Invite many", () => {
 });
 
 describe("importing people from a CSV", () => {
-	async function seedStandard() {
-		return seedSchedule(acme.id, "Standard", STANDARD_WEEK);
-	}
-
 	it("shows each row's outcome before anything is sent", async () => {
-		await seedStandard();
+		// Not "Standard": every organisation is given a schedule of that name.
+		await seedSchedule(acme.id, "Rota", STANDARD_WEEK);
 		const { owner } = roles.people;
 		const id = await started(
 			owner,
-			"email,name,role,team,manager,schedule,start date,phone\nnew@x.example,New Person,Finance,Design,hedy@example.com,Standard,2099-12-01,0123\nlinus@example.com,,,,,,,\n",
+			"email,name,role,team,manager,schedule,start date,phone\nnew@x.example,New Person,Finance,Design,hedy@example.com,Rota,2099-12-01,0123\nlinus@example.com,,,,,,,\n",
 		);
 		const text = await page(`${IMPORT}?import=${id}`, owner);
 		expect(text).toContain("Dry run of people.csv");
 		expect(text).toContain("Not read: phone.");
 		expect(text).toContain("1 person to invite, 1 not sent.");
 		expect(text).toContain(
-			"Finance · joins Design · hedy@example.com manages Design · Standard from 1 December 2099, or the day they join if later",
+			"Finance · joins Design · hedy@example.com manages Design · Rota from Tuesday 1 December 2099, or the day they join if later",
 		);
 		expect(text).toContain("They are already a member.");
 		expect(await count("select count(*) from invitations where organisation_id = ?", acme.id)).toBe(
@@ -450,13 +512,13 @@ describe("importing people from a CSV", () => {
 	});
 
 	it("sends the invitations, records the import, and applies each person's team, manager, schedule and name when they join, a manager from the same file included", async () => {
-		const standard = await seedStandard();
+		const rota = await seedSchedule(acme.id, "Rota", STANDARD_WEEK);
 		const { owner } = roles.people;
 		const id = await started(
 			owner,
 			[
 				"Email,Name,Role,Team,Manager,Schedule,Start date",
-				"worker@x.example,Wendy Worker,,Design,lead@x.example,Standard,2099-12-01",
+				"worker@x.example,Wendy Worker,,Design,lead@x.example,Rota,2099-12-01",
 				"lead@x.example,Lee Lead,Admin,,,,",
 				"helper@x.example,,,Design,hedy@example.com,,",
 				"linus@example.com,,,,,,",
@@ -466,7 +528,7 @@ describe("importing people from a CSV", () => {
 		expect(imported.status).toBe(302);
 		expect(
 			await row(
-				"select status, imported_count, skipped_count, source from import_jobs where id = ?",
+				"select status, imported_count, skipped_count, source from people_imports where id = ?",
 				id,
 			),
 		).toEqual({ status: "imported", imported_count: 3, skipped_count: 1, source: null });
@@ -493,7 +555,7 @@ describe("importing people from a CSV", () => {
 				acme.id,
 			)) as string;
 
-		// The worker joins first: into Design, the Standard schedule from their start date.
+		// The worker joins first: into Design, the Rota schedule from their start date.
 		const worker = await person(mailbox, "worker@x.example");
 		expect((await accept(worker.cookie, await invitationOf("worker@x.example"))).status).toBe(200);
 		expect(await row("select name from users where id = ?", worker.user.id)).toEqual({
@@ -511,7 +573,7 @@ describe("importing people from a CSV", () => {
 				"select schedule_id, effective_from from schedule_assignments where target_kind = 'person' and target_id = ?",
 				worker.user.id,
 			),
-		).toEqual({ schedule_id: standard, effective_from: "2099-12-01" });
+		).toEqual({ schedule_id: rota, effective_from: "2099-12-01" });
 
 		// Their manager, from the same file, joins later and then manages Design.
 		const lead = await person(mailbox, "lead@x.example");
@@ -569,7 +631,7 @@ describe("importing people from a CSV", () => {
 		expect(await count("select count(*) from invitations where organisation_id = ?", acme.id)).toBe(
 			0,
 		);
-		expect(await row("select status from import_jobs where id = ?", id)).toEqual({
+		expect(await row("select status from people_imports where id = ?", id)).toEqual({
 			status: "previewed",
 		});
 	});
@@ -614,7 +676,7 @@ describe("importing people from a CSV", () => {
 		expect(reverted.said).toContain(
 			"Import reverted: 2 invitations withdrawn. 1 person who joined stays.",
 		);
-		expect(await row("select status from import_jobs where id = ?", id)).toEqual({
+		expect(await row("select status from people_imports where id = ?", id)).toEqual({
 			status: "reverted",
 		});
 		expect(
@@ -705,7 +767,12 @@ describe("importing people from a CSV", () => {
 		mailbox.send.mockRejectedValue(new Error("held"));
 		const id = await started(owner, "Email\nfirst@x.example\nsecond@x.example\n");
 		await submit(IMPORT, { intent: "import", importId: id }, owner);
-		await vi.waitFor(() => expect(mailbox.send).toHaveBeenCalled());
+		// Signing in sent mail already: wait for the invitation's refusal, then its return.
+		await vi.waitFor(() =>
+			expect(mailbox.send.mock.calls.some(([m]) => m.subject.startsWith("You are invited"))).toBe(
+				true,
+			),
+		);
 		await vi.waitFor(async () =>
 			expect(
 				await count("select count(*) from invitation_plans where mail_state = 'waiting'"),
@@ -730,8 +797,8 @@ describe("importing people from a CSV", () => {
 			expect((await open(IMPORT, who)).status, who.user.email).toBe(404);
 			expect((await upload(who, "Email\na@x.example\n")).status, who.user.email).toBe(404);
 		}
-		expect(await count("select count(*) from import_jobs where organisation_id = ?", acme.id)).toBe(
-			0,
-		);
+		expect(
+			await count("select count(*) from people_imports where organisation_id = ?", acme.id),
+		).toBe(0);
 	});
 });

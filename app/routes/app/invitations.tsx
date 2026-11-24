@@ -172,12 +172,19 @@ export async function action({ request, context }: Route.ActionArgs) {
 				? [...known.teams.values()].find((each) => each.id === input.teamId)
 				: undefined;
 			if (wantsTeam && !team) return declined("That team is no longer there. Choose another.");
-			// An address pasted twice is sent once and reported once.
-			const firsts = addresses.filter(
-				(address, index) =>
-					addresses.findIndex((other) => other.toLowerCase() === address.toLowerCase()) === index,
-			);
-			const twice = [...new Set(addresses.filter((address) => !firsts.includes(address)))];
+			// An address pasted twice, in any case, is sent once and reported once.
+			const seen = new Set<string>();
+			const firsts: string[] = [];
+			const repeats = new Set<string>();
+			for (const address of addresses) {
+				const key = address.toLowerCase();
+				if (seen.has(key)) repeats.add(address);
+				else {
+					seen.add(key);
+					firsts.push(address);
+				}
+			}
+			const twice = [...repeats];
 			const outcomes = decidePeople(rowsOfAddresses(firsts, input.role, team?.name ?? ""), known);
 			const notSent = [
 				...outcomes.flatMap((o) => (o.ok ? [] : [`${o.email}: ${o.problems.join(" ")}`])),

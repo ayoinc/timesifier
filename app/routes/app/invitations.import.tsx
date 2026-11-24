@@ -6,9 +6,10 @@ import * as z from "zod";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
 import { organisationScope } from "~/db";
-import { discardImport, findImport } from "~/import/import.server";
 import { parseRequest } from "~/lib/validate";
 import {
+	discardPeopleImport,
+	findPeopleImport,
 	peopleImports,
 	previewPeopleImport,
 	revertPeopleImport,
@@ -74,8 +75,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	if (!isAdministrator(membership.role)) throw notFound();
 	const scope = organisationScope(env.DB, membership.organisation.id);
 	const id = new URL(request.url).searchParams.get("import");
-	const job = id ? await findImport(scope, id) : null;
-	if (id && job?.kind !== "people") throw notFound();
+	const job = id ? await findPeopleImport(scope, id) : null;
+	if (id && !job) throw notFound();
 	const [zone, preview, standing, imports] = await Promise.all([
 		zoneOfMember(membership),
 		job?.status === "previewed" && job.source !== null
@@ -172,9 +173,8 @@ export async function action({ request, context }: Route.ActionArgs) {
 			return redirect(peopleImportPath(organisation.slug, input.importId));
 		}
 		case "discard": {
-			const job = await findImport(scope, input.importId);
-			if (job?.kind !== "people") throw notFound();
-			await discardImport(scope, job.id);
+			if (!(await findPeopleImport(scope, input.importId))) throw notFound();
+			await discardPeopleImport(scope, input.importId);
 			return redirect(peopleImportPath(organisation.slug));
 		}
 		case "revert": {

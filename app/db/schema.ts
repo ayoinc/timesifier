@@ -2571,10 +2571,8 @@ export const webhookDeliveries = sqliteTable(
 );
 
 /**
- * One CSV import (B19): previewed first, then imported, and perhaps reverted.
- * A time import's revert deletes exactly the entries whose `importId` names
- * it; a people import's (TS-108) withdraws the invitations it sent that are
- * still waiting, and what was to happen when they were accepted.
+ * One CSV import (B19): previewed first, then imported, and perhaps reverted,
+ * which deletes exactly the entries whose `importId` names it.
  */
 export const importJobs = sqliteTable(
 	"import_jobs",
@@ -2583,7 +2581,7 @@ export const importJobs = sqliteTable(
 		organisationId: text("organisation_id")
 			.notNull()
 			.references(() => organisations.id, { onDelete: "cascade" }),
-		/** `time`, `clients`, `projects`, `expenses` or `people` (TS-108). */
+		/** `time`, `clients`, `projects` or `expenses`. */
 		kind: text("kind").notNull(),
 		/** `previewed`, `imported`, `reverted` or `failed`. */
 		status: text("status").notNull().default("previewed"),
@@ -2613,7 +2611,7 @@ export const importJobs = sqliteTable(
 		index("import_jobs_organisation_id_created_at_idx").on(table.organisationId, table.createdAt),
 		check(
 			"import_jobs_kind_known",
-			sql`${table.kind} IN ('time', 'clients', 'projects', 'expenses', 'people')`,
+			sql`${table.kind} IN ('time', 'clients', 'projects', 'expenses')`,
 		),
 		check(
 			"import_jobs_status_known",
@@ -2621,6 +2619,57 @@ export const importJobs = sqliteTable(
 		),
 		check(
 			"import_jobs_counts_not_negative",
+			sql`${table.rowCount} >= 0 AND ${table.importedCount} >= 0 AND ${table.skippedCount} >= 0`,
+		),
+	],
+);
+
+/**
+ * One CSV import of people (TS-108, docs/decisions.md entry 72): a dry run
+ * first, then imported, and perhaps reverted, which withdraws the invitations
+ * it sent that are still waiting and what was to happen when they were
+ * accepted. People who joined stay. A table of its own, not `import_jobs`:
+ * that table's kind check names the time import's kinds, and changing it
+ * would mean making the live table again.
+ */
+export const peopleImports = sqliteTable(
+	"people_imports",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		/** `previewed`, `imported` or `reverted`. */
+		status: text("status").notNull().default("previewed"),
+		fileName: text("file_name").notNull(),
+		rowCount: integer("row_count").notNull().default(0),
+		importedCount: integer("imported_count").notNull().default(0),
+		skippedCount: integer("skipped_count").notNull().default(0),
+		/** The uploaded file's text while it is a dry run; emptied once it is imported. */
+		source: text("source"),
+		/** Which column of the file holds each field, by the field's name. */
+		mapping: text("mapping", { mode: "json" }).$type<Record<string, string>>(),
+		/** The rows that were not sent, by line, with why. */
+		skipped: text("skipped", { mode: "json" }).$type<{ line: number; reason: string }[]>(),
+		createdBy: text("created_by")
+			.notNull()
+			.references(() => users.id),
+		importedAt: integer("imported_at", { mode: "timestamp_ms" }),
+		revertedAt: integer("reverted_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("people_imports_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("people_imports_organisation_id_created_at_idx").on(
+			table.organisationId,
+			table.createdAt,
+		),
+		check(
+			"people_imports_status_known",
+			sql`${table.status} IN ('previewed', 'imported', 'reverted')`,
+		),
+		check(
+			"people_imports_counts_not_negative",
 			sql`${table.rowCount} >= 0 AND ${table.importedCount} >= 0 AND ${table.skippedCount} >= 0`,
 		),
 	],
@@ -2680,7 +2729,7 @@ export const invitationPlans = sqliteTable(
 		foreignKey({
 			name: "invitation_plans_import_fk",
 			columns: [table.organisationId, table.importId],
-			foreignColumns: [importJobs.organisationId, importJobs.id],
+			foreignColumns: [peopleImports.organisationId, peopleImports.id],
 		}).onDelete("cascade"),
 		check(
 			"invitation_plans_mail_state_known",
