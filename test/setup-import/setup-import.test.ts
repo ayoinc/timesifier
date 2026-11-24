@@ -53,11 +53,25 @@ const KNOWN: SetupKnown = {
 	projects: new Map([
 		[
 			"acme-001",
-			{ id: "p1", code: "ACME-001", name: "Website", archived: false, currency: "GBP", billable: true },
+			{
+				id: "p1",
+				code: "ACME-001",
+				name: "Website",
+				archived: false,
+				currency: "GBP",
+				billable: true,
+			},
 		],
 		[
 			"acme-000",
-			{ id: "p0", code: "ACME-000", name: "Old site", archived: true, currency: "GBP", billable: true },
+			{
+				id: "p0",
+				code: "ACME-000",
+				name: "Old site",
+				archived: true,
+				currency: "GBP",
+				billable: true,
+			},
 		],
 	]),
 	projectNames: new Set(["website", "old site"]),
@@ -244,7 +258,12 @@ describe("deciding each row", () => {
 		});
 		expect(outcomes[1]).toMatchObject({
 			ok: true,
-			plan: { who: { invitationId: "i1" }, startsOn: "2026-12-01", startsToday: true, role: "member" },
+			plan: {
+				who: { invitationId: "i1" },
+				startsOn: "2026-12-01",
+				startsToday: true,
+				role: "member",
+			},
 		});
 	});
 
@@ -290,10 +309,10 @@ describe("deciding each row", () => {
 		expect(
 			problemsOf(decided("Project,ACME,P-4,,Four,,,,,,", { ...KNOWN, workModel: "internal" })),
 		).toEqual({ 2: "This organisation has no clients. Leave Client code empty." });
-		const both = decided(
-			["Project,,P-5,,Five,,,Hourly,,,", "Project,,P-6,,Six,,,,,,"].join("\n"),
-			{ ...KNOWN, workModel: "both" },
-		);
+		const both = decided(["Project,,P-5,,Five,,,Hourly,,,", "Project,,P-6,,Six,,,,,,"].join("\n"), {
+			...KNOWN,
+			workModel: "both",
+		});
 		expect(problemsOf(both)).toEqual({
 			2: "A project with no client is a work code here, and bills nothing. Leave Billing empty, or name its client.",
 			3: "ok",
@@ -409,7 +428,9 @@ describe("the dry run", () => {
 		expect(text).toContain("1 project, 2 work packages and 3 assignments to add; 1 row not added.");
 		expect(text).toContain("1 assignment is for invited people, and waits until each joins.");
 		expect(text).toContain("ACME-002 · Brand");
-		expect(text).toContain("for ACME · Fixed fee · Monday 4 January 2027 to Wednesday 30 June 2027");
+		expect(text).toContain(
+			"for ACME · Fixed fee · Monday 4 January 2027 to Wednesday 30 June 2027",
+		);
 		expect(text).toContain("in ACME-002 (line 2) · 40 hours budget");
 		expect(text).toContain("in ACME-001 · 1000.00 GBP budget");
 		expect(text).toContain("Delivery manager on ACME-002 (line 2) · from Monday 4 January 2027");
@@ -460,7 +481,9 @@ describe("importing", () => {
 			),
 		).toEqual({ project_id: brand, budget_kind: "hours", budget_amount: 2400, billable: 1 });
 		expect(
-			await row("select project_id, budget_kind, budget_amount from work_packages where code = 'WP9'"),
+			await row(
+				"select project_id, budget_kind, budget_amount from work_packages where code = 'WP9'",
+			),
 		).toEqual({ project_id: website, budget_kind: "fees", budget_amount: 100000 });
 		expect(
 			await env.DB.prepare(
@@ -535,7 +558,9 @@ describe("importing", () => {
 		});
 		const text = await page(`${IMPORT}?import=${id}`, owner);
 		expect(text).toContain("6 rows added, 1 not added.");
-		expect(text).toContain("2 assignments are on teams now; 1 still waits for invited people to join.");
+		expect(text).toContain(
+			"2 assignments are on teams now; 1 still waits for invited people to join.",
+		);
 	});
 
 	it("imports once, however often it is asked", async () => {
@@ -566,16 +591,16 @@ describe("importing", () => {
 		const id = await imported([HEADER, ...lines].join("\n"));
 		// The import, projects, work packages, assignments and records: five statements, one batch.
 		expect(batch.mock.calls.filter(([statements]) => statements.length === 5)).toHaveLength(1);
-		expect(await row("select imported_count, skipped_count from setup_imports where id = ?", id)).toEqual({
+		expect(
+			await row("select imported_count, skipped_count from setup_imports where id = ?", id),
+		).toEqual({
 			imported_count: 500,
 			skipped_count: 0,
 		});
 		expect(await count("select count(*) from projects where code like 'P-%'")).toBe(100);
 		expect(await count("select count(*) from work_packages")).toBe(200);
 		expect(await count("select count(*) from project_members where source_id = ?", id)).toBe(200);
-		expect(
-			await count("select count(*) from activity_records where source = 'import'"),
-		).toBe(501);
+		expect(await count("select count(*) from activity_records where source = 'import'")).toBe(501);
 	});
 });
 
@@ -639,9 +664,7 @@ describe("invited people", () => {
 			.bind(brand, acme.id, now, now)
 			.run();
 		const invitationId = await seedInvitation(acme.id, owner.user.id, "new@x.example");
-		await imported(
-			`${FOR_NEW}\nAssignment,,ACME-002,,,2027-01-04,,,,new@x.example,`,
-		);
+		await imported(`${FOR_NEW}\nAssignment,,ACME-002,,,2027-01-04,,,,new@x.example,`);
 		await env.DB.prepare("update projects set archived_at = ? where id = ?").bind(now, brand).run();
 		const newcomer = await person(mailbox, "new@x.example");
 		// Put on the Website team by hand, before they accept, through the trigger's own table.
@@ -659,7 +682,9 @@ describe("invited people", () => {
 				newcomer.user.id,
 			),
 		).toBe("member");
-		expect(await count("select count(*) from project_members where source_kind = 'import'")).toBe(0);
+		expect(await count("select count(*) from project_members where source_kind = 'import'")).toBe(
+			0,
+		);
 		const skipped = await env.DB.prepare(
 			"select subject_id, summary from activity_records where action = 'project.member_skipped' order by subject_id",
 		).all<{ subject_id: string; summary: string }>();
@@ -688,7 +713,9 @@ describe("reverting", () => {
 		expect(await count("select count(*) from work_packages")).toBe(0);
 		expect(await count("select count(*) from project_members")).toBe(0);
 		expect(await count("select count(*) from invitation_assignments")).toBe(0);
-		expect(await value<string>("select status from setup_imports where id = ?", id)).toBe("reverted");
+		expect(await value<string>("select status from setup_imports where id = ?", id)).toBe(
+			"reverted",
+		);
 		expect(
 			await row(
 				"select summary from activity_records where action = 'import.reverted' and subject_id = ?",
@@ -701,9 +728,7 @@ describe("reverting", () => {
 		});
 		// Hedy's stretch was on a project that stays, so it is recorded as taken off.
 		expect(
-			await row(
-				"select subject_id from activity_records where action = 'project.member_removed'",
-			),
+			await row("select subject_id from activity_records where action = 'project.member_removed'"),
 		).toEqual({ subject_id: website });
 		// Invitations stay.
 		expect(await count("select count(*) from invitations where status = 'pending'")).toBe(1);
@@ -712,9 +737,7 @@ describe("reverting", () => {
 	it("after a person joins: takes away the assignment made when they joined", async () => {
 		const { owner } = roles.people;
 		const invitationId = await seedInvitation(acme.id, owner.user.id, "new@x.example");
-		const id = await imported(
-			`${HEADER}\nAssignment,,ACME-001,,,2027-01-04,,,,new@x.example,`,
-		);
+		const id = await imported(`${HEADER}\nAssignment,,ACME-001,,,2027-01-04,,,,new@x.example,`);
 		const newcomer = await person(mailbox, "new@x.example");
 		expect((await accept(newcomer.cookie, invitationId)).status).toBe(200);
 		expect(await count("select count(*) from project_members")).toBe(1);
@@ -738,7 +761,9 @@ describe("reverting", () => {
 		await seedEntry(acme.id, member.user.id, brand, "2027-01-05T09:00:00Z", "2027-01-05T10:00:00Z");
 		const refused = await revert(onProject);
 		expect(refused.status).toBe(409);
-		expect(refused.said).toContain("Time has been tracked to ACME-002 · Brand, which this import added.");
+		expect(refused.said).toContain(
+			"Time has been tracked to ACME-002 · Brand, which this import added.",
+		);
 		expect(refused.said).toContain("Nothing was reverted");
 		expect(await count("select count(*) from projects where organisation_id = ?", acme.id)).toBe(2);
 		expect(await count("select count(*) from work_packages")).toBe(2);
@@ -766,7 +791,13 @@ describe("reverting", () => {
 
 		// By a person in the stretch it put them on an existing project's team; before it, nothing stops it.
 		await env.DB.prepare("delete from time_entries").run();
-		await seedEntry(acme.id, manager.user.id, website, "2026-12-01T09:00:00Z", "2026-12-01T10:00:00Z");
+		await seedEntry(
+			acme.id,
+			manager.user.id,
+			website,
+			"2026-12-01T09:00:00Z",
+			"2026-12-01T10:00:00Z",
+		);
 		expect((await revert(onProject)).status).toBe(200);
 	});
 
@@ -775,7 +806,13 @@ describe("reverting", () => {
 		const id = await imported(
 			`${HEADER}\nAssignment,,ACME-001,,,2027-01-04,2027-03-31,,,hedy@example.com,`,
 		);
-		await seedEntry(acme.id, manager.user.id, website, "2027-02-01T09:00:00Z", "2027-02-01T10:00:00Z");
+		await seedEntry(
+			acme.id,
+			manager.user.id,
+			website,
+			"2027-02-01T09:00:00Z",
+			"2027-02-01T10:00:00Z",
+		);
 		const refused = await revert(id);
 		expect(refused.status).toBe(409);
 		expect(refused.said).toContain(
