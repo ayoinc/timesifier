@@ -70,6 +70,8 @@ describe("a page as a manager of 120 of 150 people", () => {
 			managedTeams: sql.filter((s) => /from "team_members".*"is_manager" = \?/.test(s)).length,
 			// The person's pins (TS-122, S2-09): the project picker's, or Team's people.
 			pins: reads(sql, "pins"),
+			// The bell's unread count (TS-049): the organisation's loader, once.
+			notifications: reads(sql, "notifications"),
 		};
 	}
 
@@ -82,17 +84,19 @@ describe("a page as a manager of 120 of 150 people", () => {
 	// date as it reaches the person, twice) and Team 2 more (leave, and the
 	// people's zones): none of the memberships or the teams, and the repeats
 	// among them are TS-113b's too. Since TS-122, each reads the person's pins
-	// once more: Timesheet day for the project picker, Team for This week.
+	// once more: Timesheet day for the project picker, Team for This week. Since
+	// TS-049, each reads the person's unread notifications once, for the bell.
 	it("Timesheet day reads the manager's membership and their teams once", async () => {
 		const counts = await statementsOf(`/app/acme?day=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 56,
+			total: 57,
 			memberships: 4,
 			teamMembers: 3,
 			ownMembership: 1,
 			managedTeams: 1,
 			pins: 1,
+			notifications: 1,
 		});
 	});
 
@@ -100,12 +104,13 @@ describe("a page as a manager of 120 of 150 people", () => {
 		const counts = await statementsOf(`/app/acme/team?week=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 36,
+			total: 37,
 			memberships: 5,
 			teamMembers: 3,
 			ownMembership: 1,
 			managedTeams: 1,
 			pins: 1,
+			notifications: 1,
 		});
 	});
 });
