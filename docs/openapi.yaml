@@ -73,7 +73,11 @@ components:
       properties:
         id: { type: string }
         project_id: { type: string }
-        code: { type: string, description: "Unique in its project whatever its letters' case, for example WP2." }
+        code:
+          {
+            type: string,
+            description: "Unique in its project whatever its letters' case, for example WP2.",
+          }
         name: { type: string }
         starts_on: { type: [string, "null"], format: date }
         ends_on: { type: [string, "null"], format: date }

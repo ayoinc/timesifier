@@ -111,10 +111,16 @@ describe("the export", () => {
 		const response = await open(`${EXPORT}?${WEEK}`, ada);
 		expect(response.status).toBe(200);
 		const [header, ...rows] = parseCsv((await response.text()).replace(/^\uFEFF/, ""));
-		expect(header?.slice(2, 6)).toEqual(["project_code", "project", "client_code", "client"]);
-		expect(rows.map((cells) => cells.slice(2, 6))).toEqual([
-			["ACME-001", "Site", "INI", "Initech"],
-			["", "Billing", "", ""],
+		expect(header?.slice(2, 7)).toEqual([
+			"project_code",
+			"project",
+			"work_package_code",
+			"client_code",
+			"client",
+		]);
+		expect(rows.map((cells) => cells.slice(2, 7))).toEqual([
+			["ACME-001", "Site", "", "INI", "Initech"],
+			["", "Billing", "", "", ""],
 		]);
 	});
 });
