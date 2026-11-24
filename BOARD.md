@@ -70,7 +70,7 @@ Builder: an AI session on branch `ts-049-notifications`, pull request #102. Deci
 - [x] Emails: at most 100 a run, oldest first; one more than a day old is never sent; the first that fails stops the run. Notifications are kept 90 days, and the privacy notice and `/security` say so. Tests: `test/notifications/mail.test.ts`, `test/claims.test.ts` ("the security page says how long each thing is kept").
 - [x] The hourly run reads only organisations with a timer running, a week waiting (the partial index `periods_submitted_idx`) or a deadline due within 25 hours; with nothing to do it is three reads, however many organisations there are. Test: `test/notifications/reminders.test.ts`, "the hourly run's reads (decision 69)" (each set from its partial index, by the query plan); decision 69 records the limit that remains.
 - [x] Browser spec `e2e/notifications.spec.ts`; screenshots in `cmux-assets/browser/timesifier/TS-049/`. A section reached by its anchor now keeps its rule in view below the band (`Section`, `app/shell/PageHeading.tsx`).
-- [ ] typecheck, lint and tests pass in the pipeline.
+- [x] typecheck, lint and tests pass in the pipeline: run 45306669601 on `c8a4dab`, every job green (browser shard 2/4 green on its second attempt; its first was cancelled at the 30-minute limit with no log kept).
 
 ### TS-122 · The rest of the Harvest sweep
 
