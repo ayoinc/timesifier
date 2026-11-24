@@ -288,6 +288,13 @@
 			"when": 1795510172618,
 			"tag": "0041_leave_from_contract",
 			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "6",
+			"when": 1795511340922,
+			"tag": "0042_waiting_assignments",
+			"breakpoints": true
 		}
 	]
 }

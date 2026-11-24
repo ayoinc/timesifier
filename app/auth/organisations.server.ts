@@ -57,6 +57,10 @@ import { admits, policyOf, type SessionMethod } from "~/organisations/sign-in-po
 import { availableSlug, slugFromName, slugSearchPrefix } from "~/organisations/slug";
 import { SEATS_FULL } from "~/plans/plans";
 import { seatForOneMore } from "~/plans/plans.server";
+import {
+	applyWaitingAssignments,
+	dropWaitingAssignments,
+} from "~/setup-import/setup-import.server";
 import { sendEmail } from "./email.server";
 import { isOurHost } from "./hosts";
 import { valid } from "./input.server";
@@ -495,9 +499,20 @@ export function organisationPlugins() {
 					}
 				},
 				// An invitation sent with others (TS-108) may carry a team, a manager
-				// and a schedule for the person: they are given them now they are in.
+				// and a schedule for the person: they are given them now they are in;
+				// and a set-up import (TS-115d) may have put them on project teams.
 				async afterAcceptInvitation({ invitation, user }) {
 					await applyInvitationPlan(invitation.organizationId, invitation.id, user, new Date());
+					await applyWaitingAssignments(invitation.organizationId, invitation.id, user);
+				},
+				// Cancelled or rejected, an invitation keeps its row, so the
+				// assignments waiting on it are deleted here (decision 77); the
+				// daily sweep takes those of invitations that run out.
+				async afterCancelInvitation({ invitation }) {
+					await dropWaitingAssignments(invitation.organizationId, invitation.id);
+				},
+				async afterRejectInvitation({ invitation }) {
+					await dropWaitingAssignments(invitation.organizationId, invitation.id);
 				},
 				// The plugin deletes an organisation's memberships first and its row
 				// last, and the database refuses to take the last owner from an

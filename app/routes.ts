@@ -34,6 +34,7 @@ import {
 import { DEFAULT_RATES_SEGMENT, PROJECT_PARAM } from "./projects/projects";
 import { REPORT_EXPORT_SEGMENT, REPORT_PEOPLE_SEGMENT } from "./reports/paths";
 import { LEAVE_EXPORT_SEGMENT, REPORT_VIEW_ROUTES } from "./reports/views";
+import { SETUP_IMPORT_SEGMENT } from "./setup-import/paths";
 import {
 	ACCOUNT_SEGMENT,
 	APP_PATH,
@@ -93,6 +94,7 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(TRACK_DAY_SEGMENT, "routes/app/timesheet.day.ts"),
 	route(PICKER_MONTH_SEGMENT, "routes/app/timesheet.month.ts"),
 	route(`${destination("projects").segment}/${DEFAULT_RATES_SEGMENT}`, "routes/app/rates.tsx"),
+	route(SETUP_IMPORT_SEGMENT, "routes/app/projects.import.tsx"),
 	route(`${destination("projects").segment}/:${PROJECT_PARAM}`, "routes/app/project.tsx"),
 	...REPORT_VIEW_ROUTES.map(({ path, file }) => route(path, file)),
 	route(LEAVE_EXPORT_SEGMENT, "routes/app/reports.leave.export.ts"),

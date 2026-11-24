@@ -12,6 +12,7 @@ import { sendWaitingInvitations } from "~/onboarding/onboarding.server";
 import { recheckDomains } from "~/organisations/domains.server";
 import { MAIL_BATCH } from "~/platform/limits";
 import { sendWaitingMail } from "~/platform/mail.server";
+import { deleteLapsedAssignments } from "~/setup-import/setup-import.server";
 
 /**
  * The Worker's background work, run by the Cron Triggers in wrangler.jsonc.
@@ -35,7 +36,8 @@ import { sendWaitingMail } from "~/platform/mail.server";
  *   records after 730 days (TS-072), sign-ins after 90 (TS-099),
  *   notifications after 90 (TS-049), and contracts three years after the end
  *   of the tax year (5 April) they ended in (TS-098a). TS-033 adds the other
- *   tables here.
+ *   tables here. A set-up import's assignments waiting on an invitation
+ *   that ran out are deleted (TS-115d, decision 77).
  *   Every organisation's domains are looked up again (TS-104): the owners
  *   are told once after 7 days without the record, and the domain is
  *   unverified after 14.
@@ -98,6 +100,7 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 			signIns: () => platformData.deleteOldSignIns(env.DB, new Date(now)),
 			notifications: () => deleteExpiredNotifications(new Date(now)),
 			contracts: () => deleteExpiredContracts(env.DB, new Date(now)),
+			lapsedAssignments: () => deleteLapsedAssignments(env.DB, new Date(now)),
 			domains: () => recheckDomains(new Date(now)),
 		});
 	}

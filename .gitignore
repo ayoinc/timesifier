@@ -23,4 +23,5 @@ wrangler.preview-migrations.jsonc
 *.log
 coverage/
 playwright-report/
+blob-report/
 test-results/

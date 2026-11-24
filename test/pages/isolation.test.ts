@@ -103,6 +103,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/expenses",
 				"/app/acme/projects",
 				"/app/acme/projects/rates",
+				// Setting up projects, work packages and teams from a CSV (TS-115d).
+				"/app/acme/projects/import",
 				"/app/acme/projects/x",
 				"/app/acme/clients",
 				"/app/acme/tasks",
@@ -202,6 +204,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/notifications",
 			"routes/app/project",
 			"routes/app/projects",
+			"routes/app/projects.import",
 			"routes/app/rates",
 			"routes/app/reports",
 			"routes/app/reports.leave",
@@ -354,6 +357,8 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/sign-in-settings": { intent: "add-domain", domain: "acme-works.com" },
 		// An import of people a stranger would revert in another organisation; none is.
 		"routes/app/invitations.import": { intent: "revert", importId: "i-theirs" },
+		// A set-up import a stranger would revert in another organisation; none is.
+		"routes/app/projects.import": { intent: "revert", importId: "i-theirs" },
 		// A contract a stranger would give a person of another organisation; none is given.
 		"routes/app/contract": {
 			intent: "give",

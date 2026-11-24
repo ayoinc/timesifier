@@ -18,6 +18,7 @@ import { runReminders } from "~/notifications/reminders.server";
 import { sendWaitingInvitations } from "~/onboarding/onboarding.server";
 import { recheckDomains } from "~/organisations/domains.server";
 import { sendWaitingMail } from "~/platform/mail.server";
+import { deleteLapsedAssignments } from "~/setup-import/setup-import.server";
 import worker from "../../workers/app";
 import { DAILY, EVERY_MINUTE, HOURLY } from "../../workers/scheduled";
 import { freshDatabase } from "../db/database";
@@ -34,6 +35,7 @@ vi.mock("~/notifications/reminders.server", { spy: true });
 vi.mock("~/onboarding/onboarding.server", { spy: true });
 vi.mock("~/organisations/domains.server", { spy: true });
 vi.mock("~/platform/mail.server", { spy: true });
+vi.mock("~/setup-import/setup-import.server", { spy: true });
 
 // The scheduled handler's duties (workers/scheduled.ts): each runs on its
 // own, so one that throws is logged and the others still run, in their order;
@@ -71,6 +73,7 @@ function stubbed(failing: string[]) {
 	stub("activity", deleteExpiredActivity);
 	stub("notifications", deleteExpiredNotifications);
 	stub("contracts", deleteExpiredContracts);
+	stub("lapsedAssignments", deleteLapsedAssignments);
 	stub("domains", recheckDomains);
 	return ran;
 }
@@ -124,16 +127,28 @@ describe("the scheduled duties", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const ran = stubbed(["activity", "notifications"]);
 		await trigger(DAILY, Date.parse("2026-11-24T03:17:00Z"));
-		expect(ran).toEqual(["activity", "notifications", "contracts", "domains"]);
+		expect(ran).toEqual(["activity", "notifications", "contracts", "lapsedAssignments", "domains"]);
 	});
 
 	it("daily: the contracts' deletion is a duty of its own, whose failing is logged and stops nothing", async () => {
 		const error = vi.spyOn(console, "error").mockImplementation(() => {});
 		const ran = stubbed(["contracts"]);
 		await trigger(DAILY, Date.parse("2026-11-24T03:17:00Z"));
-		expect(ran).toEqual(["activity", "notifications", "contracts", "domains"]);
+		expect(ran).toEqual(["activity", "notifications", "contracts", "lapsedAssignments", "domains"]);
 		expect(error).toHaveBeenCalledWith("scheduled: contracts failed with Error");
 		expect(vi.mocked(deleteExpiredContracts)).toHaveBeenCalledWith(
+			env.DB,
+			new Date("2026-11-24T03:17:00Z"),
+		);
+	});
+
+	it("daily: the waiting assignments' deletion is a duty of its own, whose failing is logged and stops nothing", async () => {
+		const error = vi.spyOn(console, "error").mockImplementation(() => {});
+		const ran = stubbed(["lapsedAssignments"]);
+		await trigger(DAILY, Date.parse("2026-11-24T03:17:00Z"));
+		expect(ran).toEqual(["activity", "notifications", "contracts", "lapsedAssignments", "domains"]);
+		expect(error).toHaveBeenCalledWith("scheduled: lapsedAssignments failed with Error");
+		expect(vi.mocked(deleteLapsedAssignments)).toHaveBeenCalledWith(
 			env.DB,
 			new Date("2026-11-24T03:17:00Z"),
 		);
