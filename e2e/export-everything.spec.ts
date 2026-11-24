@@ -178,14 +178,23 @@ for (const viewport of [
 					)
 					.toBe("1:free");
 
-				// The every-minute trigger's step finishes it, and its next run, whose
+				// The every-minute trigger's step finishes it. Its next run, whose
 				// notification emails go before the exports, emails the owner the notice.
+				// The database is the one the tests before this one used, so any other
+				// notification's email still waiting is set aside first: the one message
+				// that run sends is this one.
+				await runTrigger(page, EVERY_MINUTE);
+				expect(
+					value(
+						`select count(*) from notifications where kind = 'export-ready' and email_state = 'waiting' and organisation_id = ${organisationId}`,
+					),
+				).toBe(1);
+				sql(
+					`update notifications set email_state = 'skipped' where email_state = 'waiting' and not (kind = 'export-ready' and organisation_id = ${organisationId})`,
+				);
 				const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 				await foundInMessageSentBy(
-					async () => {
-						await runTrigger(page, EVERY_MINUTE);
-						await runTrigger(page, EVERY_MINUTE);
-					},
+					() => runTrigger(page, EVERY_MINUTE),
 					new RegExp(`“${escaped}”: Your export of everything is ready to download, as one ZIP`),
 					"the export's notice",
 				);
