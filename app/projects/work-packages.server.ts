@@ -3,7 +3,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { recordStatement } from "~/activity/activity.server";
 import { billableMinuteMinor } from "~/billing/billable";
 import { type BudgetStatus, budgetStatus, countsTowardHours } from "~/budgets/budget";
-import { mayCreateProject } from "~/clients/managers.server";
+import { managedClientIds, mayCreateProject } from "~/clients/managers.server";
 import {
 	among,
 	latestAmong,
@@ -12,6 +12,7 @@ import {
 	type TenantRow,
 } from "~/db";
 import { codeKey } from "~/lib/codes";
+import { maySeeRates } from "~/organisations/access";
 import type { Role } from "~/organisations/roles";
 import { priceTime } from "~/rates/price";
 import { notInvoiced } from "~/tasks/tasks.server";
@@ -166,9 +167,8 @@ export interface WorkPackageInput {
 	name: string;
 	startsOn: Day | null;
 	endsOn: Day | null;
-	budgetKind: WorkPackageBudgetKind;
-	/** Minutes for hours, minor units for fees; null for no budget. */
-	budgetAmount: number | null;
+	/** Its budget; null, on a change, keeps the one it has (one the person changing it is not shown). */
+	budget: { kind: WorkPackageBudgetKind; amount: number | null } | null;
 	billable: boolean;
 }
 
@@ -213,8 +213,12 @@ function fieldsOf(input: WorkPackageInput) {
 		name: input.name,
 		startsOn: input.startsOn,
 		endsOn: input.endsOn,
-		budgetKind: input.budgetKind,
-		budgetAmount: input.budgetKind === "none" ? null : input.budgetAmount,
+		...(input.budget === null
+			? {}
+			: {
+					budgetKind: input.budget.kind,
+					budgetAmount: input.budget.kind === "none" ? null : input.budget.amount,
+				}),
 		billable: input.billable,
 	};
 }
@@ -480,4 +484,91 @@ export async function openPackagesOf(scope: OrganisationScope, projectId: string
 		(w) => and(eq(w.projectId, projectId), eq(w.state, "open"), isNull(w.archivedAt)),
 		{ orderBy: (w) => [asc(w.codeKey)] },
 	);
+}
+
+/** A work package as its project's Work packages tab lists it. */
+export interface ListedWorkPackage {
+	id: string;
+	code: string;
+	name: string;
+	startsOn: Day | null;
+	endsOn: Day | null;
+	state: WorkPackageState;
+	billable: boolean;
+	archived: boolean;
+	/** Its kind of budget; null where the viewer is not shown it, as a fees budget is hidden from those who do not see rates. */
+	budgetKind: WorkPackageBudgetKind | null;
+	/** Minutes for hours, minor units for fees; null when hidden or none. */
+	budgetAmount: number | null;
+	/** Minutes tracked to it; null for those not shown budgets. */
+	minutes: number | null;
+	/** Its budget progress, where the viewer is shown it. */
+	budget: { kind: "hours" | "fees"; amount: number; status: BudgetStatus } | null;
+}
+
+/** What the Work packages tab shows `membership`, and whether they manage the project's work packages. */
+export interface WorkPackagesTab {
+	packages: ListedWorkPackage[];
+	manages: boolean;
+}
+
+/**
+ * The project's work packages as its Work packages tab lists them: every one,
+ * open first then closed, archived last, each by code. Progress is shown as a
+ * project's budget is (`budgetShownTo`): an hours budget to those who see
+ * rates or manage a team, a fees budget to those who see rates, nothing to
+ * anyone else, who see each work package's code, name, days and state.
+ */
+export async function workPackagesTab(
+	scope: OrganisationScope,
+	membership: { role: Role; managesTeams: boolean; userId: string },
+	project: { id: string; clientId: string | null },
+	{
+		now,
+		money,
+		pricing,
+		showsClients,
+	}: {
+		now: number;
+		money: OrganisationMoney;
+		pricing: Pricing;
+		showsClients: boolean;
+	},
+): Promise<WorkPackagesTab> {
+	const packages = (await workPackagesOf(scope, [project.id])).get(project.id) ?? [];
+	const seesRates = maySeeRates(membership.role);
+	const seesHours = seesRates || membership.managesTeams;
+	const progress =
+		seesHours && packages.length > 0
+			? await workPackageProgress(scope, project.id, packages, { now, money, pricing })
+			: new Map<string, WorkPackageProgress>();
+	const managed =
+		showsClients && project.clientId !== null
+			? await managedClientIds(scope, membership.userId)
+			: [];
+	const rank = (wp: WorkPackageRow) => (wp.archivedAt !== null ? 2 : wp.state === "closed" ? 1 : 0);
+	return {
+		manages: mayManageWorkPackages(membership.role, managed, project.clientId),
+		packages: [...packages]
+			.sort((a, b) => rank(a) - rank(b))
+			.map((wp): ListedWorkPackage => {
+				const shown = progress.get(wp.id);
+				const kind = wp.budgetKind === "hours" || wp.budgetKind === "fees" ? wp.budgetKind : null;
+				const showsBudget = kind === "hours" ? seesHours : kind === "fees" ? seesRates : false;
+				return {
+					id: wp.id,
+					code: wp.code,
+					name: wp.name,
+					startsOn: wp.startsOn,
+					endsOn: wp.endsOn,
+					state: wp.state === "closed" ? "closed" : "open",
+					billable: wp.billable,
+					archived: wp.archivedAt !== null,
+					budgetKind: kind === null ? "none" : showsBudget ? kind : null,
+					budgetAmount: showsBudget ? wp.budgetAmount : null,
+					minutes: seesHours ? (shown?.minutes ?? 0) : null,
+					budget: showsBudget ? (shown?.budget ?? null) : null,
+				};
+			}),
+	};
 }
