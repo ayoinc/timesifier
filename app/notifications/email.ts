@@ -1,10 +1,8 @@
 import { compose, type PlatformLook } from "~/auth/email-frame";
-import { accountPath, organisationPath } from "~/shell/destinations";
+import { organisationPath } from "~/shell/destinations";
 
 import { KIND_WORDS, type NotificationKind } from "./kinds";
-
-/** Where My account › Notifications is, below the account page. */
-export const NOTIFICATIONS_ANCHOR = "notifications";
+import { notificationChoicesPath } from "./paths";
 
 /** What a notification's email is made from: the notification as its person sees it in the bell. */
 export interface NotificationMail {
@@ -41,7 +39,7 @@ export function notificationEmail(mail: NotificationMail, platform: PlatformLook
 			reason: words.reason,
 			unsubscribe: {
 				action: "Turn these emails off",
-				link: `${mail.origin}${accountPath(mail.slug)}#${NOTIFICATIONS_ANCHOR}`,
+				link: `${mail.origin}${notificationChoicesPath(mail.slug)}`,
 			},
 		},
 		platform,

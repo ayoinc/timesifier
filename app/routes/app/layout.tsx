@@ -31,6 +31,7 @@ import {
 import { MenuToggle } from "~/shell/MenuToggle";
 import { menuCookie, readMenuHidden } from "~/shell/menu";
 import { Navigation } from "~/shell/Navigation";
+import { NotificationBell } from "~/shell/NotificationBell";
 import { OUTSIDE_COLUMN, OUTSIDE_FRAME, OUTSIDE_MAIN } from "~/shell/Outside";
 import { ProfileMenu } from "~/shell/ProfileMenu";
 import { layoutShouldRevalidate } from "~/shell/revalidation";
@@ -126,9 +127,10 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 	}, []);
 
 	// The organisation's name stands in the band, at the other end from the
-	// product's, and beside it the person's profile menu: the way to My account
-	// and the way out. Outside an organisation the band holds the menu alone,
-	// without My account, which belongs to an organisation.
+	// product's, and beside it the bell (TS-049) and the person's profile menu:
+	// the way to My account and the way out. Outside an organisation the band
+	// holds the menu alone, without My account or the bell, which belong to an
+	// organisation.
 	const organisationData = useRouteLoaderData<typeof organisationLoader>("routes/app/organisation");
 	return (
 		<OrganisationTools organisation={organisation}>
@@ -179,23 +181,29 @@ export default function Shell({ loaderData }: Route.ComponentProps) {
 									</p>
 								</div>
 							)}
-							<ProfileMenu
-								name={loaderData.name}
-								email={loaderData.email}
-								accountHref={organisationData && accountPath(organisationData.slug)}
-								organisation={organisationData?.name}
-								timeReportHref={
-									organisationData?.destinations.includes("reports")
-										? `${destinationPath(organisationData.slug, "reports")}?range=this-week&group=project&person=${organisationData.userId}`
-										: undefined
-								}
-								organisationsHref={
-									organisationData && organisationData.organisationCount > 1 ? APP_PATH : undefined
-								}
-								// The page that creates an organisation is where a new account lands, and
-								// signing in with the wrong one of two addresses makes one: its way out says so.
-								wayOut={pathname === NEW_ORGANISATION_PATH ? "Use a different email" : "Sign out"}
-							/>
+							{/* The bell and the profile menu, side by side, each 40px: the band stays 80px (TS-049). */}
+							<div className="flex shrink-0 items-center gap-2">
+								{organisationData && <NotificationBell slug={organisationData.slug} />}
+								<ProfileMenu
+									name={loaderData.name}
+									email={loaderData.email}
+									accountHref={organisationData && accountPath(organisationData.slug)}
+									organisation={organisationData?.name}
+									timeReportHref={
+										organisationData?.destinations.includes("reports")
+											? `${destinationPath(organisationData.slug, "reports")}?range=this-week&group=project&person=${organisationData.userId}`
+											: undefined
+									}
+									organisationsHref={
+										organisationData && organisationData.organisationCount > 1
+											? APP_PATH
+											: undefined
+									}
+									// The page that creates an organisation is where a new account lands, and
+									// signing in with the wrong one of two addresses makes one: its way out says so.
+									wayOut={pathname === NEW_ORGANISATION_PATH ? "Use a different email" : "Sign out"}
+								/>
+							</div>
 						</div>
 					}
 				/>
