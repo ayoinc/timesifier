@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useLayoutEffect } from "react";
 import {
 	Dialog as AriaDialog,
 	Heading,
@@ -8,7 +8,7 @@ import {
 } from "react-aria-components";
 
 import { cx } from "./cx";
-import { SCRIM_MOTION, SHEET_MOTION } from "./motion";
+import { finishLeavingPopovers, SCRIM_MOTION, SHEET_MOTION } from "./motion";
 
 // Material 3 modal bottom sheet: a surface-container-low panel with `extra-large`
 // top corners at elevation 1, over a 32% scrim, at most 640px wide. From the
@@ -29,6 +29,17 @@ export interface SheetProps
 	actions?: ReactNode;
 	/** Whether pressing outside closes the sheet. Escape always does. Defaults to true. */
 	isDismissable?: boolean;
+}
+
+/**
+ * A sheet opened from a menu's item opens as the menu leaves. The menu is gone
+ * at once, so that a sheet never stands over it: an exit cut short under the
+ * sheet would keep the menu, and the focus the sheet gives back when it closes
+ * would go into it and not to the menu's button (`finishLeavingPopovers`).
+ */
+function OverLeavingMenus() {
+	useLayoutEffect(finishLeavingPopovers, []);
+	return null;
 }
 
 /**
@@ -54,6 +65,7 @@ export function Sheet({ title, children, actions, isDismissable = true, ...props
 				)}
 			>
 				<AriaDialog className="flex flex-col gap-4 p-6 outline-none">
+					<OverLeavingMenus />
 					<Heading slot="title" className="text-title-large text-on-surface">
 						{title}
 					</Heading>

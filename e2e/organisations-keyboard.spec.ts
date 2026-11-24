@@ -188,7 +188,7 @@ for (const viewport of [
 	});
 }
 
-test("Escape closes a sheet whose menu is still leaving, and the menu goes with it", async ({
+test("a sheet opened from a menu's item never stands over the leaving menu, and Escape gives the focus back to the menu's button", async ({
 	page,
 }) => {
 	const { slug, member } = homeOrganisation();
@@ -202,10 +202,11 @@ test("Escape closes a sheet whose menu is still leaving, and the menu goes with 
 	const menu = page.locator(".popover-motion");
 	await expect.poll(() => menu.evaluate((popover) => popover.getAnimations().length)).toBe(0);
 
-	// The menu's way out is slowed a thousand times as it starts, so Escape
-	// meets it still leaving however long the keys take. Escape is not
-	// animated, and the menu must not be left waiting for an exit that Escape
-	// cut short (TS-114).
+	// The menu's way out is slowed a thousand times as it starts. The sheet
+	// its item opens finishes it all the same: a menu left leaving under the
+	// sheet, its exit cut short, would never go, and the focus the sheet gives
+	// back would go into it (TS-114, and organisations-keyboard at 1280px in
+	// run 45384665659).
 	await page.evaluate(() => {
 		new MutationObserver((records) => {
 			for (const { target } of records) {
@@ -223,16 +224,14 @@ test("Escape closes a sheet whose menu is still leaving, and the menu goes with 
 	await page.keyboard.press("Enter");
 	const role = page.getByRole("dialog", { name: `Change the role of ${member.name}` });
 	await expect(role).toBeVisible();
-	const leaving = page.locator(".popover-motion[data-exiting]");
-	await expect(leaving).toHaveCount(1);
+	await expect(page.locator(".popover-motion")).toHaveCount(0);
+	await expect(page.getByRole("menu")).toHaveCount(0);
 	await expect
 		.poll(() => role.evaluate((dialog) => dialog.contains(document.activeElement)))
 		.toBe(true);
 
 	await page.keyboard.press("Escape");
 	await expect(role).toBeHidden();
-	await expect(leaving).toHaveCount(0);
-	await expect(page.getByRole("menu")).toHaveCount(0);
 	await expectFocusShown(actions);
 });
 

@@ -51,6 +51,19 @@ export const SHEET_MOTION =
 	"data-exiting:duration-short4 data-exiting:ease-emphasized-accelerate";
 
 /**
+ * Finishes the exit of every popover on its way out, such as a menu whose item
+ * opened a sheet. React Aria removes a leaving popover once its transitions end,
+ * and gives up waiting if one is cut short: the popover would then stay, with
+ * the focus a sheet gives back going into it. A sheet that opens over it, and
+ * an Escape, finish it first.
+ */
+export function finishLeavingPopovers() {
+	for (const leaving of document.querySelectorAll(".popover-motion[data-exiting]")) {
+		for (const animation of leaving.getAnimations()) animation.finish();
+	}
+}
+
+/**
  * Dismissing with Escape is not animated (TS-114, harvest sweep S2-15). While
  * the key is down, and for the frames in which what it closed leaves and the
  * focus goes back to what opened it, the document carries `data-escaping`,
@@ -70,9 +83,7 @@ export function settleOnEscape() {
 		// sheet that this Escape closes, is finished first. The mark would cut
 		// its exit short, and React Aria, waiting for that exit to finish, would
 		// keep the popover open with the focus given back into it.
-		for (const leaving of document.querySelectorAll(".popover-motion[data-exiting]")) {
-			for (const animation of leaving.getAnimations()) animation.finish();
-		}
+		finishLeavingPopovers();
 		root.dataset.escaping = "";
 	};
 	// React Aria gives the focus back in the frame after the overlay leaves; the mark stays one frame more.
