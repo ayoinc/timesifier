@@ -106,6 +106,10 @@ export function mayJoin(team: TeamChoices, projectId: string, today: Day): boole
 export const TEAM_REFUSAL =
 	"You are not on this project's team on that day, so it takes no time from you. Ask its delivery manager to add you.";
 
+/** What the picker says where projects are left out of it as the person is not on their teams that day. */
+export const TEAMS_ONLY =
+	"Only the projects whose team you are on that day are offered. Ask a project's delivery manager to add you to its team.";
+
 /** What the picker says of a project the person is not on the team of, but may join. */
 export function joinNote(projectName: string): string {
 	return `You are not on ${projectName}'s team on this day.`;

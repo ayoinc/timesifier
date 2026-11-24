@@ -5,7 +5,7 @@ import { Button } from "~/components/Button";
 import { Select } from "~/components/Select";
 import { codedName } from "~/lib/codes";
 import { ProjectPicker } from "~/projects/ProjectPicker";
-import { JOIN_INTENT, JOIN_LABEL, joinNote, mayJoin, onTeam } from "~/projects/teams";
+import { JOIN_INTENT, JOIN_LABEL, joinNote, mayJoin, onTeam, TEAMS_ONLY } from "~/projects/teams";
 import { WORK_PACKAGE_FIELD } from "~/projects/work-packages";
 import { useOrganisation, useTerms } from "~/routes/app/useOrganisation";
 import { TagPicker } from "~/tags/TagPicker";
@@ -122,6 +122,11 @@ export function EntryChoices({
 				}}
 				autoFocus={autoFocusProject}
 				isRequired
+				description={
+					offered.length < projects.length && joinable.length === 0
+						? inTerms(TEAMS_ONLY, terms)
+						: undefined
+				}
 			/>
 			{projectId !== null && onDay !== undefined && joinable.includes(projectId) && (
 				<JoinTeam project={projects.find((p) => p.id === projectId) ?? null} day={onDay} />

@@ -57,6 +57,7 @@ import {
 } from "~/projects/projects";
 import { offeredCopyName, projectCodeRules } from "~/projects/projects.server";
 import { changeBilling, changeBudget, changeOvertimeRate } from "~/projects/settings.server";
+import { TeamTab } from "~/projects/TeamTab";
 import { NAMES_LEADS_ONLY, TEAM_PROBLEMS, TeamRole } from "~/projects/teams";
 import {
 	assignToTeam,
@@ -1289,37 +1290,40 @@ function Team({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) 
 	const personRates = page.seesRates && page.project.rateMode === "person";
 	return (
 		<>
-			<Ledger heading="People" note={page.people.length}>
-				{page.people.length === 0 ? (
-					<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
-						{t("Nobody whose time you can see has tracked time to this project yet.")}
-					</p>
-				) : (
-					<LedgerRows label="People and their hours">
-						{page.people.map((person) => (
-							<LedgerRow
-								key={person.id}
-								title={<span className="wrap-anywhere">{person.name}</span>}
-								detail={personRates ? rateWords(person.rate, person.defaultRate) : undefined}
-								value={person.hours}
-								action={
-									managesRates && personRates ? (
-										<Button
-											variant="text"
-											aria-label={`Set rate for ${person.name}`}
-											onPress={() =>
-												setRating({ level: "project-person", key: person.id, name: person.name })
-											}
-										>
-											Set rate
-										</Button>
-									) : undefined
-								}
-							/>
-						))}
-					</LedgerRows>
-				)}
-			</Ledger>
+			{data.team && <TeamTab team={data.team} today={data.today} onSaid={onSaid} />}
+			<div className={data.team ? "mt-10" : undefined}>
+				<Ledger heading="People" note={page.people.length}>
+					{page.people.length === 0 ? (
+						<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
+							{t("Nobody whose time you can see has tracked time to this project yet.")}
+						</p>
+					) : (
+						<LedgerRows label="People and their hours">
+							{page.people.map((person) => (
+								<LedgerRow
+									key={person.id}
+									title={<span className="wrap-anywhere">{person.name}</span>}
+									detail={personRates ? rateWords(person.rate, person.defaultRate) : undefined}
+									value={person.hours}
+									action={
+										managesRates && personRates ? (
+											<Button
+												variant="text"
+												aria-label={`Set rate for ${person.name}`}
+												onPress={() =>
+													setRating({ level: "project-person", key: person.id, name: person.name })
+												}
+											>
+												Set rate
+											</Button>
+										) : undefined
+									}
+								/>
+							))}
+						</LedgerRows>
+					)}
+				</Ledger>
+			</div>
 			{personRates && (
 				<p className="mt-4 max-w-160 text-body-medium text-on-surface-variant">
 					{t("A rate set here is for this project alone.")} Each person's default rate is on{" "}
