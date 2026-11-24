@@ -61,7 +61,7 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ### TS-126 · Export everything
 
-Builder: an AI session on branch `ts-126-export-everything`, pull request #105. Closes gap 18 of `research/corporate-readiness.md`: one ZIP of every table the organisation owns, plus receipts and logos. Decision 71. Migration `0035_organisation_exports`, after #100's 0033 and #102's 0034; renumbered at merge. Until #102 (TS-049, the bell) merges, the owner is told by email alone.
+Builder: an AI session on branch `ts-126-export-everything`, pull request #105. Closes gap 18 of `research/corporate-readiness.md`: one ZIP of every table the organisation owns, plus receipts and logos. Decision 71. Migration `0033_organisation_exports`, after #100's 0033 and #102's 0034; renumbered at merge. Until #102 (TS-049, the bell) merges, the owner is told by email alone.
 
 - [x] An owner asks for one ZIP of everything on Workspace settings › Export everything; it holds every table of the organisation as CSV, its receipts and logo, and `manifest.json` whose counts are the files' (`test/exports/export-everything.test.ts`, "holds every table of the organisation as CSV, its receipts and logo, and a manifest whose counts are the files'").
 - [x] It holds nothing of another organisation, and a former member by id alone (`test/exports/export-everything.test.ts`, "holds no row, receipt or name of another organisation", "names a former member's rows by their id alone, as the export of all time does").

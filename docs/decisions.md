@@ -1053,7 +1053,7 @@ Decided for TS-125 (research/harvest-sweep-2.md, S2-08).
 
 ### 71. The export of everything: a job of steps into one R2 multipart upload, a step a minute, kept 7 days
 
-Decided on 2026-11-24 for TS-126 (`research/corporate-readiness.md`, gap 18: "Export everything": one ZIP of every table the organisation owns, plus receipts and logos). The code is `app/exports/job.server.ts`, the table `organisation_exports` (migration `0035_organisation_exports`).
+Decided on 2026-11-24 for TS-126 (`research/corporate-readiness.md`, gap 18: "Export everything": one ZIP of every table the organisation owns, plus receipts and logos). The code is `app/exports/job.server.ts`, the table `organisation_exports` (migration `0033_organisation_exports`).
 
 **Why a job.** An organisation of 300 people holds hundreds of thousands of rows and may hold gigabytes of receipts. One invocation of a Worker cannot read or hold that. Cloudflare's limits, read again on 2026-11-24:
 
