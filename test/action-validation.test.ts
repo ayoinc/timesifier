@@ -64,6 +64,9 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 	// An invitation gives the role of a member or an admin; this is neither.
 	"routes/app/invitations": () =>
 		formFromAMember("/app/acme/team/invitations", "intent=invite&email=bob@example.com&role=owner"),
+	// A people import is uploaded, imported, discarded or reverted; this asks to delete one.
+	"routes/app/invitations.import": () =>
+		formFromAMember("/app/acme/team/invitations/import", "intent=delete&importId=x"),
 	// A project is created, renamed, archived or restored; this asks to delete one.
 	"routes/app/projects": () => formFromAMember("/app/acme/projects", "intent=delete&projectId=p1"),
 	// A client's name is 1 to 120 characters; this is none.

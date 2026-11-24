@@ -182,6 +182,8 @@ const NARROWER: Record<string, (role: Role) => boolean> = {
 	// The export of everything and its ZIP (TS-126), below Workspace settings too.
 	"routes/app/export-everything": (role) => role === "owner",
 	"routes/app/export-everything.download": (role) => role === "owner",
+	// Importing people (TS-108), below Invitations, which managers are shown too, is the owners' and admins'.
+	"routes/app/invitations.import": (role) => role === "owner" || role === "admin",
 };
 
 /** Whether a person of `role`, who is shown the route's destination, may open the route. */
