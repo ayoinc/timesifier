@@ -68,6 +68,8 @@ describe("a page as a manager of 120 of 150 people", () => {
 			).length,
 			// The teams they manage: `managedPlaces`, which the layout and `accessOf` share.
 			managedTeams: sql.filter((s) => /from "team_members".*"is_manager" = \?/.test(s)).length,
+			// The person's pins (TS-122, S2-09): the project picker's, or Team's people.
+			pins: reads(sql, "pins"),
 		};
 	}
 
@@ -79,16 +81,18 @@ describe("a page as a manager of 120 of 150 people", () => {
 	// leave and weeks for the day's limits, the people's zones, and the lock
 	// date as it reaches the person, twice) and Team 2 more (leave, and the
 	// people's zones): none of the memberships or the teams, and the repeats
-	// among them are TS-113b's too.
+	// among them are TS-113b's too. Since TS-122, each reads the person's pins
+	// once more: Timesheet day for the project picker, Team for This week.
 	it("Timesheet day reads the manager's membership and their teams once", async () => {
 		const counts = await statementsOf(`/app/acme?day=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 55,
+			total: 56,
 			memberships: 4,
 			teamMembers: 3,
 			ownMembership: 1,
 			managedTeams: 1,
+			pins: 1,
 		});
 	});
 
@@ -96,11 +100,12 @@ describe("a page as a manager of 120 of 150 people", () => {
 		const counts = await statementsOf(`/app/acme/team?week=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 35,
+			total: 36,
 			memberships: 5,
 			teamMembers: 3,
 			ownMembership: 1,
 			managedTeams: 1,
+			pins: 1,
 		});
 	});
 });
