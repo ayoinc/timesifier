@@ -63,6 +63,7 @@ export const STORED = [
 				term: "Projects, tasks and budgets",
 				tables: [
 					"projects",
+					"work_packages",
 					"project_tasks",
 					"project_tags",
 					"tasks",

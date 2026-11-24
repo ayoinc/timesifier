@@ -270,8 +270,16 @@ export async function removeTaskFromProject(
  * An entry of the project that no invoice bills: what re-rating may change.
  * An invoiced entry keeps what it was billed as.
  */
-function notInvoiced(scope: OrganisationScope, id: Parameters<typeof eq>[0]) {
+export function notInvoiced(scope: OrganisationScope, id: Parameters<typeof eq>[0]) {
 	return sql`${id} not in (select time_entry_id from invoice_line_sources where organisation_id = ${scope.organisationId} and time_entry_id is not null)`;
+}
+
+/**
+ * An entry with no work package, or on a billable one (TS-115b): what may be
+ * made billable. An entry on a work package that is not billable stays not.
+ */
+export function onBillablePackage(scope: OrganisationScope, wp: Parameters<typeof eq>[0]) {
+	return sql`(${wp} is null or ${wp} in (select id from work_packages where organisation_id = ${scope.organisationId} and billable = 1))`;
 }
 
 /**
@@ -304,7 +312,12 @@ export async function setProjectTaskBillable(
 			and(eq(pt.projectId, projectId), among(pt.taskId, changing)),
 		),
 		scope.timeEntries.statements.update({ billable }, (e) =>
-			and(eq(e.projectId, projectId), among(e.taskId, changing), notInvoiced(scope, e.id)),
+			and(
+				eq(e.projectId, projectId),
+				among(e.taskId, changing),
+				notInvoiced(scope, e.id),
+				billable ? onBillablePackage(scope, e.workPackageId) : undefined,
+			),
 		),
 		recordStatement(
 			scope,
@@ -349,7 +362,12 @@ export async function rerateForBillingType(
 			and(eq(pt.projectId, projectId), among(pt.taskId, billableIds)),
 		),
 		scope.timeEntries.statements.update({ billable: true }, (e) =>
-			and(eq(e.projectId, projectId), among(e.taskId, billableIds), notInvoiced(scope, e.id)),
+			and(
+				eq(e.projectId, projectId),
+				among(e.taskId, billableIds),
+				notInvoiced(scope, e.id),
+				onBillablePackage(scope, e.workPackageId),
+			),
 		),
 	];
 }

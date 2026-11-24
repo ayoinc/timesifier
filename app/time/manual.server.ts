@@ -6,6 +6,7 @@ import { type OrganisationScope, uuidv7 } from "~/db";
 import { refusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
+import { entryPackageOf } from "~/projects/work-packages.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 
@@ -23,8 +24,9 @@ import { gridEntryStart, placeOnDay } from "./grid";
  * before and after the change (`lockedDays`), and so is time a day does not
  * take: a public holiday, whole-day leave, regular time past the day's
  * expected hours, or overtime the organisation's rules do not allow (TS-090,
- * TS-095, `refusalOf`). Each change goes in one batch with its row in the
- * activity log.
+ * TS-095, `refusalOf`), and so is an entry of a project with an open work
+ * package that names none, or names a closed one (TS-115b, `entryPackageOf`).
+ * Each change goes in one batch with its row in the activity log.
  */
 
 /** Why a change was not made. */
@@ -38,6 +40,8 @@ export type NotWritten =
 	| "limit"
 	| "invoiced"
 	| "no-task"
+	| "no-work-package"
+	| "work-package-closed"
 	| "no-tag"
 	| "ahead"
 	| "too-long";
@@ -53,6 +57,8 @@ export interface Span {
 	tagIds?: readonly string[];
 	/** Whether the entry is overtime (TS-095); left out, it stays as it is. */
 	overtime?: boolean;
+	/** The work package chosen, null for none (TS-115b); left out, the entry keeps its own. */
+	workPackageId?: string | null;
 }
 
 export const refuse = (reason: Exclude<NotWritten, "limit" | "invoiced">) => ({
@@ -111,6 +117,7 @@ export const ENTRY_FIELDS = [
 	"startedAt",
 	"endedAt",
 	"overtime",
+	"workPackageId",
 ] as const;
 
 /** The entry `id` of `userId`, as the activity log names it. */
@@ -174,12 +181,26 @@ export async function editEntry(
 		span.projectId === entry.projectId ? entry.taskId : null,
 	);
 	if (!task.ok) return refuse("no-task");
+	const wp = await entryPackageOf(
+		scope,
+		span.projectId,
+		span.workPackageId,
+		span.projectId === entry.projectId
+			? {
+					workPackageId: entry.workPackageId,
+					addsTime:
+						span.endedAt - span.startedAt > entry.endedAt.getTime() - entry.startedAt.getTime(),
+				}
+			: null,
+	);
+	if (!wp.ok) return refuse(wp.reason);
 	const currentTags = (await tagsOfEntries(scope, [id])).get(id) ?? [];
 	if (span.tagIds && !(await tagsAllowed(scope, currentTags, span.tagIds))) return refuse("no-tag");
 	const changed = {
 		projectId: span.projectId,
 		taskId: task.taskId,
-		billable: task.billable,
+		workPackageId: wp.workPackageId,
+		billable: task.billable && wp.billable,
 		description: span.description,
 		startedAt: new Date(span.startedAt),
 		endedAt: new Date(span.endedAt),
@@ -215,6 +236,8 @@ export interface DeletedEntry {
 	overtime: boolean;
 	/** The day it belonged to (TS-111): it is put back on the same day. */
 	spentOn: Day;
+	/** Its work package (TS-115b): it is put back on it, while it takes time. Absent from an older undo. */
+	workPackageId?: string | null;
 }
 
 /** Deletes an entry of `userId` that has ended, and answers what it was, so it can be put back. */
@@ -253,6 +276,7 @@ export async function deleteEntry(
 		tagIds,
 		overtime: entry.overtime,
 		spentOn: entry.spentOn,
+		workPackageId: entry.workPackageId,
 	};
 	return { ok: true as const, deleted };
 }
@@ -280,11 +304,15 @@ export async function restoreEntry(
 		overtime: entry.overtime,
 	});
 	if (over) return limited(over);
+	// Put back is new time: its work package must still take it (TS-115b).
+	const wp = await entryPackageOf(scope, entry.projectId, entry.workPackageId ?? null);
+	if (!wp.ok) return refuse(wp.reason);
 	const restored = {
 		id: entry.id,
 		userId,
 		projectId: entry.projectId,
 		taskId: entry.taskId,
+		workPackageId: wp.workPackageId,
 		billable: entry.billable,
 		description: entry.description,
 		startedAt: new Date(entry.startedAt),
@@ -329,6 +357,8 @@ export interface DayHours {
 	tagIds?: readonly string[];
 	/** Whether the hours are overtime (TS-095). */
 	overtime?: boolean;
+	/** The work package chosen (TS-115b); required while the project has an open one. */
+	workPackageId?: string | null;
 }
 
 /** The refusal of hours a day has no room for, saying what it has left (TS-091, W08). */
@@ -364,6 +394,8 @@ export async function addHours(
 	if (over) return limited(over);
 	const task = await entryTaskOf(scope, projectId, hours.taskId);
 	if (!task.ok) return refuse("no-task");
+	const wp = await entryPackageOf(scope, projectId, hours.workPackageId ?? null);
+	if (!wp.ok) return refuse(wp.reason);
 	if (hours.tagIds && !(await tagsAllowed(scope, [], hours.tagIds))) return refuse("no-tag");
 	const wanted =
 		hours.startedAt ?? gridEntryStart(day, zone, await entriesOfDay(scope, userId, day), now);
@@ -376,7 +408,8 @@ export async function addHours(
 		userId,
 		projectId,
 		taskId: task.taskId,
-		billable: task.billable,
+		workPackageId: wp.workPackageId,
+		billable: task.billable && wp.billable,
 		description,
 		startedAt: new Date(placed.start),
 		endedAt: new Date(placed.start + minutes * 60_000),
@@ -405,6 +438,8 @@ export interface CellHours {
 	minutes: number;
 	/** Whether the cell is the project's overtime on the day, rather than its regular time (TS-095). */
 	overtime?: boolean;
+	/** The row's work package, null for the project's time on none (TS-115b). */
+	workPackageId?: string | null;
 	zone: string;
 	/** The server's clock. */
 	now: number;
@@ -412,8 +447,8 @@ export interface CellHours {
 
 /**
  * Sets the time of one project on one day to `minutes` (TS-052), of regular
- * time or of overtime (TS-095): a cell is the entries of one project and one
- * kind. A cell with no entry gains one, which starts where `gridEntryStart`
+ * time or of overtime (TS-095): a cell is the entries of one project, one
+ * work package (TS-115b) and one kind. A cell with no entry gains one, which starts where `gridEntryStart`
  * says; a cell of one entry keeps its start and has its end moved; 0 deletes
  * it. A cell of more than one entry, or of a running one, is changed in the
  * Day view. Either way the entry is placed within its day by `placeOnDay`
@@ -424,11 +459,15 @@ export interface CellHours {
 export async function setCellHours(scope: OrganisationScope, userId: string, cell: CellHours) {
 	const { projectId, day, minutes, zone, now } = cell;
 	const overtime = cell.overtime ?? false;
+	const workPackageId = cell.workPackageId ?? null;
 	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
 
 	const ofDay = await entriesOfDay(scope, userId, day);
 	const inCell = ofDay.filter(
-		(entry) => entry.projectId === projectId && entry.overtime === overtime,
+		(entry) =>
+			entry.projectId === projectId &&
+			entry.overtime === overtime &&
+			entry.workPackageId === workPackageId,
 	);
 	if (inCell.length > 1 || inCell.some((entry) => entry.endedAt === null)) {
 		return refuse("in-day-view");
@@ -460,6 +499,20 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 		return { ok: true as const };
 	}
 	if (!entry && !(await findActiveProject(scope, projectId))) return refuse("no-project");
+	// The cell's entry keeps the row's work package; what it adds must be taken by it (TS-115b).
+	const wp = await entryPackageOf(
+		scope,
+		projectId,
+		workPackageId,
+		entry
+			? {
+					workPackageId,
+					addsTime:
+						minutes * 60_000 > (entry.endedAt?.getTime() ?? now) - entry.startedAt.getTime(),
+				}
+			: null,
+	);
+	if (!wp.ok) return refuse(wp.reason);
 
 	const wanted = entry ? entry.startedAt.getTime() : gridEntryStart(day, zone, ofDay, now);
 	const placed = placeOnDay(day, zone, wanted, minutes, now);
@@ -491,7 +544,8 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 			userId,
 			projectId,
 			taskId: task.taskId,
-			billable: task.billable,
+			workPackageId,
+			billable: task.billable && wp.billable,
 			description: null,
 			overtime,
 			...span,

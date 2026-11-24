@@ -32,6 +32,7 @@ import { nameKey, recordName } from "~/lib/names";
 import { lockOf, lockReachOf } from "~/locks/locks";
 import { PeriodStatus } from "~/periods/periods";
 import { nextPatternCodes, projectCodeRules } from "~/projects/projects.server";
+import { type PackageRules, packageRules } from "~/projects/work-packages.server";
 import { addDays, type Day, dayOf, instantAt } from "~/time/calendar";
 import { formatDayWithYear, formatDuration } from "~/time/format";
 import { ENTRY_FIELDS } from "~/time/manual.server";
@@ -187,6 +188,9 @@ export interface TimeRow {
 	project: string;
 	/** The project's code: its own when found, else the file's for one the import adds. */
 	projectCode: string | null;
+	/** The project's work package, found by its code within the project (TS-115b); null for none. */
+	workPackageId: string | null;
+	workPackageCode: string | null;
 	task: string | null;
 	notes: string | null;
 	minutes: number;
@@ -502,6 +506,12 @@ async function previewTime(
 		scope.tasks.select(),
 		scope.clients.select(),
 	]);
+	const projectIdOf = new Map(projects.map((p) => [p.nameKey, p.id]));
+	// A row's work package is found by its code within its project (TS-115b).
+	const packages = await packageRules(
+		scope,
+		projects.map((p) => p.id),
+	);
 	const byEmail = new Map(members.map((m) => [m.email, m]));
 	const byName = new Map<string, Member[]>();
 	for (const member of members) {
@@ -587,6 +597,15 @@ async function previewTime(
 			preview.skipped.push({ line: row.line, reason: needed });
 			continue;
 		}
+		const workPackage = packageOfRow(
+			packages,
+			found ? (projectIdOf.get(found.nameKey) ?? null) : null,
+			cell(row, "work_package_code"),
+		);
+		if ("reason" in workPackage) {
+			preview.skipped.push({ line: row.line, reason: workPackage.reason });
+			continue;
+		}
 		if (!found) projectFinder.add(project, projectCode);
 		const notes = cell(row, "notes");
 		memberOf.set(member.userId, member);
@@ -599,6 +618,8 @@ async function previewTime(
 			clientCode: client.client?.code ?? null,
 			project,
 			projectCode: found ? found.code : projectCode,
+			workPackageId: workPackage.id,
+			workPackageCode: workPackage.code,
 			task: recordName(cell(row, "task")),
 			notes: notes ? notes.slice(0, 2000) : null,
 			minutes,
@@ -759,6 +780,30 @@ async function previewTime(
 		projects: [...newProjects.values()],
 		tasks: [...newTasks.values()],
 	};
+}
+
+/**
+ * A row's work package (TS-115b): the open one of its project whose code the
+ * row gives, ignoring case. A row with no code is taken only where its project
+ * has no open work package; a project the import adds has none. A code no
+ * work package of the project has, or a closed one's, skips the row.
+ */
+function packageOfRow(
+	packages: PackageRules,
+	projectId: string | null,
+	typed: string,
+): { id: string | null; code: string | null } | { reason: string } {
+	if (typed === "") {
+		return projectId !== null && packages.required(projectId)
+			? { reason: "No work package code: this project's time goes to one of its work packages." }
+			: { id: null, code: null };
+	}
+	const found = projectId === null ? null : packages.byCode(projectId, typed);
+	if (!found) return { reason: `This project has no work package with the code ${typed}.` };
+	if (packages.open(found.projectId, found.id) === null) {
+		return { reason: `Work package ${found.code} is closed, so it takes no new time.` };
+	}
+	return { id: found.id, code: found.code };
 }
 
 /**
@@ -1051,6 +1096,15 @@ async function entriesToCreate(
 	const { zone: organisationZone } = await organisationOf(scope.organisationId);
 	const members = new Map((await membersOf(scope, organisationZone)).map((m) => [m.userId, m]));
 	const nextStart = new Map<string, number>();
+	const packageIds = [
+		...new Set(preview.rows.flatMap((row) => (row.workPackageId ? [row.workPackageId] : []))),
+	];
+	const packageBillable = new Map(
+		(packageIds.length === 0
+			? []
+			: await scope.workPackages.select((w) => among(w.id, packageIds))
+		).map((wp) => [wp.id, wp.billable]),
+	);
 	const entries = [];
 	for (const row of preview.rows) {
 		const zone = members.get(row.userId)?.zone ?? organisationZone;
@@ -1072,11 +1126,15 @@ async function entriesToCreate(
 			userId: row.userId,
 			projectId,
 			taskId,
+			workPackageId: row.workPackageId,
 			description: row.notes,
 			startedAt: new Date(startedAt),
 			endedAt: new Date(endedAt),
 			spentOn: row.day,
-			billable: taskId === null ? false : (known.billable.get(`${projectId}|${taskId}`) ?? false),
+			billable:
+				taskId !== null &&
+				(known.billable.get(`${projectId}|${taskId}`) ?? false) &&
+				(row.workPackageId === null || (packageBillable.get(row.workPackageId) ?? true)),
 			overtime: row.overtime,
 			importId,
 		});

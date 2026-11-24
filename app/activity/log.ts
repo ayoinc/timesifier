@@ -15,6 +15,7 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	time_entry: "Time entries",
 	period: "Weeks",
 	project: "Projects",
+	work_package: "Work packages",
 	client: "Clients",
 	membership: "Members",
 	invitation: "Invitations",

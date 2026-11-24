@@ -6,6 +6,7 @@ import { daysOf } from "~/leave/leave.server";
 import { refusalOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { type PeriodDays, periodAfter } from "~/periods/periods";
+import { packageRules } from "~/projects/work-packages.server";
 import { entryTagStatements, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
@@ -31,6 +32,10 @@ import { formatDuration } from "./durations";
  * within the rules of the day it lands on: where that day does not take the
  * overtime, the regular entries are copied and the overtime is left out, and
  * the copy says so (TR-18e). Copy week names each day it leaves, and why.
+ *
+ * A copy goes to its entry's work package (TS-115b, `packageRules`): an entry
+ * whose work package has closed since, or one on no work package of a project
+ * that now has an open one, is not copied, as new time it would be refused.
  */
 
 /** How far back a copy looks: three weeks (Harvest's "Copy your last timesheet"). */
@@ -47,6 +52,8 @@ export interface CopySource {
 	lengthMs: number;
 	/** Whether it is overtime (TS-095): its copy is too, where the day takes it. */
 	overtime: boolean;
+	/** Its work package (TS-115b): its copy goes to it, while it is open. */
+	workPackageId: string | null;
 }
 
 /** The person's ended entries on active projects from `first` to `last`, earliest first. */
@@ -74,6 +81,7 @@ async function sourcesIn(
 			startedAt: row.startedAt.getTime(),
 			lengthMs: (row.endedAt as Date).getTime() - row.startedAt.getTime(),
 			overtime: row.overtime,
+			workPackageId: row.workPackageId,
 		}))
 		.sort((a, b) => a.startedAt - b.startedAt);
 }
@@ -147,7 +155,7 @@ async function copyOnto(
 	scope: OrganisationScope,
 	userId: string,
 	day: Day,
-	all: readonly CopySource[],
+	given: readonly CopySource[],
 	zone: string,
 	now: number,
 ): Promise<
@@ -159,6 +167,21 @@ async function copyOnto(
 	}
 	if ((await lockedDays(scope, userId, [day])).size > 0) {
 		return { ok: false, problem: "That day is locked: nothing can be copied onto it." };
+	}
+	const rules = await packageRules(
+		scope,
+		given.map((s) => s.projectId),
+	);
+	const all = given.filter((s) =>
+		s.workPackageId === null
+			? !rules.required(s.projectId)
+			: rules.open(s.projectId, s.workPackageId) !== null,
+	);
+	if (all.length === 0) {
+		return {
+			ok: false,
+			problem: "Those entries' work packages are closed, so nothing was copied onto that day.",
+		};
 	}
 	const lengthOf = (entries: readonly CopySource[]) =>
 		entries.reduce((sum, s) => sum + s.lengthMs, 0);
@@ -218,7 +241,9 @@ async function copyOnto(
 			userId,
 			projectId: source.projectId,
 			taskId: task.taskId,
-			billable: task.billable,
+			workPackageId: source.workPackageId,
+			billable:
+				task.billable && (rules.open(source.projectId, source.workPackageId)?.billable ?? true),
 			description: source.description,
 			startedAt: new Date(at),
 			endedAt: new Date(at + source.lengthMs),

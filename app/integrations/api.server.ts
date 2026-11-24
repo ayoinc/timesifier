@@ -16,6 +16,7 @@ import {
 	maySeeRates,
 	timeScopeOf,
 } from "~/organisations/access";
+import { WORK_PACKAGE_REFUSALS } from "~/projects/work-packages";
 import { clockTime } from "~/schedules/schedules";
 import { canSee } from "~/shell/destinations";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
@@ -140,6 +141,7 @@ const ROUTES: Record<string, ApiRoute> = {
 	clients: { scope: { read: "projects:read" }, collection: { GET: listClients } },
 	projects: { scope: { read: "projects:read" }, collection: { GET: listProjects } },
 	tasks: { scope: { read: "projects:read" }, collection: { GET: listTasks } },
+	work_packages: { scope: { read: "projects:read" }, collection: { GET: listWorkPackages } },
 	time_entries: {
 		scope: { read: "time:read", write: "time:write" },
 		collection: { GET: listEntries, POST: createEntry },
@@ -386,6 +388,42 @@ async function listTasks({ caller }: Call) {
 	});
 }
 
+const WorkPackagesQuery = z.object({ project_id: z.string().min(1).max(64).optional() });
+
+/**
+ * Each project's work packages (TS-115b), by project then code, archived ones
+ * too: code, name, days, state and whether billable; the budget only to those
+ * who see money, as a project's is.
+ */
+async function listWorkPackages({ caller, url }: Call) {
+	const query = queryOf(url, WorkPackagesQuery);
+	if (!query.success) return invalid(query.error);
+	const { project_id } = query.data;
+	const rows = await caller.scope.workPackages.select(
+		project_id === undefined ? undefined : (w) => eq(w.projectId, project_id),
+		{ orderBy: (w) => [w.projectId, w.codeKey] },
+	);
+	const money = maySeeRates(caller.role);
+	return json({
+		data: rows.map((wp) => ({
+			id: wp.id,
+			project_id: wp.projectId,
+			code: wp.code,
+			name: wp.name,
+			starts_on: wp.startsOn,
+			ends_on: wp.endsOn,
+			state: wp.state,
+			billable: wp.billable,
+			archived: wp.archivedAt !== null,
+			// An hours budget is shown to everyone who reads projects; fees, as money, to those who see rates.
+			budget:
+				wp.budgetKind === "none" || (wp.budgetKind === "fees" && !money)
+					? null
+					: { kind: wp.budgetKind, amount: wp.budgetAmount },
+		})),
+	});
+}
+
 // ── Time entries ─────────────────────────────────────────────────────────────
 
 /** What the API reads of a time entry. */
@@ -394,6 +432,7 @@ interface EntryRow {
 	userId: string;
 	projectId: string;
 	taskId: string | null;
+	workPackageId: string | null;
 	description: string | null;
 	startedAt: Date;
 	endedAt: Date | null;
@@ -407,13 +446,16 @@ interface EntryRow {
 
 /** Entries as the API shows them: names beside ids, their stored day, and descriptions only with the scope. */
 async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number): Promise<Json[]> {
-	const [people, projects, clients, tasks] = await Promise.all([
+	const packageIds = new Set(entries.flatMap((e) => (e.workPackageId ? [e.workPackageId] : [])));
+	const [people, projects, clients, tasks, packages] = await Promise.all([
 		namesOfPeople(entries.map((e) => e.userId)),
 		// Each project once: a page of 101 entries on one project is one id, not 101.
 		caller.scope.projects.select((p) => among(p.id, new Set(entries.map((e) => e.projectId)))),
 		caller.scope.clients.select(),
 		caller.scope.tasks.select(),
+		packageIds.size === 0 ? [] : caller.scope.workPackages.select((w) => among(w.id, packageIds)),
 	]);
+	const packageById = new Map(packages.map((wp) => [wp.id, wp]));
 	const projectById = new Map(projects.map((p) => [p.id, p]));
 	const clientById = new Map(clients.map((c) => [c.id, c]));
 	const taskNames = new Map(tasks.map((t) => [t.id, t.name]));
@@ -430,6 +472,8 @@ async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number)
 					? codedRef(project.clientId, clientById)
 					: null,
 			task: ref(entry.taskId, taskNames),
+			work_package_id: entry.workPackageId,
+			work_package: codedRef(entry.workPackageId, packageById),
 			spent_date: entry.spentOn,
 			started_at: iso(entry.startedAt),
 			ended_at: iso(entry.endedAt),
@@ -506,6 +550,8 @@ const NewEntry = z
 		user_id: z.string().max(64).optional(),
 		project_id: z.string().min(1).max(64),
 		task_id: z.string().min(1).max(64).optional(),
+		/** The work package (TS-115b): required while the project has an open one. */
+		work_package_id: z.string().min(1).max(64).nullable().optional(),
 		spent_date: Day.optional(),
 		started_at: z.iso.datetime({ offset: true }).optional(),
 		hours: z.number().positive().max(24).optional(),
@@ -524,6 +570,8 @@ const EntryChange = z
 	.object({
 		project_id: z.string().min(1).max(64).optional(),
 		task_id: z.string().min(1).max(64).optional(),
+		/** Left out, the entry keeps its work package; null takes it off. */
+		work_package_id: z.string().min(1).max(64).nullable().optional(),
 		started_at: z.iso.datetime({ offset: true }).optional(),
 		ended_at: z.iso.datetime({ offset: true }).optional(),
 		hours: z.number().positive().max(24).optional(),
@@ -587,6 +635,10 @@ function refused(refusal: { reason: string; message?: string }): Response {
 			return problem(422, "invalid", "An entry ends after it starts.");
 		case "no-project":
 			return problem(422, "invalid", "Choose an active project of this organisation.");
+		case "no-work-package":
+			return problem(422, "work_package_required", WORK_PACKAGE_REFUSALS["no-work-package"]);
+		case "work-package-closed":
+			return problem(409, "work_package_closed", WORK_PACKAGE_REFUSALS["work-package-closed"]);
 		default:
 			return problem(422, "invalid", message ?? `The entry was not written: ${reason}.`);
 	}
@@ -604,8 +656,17 @@ const NO_MINUTES = "`hours` is less than a minute.";
 async function createEntry({ caller, request, now }: Call) {
 	const body = await bodyOf(request, NewEntry);
 	if (!body.ok) return body.response;
-	const { user_id, project_id, task_id, spent_date, started_at, hours, description, overtime } =
-		body.data;
+	const {
+		user_id,
+		project_id,
+		task_id,
+		work_package_id,
+		spent_date,
+		started_at,
+		hours,
+		description,
+		overtime,
+	} = body.data;
 	// Nobody changes anybody's entries but their own (decision 25), on a page or here.
 	if (user_id !== undefined && user_id !== caller.user.id) {
 		return forbidden("A token adds its maker's own time, and nobody else's.");
@@ -622,6 +683,7 @@ async function createEntry({ caller, request, now }: Call) {
 	const dayHours = {
 		projectId: project_id,
 		taskId: task_id,
+		workPackageId: work_package_id ?? null,
 		description: description?.length ? description : null,
 		day,
 		minutes,
@@ -648,7 +710,16 @@ async function changeEntry({ caller, request, id, now }: Call) {
 		return forbidden("A token changes its maker's own entries, and nobody else's.");
 	}
 	if (entry.endedAt === null) return refused({ reason: "running" });
-	const { project_id, task_id, started_at, ended_at, hours, description, overtime } = body.data;
+	const {
+		project_id,
+		task_id,
+		work_package_id,
+		started_at,
+		ended_at,
+		hours,
+		description,
+		overtime,
+	} = body.data;
 	const startedAt = started_at === undefined ? entry.startedAt.getTime() : Date.parse(started_at);
 	const length = entry.endedAt.getTime() - entry.startedAt.getTime();
 	if (hours !== undefined && Math.round(hours * 60) === 0) {
@@ -663,6 +734,7 @@ async function changeEntry({ caller, request, id, now }: Call) {
 	const span = {
 		projectId: project_id ?? entry.projectId,
 		taskId: task_id,
+		workPackageId: work_package_id,
 		description:
 			description === undefined ? entry.description : description?.length ? description : null,
 		startedAt,

@@ -34,6 +34,7 @@ const Payload = z.object({
 		tagIds: z.array(z.string()),
 		overtime: z.boolean(),
 		spentOn: z.iso.date(),
+		workPackageId: z.string().nullable().optional(),
 	}),
 });
 
