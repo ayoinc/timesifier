@@ -1,12 +1,13 @@
 import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { Link, type ShouldRevalidateFunctionArgs, useFetcher } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import {
@@ -23,6 +24,10 @@ import {
 	type OvertimePay,
 	PAY_BASES,
 	PAY_BASIS_LABELS,
+	PRIOR_DAYS,
+	PRIOR_DAYS_LABELS,
+	type PriorDays,
+	priorDaysQuestion,
 	WORKS_NUMBER_MAX_LENGTH,
 } from "~/contracts/contracts";
 import {
@@ -31,9 +36,10 @@ import {
 	endContract,
 	giveContract,
 	otherAdministrators,
+	previewedContracts,
 } from "~/contracts/contracts.server";
 import { ContractFields } from "~/contracts/forms";
-import { contractsOf } from "~/contracts/read.server";
+import { contractsOf, joinedOnOf } from "~/contracts/read.server";
 import { type ContractDefaults, contractsView, defaultsOf } from "~/contracts/view";
 import { type OrganisationScope, organisationScope, users } from "~/db";
 import {
@@ -49,7 +55,7 @@ import {
 	USUAL_SETTINGS,
 } from "~/leave/entitlement";
 import { addAdjustment, adjustmentsOf } from "~/leave/entitlement.server";
-import { annualLeaveOf } from "~/leave/leave.server";
+import { annualLeaveOf, annualLeftWords } from "~/leave/leave.server";
 import { leaveYear, leaveYearLabel, leaveYearOf } from "~/leave/years";
 import { parseRequest } from "~/lib/validate";
 import { mayChangeContractOf, maySeeContractOf, maySeePayOf } from "~/organisations/access";
@@ -57,7 +63,7 @@ import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound, viewerOf } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { shownName } from "~/organisations/people";
-import { NOT_ALLOWED } from "~/organisations/problems";
+import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { organisationMoney } from "~/projects/money.server";
 import { type ScheduleWeek, versionOn } from "~/schedules/schedules";
 import { scheduleBookOf } from "~/schedules/schedules.server";
@@ -87,6 +93,15 @@ const ADJUST_NEEDS_CONTRACT =
 // their own while another owner or admin could.
 
 const TITLE = "Contract";
+
+/** The Give sheet's preview reads; it changes nothing the page shows. */
+export function shouldRevalidate({
+	formData,
+	defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) {
+	if (formData?.get("intent") === "preview") return false;
+	return defaultShouldRevalidate;
+}
 
 export function meta({ loaderData }: Route.MetaArgs) {
 	return [{ title: `${loaderData?.person.name ?? TITLE} · ${TITLE} · Timesifier` }];
@@ -152,6 +167,8 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 	// The contract a sheet changes or ends: the one that covers today, or the next to begin, while it is not ended.
 	const open = currentContract && currentContract.endReason === null ? currentContract : null;
 	const last = theirs.at(-1);
+	// The day they joined: the Give sheet asks how the days before a first contract count of someone who joined before it.
+	const joinedOn = canChange && person.isMember ? await joinedOnOf(scope, personId) : null;
 	return {
 		person: { id: person.id, name: person.name, isMember: person.isMember },
 		isYou: personId === access.userId,
@@ -172,7 +189,11 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 					change: open ? { id: open.id, ...defaultsOf(open, today) } : null,
 					give:
 						person.isMember && (!last || last.endsOn !== null)
-							? { from: last?.endsOn ? addDays(last.endsOn, 1) : today }
+							? {
+									from: last?.endsOn ? addDays(last.endsOn, 1) : today,
+									joinedOn,
+									hasContracts: theirs.length > 0,
+								}
 							: null,
 					currency: money.currency,
 					schedules: [...book.schedules.values()]
@@ -227,8 +248,23 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 
 const Id = z.string().min(1).max(64);
 
+/** How the days before a first contract count, where the Give sheet asks (decision 76). */
+const PriorDaysField = z.preprocess(
+	(value) => (value === "" ? undefined : value),
+	z.enum(PRIOR_DAYS).optional(),
+);
+
+/** What the Give sheet's preview reads of its fields. Pay plays no part in leave, and may not be typed yet. */
+const GivePreview = ContractFields.extend({
+	startsOn: Day,
+	priorDays: PriorDaysField,
+	pay: z.unknown().transform(() => "0"),
+});
+
 const form = z.discriminatedUnion("intent", [
-	ContractFields.extend({ intent: z.literal("give"), startsOn: Day }),
+	ContractFields.extend({ intent: z.literal("give"), startsOn: Day, priorDays: PriorDaysField }),
+	// The Give sheet's fields as they stand, half filled in maybe: read in the action, never refused.
+	z.looseObject({ intent: z.literal("preview") }),
 	ContractFields.extend({ intent: z.literal("change"), contractId: Id, from: Day }),
 	z.object({
 		intent: z.literal("end"),
@@ -299,8 +335,40 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 
 	switch (input.intent) {
 		case "give": {
-			const change = await giveContract(scope, user.id, personId, input.startsOn, input, today);
+			const change = await giveContract(
+				scope,
+				user.id,
+				personId,
+				input.startsOn,
+				input,
+				today,
+				input.priorDays,
+			);
 			return answer(change, `The contract is given, from ${formatDayWithYear(input.startsOn)}.`);
+		}
+		case "preview": {
+			// What the Give sheet's fields would make of this leave year's balance, saving nothing.
+			const fields = GivePreview.safeParse(input);
+			if (!fields.success) return done("");
+			const { startsOn, priorDays } = fields.data;
+			const planned = await previewedContracts(
+				scope,
+				personId,
+				startsOn,
+				fields.data,
+				today,
+				priorDays,
+			);
+			if (planned.change !== "planned") return done("");
+			const [now, then] = await Promise.all([
+				annualLeaveOf(scope, personId),
+				annualLeaveOf(scope, personId, planned),
+			]);
+			if (!now || !then) return done("");
+			const year = leaveYearOf(now.settings.leaveYearStarts, today);
+			const before = annualLeftWords(now, year);
+			const after = annualLeftWords(then, year);
+			return done(before && after ? `This year: ${before} → ${after}` : "");
 		}
 		case "change": {
 			const change = await changeContract(
@@ -657,6 +725,8 @@ function TermsSheet({
 	const [kind, setKind] = useState<string>(defaults?.kind ?? "permanent");
 	const [scheduleId, setScheduleId] = useState<string>(defaults?.scheduleId ?? "");
 	const [leaveDays, setLeaveDays] = useState<string>(defaults?.leaveDays ?? "");
+	const [startsOn, setStartsOn] = useState<string>(from);
+	const [chosen, setChosen] = useState<PriorDays | null>(null);
 	// The statutory floor (TS-098b): warned of as the days are typed, never refused.
 	const week: ScheduleWeek = (scheduleId && sheets.floor.weeks[scheduleId]) || sheets.floor.ownWeek;
 	const below =
@@ -670,6 +740,12 @@ function TermsSheet({
 		});
 	const multipliers = MULTIPLIERS.map((bp) => ({ id: String(bp), label: MULTIPLIER_LABELS[bp] }));
 	const giving = task === "give";
+	// Asked of a first contract for someone who joined before it starts (decision 76); suggested until chosen.
+	const asked =
+		giving && sheets.give && /^\d{4}-\d{2}-\d{2}$/.test(startsOn)
+			? priorDaysQuestion(sheets.give.joinedOn, sheets.give.hasContracts, startsOn)
+			: null;
+	const priorDays = asked ? (chosen ?? asked) : null;
 	return (
 		<FormSheet
 			title={giving ? `Give ${name} a contract` : `Change ${name}'s contract`}
@@ -684,7 +760,9 @@ function TermsSheet({
 				label={giving ? "First day" : "From"}
 				name={giving ? "startsOn" : "from"}
 				type="date"
-				defaultValue={from}
+				value={giving ? startsOn : undefined}
+				onChange={giving ? setStartsOn : undefined}
+				defaultValue={giving ? undefined : from}
 				min={defaults ? defaults.startsOn : undefined}
 				isRequired
 				description={
@@ -810,6 +888,26 @@ function TermsSheet({
 					</div>
 				</>
 			)}
+			{priorDays && (
+				<RadioGroup
+					label="Earlier this leave year"
+					name="priorDays"
+					value={priorDays}
+					onChange={(value) => setChosen(value as PriorDays)}
+					isRequired
+				>
+					{PRIOR_DAYS.map((id) => (
+						<Radio key={id} value={id}>
+							{PRIOR_DAYS_LABELS[id]}
+						</Radio>
+					))}
+				</RadioGroup>
+			)}
+			{giving && (
+				<BalancePreview
+					kept={{ startsOn, kind, scheduleId, leaveDays, priorDays: priorDays ?? "" }}
+				/>
+			)}
 			<TextField
 				label="Works number"
 				name="worksNumber"
@@ -818,5 +916,60 @@ function TermsSheet({
 				description="Their number in your payroll software, if it has one."
 			/>
 		</FormSheet>
+	);
+}
+
+/** The fields of the Give sheet it keeps itself, which its form may not have caught up with. */
+interface KeptFields {
+	startsOn: string;
+	kind: string;
+	scheduleId: string;
+	leaveDays: string;
+	priorDays: string;
+}
+
+/**
+ * What the Give sheet's fields would make of this leave year's balance, "This
+ * year: 25 days → 25 days", asked of the server as they change (decision 76):
+ * the same sum as the contract once saved. The fields the sheet keeps are
+ * sent as it holds them; the others are heard as they are typed.
+ */
+function BalancePreview({ kept }: { kept: KeptFields }) {
+	const fetcher = useFetcher<Outcome>();
+	const { submit } = fetcher;
+	const anchor = useRef<HTMLParagraphElement>(null);
+	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const { startsOn, kind, scheduleId, leaveDays, priorDays } = kept;
+	useEffect(() => {
+		const form = anchor.current?.closest("form");
+		if (!form) return;
+		const ask = () => {
+			clearTimeout(timer.current);
+			timer.current = setTimeout(() => {
+				const fields = new FormData(form);
+				fields.set("intent", "preview");
+				for (const [name, value] of Object.entries({
+					startsOn,
+					kind,
+					scheduleId,
+					leaveDays,
+					priorDays,
+				})) {
+					fields.set(name, value);
+				}
+				void submit(fields, { method: "post" });
+			}, 300);
+		};
+		ask();
+		form.addEventListener("input", ask);
+		return () => {
+			clearTimeout(timer.current);
+			form.removeEventListener("input", ask);
+		};
+	}, [submit, startsOn, kind, scheduleId, leaveDays, priorDays]);
+	return (
+		<p ref={anchor} role="status" className="text-body-medium text-on-surface empty:hidden">
+			{fetcher.data?.ok ? fetcher.data.said : ""}
+		</p>
 	);
 }

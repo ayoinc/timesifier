@@ -3591,6 +3591,15 @@ export const contracts = sqliteTable(
 		endReason: text("end_reason"),
 		/** The person's number in the payroll software, which an export matches on. */
 		worksNumber: text("works_number"),
+		/**
+		 * Whether the days of a leave year before this, a person's first contract,
+		 * count at the annual kind's allowance (TS-098b, decision 76): asked when
+		 * it is given to someone who was a member before it starts. False counts
+		 * them nothing, as for a starter.
+		 */
+		priorDaysAtAllowance: integer("prior_days_at_allowance", { mode: "boolean" })
+			.notNull()
+			.default(false),
 		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),

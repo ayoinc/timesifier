@@ -373,6 +373,7 @@ const FIELD_LABELS: Record<string, string> = {
 	leaveYearStarts: "Leave year starts (month-day)",
 	starterMonth: "A starter's first month",
 	holidaysFromAllowance: "Public holidays come out of annual leave",
+	priorDaysAtAllowance: "Earlier this leave year counts at the usual allowance",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */

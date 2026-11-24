@@ -1,11 +1,13 @@
 -- Leave from the contract (TS-098b; docs/decisions.md entry 76;
 -- research/contracts-model.md sections 2, 3 and 8).
 --
--- Additive: one new table and five columns added in place, so no table is
+-- Additive: one new table and six columns added in place, so no table is
 -- rebuilt and nothing existing changes. Every organisation keeps a leave year
 -- from 1 January, counts a starter's month from their first day, and keeps
 -- public holidays on top of annual leave, as before (the owner's answer 2).
--- Every contract version carries nothing over, as before.
+-- Every contract version carries nothing over, as before. No contract counts
+-- the days before it at the kind's allowance; only a first contract given to
+-- someone already a member is asked to (decision 76).
 --
 -- The new columns' bounds are CHECKs on the columns, which SQLite adds in
 -- place: a CHECK on the table, as drizzle-kit would write it, rebuilds the
@@ -38,4 +40,5 @@ ALTER TABLE `contract_versions` ADD `carry_over_days` integer DEFAULT 0 NOT NULL
 ALTER TABLE `contract_versions` ADD `carry_over_expires_after_days` integer CHECK (`carry_over_expires_after_days` IS NULL OR `carry_over_expires_after_days` BETWEEN 1 AND 366);--> statement-breakpoint
 ALTER TABLE `organisations` ADD `leave_year_starts` text DEFAULT '01-01' NOT NULL CHECK (`leave_year_starts` GLOB '[01][0-9]-[0-3][0-9]' AND date('2001-' || `leave_year_starts`) IS '2001-' || `leave_year_starts`);--> statement-breakpoint
 ALTER TABLE `organisations` ADD `starter_month` text DEFAULT 'days' NOT NULL CHECK (`starter_month` IN ('days', 'whole'));--> statement-breakpoint
-ALTER TABLE `organisations` ADD `holidays_from_allowance` integer DEFAULT false NOT NULL CHECK (`holidays_from_allowance` IN (0, 1));
+ALTER TABLE `organisations` ADD `holidays_from_allowance` integer DEFAULT false NOT NULL CHECK (`holidays_from_allowance` IN (0, 1));--> statement-breakpoint
+ALTER TABLE `contracts` ADD `prior_days_at_allowance` integer DEFAULT false NOT NULL CHECK (`prior_days_at_allowance` IN (0, 1));

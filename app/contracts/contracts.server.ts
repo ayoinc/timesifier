@@ -3,8 +3,15 @@ import { and, eq, ne, or } from "drizzle-orm";
 import { changes, recordStatement } from "~/activity/activity.server";
 import { among, type OrganisationScope, type ScopedStatement, uuidv7 } from "~/db";
 import { parseMoney } from "~/money/typed";
-import { assignmentOn, versionOn } from "~/schedules/schedules";
-import { scheduleBookOf } from "~/schedules/schedules.server";
+import {
+	type Assignment,
+	assignmentOn,
+	type ScheduleBook,
+	type Timetable,
+	timetableOf,
+	versionOn,
+} from "~/schedules/schedules";
+import { formerPlace, placesOf, scheduleBookOf } from "~/schedules/schedules.server";
 import { addDays, type Day, dayOf } from "~/time/calendar";
 
 import {
@@ -18,10 +25,13 @@ import {
 	type Multiplier,
 	multipliersOf,
 	overlapOf,
+	type PriorDays,
 	payWords,
+	priorDaysQuestion,
+	spansOf,
 } from "./contracts";
 import type { ContractFields, TermsFields } from "./forms";
-import { contractsOf } from "./read.server";
+import { contractsOf, joinedOnOf } from "./read.server";
 
 /**
  * Contracts in the database (TS-098a): reading a person's, and the changes
@@ -107,18 +117,17 @@ async function termsOf(
 }
 
 /**
- * The statements that bring `userId`'s person assignments in line with
- * `contracts` from `today` on: the contract's own are written again, and a
- * manual one on a day a contract now gives the hours is taken away. One on a
- * day the contracts leave alone stays, and so does every day before today.
+ * How `userId`'s person assignments come in line with `contracts` from
+ * `today` on: the contract's own are written again, and a manual one on a day
+ * a contract now gives the hours is taken away. One on a day the contracts
+ * leave alone stays, and so does every day before today.
  */
-async function assignmentStatements(
-	scope: OrganisationScope,
+function plannedAssignments(
+	book: ScheduleBook,
 	userId: string,
 	contracts: readonly Contract[],
 	today: Day,
 ) {
-	const book = await scheduleBookOf(scope);
 	const theirs = book.assignments.filter((a) => a.targetKind === "person" && a.targetId === userId);
 	const before = assignmentOn(
 		theirs.filter((a) => a.effectiveFrom < today),
@@ -144,6 +153,22 @@ async function assignmentStatements(
 			),
 	);
 	const gone = theirs.filter((a) => a.effectiveFrom >= today && !kept.includes(a)).map((a) => a.id);
+	return { gone, wanted };
+}
+
+/** The statements of `plannedAssignments`. */
+async function assignmentStatements(
+	scope: OrganisationScope,
+	userId: string,
+	contracts: readonly Contract[],
+	today: Day,
+) {
+	const { gone, wanted } = plannedAssignments(
+		await scheduleBookOf(scope),
+		userId,
+		contracts,
+		today,
+	);
 	return [
 		...(gone.length > 0
 			? [scope.scheduleAssignments.statements.delete((a) => among(a.id, gone))]
@@ -180,6 +205,7 @@ const OPEN_FIELDS = [
 	"carryOverExpiresAfterDays",
 	"endReason",
 	"changedAlone",
+	"priorDaysAtAllowance",
 ] as const;
 
 /** The fields of pay, as `contract_pay.changed` records them, which managers never read. */
@@ -303,9 +329,54 @@ async function written(
 }
 
 /**
+ * The contract giving `userId` one of `fields` from `startsOn` would make,
+ * with their others and its terms; or why it is refused. `priorDays` answers
+ * how the leave year's days before it count where that is asked: a first
+ * contract for someone who joined before it starts (decision 76). Unanswered,
+ * it takes the answer the sheet suggests.
+ */
+async function plannedContract(
+	scope: OrganisationScope,
+	userId: string,
+	startsOn: Day,
+	fields: ContractFields,
+	today: Day,
+	priorDays: PriorDays | undefined,
+) {
+	const [member] = await scope.memberships.select((m) => eq(m.userId, userId), { limit: 1 });
+	if (!member) return { change: "missing" } as const;
+	const endsOn = fields.endsOn ?? null;
+	if (fields.kind === "fixed_term" && !endsOn) return { change: "fixed-term-end" } as const;
+	if (endsOn && endsOn < startsOn) return { change: "ends-before-start" } as const;
+	const terms = await termsOf(scope, fields);
+	if (typeof terms === "string") return { change: terms };
+	if (terms.scheduleId && (endsOn ?? today) < today) return { change: "past-hours" } as const;
+	const [theirs, joinedOn] = await Promise.all([
+		contractsOf(scope, [userId]).then((found) => found.get(userId) ?? []),
+		joinedOnOf(scope, userId),
+	]);
+	const clash = overlapOf(theirs, { startsOn, endsOn });
+	if (clash) return { change: "overlap", with: clash } as const;
+	const asked = priorDaysQuestion(joinedOn, theirs.length > 0, startsOn);
+	const contract: Contract = {
+		id: uuidv7(),
+		userId,
+		kind: fields.kind,
+		startsOn,
+		endsOn,
+		endReason: null,
+		worksNumber: fields.worksNumber ?? null,
+		priorDaysAtAllowance: asked !== null && (priorDays ?? asked) === "allowance",
+		versions: [{ id: uuidv7(), effectiveFrom: startsOn, ...terms }],
+	};
+	return { change: "planned", contract, terms, theirs, asked } as const;
+}
+
+/**
  * Gives `userId` a contract of `fields` from `startsOn`. Refused when it would
  * share a day with another of theirs, when a fixed term has no end, or when
- * its terms do not hold together.
+ * its terms do not hold together. `priorDays` answers how the days of the
+ * leave year before a first contract count, where that is asked.
  */
 export async function giveContract(
 	scope: OrganisationScope,
@@ -314,32 +385,13 @@ export async function giveContract(
 	startsOn: Day,
 	fields: ContractFields,
 	today: Day,
+	priorDays?: PriorDays,
 ): Promise<ContractChange> {
-	const [member] = await scope.memberships.select((m) => eq(m.userId, userId), { limit: 1 });
-	if (!member) return { change: "missing" };
-	const endsOn = fields.endsOn ?? null;
-	if (fields.kind === "fixed_term" && !endsOn) return { change: "fixed-term-end" };
-	if (endsOn && endsOn < startsOn) return { change: "ends-before-start" };
-	const terms = await termsOf(scope, fields);
-	if (typeof terms === "string") return { change: terms };
-	if (terms.scheduleId && (endsOn ?? today) < today) return { change: "past-hours" };
-	const theirs = (await contractsOf(scope, [userId])).get(userId) ?? [];
-	const span = { startsOn, endsOn };
-	const clash = overlapOf(theirs, span);
-	if (clash) return { change: "overlap", with: clash };
-
-	const id = uuidv7();
-	const versionId = uuidv7();
-	const contract: Contract = {
-		id,
-		userId,
-		kind: fields.kind,
-		startsOn,
-		endsOn,
-		endReason: null,
-		worksNumber: fields.worksNumber ?? null,
-		versions: [{ id: versionId, effectiveFrom: startsOn, ...terms }],
-	};
+	const planned = await plannedContract(scope, userId, startsOn, fields, today, priorDays);
+	if (planned.change !== "planned") return planned;
+	const { contract, terms, theirs, asked } = planned;
+	const { id, endsOn } = contract;
+	const versionId = contract.versions[0]?.id ?? uuidv7();
 	const alone = { changedAlone: actor === userId || null };
 	return written(
 		scope,
@@ -351,6 +403,7 @@ export async function giveContract(
 				startsOn,
 				endsOn,
 				worksNumber: contract.worksNumber,
+				priorDaysAtAllowance: contract.priorDaysAtAllowance,
 				createdBy: actor,
 			}),
 			...versionStatements(scope, actor, id, startsOn, terms, versionId),
@@ -368,6 +421,8 @@ export async function giveContract(
 					effectiveFrom: startsOn,
 					...openTerms(terms),
 					...alone,
+					// The answer, where the sheet asked how the days before count.
+					...(asked ? { priorDaysAtAllowance: contract.priorDaysAtAllowance } : {}),
 				},
 				null,
 				payRecord(terms, contract.worksNumber),
@@ -375,8 +430,56 @@ export async function giveContract(
 		],
 		id,
 		userId,
-		span,
+		{ startsOn, endsOn },
 	);
+}
+
+/**
+ * What giving `userId` that contract would make of their contracts and their
+ * schedule, day by day, without writing anything: what the Give sheet counts
+ * this leave year's balance from before it is saved. Refused as giving it
+ * would be.
+ */
+export async function previewedContracts(
+	scope: OrganisationScope,
+	userId: string,
+	startsOn: Day,
+	fields: ContractFields,
+	today: Day,
+	priorDays: PriorDays | undefined,
+): Promise<
+	| Exclude<ContractChange, { change: "done" }>
+	| { change: "planned"; contracts: Contract[]; timetable: Timetable }
+> {
+	const planned = await plannedContract(scope, userId, startsOn, fields, today, priorDays);
+	if (planned.change !== "planned") return planned;
+	const contracts = [...planned.theirs, planned.contract].sort((a, b) =>
+		a.startsOn.localeCompare(b.startsOn),
+	);
+	const [book, places] = await Promise.all([scheduleBookOf(scope), placesOf(scope, [userId])]);
+	const { gone, wanted } = plannedAssignments(book, userId, contracts, today);
+	const assignments: Assignment[] = [
+		...book.assignments.filter((a) => !gone.includes(a.id)),
+		...wanted.map((a) => ({
+			id: `planned:${a.from}`,
+			scheduleId: a.scheduleId,
+			targetKind: "person" as const,
+			targetId: userId,
+			effectiveFrom: a.from,
+			sourceKind: "contract" as const,
+			sourceId: a.sourceId,
+			createdAt: Date.now(),
+		})),
+	];
+	const place = places.get(userId) ?? formerPlace(userId);
+	return {
+		change: "planned",
+		contracts,
+		timetable: timetableOf(
+			{ schedules: book.schedules, assignments },
+			{ ...place, contracts: spansOf(contracts) },
+		),
+	};
 }
 
 /**
@@ -423,6 +526,8 @@ export async function changeContract(
 			endsOn,
 			endReason: null,
 			worksNumber: fields.worksNumber ?? null,
+			// Only a person's first contract counts the days before it (decision 76).
+			priorDaysAtAllowance: false,
 			versions: [{ id: uuidv7(), effectiveFrom: from, ...terms }],
 		};
 		const ended = { ...contract, endsOn: lastDay, endReason: "replaced" as const };

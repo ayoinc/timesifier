@@ -149,7 +149,38 @@ export interface Contract {
 	endsOn: Day | null;
 	endReason: EndReason | null;
 	worksNumber: string | null;
+	/** Whether, as the person's first, the days of a leave year before it count at the annual kind's allowance (TS-098b, decision 76). */
+	priorDaysAtAllowance: boolean;
 	versions: readonly ContractVersion[];
+}
+
+/** How the days of a leave year before a person's first contract count: at the kind's allowance, or not at all. */
+export const PRIOR_DAYS = ["allowance", "nothing"] as const;
+export type PriorDays = (typeof PRIOR_DAYS)[number];
+
+/** The Give sheet's answers to how the days before a first contract count. */
+export const PRIOR_DAYS_LABELS: Record<PriorDays, string> = {
+	allowance: "Count at the usual allowance (they worked here before; their balance stays as it is)",
+	nothing: "Count nothing (they start with this contract)",
+};
+
+/** Days a member joined before their first contract starts from which the Give sheet suggests their earlier days count at the allowance. */
+export const PRIOR_DAYS_SUGGESTED_FROM = 28;
+
+/**
+ * Whether giving a contract from `startsOn` asks how the days of the leave
+ * year before it count, and the answer it suggests: asked only of a first
+ * contract for someone who joined before it starts. It suggests the allowance
+ * when they joined at least 28 days before, and nothing otherwise, as for a
+ * starter invited a few days early. Null when it is not asked.
+ */
+export function priorDaysQuestion(
+	joinedOn: Day | null,
+	hasContracts: boolean,
+	startsOn: Day,
+): PriorDays | null {
+	if (hasContracts || joinedOn === null || joinedOn >= startsOn) return null;
+	return addDays(joinedOn, PRIOR_DAYS_SUGGESTED_FROM) <= startsOn ? "allowance" : "nothing";
 }
 
 /** The one of `contracts` that a contract from `startsOn` to `endsOn` would share a day with, if any; `except` is left out. */

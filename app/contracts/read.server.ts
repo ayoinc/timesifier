@@ -1,6 +1,10 @@
-import { asc } from "drizzle-orm";
+import { env } from "cloudflare:workers";
+import { asc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
 
-import { among, type OrganisationScope } from "~/db";
+import { among, type OrganisationScope, organisations, users } from "~/db";
+import { type Day, dayOf } from "~/time/calendar";
+import { zoneOf } from "~/time/zones";
 
 import type { Contract, ContractKind, ContractVersion, EndReason, Multiplier } from "./contracts";
 
@@ -38,6 +42,7 @@ export async function contractsOf(
 			endsOn: row.endsOn,
 			endReason: row.endReason as EndReason | null,
 			worksNumber: row.worksNumber,
+			priorDaysAtAllowance: row.priorDaysAtAllowance,
 			versions: versions
 				.filter((v) => v.contractId === row.id)
 				.map(
@@ -61,4 +66,27 @@ export async function contractsOf(
 		result.set(row.userId, list);
 	}
 	return result;
+}
+
+/**
+ * The day `userId` joined the organisation, in the zone their days are
+ * counted in; null when they are not a member. The Give sheet asks how the
+ * days before a first contract count only of someone who joined before it
+ * (TS-098b, decision 76).
+ */
+export async function joinedOnOf(scope: OrganisationScope, userId: string): Promise<Day | null> {
+	const [[membership], [zones]] = await Promise.all([
+		scope.memberships.select((m) => eq(m.userId, userId), { limit: 1 }),
+		drizzle(env.DB)
+			.select({ own: users.timeZone, organisation: organisations.timeZone })
+			.from(users)
+			.innerJoin(organisations, eq(organisations.id, scope.organisationId))
+			.where(eq(users.id, userId))
+			.limit(1),
+	]);
+	if (!membership || !zones) return null;
+	return dayOf(
+		membership.createdAt,
+		zoneOf({ timeZone: zones.own }, { timeZone: zones.organisation }),
+	);
 }

@@ -83,6 +83,7 @@ function contract(
 		endsOn: null,
 		endReason: null,
 		worksNumber: null,
+		priorDaysAtAllowance: false,
 		...more,
 		versions,
 	};

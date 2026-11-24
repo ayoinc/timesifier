@@ -25,6 +25,17 @@ import { type LeaveYear, leaveYear, leaveYearOf } from "./years";
  * half day. A starter or a leaver gets the days they are covered for; a change
  * mid-year counts each part. A contractor's contract gives none.
  *
+ * A day of the year no contract covers counts at the rule from before
+ * contracts, the kind's allowance in the person's own working days,
+ * `allowance ÷ 2 × the week's minutes ÷ its working days ÷ the year's days`:
+ * - before their first contract, where whoever gave it said they worked here
+ *   before it (`prior_days_at_allowance`); otherwise those days count nothing,
+ *   as for a starter;
+ * - between two contracts, as a member still.
+ * After their last contract ends, nothing counts. So a contract given part way
+ * through a year to someone who worked here before changes nothing before its
+ * first day (decision 76).
+ *
  * Whoever has no contract whose annual leave is its own keeps the balance
  * they had before: the kind's allowance in half days, `balance` in ./days.
  */
@@ -62,38 +73,48 @@ export interface ContractLeave {
 	adjustments: readonly { leaveYear: number; minutes: number }[];
 }
 
-/** A version that holds on a day, and the day whose schedule's week the day is counted in. */
-interface DayTerms {
-	version: ContractVersion;
-	weekOf: Day;
-}
+/**
+ * Where a day's share of annual leave comes from: the version of a contract,
+ * counted in the week of `weekOf`; or the kind's allowance, on a day no
+ * contract covers (decision 76).
+ */
+type DayShare = { from: "contract"; version: ContractVersion; weekOf: Day } | { from: "allowance" };
 
 /**
- * The terms that give `day` its share of annual leave: the version of the
- * contract that covers it, not a contractor's. Where the organisation counts
- * a starter's month whole, a day of the month a contract starts in, before it
- * starts and after any other contract ended, counts with its first terms.
+ * What gives `day` its share of annual leave (decision 76):
+ * - the version of the contract that covers it, not a contractor's;
+ * - between two contracts, the kind's allowance;
+ * - before the first, the kind's allowance where that contract says so; else,
+ *   where the organisation counts a starter's month whole, a day of the month
+ *   it starts in, with its first terms;
+ * - after the last has ended, nothing.
  */
-function termsOn(
+function shareOn(
 	contracts: readonly Contract[],
+	settings: LeaveYearSettings,
 	day: Day,
-	starterMonth: StarterMonth,
-): DayTerms | null {
+): DayShare | null {
 	const covering = contracts.find((c) => covers(c, day));
 	if (covering) {
 		return covering.kind === "contractor"
 			? null
-			: { version: versionOn(covering, day), weekOf: day };
+			: { from: "contract", version: versionOn(covering, day), weekOf: day };
 	}
-	if (starterMonth !== "whole") return null;
-	const month = day.slice(0, 7);
-	const starting = contracts.find((c) => c.startsOn > day && c.startsOn.slice(0, 7) === month);
-	if (!starting || starting.kind === "contractor") return null;
-	const endedThisMonth = contracts.some(
-		(c) => c.endsOn !== null && c.endsOn >= `${month}-01` && c.endsOn < starting.startsOn,
-	);
-	const first = starting.versions[0];
-	return endedThisMonth || !first ? null : { version: first, weekOf: starting.startsOn };
+	const first = contracts[0];
+	const lastEnds = contracts.at(-1)?.endsOn ?? null;
+	if (!first || (lastEnds !== null && day > lastEnds)) return null;
+	if (day > first.startsOn) return { from: "allowance" };
+	if (first.priorDaysAtAllowance) return { from: "allowance" };
+	const terms = first.versions[0];
+	if (
+		settings.starterMonth === "whole" &&
+		first.kind !== "contractor" &&
+		terms &&
+		day.slice(0, 7) === first.startsOn.slice(0, 7)
+	) {
+		return { from: "contract", version: terms, weekOf: first.startsOn };
+	}
+	return null;
 }
 
 /** The days a week works, and its minutes. */
@@ -102,9 +123,12 @@ function weekShape(week: ScheduleWeek) {
 }
 
 /** `a ÷ b` rounded up, for whole numbers with `b` above 0. */
-function ceilDiv(a: number, b: number): number {
-	return Math.floor((a + b - 1) / b);
+function ceilDiv(a: bigint, b: bigint): number {
+	return Number((a + b - 1n) / b);
 }
+
+/** lcm(1, …, 7): an average day, a week's minutes ÷ its working days, is whole in these. */
+const SCALE = 420;
 
 /** One leave year's entitlement, and what the year's balance is shown and carried in. */
 export interface YearEntitlement {
@@ -119,7 +143,7 @@ export interface YearEntitlement {
 	dayLength: number | null;
 	/** The terms on the last day counted, whose carry-over applies at the year's end; null for none. */
 	lastTerms: ContractVersion | null;
-	/** Whether `day` is counted: a contract gives it its share of leave. */
+	/** Whether a contract gives `day` its share: public holidays come out of annual leave only on such days. */
 	counts: (day: Day) => boolean;
 }
 
@@ -134,24 +158,35 @@ export function entitlementOf(
 	const lengths = new Set<number>();
 	let fromContract = false;
 	let lastTerms: ContractVersion | null = null;
-	// Exact sums: half days × week minutes, week minutes, and days worked a week.
-	let halvesByMinutes = 0;
+	// The exact share in minutes is `share ÷ (10 × the year's days × SCALE)`:
+	// a contract's day adds half days × week minutes × SCALE, and an allowance
+	// day 5 × half days × week minutes × SCALE ÷ working days. Beside it, the
+	// week minutes and the days worked a week of every day counted.
+	let share = 0;
 	let weekMinutes = 0;
 	let weekDays = 0;
 	for (const day of days) {
-		const terms = termsOn(leave.contracts, day, leave.settings.starterMonth);
+		const terms = shareOn(leave.contracts, leave.settings, day);
 		if (!terms) continue;
-		const week = leave.calendar.timetable(terms.weekOf).week;
+		const week = leave.calendar.timetable(terms.from === "contract" ? terms.weekOf : day).week;
 		const shape = weekShape(week);
-		counted.add(day);
-		lastTerms = terms.version;
-		if (terms.version.leaveDays !== null) fromContract = true;
-		// Half days a year for a full week: the version's own, or the kind's allowance.
-		const halves =
-			terms.version.leaveDays === null
-				? (leave.allowanceHalfDays ?? 0)
-				: terms.version.leaveDays * 2;
-		halvesByMinutes += halves * shape.minutes;
+		if (terms.from === "contract") {
+			counted.add(day);
+			lastTerms = terms.version;
+			if (terms.version.leaveDays !== null) fromContract = true;
+			// Half days a year for a full week: the version's own, or the kind's allowance.
+			const halves =
+				terms.version.leaveDays === null
+					? (leave.allowanceHalfDays ?? 0)
+					: terms.version.leaveDays * 2;
+			share += halves * shape.minutes * SCALE;
+		} else {
+			// Nothing carries out of a year the allowance ends.
+			lastTerms = null;
+			if (shape.days > 0) {
+				share += (5 * (leave.allowanceHalfDays ?? 0) * shape.minutes * SCALE) / shape.days;
+			}
+		}
 		weekMinutes += shape.minutes;
 		weekDays += shape.days;
 		for (const worked of week) {
@@ -160,12 +195,14 @@ export function entitlementOf(
 		}
 	}
 	let minutes = 0;
-	if (weekMinutes > 0 && weekDays > 0 && halvesByMinutes > 0) {
-		// The exact share is halvesByMinutes ÷ (2 × 5 × the year's days) minutes;
-		// half an average day is weekMinutes ÷ (2 × weekDays). Rounded up to a
-		// whole number of those, then up to the whole minute.
-		const halves = ceilDiv(halvesByMinutes * weekDays, 5 * days.length * weekMinutes);
-		minutes = ceilDiv(halves * weekMinutes, 2 * weekDays);
+	if (weekMinutes > 0 && weekDays > 0 && share > 0) {
+		// Half an average day is weekMinutes ÷ (2 × weekDays). The share is
+		// rounded up to a whole number of those, then up to the whole minute.
+		const halves = ceilDiv(
+			BigInt(share) * BigInt(weekDays),
+			BigInt(5 * days.length * SCALE) * BigInt(weekMinutes),
+		);
+		minutes = ceilDiv(BigInt(halves) * BigInt(weekMinutes), BigInt(2 * weekDays));
 	}
 	const [only] = lengths;
 	return {

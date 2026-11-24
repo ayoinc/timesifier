@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
 import { leaveRefusersOf } from "~/approvals/refusals.server";
+import type { Contract } from "~/contracts/contracts";
 import { contractsOf } from "~/contracts/read.server";
 import { among, type OrganisationScope, type ScopedAccessor, users, uuidv7 } from "~/db";
 import type { LockReason } from "~/locks/locks";
@@ -20,6 +21,7 @@ import {
 	maySeeLeaveKindOf,
 } from "~/organisations/access";
 import { nameOrEmail } from "~/organisations/people";
+import type { Timetable } from "~/schedules/schedules";
 import { type Timetables, timetableFor, timetablesOf } from "~/schedules/schedules.server";
 import { type Person, peopleOf } from "~/teams/people.server";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
@@ -43,10 +45,18 @@ import {
 	type PersonStatus,
 	personStatus,
 } from "./days";
-import { type ContractBalance, contractBalance } from "./entitlement";
+import {
+	type ContractBalance,
+	type ContractLeave,
+	contractBalance,
+	type LeaveYearSettings,
+	leaveAmount,
+	shownInDays,
+} from "./entitlement";
 import { contractLeaveOf, leaveYearSettingsOf } from "./entitlement.server";
 import {
 	HOLIDAY_KIND,
+	halfDaysLabel,
 	inKindOrder,
 	KindKey,
 	type LeaveKind,
@@ -300,16 +310,31 @@ export async function myLeave(
 	return { kinds, requests, year, yearLabel: leaveYearLabel(starts, year), balances };
 }
 
+/** A person's annual leave, as `annualLeaveOf` reads it. */
+export interface AnnualLeave {
+	annual: LeaveKind;
+	settings: LeaveYearSettings;
+	leave: ContractLeave;
+	/** Every public holiday while they are on. */
+	holidays: Day[];
+}
+
 /**
  * What a person's annual leave is counted from (TS-098b): the organisation's
  * leave year settings, the kind, every public holiday while they are on,
  * their pending and approved annual leave, their contracts and adjustments.
- * Null where the organisation has no annual leave kind.
+ * `planned` counts it instead from contracts and a schedule not yet saved, as
+ * the Give sheet's preview does. Null where the organisation has no annual
+ * leave kind.
  */
-export async function annualLeaveOf(scope: OrganisationScope, userId: string) {
+export async function annualLeaveOf(
+	scope: OrganisationScope,
+	userId: string,
+	planned?: { contracts: readonly Contract[]; timetable: Timetable },
+): Promise<AnnualLeave | null> {
 	const [kinds, timetable, holidays, settings] = await Promise.all([
 		leaveKindsOf(scope),
-		timetableFor(scope, userId),
+		planned?.timetable ?? timetableFor(scope, userId),
 		publicHolidaysOf(scope),
 		leaveYearSettingsOf(scope.organisationId),
 	]);
@@ -321,8 +346,38 @@ export async function annualLeaveOf(scope: OrganisationScope, userId: string) {
 	const requests = await scope.leaveRequests.select((r) =>
 		and(eq(r.userId, userId), eq(r.kindId, annual.id), inArray(r.status, ["pending", "approved"])),
 	);
-	const leave = await contractLeaveOf(scope, userId, { settings, annual, calendar, requests });
+	const leave = await contractLeaveOf(scope, userId, {
+		settings,
+		annual,
+		calendar,
+		requests,
+		contracts: planned?.contracts,
+	});
 	return { annual, settings, leave, holidays: holidayDays };
+}
+
+/**
+ * What is left of a person's annual leave in the leave year `year`, in words,
+ * as Time off counts it: from their contract in its own unit, or the kind's
+ * allowance in days; "… over" where more was taken. Null where the kind has
+ * no allowance and no contract gives the year.
+ */
+export function annualLeftWords(annualLeave: AnnualLeave, year: number): string | null {
+	const { leave, annual, settings } = annualLeave;
+	const counted = contractBalance(leave, year);
+	if (counted) {
+		const amount = leaveAmount(Math.abs(counted.left), shownInDays(counted));
+		return counted.left < 0 ? `${amount} over` : amount;
+	}
+	const { left } = balance(
+		annual.allowanceHalfDays,
+		leave.requests,
+		year,
+		leave.calendar,
+		settings.leaveYearStarts,
+	);
+	if (left === null) return null;
+	return left < 0 ? `${halfDaysLabel(-left)} over` : halfDaysLabel(left);
 }
 
 /**
