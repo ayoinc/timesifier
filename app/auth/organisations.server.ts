@@ -28,7 +28,7 @@
  *
  * See docs/security.md, "Organisations and roles".
  */
-import { env, waitUntil } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { organization } from "better-auth/plugins/organization";
 import type { BetterAuthPlugin, DBAdapter } from "better-auth/types";
@@ -43,6 +43,7 @@ import { termsOf } from "~/expenses/expenses.server";
 import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
 import { deleteOrganisationExports } from "~/exports/job.server";
 import { DPA_VERSION } from "~/landing/trust";
+import { inBackground } from "~/lib/background.server";
 import { acceptDpa } from "~/organisations/dpa.server";
 import {
 	COMPANY_SIGN_IN_REQUIRED,
@@ -524,7 +525,7 @@ export function organisationPlugins() {
 					await getPlatformBrand(env),
 				);
 				// Not awaited: how long the mail takes must not show in the response.
-				waitUntil(sendEmail({ to: email, ...message }));
+				inBackground(sendEmail({ to: email, ...message }));
 			},
 		}),
 		organisationRules,

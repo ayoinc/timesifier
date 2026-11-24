@@ -9,6 +9,8 @@
 // by the export of everything (TS-126), which may pass 4 GiB or 65,535 files
 // and then writes ZIP64's records.
 
+import { bodyOf } from "./background.server";
+
 /** A file to put in the ZIP. */
 export interface ZipEntry {
 	name: string;
@@ -232,15 +234,5 @@ export function zip(
 ): ReadableStream<Uint8Array<ArrayBuffer>> {
 	const encoded = new TextEncoder().encode(comment);
 	if (encoded.length > MAX_U16) throw new Error("A ZIP's comment is at most 65,535 bytes.");
-	const source = chunks(entries, encoded);
-	return new ReadableStream<Uint8Array<ArrayBuffer>>({
-		async pull(controller) {
-			const next = await source.next();
-			if (next.done) controller.close();
-			else controller.enqueue(next.value);
-		},
-		async cancel() {
-			await source.return(undefined);
-		},
-	});
+	return bodyOf(chunks(entries, encoded));
 }

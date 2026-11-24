@@ -46,7 +46,7 @@ export function sender(): { email: string } | null {
  * domain, which names a person when one person uses it; and nothing of the
  * message, which may carry a sign-in code.
  *
- * It never throws, so a caller may hand the promise to `waitUntil` and answer
+ * It never throws, so a caller may hand the promise to `inBackground` and answer
  * the request without waiting for the mail. It answers whether the message was
  * handed to Email Service, which the mailings' queue reads (TS-099).
  */
