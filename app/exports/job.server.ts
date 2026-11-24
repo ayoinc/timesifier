@@ -848,14 +848,18 @@ export async function requestExport(
 	return { ok: true, id };
 }
 
-/** The organisation's export as its page shows it: none, being made, made, or failed. */
+/** The organisation's export as its page shows it: none, being made, made, past its 7 days, or failed. */
 export type ExportState =
 	| { status: "none" }
 	| { status: "running"; requestedAt: Date }
 	| { status: "ready"; finishedAt: Date; expiresAt: Date; size: number }
+	| { status: "expired"; finishedAt: Date; expiresAt: Date }
 	| { status: "failed"; requestedAt: Date };
 
-/** The organisation's export: there is at most one. A made one past its 7 days is none, deleted or not. */
+/**
+ * The organisation's export: there is at most one. A made one past its 7 days
+ * is expired until the hourly trigger deletes it, and none after.
+ */
 export async function exportStateOf(scope: OrganisationScope, now: Date): Promise<ExportState> {
 	const [row] = await scope.organisationExports.select(undefined, {
 		orderBy: (e) => [asc(e.createdAt)],
@@ -863,8 +867,9 @@ export async function exportStateOf(scope: OrganisationScope, now: Date): Promis
 	if (!row) return { status: "none" };
 	if (row.status === "running") return { status: "running", requestedAt: row.createdAt };
 	if (row.status === "failed") return { status: "failed", requestedAt: row.createdAt };
-	if (!row.finishedAt || !row.expiresAt || row.expiresAt.getTime() <= now.getTime()) {
-		return { status: "none" };
+	if (!row.finishedAt || !row.expiresAt) return { status: "none" };
+	if (row.expiresAt.getTime() <= now.getTime()) {
+		return { status: "expired", finishedAt: row.finishedAt, expiresAt: row.expiresAt };
 	}
 	return {
 		status: "ready",

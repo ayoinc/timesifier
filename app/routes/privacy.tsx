@@ -24,7 +24,7 @@ import {
 	SECURITY_EMAIL,
 	TERMS_PATH,
 } from "~/landing/Site";
-import { IcoRegistration, TIME_TRAVEL_DAYS } from "~/landing/trust";
+import { IcoRegistration, R2_HOLDS, TIME_TRAVEL_DAYS } from "~/landing/trust";
 import { WhoSeesWhat } from "~/landing/WhoSees";
 
 import { setting } from "~/lib/deployment";
@@ -362,8 +362,8 @@ export default function Privacy({
 			<DocumentSection id="where" title="Where it is kept">
 				<p>
 					In one database, Cloudflare D1, restricted to the European Union: it runs and stores its
-					data only inside the EU. Receipts and organisations' logos are kept in Cloudflare R2, in
-					buckets restricted to the EU, whose files are stored only inside the EU.
+					data only inside the EU. Cloudflare R2 holds the {R2_HOLDS}, in buckets restricted to the
+					EU, whose files are stored only inside the EU.
 				</p>
 				<p>
 					The application runs on Cloudflare Workers in Frankfurt, near the database. Your request
@@ -389,7 +389,7 @@ export default function Privacy({
 				<Rows>
 					<Row term="Hosting, the database and files">
 						Cloudflare Workers answers every request, Cloudflare D1 holds the database and
-						Cloudflare R2 holds the receipts and the organisations' logos.
+						Cloudflare R2 holds the {R2_HOLDS}.
 					</Row>
 					<Row term="Email">
 						<p>
@@ -627,15 +627,16 @@ export default function Privacy({
 					</Row>
 					<Row term="Deleting an organisation">
 						An owner can delete an organisation. Everything in it goes at once: its memberships,
-						invitations and all its work, and first its receipts and its logo. If a receipt or the
-						logo cannot be deleted, the organisation is not deleted, and the owner is asked to try
-						again. The accounts of the people in it are not deleted.
+						invitations and all its work, and first its receipts, its logo and its exports of
+						everything. If any of those files cannot be deleted, the organisation is not deleted,
+						and the owner is asked to try again. The accounts of the people in it are not deleted.
 					</Row>
 					<Row term="Copies">
 						Cloudflare keeps the means to restore the database to any minute of the last{" "}
 						{TIME_TRAVEL_DAYS} days, so what is deleted from the database is gone for good{" "}
-						{TIME_TRAVEL_DAYS} days later. Timesifier keeps no other copy, of the database, a
-						receipt or a logo.
+						{TIME_TRAVEL_DAYS} days later. Timesifier keeps no other copy of the database, a receipt
+						or a logo, besides the export of everything an owner asks for, which is deleted{" "}
+						{EXPORT_KEEP_DAYS} days after it is made.
 					</Row>
 				</Rows>
 			</DocumentSection>

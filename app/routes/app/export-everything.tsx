@@ -68,6 +68,12 @@ export async function loader({ context }: Route.LoaderArgs) {
 				keptUntil: when(state.expiresAt),
 				size: sizeText(state.size),
 			};
+		case "expired":
+			return {
+				status: state.status,
+				madeAt: when(state.finishedAt),
+				keptUntil: when(state.expiresAt),
+			};
 	}
 }
 
@@ -104,9 +110,10 @@ export default function ExportEverything({ loaderData, params }: Route.Component
 	}, [running, revalidate, state]);
 
 	const heading = {
-		none: "No export yet",
+		none: "No export to download",
 		running: "Being made",
 		ready: "Ready to download",
+		expired: "Expired",
 		failed: "It could not be made",
 	}[loaderData.status];
 
@@ -137,6 +144,13 @@ export default function ExportEverything({ loaderData, params }: Route.Component
 						<p>
 							Asked for on {loaderData.requestedAt}, and it could not be made. Make it again; if it
 							fails again, write to us.
+						</p>
+					)}
+					{loaderData.status === "expired" && (
+						<p>
+							Made on {loaderData.madeAt}. Its {EXPORT_KEEP_DAYS} days ended on{" "}
+							{loaderData.keptUntil}, so it can no longer be downloaded and is being deleted. Make
+							it again to download everything.
 						</p>
 					)}
 					{loaderData.status === "ready" && (

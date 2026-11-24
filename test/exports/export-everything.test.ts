@@ -575,7 +575,7 @@ describe("the job", () => {
 });
 
 describe("after 7 days", () => {
-	it("is no longer offered, and the hourly trigger deletes its file and its row", async () => {
+	it("is expired and no longer offered, and the hourly trigger deletes its file and its row", async () => {
 		const made = new Date();
 		const { id } = await exportMade(acme.id, ada.user.id, EXPORT_LIMITS, made);
 		const scope = organisationScope(env.DB, acme.id);
@@ -583,7 +583,7 @@ describe("after 7 days", () => {
 		const ended = new Date(made.getTime() + 7 * DAY_MS);
 		expect(await exportStateOf(scope, last)).toMatchObject({ status: "ready" });
 		expect(await deleteExpiredExports(last)).toBe(0);
-		expect(await exportStateOf(scope, ended)).toEqual({ status: "none" });
+		expect(await exportStateOf(scope, ended)).toMatchObject({ status: "expired" });
 
 		// The download stops when the 7 days do, before the trigger has run.
 		await env.DB.prepare("update organisation_exports set expires_at = ?")
@@ -592,6 +592,7 @@ describe("after 7 days", () => {
 		expect((await open(DOWNLOAD, ada)).status).toBe(404);
 
 		expect(await deleteExpiredExports(ended)).toBe(1);
+		expect(await exportStateOf(scope, ended)).toEqual({ status: "none" });
 		expect(await env.RECEIPTS.head(exportKey(acme.id, id))).toBeNull();
 		expect(await value("select count(*) from organisation_exports")).toBe(0);
 		expect(
