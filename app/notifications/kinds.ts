@@ -18,6 +18,7 @@ export const NOTIFICATION_KINDS = [
 	"budget",
 	"timer-reminder",
 	"deadline-reminder",
+	"submit-reminder",
 	"approvals-reminder",
 ] as const;
 
@@ -106,6 +107,15 @@ export const KIND_WORDS: Record<NotificationKind, KindWords> = {
 		subject: "Your timesheet is due soon",
 		heading: "Your timesheet is due",
 		reason: "You got this email because this timesheet is yours and it is not submitted.",
+		audience: "everyone",
+	},
+	"submit-reminder": {
+		label: "Asked to submit a timesheet",
+		description: "When someone who approves your timesheets asks you to submit a week.",
+		subject: "Please submit your timesheet",
+		heading: "Your timesheet",
+		reason:
+			"You got this email because this timesheet is yours, it is not submitted, and someone who approves it asked you to submit it.",
 		audience: "everyone",
 	},
 	"approvals-reminder": {

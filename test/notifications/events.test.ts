@@ -390,6 +390,63 @@ describe("what the system does", () => {
 	});
 });
 
+describe("asked to submit (Approvals › Not submitted)", () => {
+	/** The week before T0's, ended. */
+	const LAST_MONDAY = "2026-11-02";
+
+	// Everyone a member since before the week, as Not submitted asks (W13).
+	beforeEach(async () => {
+		await env.DB.prepare("update memberships set created_at = 0 where organisation_id = ?")
+			.bind(acme.id)
+			.run();
+	});
+
+	it("tells the person a decider asks, once a day for the week, and nobody else", async () => {
+		const remind = { intent: "remind", startsOn: LAST_MONDAY, personId: people.member.user.id };
+		await post(APPROVALS, remind, "manager");
+		expect(await whoWasTold("submit-reminder")).toEqual(["member"]);
+		expect((await told("submit-reminder"))[0]).toEqual({
+			email: EMAIL.member,
+			title: "Please submit your timesheet for 2–8 November 2026.",
+			body: "hedy@example.com asked you to submit it.",
+			path: "?view=week&start=2026-11-02",
+		});
+		// A second press the same day adds nothing.
+		await post(APPROVALS, remind, "manager");
+		expect(await whoWasTold("submit-reminder")).toEqual(["member"]);
+	});
+
+	it("Remind all tells everyone the asker decides for who has not submitted", async () => {
+		await seedEntry(
+			acme.id,
+			people.contractor.user.id,
+			site,
+			"2026-11-03T09:00:00Z",
+			"2026-11-03T10:00:00Z",
+		);
+		await post(SHEET, { intent: "submit", startsOn: LAST_MONDAY }, "contractor");
+		await post(APPROVALS, { intent: "remind-all", startsOn: LAST_MONDAY }, "manager");
+		// Carl submitted; Hedy decides for Linus and Carl alone.
+		expect(await whoWasTold("submit-reminder")).toEqual(["member"]);
+
+		await post(APPROVALS, { intent: "remind-all", startsOn: LAST_MONDAY }, "owner");
+		// Ada decides for everyone but herself (D5); Linus already has today's.
+		expect(await whoWasTold("submit-reminder")).toEqual(["admin", "finance", "manager", "member"]);
+	});
+
+	it("refuses a week still open, a person not the asker's to decide, and one who decides nobody's", async () => {
+		const status = async (fields: Record<string, string>, who: Kind) =>
+			(await submit(APPROVALS, fields, people[who], { byScript: true })).status;
+		const stillOpen = { intent: "remind", startsOn: MONDAY, personId: people.member.user.id };
+		expect(await status(stillOpen, "manager")).toBe(409);
+		const notHers = { intent: "remind", startsOn: LAST_MONDAY, personId: people.admin.user.id };
+		expect(await status(notHers, "manager")).toBe(409);
+		const all = { intent: "remind-all", startsOn: LAST_MONDAY };
+		expect(await status(all, "member")).not.toBe(200);
+		expect(await whoWasTold("submit-reminder")).toEqual([]);
+	});
+});
+
 describe("what nobody is told", () => {
 	it("Finance, a member, a contractor and a stranger hear nothing of anybody else's week or request", async () => {
 		await submitWeek("member");

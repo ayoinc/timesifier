@@ -78,6 +78,22 @@ export function weekDecided(
 	};
 }
 
+/**
+ * To a person asked from Approvals › Not submitted to submit their week, by
+ * `askedBy`, the name of whoever asked. Once a day for each week: a second
+ * press on `today` adds nothing.
+ */
+export function submitAsked(week: WeekOf, askedBy: string, today: Day): NewNotification {
+	return {
+		userId: week.userId,
+		kind: "submit-reminder",
+		title: `Please submit your timesheet for ${formatRange(week.startsOn, week.endsOn)}.`,
+		body: `${askedBy} asked you to submit it.`,
+		path: pathBelow((slug) => weekPath(slug, week.startsOn)),
+		key: `asked:${week.startsOn}:${today}`,
+	};
+}
+
 /** A request for leave or for extra work, as its notifications name it. */
 export type RequestOf = {
 	userId: string;
