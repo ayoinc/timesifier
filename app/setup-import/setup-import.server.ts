@@ -785,3 +785,35 @@ export async function applyWaitingAssignments(
 		}
 	}
 }
+
+/**
+ * Deletes the assignments waiting on invitation `invitationId`, which was
+ * cancelled or rejected: nobody will join by it, so they have no purpose left
+ * (decision 77). Better Auth keeps the invitation's row, so its foreign key
+ * never takes them.
+ */
+export async function dropWaitingAssignments(
+	organisationId: string,
+	invitationId: string,
+): Promise<void> {
+	const scope = organisationScope(env.DB, organisationId);
+	await scope.batch([
+		scope.invitationAssignments.statements.delete((a) => eq(a.invitationId, invitationId)),
+	]);
+}
+
+/**
+ * The daily sweep (decision 77): deletes every assignment whose invitation
+ * waits no more, because it ran out, or was cancelled or rejected without the
+ * hook above taking it. Returns how many were deleted.
+ */
+export async function deleteLapsedAssignments(db: D1Database, now: Date): Promise<number> {
+	const result = await db
+		.prepare(
+			`delete from invitation_assignments where invitation_id in
+				(select id from invitations where status <> 'pending' or expires_at <= ?)`,
+		)
+		.bind(now.getTime())
+		.run();
+	return result.meta.changes;
+}

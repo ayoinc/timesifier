@@ -1,3 +1,8 @@
+import {
+	createExecutionContext,
+	createScheduledController,
+	waitOnExecutionContext,
+} from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +16,9 @@ import {
 	type SetupRow,
 	stretchKey,
 } from "~/setup-import/setup";
-import { captureEmail, type Mailbox, ORIGIN } from "../auth/harness";
+import worker from "../../workers/app";
+import { DAILY } from "../../workers/scheduled";
+import { captureEmail, type Mailbox, ORIGIN, post } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { accept, row, seedInvitation, value } from "../organisations/harness";
 import { open, type Person, pageBody, person, submit, textOf } from "../pages/harness";
@@ -383,6 +390,14 @@ const page = async (path: string, who: Person) => {
 	return textOf(await pageBody(response));
 };
 
+/** Runs the daily Cron Trigger at `at`. */
+async function daily(at: number) {
+	const controller = createScheduledController({ scheduledTime: at, cron: DAILY });
+	const context = createExecutionContext();
+	await worker.scheduled(controller, env, context);
+	await waitOnExecutionContext(context);
+}
+
 /** Imports `text` as the owner: started, then imported. */
 async function imported(text: string) {
 	const { owner } = roles.people;
@@ -652,6 +667,48 @@ describe("invited people", () => {
 		expect((await accept(newcomer.cookie, second)).status).toBe(200);
 		expect(await count("select count(*) from project_members")).toBe(0);
 		expect(await count("select count(*) from invitation_assignments")).toBe(0);
+	});
+
+	it("deletes the assignments of an invitation cancelled by the organisation", async () => {
+		const { owner } = roles.people;
+		const invitationId = await seedInvitation(acme.id, owner.user.id, "new@x.example");
+		await imported(FOR_NEW);
+		const response = await post(
+			"/organization/cancel-invitation",
+			{ organizationId: acme.id, invitationId },
+			{ cookie: owner.cookie },
+		);
+		expect(response.status).toBe(200);
+		expect(await count("select count(*) from invitation_assignments")).toBe(0);
+	});
+
+	it("deletes the assignments of an invitation its person rejects", async () => {
+		const { owner } = roles.people;
+		const invitationId = await seedInvitation(acme.id, owner.user.id, "new@x.example");
+		await imported(FOR_NEW);
+		const newcomer = await person(mailbox, "new@x.example");
+		const response = await post(
+			"/organization/reject-invitation",
+			{ invitationId },
+			{ cookie: newcomer.cookie },
+		);
+		expect(response.status).toBe(200);
+		expect(await count("select count(*) from invitation_assignments")).toBe(0);
+	});
+
+	it("deletes, each day, the assignments of invitations that ran out, and keeps those still pending", async () => {
+		const { owner } = roles.people;
+		const lapsed = await seedInvitation(acme.id, owner.user.id, "new@x.example");
+		const pending = await seedInvitation(acme.id, owner.user.id, "later@x.example");
+		await imported(`${FOR_NEW}\nAssignment,,ACME-001,,,2027-01-04,,,,later@x.example,Member`);
+		expect(await count("select count(*) from invitation_assignments")).toBe(2);
+		await env.DB.prepare("update invitations set expires_at = ? where id = ?")
+			.bind(Date.now() - 1000, lapsed)
+			.run();
+		await daily(Date.now());
+		expect(
+			await env.DB.prepare("select invitation_id from invitation_assignments").all(),
+		).toMatchObject({ results: [{ invitation_id: pending }] });
 	});
 
 	it("skips and records an assignment that overlaps one given by hand meanwhile, or whose project was archived, and the person still joins", async () => {

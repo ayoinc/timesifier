@@ -6,23 +6,6 @@ How the board works, and what Ready and Done mean, is in `docs/ways-of-working.m
 
 ## In progress (limit 1 per builder)
 
-### TS-115d · Set up projects, work packages and teams from a CSV
-
-Builder: an AI session on branch `ts-115d-setup-import`, stacked on TS-115c (`ts-115c-project-teams`). Decision 77. Owners and admins set up projects, work packages and assignments from one CSV with a Kind column: a dry run, an import in one batch, and a revert.
-
-- [x] One file with a Kind column, rows matched by code ignoring case, codes resolved within the file whatever the order: `test/setup-import/setup-import.test.ts` › "resolves codes within the same file, whatever the order of its rows".
-- [x] Parsing: quoted commas, a byte order mark, unknown columns named: "reads quoted commas, a byte order mark, …" and "refuses a file with no Kind or Project code column, …".
-- [x] Duplicates against existing codes and names, ignoring case, and within the file: "refuses duplicates of existing codes and names …".
-- [x] An assignment's person is a member or invited, said per row; roles, dates and overlaps: "puts members and invited people on teams, …".
-- [x] Dry run shows each row's outcome and error, writes nothing: "shows each row's outcome and why a row is not added, and writes nothing".
-- [x] Import in one batch, projects then work packages then assignments, recorded in Activity: "adds projects, then their work packages, then assignments, in one batch, and records it"; once only: "imports once, however often it is asked".
-- [x] A 500-row file within D1's limits: "imports a 500-row file within D1's limits: one batch, every row".
-- [x] Invited people (`invitation_assignments`, 0042): applied on acceptance; a cancelled invitation leaves nothing; an overlap or archived project at acceptance skipped and recorded, and the person joins: the three tests under "invited people".
-- [x] Revert before and after acceptance, and refused whole once time exists: the five tests under "reverting".
-- [x] Owners and admins only; finance, account manager, delivery manager, line manager, member, contractor and stranger get 404; Projects' link for owners and admins alone: "is a page for owners and admins alone, linked from Projects for them alone"; and the route registries (`finance`, `isolation`, `action-validation`).
-- [x] Browser spec, keyboard and axe at 390 and 1280 px, light and dark: `e2e/setup-import.spec.ts`, 4 passed on port 5432; screenshots in `cmux-assets/browser/timesifier/TS-115d/`.
-- [ ] The owner looks at the result.
-
 ### TS-031 · Apply the review of the plan
 
 Builder: an AI session on branch `ts-031-plan`. Six reviewers went over the architecture, the design flow and the way of working. This card applies what they found to the documents, the board and the pipeline. It changes no application code.
@@ -92,6 +75,23 @@ Builder: an AI session on branch `ts-115c-project-teams`, pull request #112. Bui
 - [x] The privacy notice, Who sees what and `docs/security.md` say what is stored and who sees and manages it. Test: `test/claims.test.ts`.
 - [x] Browser specs with keyboard and axe at 390px and 1280px, light and dark, and screenshots in `cmux-assets/browser/timesifier/TS-115c/`. Test: `e2e/project-teams.spec.ts` (the Team tab as an owner, a delivery manager and a member; "Your projects", "Not on the team" and "Add me to the team" in the picker; a member not on the team, not offered the project and told why), `e2e/organisations-keyboard.spec.ts` and `e2e/codes.spec.ts` (/app/new's tracking question by keyboard).
 - [x] typecheck, lint, tests and the browser tests pass in the pipeline (run 45370942980, its second attempt: the first reached the checks job's 25-minute limit with no test failed).
+
+### TS-115d · Set up projects, work packages and teams from a CSV
+
+Builder: an AI session on branch `ts-115d-setup-import`, stacked on TS-115c (`ts-115c-project-teams`). Decision 77. Owners and admins set up projects, work packages and assignments from one CSV with a Kind column: a dry run, an import in one batch, and a revert.
+
+- [x] One file with a Kind column, rows matched by code ignoring case, codes resolved within the file whatever the order: `test/setup-import/setup-import.test.ts` › "resolves codes within the same file, whatever the order of its rows".
+- [x] Parsing: quoted commas, a byte order mark, unknown columns named: "reads quoted commas, a byte order mark, …" and "refuses a file with no Kind or Project code column, …".
+- [x] Duplicates against existing codes and names, ignoring case, and within the file: "refuses duplicates of existing codes and names …".
+- [x] An assignment's person is a member or invited, said per row; roles, dates and overlaps: "puts members and invited people on teams, …".
+- [x] Dry run shows each row's outcome and error, writes nothing: "shows each row's outcome and why a row is not added, and writes nothing".
+- [x] Import in one batch, projects then work packages then assignments, recorded in Activity: "adds projects, then their work packages, then assignments, in one batch, and records it"; once only: "imports once, however often it is asked".
+- [x] A 500-row file within D1's limits: "imports a 500-row file within D1's limits: one batch, every row".
+- [x] Invited people (`invitation_assignments`, 0042): applied on acceptance; a cancelled invitation leaves nothing; an overlap or archived project at acceptance skipped and recorded, and the person joins: the three tests under "invited people". Waiting assignments are deleted when their invitation is cancelled or rejected (`afterCancelInvitation`, `afterRejectInvitation`) and, by the daily `lapsedAssignments` duty, once it runs out; a pending one stays: "deletes the assignments of an invitation cancelled by the organisation", "… its person rejects", "deletes, each day, the assignments of invitations that ran out, and keeps those still pending".
+- [x] Revert before and after acceptance, and refused whole once time exists: the five tests under "reverting".
+- [x] Owners and admins only; finance, account manager, delivery manager, line manager, member, contractor and stranger get 404; Projects' link for owners and admins alone: "is a page for owners and admins alone, linked from Projects for them alone"; and the route registries (`finance`, `isolation`, `action-validation`).
+- [x] Browser spec, keyboard and axe at 390 and 1280 px, light and dark: `e2e/setup-import.spec.ts`, 4 passed on port 5432; screenshots in `cmux-assets/browser/timesifier/TS-115d/`.
+- [ ] The owner looks at the result.
 
 ### TS-098a · Contracts and their changes
 
