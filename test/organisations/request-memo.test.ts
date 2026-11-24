@@ -90,11 +90,14 @@ describe("a page as a manager of 120 of 150 people", () => {
 	// Track time's choices and the names of the day's entries.
 	// Since TS-098a, each reads the contracts twice: `placesOf` reads them with
 	// the places, for whether a person is a contractor on a day.
+	// Since TS-115c, Timesheet day reads 3 more for Track time's picker: the
+	// organisation's `project_tracking`, the person's stretches on projects'
+	// teams, and their own zone, for the day those stretches are matched on.
 	it("Timesheet day reads the manager's membership and their teams once", async () => {
 		const counts = await statementsOf(`/app/acme?day=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 60,
+			total: 63,
 			memberships: 4,
 			teamMembers: 3,
 			ownMembership: 1,

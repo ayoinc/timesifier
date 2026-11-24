@@ -100,6 +100,7 @@ import {
 	INTERNAL_TERM_MAX_LENGTH,
 	INTERNAL_TERM_PROBLEM,
 	InternalTerm,
+	inTerms,
 	WORK_MODEL_HINTS,
 	WORK_MODEL_LABELS,
 	WORK_MODELS,
@@ -681,7 +682,10 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 						/>
 						<LedgerRow
 							title={PROJECT_TRACKING_LABELS[organisation.projectTracking]}
-							detail={PROJECT_TRACKING_HINTS[organisation.projectTracking]}
+							detail={inTerms(
+								PROJECT_TRACKING_HINTS[organisation.projectTracking],
+								workTerms(organisation.workModel, organisation.internalTerm),
+							)}
 							action={change("project-tracking", "who tracks time")}
 						/>
 						<LedgerRow
@@ -871,12 +875,24 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 					defaultValue={organisation.projectTracking}
 				>
 					{PROJECT_TRACKINGS.map((tracking) => (
-						<Radio key={tracking} value={tracking} hint={PROJECT_TRACKING_HINTS[tracking]}>
+						<Radio
+							key={tracking}
+							value={tracking}
+							hint={inTerms(
+								PROJECT_TRACKING_HINTS[tracking],
+								workTerms(organisation.workModel, organisation.internalTerm),
+							)}
+						>
 							{PROJECT_TRACKING_LABELS[tracking]}
 						</Radio>
 					))}
 				</RadioGroup>
-				<p>Time already tracked stays as it is. A project's team is on its page, under Team.</p>
+				<p>
+					{inTerms(
+						"Time already tracked stays as it is. A project's team is on its page, under Team.",
+						workTerms(organisation.workModel, organisation.internalTerm),
+					)}
+				</p>
 			</FormSheet>
 
 			<FormSheet
