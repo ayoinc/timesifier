@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { defaultRatesPath, projectPath } from "../app/projects/projects";
 import { destinationPath, organisationPath } from "../app/shell/destinations";
-import { foundInMessageSentBy, newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
+import { newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
@@ -156,14 +156,19 @@ test("an owner sets a project's rate and budget and tracks time to a task, the k
 	await expect(sheet.getByText("Billable", { exact: true })).toBeVisible();
 	await tabTo(page, sheet.getByRole("textbox", { name: "Hours" }));
 	await page.keyboard.type("2");
-	// Past the alert at 80%: the owner is sent the budget's alert, its link the project's page.
-	// Read through the mailbox's lock, so no other test's message is taken for it.
-	const link = await foundInMessageSentBy(
-		() => page.keyboard.press("Enter"),
-		/https?:\/\/\S+\/projects\/[^\s/]+/,
-		"the budget alert's link",
-	);
+	// Past the alert at 80%: the owner is told, in the bell, its link the project's page
+	// (TS-049). Its email is sent by the scheduled work, and tested in
+	// test/notifications/mail.test.ts and test/pages/money-rules.test.ts.
+	await page.keyboard.press("Enter");
 	await expect(sheet).toBeHidden();
+	const bell = page.getByRole("banner").getByRole("button", { name: "1 unread notification" });
+	await bell.focus();
+	await page.keyboard.press("Enter");
+	const alert = page
+		.getByRole("dialog", { name: "Notifications" })
+		.getByRole("link", { name: /^Unread: The project “.*past the alert at 80%/ });
+	const link = (await alert.getAttribute("href")) ?? "";
+	await page.keyboard.press("Escape");
 
 	// The project's page: two hours, £240, and the budget an hour over.
 	const id = await projectIdOf(page, slug);
