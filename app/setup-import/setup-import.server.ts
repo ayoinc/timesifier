@@ -6,6 +6,7 @@ import { changes, recordStatement, recordStatementWhen } from "~/activity/activi
 import {
 	type ActivitySummary,
 	among,
+	notAmong,
 	type OrganisationScope,
 	organisationScope,
 	organisations,
@@ -538,8 +539,7 @@ export async function revertSetupImport(
 	const created = job.created ?? { projects: [], workPackages: [] };
 	const db = drizzle(env.DB);
 	const org = scope.organisationId;
-	const projectIds = JSON.stringify(created.projects);
-	const packageIds = JSON.stringify(created.workPackages);
+	const ofProjects = (column: string) => among(sql.raw(column), created.projects);
 	const [projects, packages, members, waiting, tracked, money] = await Promise.all([
 		scope.projects.select((p) => among(p.id, created.projects)),
 		scope.workPackages.select((w) => among(w.id, created.workPackages)),
@@ -550,10 +550,10 @@ export async function revertSetupImport(
 		// "ada@example.com on ACME-001 · Website".
 		db.all<{ kind: string; ref: string }>(sql`
 			select distinct 'project' as kind, e.project_id as ref from time_entries e
-			where e.organisation_id = ${org} and e.project_id in (select value from json_each(${projectIds}))
+			where e.organisation_id = ${org} and ${ofProjects("e.project_id")}
 			union
 			select distinct 'package', e.work_package_id from time_entries e
-			where e.organisation_id = ${org} and e.work_package_id in (select value from json_each(${packageIds}))
+			where e.organisation_id = ${org} and ${among(sql.raw("e.work_package_id"), created.workPackages)}
 			union
 			select distinct 'member', u.email || ' on ' || coalesce(p.code || ' · ', '') || p.name
 			from project_members m
@@ -563,14 +563,14 @@ export async function revertSetupImport(
 				and e.user_id = m.user_id and e.spent_on >= m.starts_on
 				and (m.ends_on is null or e.spent_on <= m.ends_on)
 			where m.organisation_id = ${org} and m.source_kind = 'import' and m.source_id = ${id}
-				and m.project_id not in (select value from json_each(${projectIds}))`),
+				and ${notAmong(sql.raw("m.project_id"), created.projects)}`),
 		db.all<{ ref: string }>(sql`
 			select project_id as ref from expenses
-			where organisation_id = ${org} and project_id in (select value from json_each(${projectIds}))
+			where organisation_id = ${org} and ${ofProjects("project_id")}
 			union select project_id from invoice_lines
-			where organisation_id = ${org} and project_id in (select value from json_each(${projectIds}))
+			where organisation_id = ${org} and ${ofProjects("project_id")}
 			union select project_id from retainers
-			where organisation_id = ${org} and project_id in (select value from json_each(${projectIds}))`),
+			where organisation_id = ${org} and ${ofProjects("project_id")}`),
 	]);
 	const projectName = new Map(projects.map((p) => [p.id, codedName(p.code, p.name)]));
 	const packageName = new Map(packages.map((w) => [w.id, `work package ${w.code}`]));

@@ -30,6 +30,7 @@ import {
 	maySeeTimeOf,
 	timeScopeOf,
 } from "~/organisations/access";
+import { startSetupImport } from "~/setup-import/setup-import.server";
 import type { Role } from "~/organisations/roles";
 import { saveReport } from "~/reports/saved.server";
 import { contractPath } from "~/shell/destinations";
@@ -101,6 +102,8 @@ interface World {
 	/** A previewed import of clients, Ada's. */
 	importJob: string;
 	peopleImport: string;
+	/** A previewed set-up import, Ada's (TS-115d). */
+	setupImport: string;
 	/** A saved report of the column's own, Mine. */
 	saved: string;
 	/** A draft invoice to Initech, of one line. */
@@ -179,6 +182,13 @@ async function world(column: Column): Promise<World> {
 		"Email\nnew@x.example\n",
 	);
 	if (!people.ok) throw new Error("seed failed");
+	const setup = await startSetupImport(
+		organisationScope(env.DB, acme.id),
+		ada.user.id,
+		"setup.csv",
+		"Kind,Project code,Name\nProject,P-1,One\n",
+	);
+	if (!setup.ok) throw new Error("seed failed");
 	const entry = await seedEntry(
 		acme.id,
 		grace.userId,
@@ -280,6 +290,7 @@ async function world(column: Column): Promise<World> {
 		expense: expense.id,
 		importJob: started.id,
 		peopleImport: people.id,
+		setupImport: setup.id,
 		saved: await saveReport(
 			organisationScope(env.DB, acme.id),
 			who.user.id,
@@ -721,6 +732,17 @@ const ROLE_TABLE: Record<string, Row> = {
 			doneStatus: 202,
 			made: async (w) =>
 				(await count("select count(*) from people_imports where id = ?", w.peopleImport)) === 0,
+			post: by<Post>("done", "done", 404, 404, 404),
+		},
+	},
+	// The set-up import (TS-115d), below Projects: owners' and admins' alone.
+	"routes/app/projects.import": {
+		page: by(200, 200, 404, 404, 404),
+		form: {
+			fields: (w) => ({ intent: "discard", importId: w.setupImport }),
+			doneStatus: 202,
+			made: async (w) =>
+				(await count("select count(*) from setup_imports where id = ?", w.setupImport)) === 0,
 			post: by<Post>("done", "done", 404, 404, 404),
 		},
 	},

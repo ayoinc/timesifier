@@ -184,6 +184,8 @@ const NARROWER: Record<string, (role: Role) => boolean> = {
 	"routes/app/export-everything.download": (role) => role === "owner",
 	// Importing people (TS-108), below Invitations, which managers are shown too, is the owners' and admins'.
 	"routes/app/invitations.import": (role) => role === "owner" || role === "admin",
+	// Setting up from a CSV (TS-115d), below Projects, which everyone is shown, is the owners' and admins'.
+	"routes/app/projects.import": (role) => role === "owner" || role === "admin",
 };
 
 /** Whether a person of `role`, who is shown the route's destination, may open the route. */
