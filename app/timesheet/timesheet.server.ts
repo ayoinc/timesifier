@@ -16,6 +16,8 @@ import {
 	periodContaining,
 	periodOfWeek,
 } from "~/periods/periods";
+import { lineKey } from "~/projects/work-packages";
+import { packageRules } from "~/projects/work-packages.server";
 import { hoursLabel } from "~/schedules/schedules";
 import { addDays, type Day, dayOf, daysFrom } from "~/time/calendar";
 import { runningEntry } from "~/time/entries.server";
@@ -81,6 +83,7 @@ export function toSheetEntry(row: TimeEntries["$inferSelect"]): SheetEntry {
 		endedAt: row.endedAt?.getTime() ?? null,
 		overtime: row.overtime,
 		day: row.spentOn,
+		workPackageId: row.workPackageId,
 	};
 }
 
@@ -246,8 +249,8 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	view: "week";
 	days: Day[];
 	sheet: WeekSheet;
-	/** The active projects with time in the week before, which "Copy last week's rows" adds (TS-052). */
-	lastWeekProjects: string[];
+	/** The lines (`lineKey`) with time in the week before that still take time, which "Copy last week's rows" adds (TS-052, TS-115b). */
+	lastWeekLines: string[];
 	/**
 	 * Why the week's hours cannot be copied from a week of the three before
 	 * (taste HT-F, sweep S2-13): it has not begun, its days so far are locked, or
@@ -500,6 +503,7 @@ async function weekData(
 		weekAway(scope, userId, period),
 	]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
+	const packages = await packageRules(scope, [...new Set(previous.map((e) => e.projectId))]);
 	const today = dayOf(now, zone);
 	const open = days.some((day) => !reasons.has(day) && day <= today);
 	const source = open ? await copySourceWeek(scope, userId, period) : null;
@@ -516,7 +520,20 @@ async function weekData(
 		...submission,
 		days,
 		sheet: weekSheet(entries, days, now, { projectOrder: projects.map((p) => p.id) }),
-		lastWeekProjects: [...new Set(previous.map((e) => e.projectId))].filter((id) => active.has(id)),
+		// Each project and work package of the week before that still takes time (TS-115b).
+		lastWeekLines: [
+			...new Set(
+				previous
+					.filter(
+						(e) =>
+							active.has(e.projectId) &&
+							(e.workPackageId === null
+								? !packages.required(e.projectId)
+								: packages.open(e.projectId, e.workPackageId) !== null),
+					)
+					.map((e) => lineKey(e.projectId, e.workPackageId)),
+			),
+		],
 		lockedDays: days.filter((day) => reasons.has(day)),
 		lockReasons: Object.fromEntries(reasons),
 		lockDate,

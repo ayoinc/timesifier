@@ -1,5 +1,6 @@
 import { createContext } from "react";
 
+import type { WorkPackageChoice } from "~/projects/work-packages";
 import type { TagChoice } from "~/tags/tags";
 
 /**
@@ -23,14 +24,23 @@ export interface TrackChoices {
 	tags: TagChoice[];
 	/** The projects whose people are warned that they are over budget. */
 	overBudget: string[];
-	/** The task and tags of each entry the view shows, by entry id. */
-	entries: Record<string, { taskId: string | null; tagIds: string[] }>;
+	/** The task, work package and tags of each entry the view shows, by entry id. */
+	entries: Record<
+		string,
+		{ taskId: string | null; workPackageId: string | null; tagIds: string[] }
+	>;
 	/** The person's recent projects, most recent first, archived ones left out: the head of the project picker. */
 	recent: string[];
 	/** The projects the person pinned, in the order they pinned them: first in the project picker (TS-122, S2-09). */
 	pinned: string[];
 	/** What the picker shows and groups by beside each active project's name, by project id (TS-115a). */
 	projects: Record<string, ProjectChoice>;
+	/**
+	 * Every project's work packages by project id, by code (TS-115b): the open
+	 * ones are offered, and every one is named, so an entry on a closed or
+	 * archived one still says which.
+	 */
+	workPackages: Record<string, WorkPackageChoice[]>;
 }
 
 /**

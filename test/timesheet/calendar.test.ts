@@ -35,7 +35,16 @@ function entry(
 ): SheetEntry {
 	ids += 1;
 	const day = dayOf(startedAt, zone);
-	return { id: `e${ids}`, projectId, description: null, startedAt, endedAt, overtime: false, day };
+	return {
+		id: `e${ids}`,
+		projectId,
+		description: null,
+		startedAt,
+		endedAt,
+		overtime: false,
+		day,
+		workPackageId: null,
+	};
 }
 
 /** A small seeded generator, so a failing case can be run again. */

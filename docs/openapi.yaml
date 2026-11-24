@@ -41,7 +41,7 @@ components:
         name: { type: [string, "null"] }
     CodedRef:
       type: [object, "null"]
-      description: A client or project with its code, null when it has none (TS-115a).
+      description: A client, project or work package with its code, null when it has none (TS-115a, TS-115b).
       properties:
         id: { type: string }
         name: { type: [string, "null"] }
@@ -67,6 +67,29 @@ components:
         fee_minor: { type: [integer, "null"], description: Only for those who see money. }
         currency: { type: [string, "null"], description: Only for those who see money. }
         budget: { type: object, description: Only for those who see money. }
+    WorkPackage:
+      type: object
+      description: A part of a project (TS-115b). While a project has an open one, its new and changed entries name one.
+      properties:
+        id: { type: string }
+        project_id: { type: string }
+        code:
+          {
+            type: string,
+            description: "Unique in its project whatever its letters' case, for example WP2.",
+          }
+        name: { type: string }
+        starts_on: { type: [string, "null"], format: date }
+        ends_on: { type: [string, "null"], format: date }
+        state: { type: string, enum: [open, closed], description: A closed one takes no new time. }
+        billable: { type: boolean }
+        archived: { type: boolean }
+        budget:
+          type: [object, "null"]
+          description: Hours in minutes; fees in minor units, only for those who see money.
+          properties:
+            kind: { type: string, enum: [hours, fees] }
+            amount: { type: [integer, "null"] }
     Error:
       type: object
       required: [error]
@@ -86,6 +109,8 @@ components:
         project: { $ref: "#/components/schemas/CodedRef" }
         client: { $ref: "#/components/schemas/CodedRef" }
         task: { $ref: "#/components/schemas/Ref" }
+        work_package_id: { type: [string, "null"] }
+        work_package: { $ref: "#/components/schemas/CodedRef" }
         spent_date: { type: string, format: date }
         started_at: { type: string, format: date-time }
         ended_at: { type: [string, "null"], format: date-time }
@@ -105,6 +130,9 @@ components:
         user_id: { type: string, description: The maker's own id, if sent. }
         project_id: { type: string }
         task_id: { type: string }
+        work_package_id:
+          type: [string, "null"]
+          description: Required while the project has an open work package; it must be open and of the project.
         spent_date: { type: string, format: date }
         started_at: { type: string, format: date-time }
         hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
@@ -116,6 +144,9 @@ components:
       properties:
         project_id: { type: string }
         task_id: { type: string }
+        work_package_id:
+          type: [string, "null"]
+          description: Left out, the entry keeps its own. A change adding time names an open one where the project has one.
         started_at: { type: string, format: date-time }
         ended_at: { type: string, format: date-time }
         hours: { type: number, exclusiveMinimum: 0, maximum: 24 }
@@ -189,6 +220,23 @@ paths:
       description: Scope projects:read.
       responses:
         "200": { description: "`{ data }`" }
+        default: { $ref: "#/components/responses/Error" }
+  /work_packages:
+    get:
+      summary: Each project's work packages, by project and code
+      description: Scope projects:read.
+      parameters:
+        - name: project_id
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: "`{ data }`"
+          content:
+            application/json:
+              schema:
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/WorkPackage" } }
         default: { $ref: "#/components/responses/Error" }
   /time_entries:
     get:

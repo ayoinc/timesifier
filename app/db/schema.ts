@@ -639,6 +639,64 @@ export const projects = sqliteTable(
 );
 
 /**
+ * A work package inside a project (TS-115b, docs/decisions.md entry 73), for
+ * example `WP2 Build`: its code, unique within the project by `code_key` as a
+ * project's is in the organisation, its name, its days, whether it is open,
+ * and its budget. Time goes to a project and one of its work packages: while
+ * a project has an open one, a new or changed entry names one, open and of
+ * that project. A closed work package takes no new time; what it has stays.
+ * Archived, never deleted, so an entry always has its work package.
+ */
+export const workPackages = sqliteTable(
+	"work_packages",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		projectId: text("project_id").notNull(),
+		/** For example `WP2`: a code (`app/lib/codes.ts`), unique in its project by `code_key`. */
+		code: text("code").notNull(),
+		codeKey: text("code_key").notNull(),
+		name: text("name").notNull(),
+		/** Its first and last local day, both included, or null when not set. */
+		startsOn: text("starts_on"),
+		endsOn: text("ends_on"),
+		/** `open` takes time; `closed` takes no new time and keeps what it has. */
+		state: text("state").notNull().default("open"),
+		/** `none`, `hours` (minutes in `budget_amount`) or `fees` (minor units of the project's currency). */
+		budgetKind: text("budget_kind").notNull().default("none"),
+		budgetAmount: integer("budget_amount"),
+		/** Whether its time is billed: an entry on it is billable only when this and its task are. */
+		billable: integer("billable", { mode: "boolean" }).notNull().default(true),
+		/** Null while the work package is active. */
+		archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("work_packages_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("work_packages_project_id_code_key_unique").on(table.projectId, table.codeKey),
+		index("work_packages_organisation_id_project_id_idx").on(table.organisationId, table.projectId),
+		foreignKey({
+			name: "work_packages_project_fk",
+			columns: [table.organisationId, table.projectId],
+			foreignColumns: [projects.organisationId, projects.id],
+		}).onDelete("cascade"),
+		check("work_packages_state_known", sql`${table.state} IN ('open', 'closed')`),
+		check("work_packages_budget_kind_known", sql`${table.budgetKind} IN ('none', 'hours', 'fees')`),
+		check(
+			"work_packages_budget_amount_not_negative",
+			sql`${table.budgetAmount} IS NULL OR ${table.budgetAmount} >= 0`,
+		),
+		check(
+			"work_packages_ends_after_start",
+			sql`${table.startsOn} IS NULL OR ${table.endsOn} IS NULL OR ${table.endsOn} >= ${table.startsOn}`,
+		),
+	],
+);
+
+/**
  * A stretch of one person's time on one project. `endedAt` is null while the
  * timer runs, and a person has at most one running entry in an organisation:
  * the partial unique index holds it (decision 25). `userId` does not cascade:
@@ -692,6 +750,13 @@ export const timeEntries = sqliteTable(
 		 * entry made before it is regular time.
 		 */
 		overtime: integer("overtime", { mode: "boolean" }).notNull().default(false),
+		/**
+		 * The work package of the entry's own project it goes to (TS-115b), or null.
+		 * Added in place with no reference, as `taskId` is: a reference would
+		 * rebuild the table. Migration 0038's triggers refuse a work package of
+		 * another project or organisation, and the Worker checks it first.
+		 */
+		workPackageId: text("work_package_id"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
@@ -736,6 +801,10 @@ export const timeEntries = sqliteTable(
 		),
 		index("time_entries_organisation_id_task_id_idx").on(table.organisationId, table.taskId),
 		index("time_entries_organisation_id_import_id_idx").on(table.organisationId, table.importId),
+		index("time_entries_organisation_id_work_package_id_idx").on(
+			table.organisationId,
+			table.workPackageId,
+		),
 		foreignKey({
 			name: "time_entries_project_fk",
 			columns: [table.organisationId, table.projectId],

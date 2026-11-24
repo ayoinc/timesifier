@@ -6,6 +6,7 @@ import type { Membership } from "~/organisations/membership.server";
 import { pinnedProjectIds } from "~/pins/pins.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { recentProjectIds } from "~/projects/recent.server";
+import { workPackageChoices } from "~/projects/work-packages.server";
 import { tagOptions, tagsOfEntries } from "~/tags/tags.server";
 import { hasClients } from "~/workspace/work-model";
 import { tasksOfProjects } from "./tasks.server";
@@ -17,7 +18,8 @@ import type { ProjectChoice, TrackChoices } from "./track";
  * projects over budget whose people are warned, the task and tags of each
  * entry shown, so its sheet starts at what it has, and for the project picker
  * the person's pinned and recent projects and each project's code, client
- * and the client's code, and whether it is a work code (TS-115a). An
+ * and the client's code, and whether it is a work code (TS-115a), and each
+ * project's work packages (TS-115b). An
  * organisation that shows no clients is given none.
  */
 export async function trackChoices(
@@ -30,20 +32,31 @@ export async function trackChoices(
 	// beside these (TS-114), and only the two reads of the entries wait for them.
 	const shown = Promise.resolve(shownEntryIds);
 	const showsClients = hasClients(membership.organisation.workModel);
-	const [byProject, tags, overBudget, entries, entryTags, recent, pinned, active, clients] =
-		await Promise.all([
-			tasksOfProjects(scope),
-			tagOptions(scope),
-			warnedOverBudget(scope, membership, now),
-			shown.then((ids) =>
-				ids.length === 0 ? [] : scope.timeEntries.select((e) => among(e.id, ids)),
-			),
-			shown.then((ids) => tagsOfEntries(scope, ids)),
-			recentProjectIds(scope, membership.user.id),
-			pinnedProjectIds(scope, membership.user.id),
-			scope.projects.select((p) => isNull(p.archivedAt)),
-			showsClients ? scope.clients.select() : [],
-		]);
+	const [
+		byProject,
+		tags,
+		overBudget,
+		entries,
+		entryTags,
+		recent,
+		pinned,
+		active,
+		clients,
+		packages,
+	] = await Promise.all([
+		tasksOfProjects(scope),
+		tagOptions(scope),
+		warnedOverBudget(scope, membership, now),
+		shown.then((ids) =>
+			ids.length === 0 ? [] : scope.timeEntries.select((e) => among(e.id, ids)),
+		),
+		shown.then((ids) => tagsOfEntries(scope, ids)),
+		recentProjectIds(scope, membership.user.id),
+		pinnedProjectIds(scope, membership.user.id),
+		scope.projects.select((p) => isNull(p.archivedAt)),
+		showsClients ? scope.clients.select() : [],
+		workPackageChoices(scope),
+	]);
 	const clientOf = new Map(clients.map((c) => [c.id, { name: c.name, code: c.code }]));
 	return {
 		tasks: Object.fromEntries(
@@ -60,7 +73,10 @@ export async function trackChoices(
 		tags,
 		overBudget,
 		entries: Object.fromEntries(
-			entries.map((e) => [e.id, { taskId: e.taskId, tagIds: entryTags.get(e.id) ?? [] }]),
+			entries.map((e) => [
+				e.id,
+				{ taskId: e.taskId, workPackageId: e.workPackageId, tagIds: entryTags.get(e.id) ?? [] },
+			]),
 		),
 		recent,
 		pinned,
@@ -74,6 +90,7 @@ export async function trackChoices(
 				},
 			]),
 		),
+		workPackages: packages,
 	};
 }
 

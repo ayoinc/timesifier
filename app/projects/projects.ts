@@ -189,8 +189,8 @@ export function defaultRatesPath(slug: string): string {
 	return `${destinationPath(slug, "projects")}/${DEFAULT_RATES_SEGMENT}`;
 }
 
-/** The tabs of a project's page, in order: what it has come to, its tasks, its people and its settings. */
-export const PROJECT_TABS = ["overview", "tasks", "team", "settings"] as const;
+/** The tabs of a project's page, in order: what it has come to, its tasks, its work packages (TS-115b), its people and its settings. */
+export const PROJECT_TABS = ["overview", "tasks", "work-packages", "team", "settings"] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 
 /** The query that picks a project page's tab, kept in the address so a tab can be linked to. */

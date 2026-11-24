@@ -6,6 +6,7 @@ import { type OrganisationScope, type ScopedStatement, uuidv7 } from "~/db";
 import { stopSplitOf, timerStartOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
+import { entryPackageOf } from "~/projects/work-packages.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
 
@@ -72,6 +73,8 @@ export interface StartTimer {
 	taskId?: string;
 	/** The entry's tags (TS-085). */
 	tagIds?: readonly string[];
+	/** The work package chosen (TS-115b); required while the project has an open one. */
+	workPackageId?: string | null;
 	/** Through which door the start came (TS-064). */
 	source?: ActivitySource;
 }
@@ -84,8 +87,9 @@ export interface StartTimer {
  * running one started on is in a submitted or approved period, and when
  * today takes no more time: a public holiday, whole-day leave, or nothing
  * left of its regular time and no overtime to be had (`timerStartOf`), and
- * when the task is not on the project's list or a tag is not active. The new
- * entry is overtime when today has no regular time left.
+ * when the task is not on the project's list or a tag is not active, and
+ * when the project has an open work package and none open of it is named
+ * (TS-115b). The new entry is overtime when today has no regular time left.
  */
 export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const { userId, projectId, description, zone, now } = start;
@@ -103,6 +107,9 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const source = start.source ?? "web";
 	const task = await entryTaskOf(scope, projectId, start.taskId);
 	if (!task.ok) return { ok: false as const, reason: "no-task" as const };
+	const wp = await entryPackageOf(scope, projectId, start.workPackageId ?? null);
+	if (!wp.ok) return { ok: false as const, reason: wp.reason };
+	const billable = task.billable && wp.billable;
 	if (start.tagIds && !(await tagsAllowed(scope, [], start.tagIds))) {
 		return { ok: false as const, reason: "no-tag" as const };
 	}
@@ -118,7 +125,8 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 			userId,
 			projectId,
 			taskId: task.taskId,
-			billable: task.billable,
+			workPackageId: wp.workPackageId,
+			billable,
 			description,
 			startedAt: at,
 			spentOn: dayOf(now, zone),
@@ -136,12 +144,21 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 				{
 					projectId,
 					taskId: task.taskId,
-					billable: task.billable,
+					workPackageId: wp.workPackageId,
+					billable,
 					description,
 					startedAt: at,
 					overtime: verdict.overtime,
 				},
-				["projectId", "taskId", "billable", "description", "startedAt", "overtime"],
+				[
+					"projectId",
+					"taskId",
+					"workPackageId",
+					"billable",
+					"description",
+					"startedAt",
+					"overtime",
+				],
 			),
 			source,
 		),
@@ -264,6 +281,7 @@ async function endingOf(
 			userId,
 			projectId: running.projectId,
 			taskId: running.taskId,
+			workPackageId: running.workPackageId,
 			billable: running.billable,
 			description: running.description,
 			startedAt: endsAt,
@@ -296,6 +314,7 @@ async function endingOf(
 				changes(null, remainder, [
 					"projectId",
 					"taskId",
+					"workPackageId",
 					"billable",
 					"description",
 					"startedAt",

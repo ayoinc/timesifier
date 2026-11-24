@@ -86,11 +86,13 @@ describe("a page as a manager of 120 of 150 people", () => {
 	// among them are TS-113b's too. Since TS-122, each reads the person's pins
 	// once more: Timesheet day for the project picker, Team for This week. Since
 	// TS-049, each reads the person's unread notifications once, for the bell.
+	// Since TS-115b, Timesheet day reads the projects' work packages once, for
+	// Track time's choices and the names of the day's entries.
 	it("Timesheet day reads the manager's membership and their teams once", async () => {
 		const counts = await statementsOf(`/app/acme?day=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 57,
+			total: 58,
 			memberships: 4,
 			teamMembers: 3,
 			ownMembership: 1,

@@ -72,7 +72,7 @@ export function CalendarWeek({
 	statuses: CalendarData["statuses"];
 	/** Whether there is an active project to track time on. */
 	canTrack: boolean;
-	projectName: (id: string) => string;
+	projectName: (id: string, workPackageId?: string | null) => string;
 	onEdit: (entry: SheetEntry) => void;
 	onTrack: (day: Day, start: string) => void;
 }) {
@@ -363,9 +363,14 @@ export function CalendarWeek({
 													locked={locked}
 													slug={slug}
 													now={now}
-													name={part.entry.description || projectName(part.entry.projectId)}
+													name={
+														part.entry.description ||
+														projectName(part.entry.projectId, part.entry.workPackageId)
+													}
 													project={
-														part.entry.description ? projectName(part.entry.projectId) : null
+														part.entry.description
+															? projectName(part.entry.projectId, part.entry.workPackageId)
+															: null
 													}
 													clock={clock}
 													focusProps={itemProps(blockId(part))}
@@ -431,6 +436,9 @@ function Block({
 	const length = formatDuration(Math.max(0, (entry.endedAt ?? now) - entry.startedAt));
 	const times = `${clock(entry.startedAt)}–${running ? "Running" : clock(entry.endedAt as number)}`;
 	const rows = part.rowEnd - part.row;
+	// A block tall enough for its times also has room for its name on more lines, which a
+	// project's work package often needs in a narrow day (TS-115b).
+	const roomy = zoom === "detailed" ? rows >= 6 : rows >= 18;
 	const label = [
 		name,
 		project,
@@ -458,7 +466,10 @@ function Block({
 	);
 	const content = (
 		<>
-			<span aria-hidden="true" className="truncate text-label-medium">
+			<span
+				aria-hidden="true"
+				className={cx("text-label-medium", roomy ? "line-clamp-3 wrap-anywhere" : "truncate")}
+			>
 				{name}
 			</span>
 			{entry.overtime && (
@@ -466,7 +477,7 @@ function Block({
 					Overtime
 				</span>
 			)}
-			{(zoom === "detailed" ? rows >= 6 : rows >= 18) && (
+			{roomy && (
 				<span aria-hidden="true" className="truncate text-label-small">
 					{times}
 					{project ? ` · ${project}` : ""}

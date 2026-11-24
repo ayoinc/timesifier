@@ -1235,3 +1235,26 @@ An owner or admin invites many people at once, by pasting up to 200 addresses in
 | A revert limited to some days                                 | The time import has none; a limit would leave invitations waiting, still valid, after the button had gone.                                         |
 
 **What it costs.** Two more tables. Invitations to a large organisation arrive over minutes, and over days for more than 1,000 in a day. A sender with many seats may send many invitations in a day; each is recorded with who sent it, and the seats bound them.
+
+### 73. Work packages: a project's parts, required on new time while one is open, guarded by the Worker and by triggers
+
+Decided on 2026-11-24 for TS-115b (research/projects-model.md, the owner's decision 2).
+
+A project has work packages (`work_packages`, migration `0038_work_packages`): each a code unique in the project whatever its case (`code_key`, as decision 67's codes), a name, optional first and last days, a state (`open` or `closed`), a budget (none, hours in minutes, or fees in the project's currency) and whether its time is billable; archived, never deleted. Tasks stay the kind of work; the work package is where it goes.
+
+**The rule, on every path an entry is written by** (track, the timer, a cell, a calendar slot, edit, copy, undo, the API and the CSV import), in one function, `entryPackageOf`: while a project has an open work package, a new or changed entry names one, open and of that project. A closed or archived one takes no new time; time already on it stays, and an entry on it may still be changed so long as the change adds no time to it. A project whose work packages are all closed takes time on none. Entries from before are left as they are; nothing is backfilled. An entry is billable only when its task and its work package both are.
+
+**The guard below the Worker.** `time_entries.work_package_id` is added in place, with no reference, as `task_id` was: a reference would make the live table again. Triggers on insert and on a change of the entry's work package, project or organisation refuse a work package that is not of the entry's own project and organisation, and a trigger refuses moving a work package to another project. The migration only adds, so it ships with the code.
+
+**Who manages them** follows decision 42 for the project's client: owners, admins and the client's account managers (`mayManageWorkPackages`). TS-115c's delivery managers come through its `deliveryManager` argument. Every member sees the list; budgets follow `budgetShownTo`.
+
+**Where it shows.** The picker offers a project with open work packages by each of them, "ACME-001 · Website › WP2 Build", found by the work package's code or name; an entry tracked before its project had work packages opens in Edit entry with its picker saying that one must be chosen, and the sheet is not sent until one is. The Week grid's rows are a project and a work package, the work package on a line of its own so a compact window cuts neither short; the Day view and the calendar name it; a project's page has a Work packages tab whose progress is one SQL sum by work package (decision 57); Reports group by it and the CSV gains `work_package_code`; invoice lines can be one per work package, and lines below the project carry its code; the API lists `/work_packages` and gives `work_package_id` and `work_package` on entries; the time import finds a work package by its code within the row's project. `e2e/work-packages.spec.ts` operates all of it by the keyboard, scanned by axe, at 390px and 1280px in both schemes, as an owner, an admin, the client's account manager and a member.
+
+| Option                                                 | Evidence                                                                                                  |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Rule in the Worker, project match in triggers (chosen) | Every writer asks one function; a writer that forgets still cannot store another project's work package.  |
+| A foreign key from `time_entries`                      | Exact, but SQLite adds one only by making `time_entries` again: a destructive migration that ships alone. |
+| Required on every entry of a project that has any      | Simpler to say, but a closed work package would leave a project no way to take time.                      |
+| Backfill old entries to a default work package         | One shape everywhere, but invents an assignment nobody made and changes invoiced time.                    |
+
+**What it costs.** One more read of the project's work packages on each write, and three triggers that any migration rebuilding `time_entries` must make again.

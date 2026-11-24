@@ -2,15 +2,14 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Browser, Locator, Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import {
 	destinationPath,
 	NEW_ORGANISATION_PATH,
 	organisationPath,
 } from "../app/shell/destinations";
-import { foundInMessageSentBy, newPerson, ownAddress, setName, signIn } from "./auth";
-import { SIGNED_OUT } from "./auth-state";
+import { foundInMessageSentBy, newPerson, setName, signIn } from "./auth";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { expect, openShell, test } from "./fixtures";
 import {
@@ -20,6 +19,7 @@ import {
 	openInvitations,
 	openOutsideOrganisation,
 } from "./organisation";
+import { createClient, createCodedProject, newBrowser } from "./projects";
 import { pastWeekday, zoneIsTheBrowsers } from "./timesheet";
 
 // Codes and How you work (TS-115a, decision 67; account managers, decision 42)
@@ -68,13 +68,6 @@ async function tabTo(page: Page, target: Locator, most = 80) {
 	await expect(target).toBeFocused();
 }
 
-/** Somebody with a browser of their own, signed out, at a client address of their own. */
-async function newBrowser(browser: Browser, baseURL: string | undefined): Promise<Page> {
-	const context = await browser.newContext({ baseURL, storageState: SIGNED_OUT });
-	await ownAddress(context, baseURL);
-	return context.newPage();
-}
-
 type Model = "Client projects" | "Internal work" | "Both";
 
 /** A radio of How you work: its name is the answer, then what the answer means. */
@@ -94,47 +87,6 @@ async function newOrganisation(page: Page, model: Model): Promise<string> {
 		({ pathname, search }) => /^\/app\/(?!new$)[a-z0-9-]+$/.test(pathname) && search === "",
 	);
 	return new URL(page.url()).pathname.split("/")[2] ?? "";
-}
-
-/** Creates a client with a code on Clients. */
-async function createClient(page: Page, slug: string, name: string, code: string) {
-	await openShell(page, destinationPath(slug, "clients"));
-	await page.getByRole("button", { name: "Create client" }).click();
-	const sheet = page.getByRole("dialog", { name: "Create a client" });
-	await sheet.getByLabel("Client name").fill(name);
-	await sheet.getByLabel("Code", { exact: true }).fill(code);
-	await sheet.getByRole("button", { name: "Create the client" }).click();
-	await expect(sheet).toBeHidden();
-	await expect(page.getByRole("status")).toHaveText(`Client created: ${name}.`);
-}
-
-/**
- * Creates a project with a code on Projects, for `client` as the Client field
- * names it, or with the field as it opens: no client, which under Both is a
- * work code. Under Internal work the page says the organisation's own term.
- */
-async function createCodedProject(
-	page: Page,
-	slug: string,
-	name: string,
-	code: string,
-	client?: string,
-) {
-	await openShell(page, destinationPath(slug, "projects"));
-	await page.getByRole("button", { name: /^Create (?:project|work code)$/ }).click();
-	const sheet = page.getByRole("dialog", { name: /^Create an? (?:project|work code)$/ });
-	await sheet.getByLabel(/^(?:Project|Work code) name/).fill(name);
-	await sheet.getByLabel("Code", { exact: true }).fill(code);
-	if (client) {
-		await sheet.getByRole("button", { name: /Client/ }).click();
-		await page
-			.getByRole("listbox", { name: "Client" })
-			.getByRole("option", { name: client })
-			.click();
-	}
-	await sheet.getByRole("button", { name: /^Create the (?:project|work code)$/ }).click();
-	await expect(sheet).toBeHidden();
-	await expect(page.getByRole("main")).toContainText(`${code} · ${name}`);
 }
 
 /** Creates a task on Tasks, put on every project the organisation has now. */

@@ -18,15 +18,16 @@ import { PeriodStepper } from "~/components/PeriodStepper";
 import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
-import { organisationScope } from "~/db";
+import { type OrganisationScope, organisationScope } from "~/db";
 import { quantityText } from "~/invoices/lines";
-import { codedName } from "~/lib/codes";
+import { CODE_PROBLEM, codedName, typedCode } from "~/lib/codes";
+import { recordName } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import { isCurrencyCode } from "~/money/money";
 import { moneyText, parseBudgetHours, parseMoney } from "~/money/typed";
-import { mayManageRates, mayManageTasks, timeScopeOf } from "~/organisations/access";
+import { mayManageRates, mayManageTasks, maySeeRates, timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
-import { membershipContext, notFound } from "~/organisations/membership.server";
+import { type Membership, membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import {
@@ -44,6 +45,7 @@ import {
 	RATE_MODES,
 } from "~/projects/billing";
 import { DuplicateSheet } from "~/projects/DuplicateSheet";
+import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { projectCurrencies, projectPage, projectProfit } from "~/projects/project.server";
 import {
 	defaultRatesPath,
@@ -55,6 +57,23 @@ import {
 } from "~/projects/projects";
 import { offeredCopyName, projectCodeRules } from "~/projects/projects.server";
 import { changeBilling, changeBudget, changeOvertimeRate } from "~/projects/settings.server";
+import { WorkPackagesTab } from "~/projects/WorkPackagesTab";
+import {
+	WORK_PACKAGE_NAME_MAX_LENGTH,
+	WorkPackageBudgetKind,
+	WorkPackageState,
+} from "~/projects/work-packages";
+import {
+	createWorkPackage,
+	mayManageWorkPackages,
+	setWorkPackageArchived,
+	setWorkPackageState,
+	updateWorkPackage,
+	WORK_PACKAGE_PROBLEMS,
+	type WorkPackageInput,
+	workPackageOf,
+	workPackagesTab,
+} from "~/projects/work-packages.server";
 import { resolveRate } from "~/rates/rates";
 import { ratesForProject, setRate } from "~/rates/rates.server";
 import { dayLabel } from "~/reports/format";
@@ -90,6 +109,7 @@ import { useOrganisation, useTerms } from "./useOrganisation";
 const TAB_LABELS: Record<ProjectTab, string> = {
 	overview: "Overview",
 	tasks: "Tasks",
+	"work-packages": "Work packages",
 	team: "Team",
 	settings: "Settings",
 };
@@ -143,7 +163,37 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 			tab === "overview" && hasClients(organisation.workModel)
 				? await projectProfit(membership, page.project.id, url, now)
 				: null,
+		/** The Work packages tab (TS-115b), read only when it is shown. */
+		workPackages:
+			tab === "work-packages" ? await packagesTab(scope, membership, page.project.id, now) : null,
 	};
+}
+
+/** The project's Work packages tab as `membership` is shown it. */
+async function packagesTab(
+	scope: OrganisationScope,
+	membership: Membership,
+	projectId: string,
+	now: number,
+) {
+	const found = await projectCurrencies(scope, projectId);
+	if (!found) throw notFound();
+	const money = await organisationMoney(membership.organisation.id);
+	return workPackagesTab(
+		scope,
+		{
+			role: membership.role,
+			managesTeams: membership.managesTeams,
+			userId: membership.user.id,
+		},
+		{ id: projectId, clientId: found.project.clientId },
+		{
+			now,
+			money,
+			pricing: await pricingOf(scope, money.currency),
+			showsClients: hasClients(membership.organisation.workModel),
+		},
+	);
 }
 
 const Id = z.string().min(1).max(64);
@@ -191,6 +241,23 @@ const form = z.discriminatedUnion("intent", [
 		intent: z.literal("task-billable"),
 		taskIds: Ids,
 		billable: z.enum(["true", "false"]),
+	}),
+	z.object({
+		intent: z.literal("wp-save"),
+		workPackageId: z.string().max(64).default(""),
+		code: z.string().max(64),
+		name: z.string().max(200),
+		startsOn: z.union([Day, z.literal("")]).default(""),
+		endsOn: z.union([Day, z.literal("")]).default(""),
+		budgetKind: WorkPackageBudgetKind.optional(),
+		budgetAmount: Typed.default(""),
+		billable: Flag,
+	}),
+	z.object({ intent: z.literal("wp-state"), workPackageId: Id, state: WorkPackageState }),
+	z.object({
+		intent: z.literal("wp-archive"),
+		workPackageId: Id,
+		archived: z.enum(["true", "false"]),
 	}),
 	z.object({
 		intent: z.literal("rate"),
@@ -375,6 +442,23 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			);
 		}
 
+		case "wp-save":
+		case "wp-state":
+		case "wp-archive": {
+			// Decision 42's rule for the project's client (TS-115b); TS-115c adds its delivery managers.
+			const showsClients = hasClients(organisation.workModel);
+			const managed = showsClients ? await managedClientIds(scope, user.id) : [];
+			const clientId = showsClients ? found.project.clientId : null;
+			if (!mayManageWorkPackages(role, managed, clientId)) return declined(NOT_ALLOWED, 403);
+			return workPackageAction(input, {
+				scope,
+				actor: user.id,
+				projectId,
+				currency,
+				seesRates: maySeeRates(role),
+			});
+		}
+
 		case "rate": {
 			if (!mayManageRates(role)) return declined(NOT_ALLOWED, 403);
 			const amountMinor = parseMoney(input.amount, currency);
@@ -416,6 +500,94 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			return set.ok ? done("Rate saved.") : declined(RATE_IN_FORCE, 409);
 		}
 	}
+}
+
+/** Adds, changes, closes, reopens, archives or restores one of the project's work packages (TS-115b). */
+async function workPackageAction(
+	input: Extract<z.infer<typeof form>, { intent: "wp-save" | "wp-state" | "wp-archive" }>,
+	{
+		scope,
+		actor,
+		projectId,
+		currency,
+		seesRates,
+	}: {
+		scope: OrganisationScope;
+		actor: string;
+		projectId: string;
+		currency: string;
+		seesRates: boolean;
+	},
+) {
+	if (input.intent === "wp-state") {
+		const set = await setWorkPackageState(
+			scope,
+			actor,
+			projectId,
+			input.workPackageId,
+			input.state,
+		);
+		if (set === null) throw notFound();
+		return done(
+			input.state === "closed"
+				? "Closed. It takes no new time; what it has stays."
+				: "Reopened. It takes time again.",
+		);
+	}
+	if (input.intent === "wp-archive") {
+		const archived = input.archived === "true";
+		const set = await setWorkPackageArchived(
+			scope,
+			actor,
+			projectId,
+			input.workPackageId,
+			archived,
+			Date.now(),
+		);
+		if (set === null) throw notFound();
+		return done(archived ? "Archived. Its entries keep it." : "Restored.");
+	}
+	const code = typedCode(input.code);
+	if (code === null || code === false) return declined(CODE_PROBLEM);
+	const name = recordName(input.name);
+	if (!name) return declined("Enter a name.");
+	if (name.length > WORK_PACKAGE_NAME_MAX_LENGTH) {
+		return declined(`Enter a name of up to ${WORK_PACKAGE_NAME_MAX_LENGTH} characters.`);
+	}
+	const existing =
+		input.workPackageId === "" ? null : await workPackageOf(scope, projectId, input.workPackageId);
+	if (input.workPackageId !== "" && !existing) throw notFound();
+	let budget: WorkPackageInput["budget"] = null;
+	if (input.budgetKind !== undefined) {
+		// A budget in fees is money: set by those who see rates, and kept from those who do not.
+		const fees = input.budgetKind === "fees" || existing?.budgetKind === "fees";
+		if (fees && !seesRates) return declined(NOT_ALLOWED, 403);
+		let amount: number | null = null;
+		if (input.budgetKind === "hours") {
+			amount = parseBudgetHours(input.budgetAmount);
+			if (amount === null) return declined("Type the budget in hours, such as 120 or 37.5.");
+		} else if (input.budgetKind === "fees") {
+			amount = parseMoney(input.budgetAmount, currency);
+			if (amount === null) return declined(`The budget: ${NOT_AN_AMOUNT}`);
+		}
+		budget = { kind: input.budgetKind, amount };
+	} else if (!existing) {
+		budget = { kind: "none", amount: null };
+	}
+	const fields: WorkPackageInput = {
+		code,
+		name,
+		startsOn: input.startsOn || null,
+		endsOn: input.endsOn || null,
+		budget,
+		billable: input.billable,
+	};
+	const saved = existing
+		? await updateWorkPackage(scope, actor, projectId, existing.id, fields)
+		: await createWorkPackage(scope, actor, projectId, fields);
+	if (saved === null) throw notFound();
+	if (!saved.ok) return declined(WORK_PACKAGE_PROBLEMS[saved.problem], 409);
+	return done(existing ? `${code} ${name} saved.` : `${code} ${name} added.`);
 }
 
 const RATE_IN_FORCE =
@@ -500,11 +672,21 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 						to: projectPath(organisation.slug, project.id, id),
 					}))}
 					current={tab}
+					wraps
 				/>
 			</div>
 			<div className="mt-8 max-w-200">
 				{tab === "overview" && <Overview data={loaderData} />}
 				{tab === "tasks" && <Tasks data={loaderData} onSaid={setSaid} />}
+				{tab === "work-packages" && loaderData.workPackages && (
+					<WorkPackagesTab
+						tab={loaderData.workPackages}
+						currency={page.project.currency}
+						seesRates={page.seesRates}
+						showsBilling={loaderData.showsClients && page.project.billingType !== "non_billable"}
+						onSaid={setSaid}
+					/>
+				)}
 				{tab === "team" && <Team data={loaderData} onSaid={setSaid} />}
 				{tab === "settings" && <Settings data={loaderData} onSaid={setSaid} />}
 			</div>

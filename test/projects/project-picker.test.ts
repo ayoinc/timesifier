@@ -27,7 +27,7 @@ const PROJECTS: PickerProject[] = [
 const shape = (query: string, recent: string[] = []) =>
 	projectSections(PROJECTS, recent, query).map((section) => [
 		section.title,
-		section.projects.map((project) => project.id),
+		section.options.map((option) => option.id),
 	]);
 
 describe("projectSections", () => {
@@ -78,7 +78,7 @@ describe("projectSections", () => {
 			projectSections(PROJECTS, ["copy", "web", "admin"], query, CLIENT_PROJECT_TERMS, [
 				"web",
 				"audit",
-			]).map((section) => [section.title, section.projects.map((project) => project.id)]);
+			]).map((section) => [section.title, section.options.map((option) => option.id)]);
 		expect(pinnedShape("")).toEqual([
 			[PINNED_TITLE, ["audit", "web"]],
 			[RECENT_TITLE, ["copy", "admin"]],

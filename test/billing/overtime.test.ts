@@ -118,6 +118,8 @@ describe("lines of time", () => {
 		id,
 		projectId: "p1",
 		projectName: "Site",
+		workPackageId: null,
+		workPackageName: null,
 		taskId: "t1",
 		taskName: "Development",
 		userId: "u1",
@@ -130,6 +132,37 @@ describe("lines of time", () => {
 		overtime,
 		overtimeApart: overtime,
 		...more,
+	});
+
+	it("give each work package a line of its own, carrying its code, and add up to the same subtotal (TS-115b)", () => {
+		const items = [
+			item("a", false, { workPackageId: "w1", workPackageName: "WP1 Discovery" }),
+			item("b", false, { workPackageId: "w2", workPackageName: "WP2 Build" }),
+			item("c", false, {
+				workPackageId: "w2",
+				workPackageName: "WP2 Build",
+				taskId: "t2",
+				taskName: "Design",
+			}),
+			item("d", false),
+		];
+		const regular = items.map((each) => ({ ...each, overtimeApart: false }));
+		expect(timeLines(regular, "work-package").map((l) => [l.description, l.timeEntryIds])).toEqual([
+			["Site › WP1 Discovery", ["a"]],
+			["Site › WP2 Build", ["b", "c"]],
+			["Site", ["d"]],
+		]);
+		expect(timeLines(regular, "task").map((l) => l.description)).toEqual([
+			"Site › WP1 Discovery: Development",
+			"Site › WP2 Build: Development",
+			"Site › WP2 Build: Design",
+			"Site: Development",
+		]);
+		expect(timeLines(regular, "project").map((l) => l.description)).toEqual(["Site"]);
+		const subtotal = (grouping: Grouping) =>
+			timeLines(regular, grouping).reduce((sum, line) => sum + line.amountMinor, 0);
+		expect(subtotal("work-package")).toBe(subtotal("project"));
+		expect(subtotal("task")).toBe(subtotal("entry"));
 	});
 
 	it("put overtime on a line of its own after its group's regular time, labelled", () => {

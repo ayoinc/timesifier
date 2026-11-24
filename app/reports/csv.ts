@@ -8,7 +8,8 @@ import type { Row } from "./report";
  * minutes, in seconds, as the page counts it, so the durations add up to the
  * page's total. `overtime` is `yes` for an entry of overtime, `no` for regular
  * time (TS-095), so a spreadsheet adds up each apart. Each name has its code
- * in the column before it, empty when it has none (TS-115a). The headers are
+ * in the column before it, empty when it has none (TS-115a); after the project
+ * comes the code of its work package, empty for none (TS-115b). The headers are
  * names for a machine, the same whatever the organisation calls projects.
  */
 
@@ -18,6 +19,7 @@ export const CSV_COLUMNS = [
 	"person",
 	"project_code",
 	"project",
+	"work_package_code",
 	"client_code",
 	"client",
 	"description",
@@ -73,6 +75,7 @@ export function rowCells(row: Row, showClients: boolean): string[] {
 		entry.person,
 		entry.projectCode ?? "",
 		entry.project,
+		entry.workPackageCode ?? "",
 		(client && entry.clientCode) || "",
 		(client && entry.client) || "",
 		entry.description ?? "",

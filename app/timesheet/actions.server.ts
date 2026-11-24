@@ -11,6 +11,7 @@ import { declined, done } from "~/organisations/outcome.server";
 import type { Outcome } from "~/organisations/problems";
 import { periodContaining } from "~/periods/periods";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
+import { WORK_PACKAGE_REFUSALS } from "~/projects/work-packages";
 import { TagIds } from "~/tags/tags";
 import { addDays, Day, dayOf, exactInstantAt } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
@@ -64,6 +65,16 @@ export const OvertimeFlag = z
 	.optional()
 	.transform((value) => (value === undefined ? undefined : value !== "false"));
 
+/**
+ * An entry's work package (TS-115b): an id, or empty for none. Left out, an
+ * entry being changed keeps its own, and a new one has none.
+ */
+export const WorkPackageId = z
+	.string()
+	.max(64)
+	.optional()
+	.transform((value) => (value === undefined ? undefined : value === "" ? null : value));
+
 export const TimesheetForm = z.discriminatedUnion("intent", [
 	z.object({
 		intent: z.literal("track"),
@@ -74,6 +85,7 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		/** When the entry starts, where a slot of the calendar was chosen (TS-062). */
 		start: Clock.optional(),
 		taskId: Id.optional(),
+		workPackageId: WorkPackageId,
 		tagIds: TagIds,
 		overtime: OvertimeFlag,
 	}),
@@ -87,6 +99,7 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 		end: Clock,
 		description: Description.default(""),
 		taskId: Id.optional(),
+		workPackageId: WorkPackageId,
 		tagIds: TagIds,
 		overtime: OvertimeFlag,
 	}),
@@ -99,6 +112,7 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 	z.object({
 		intent: z.literal("cell"),
 		projectId: Id,
+		workPackageId: WorkPackageId,
 		day: Day,
 		hours: Hours,
 		overtime: OvertimeFlag,
@@ -122,6 +136,8 @@ const REFUSALS: Record<Exclude<NotWritten, "limit" | "invoiced">, [string, numbe
 		409,
 	],
 	"no-task": ["Choose an active task of this project.", 400],
+	"no-work-package": [WORK_PACKAGE_REFUSALS["no-work-package"], 400],
+	"work-package-closed": [WORK_PACKAGE_REFUSALS["work-package-closed"], 409],
 	"no-tag": ["Choose active tags only.", 400],
 };
 
@@ -180,6 +196,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 					zone,
 					now,
 					taskId: input.taskId,
+					workPackageId: input.workPackageId,
 					tagIds: input.tagIds,
 				});
 				return started.ok
@@ -201,6 +218,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 				zone,
 				now,
 				taskId: input.taskId,
+				workPackageId: input.workPackageId,
 				tagIds: input.tagIds,
 				overtime: input.overtime,
 			});
@@ -261,6 +279,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 					startedAt,
 					endedAt,
 					taskId: input.taskId,
+					workPackageId: input.workPackageId,
 					tagIds: input.tagIds,
 					overtime: input.overtime,
 				},
@@ -326,6 +345,7 @@ export async function timesheetAction(request: Request, membership: Membership) 
 			if (!hours.success) return declined(hours.error.issues[0]?.message ?? "Type hours as 1.5.");
 			const set = await setCellHours(scope, user.id, {
 				projectId: input.projectId,
+				workPackageId: input.workPackageId ?? null,
 				day: input.day,
 				minutes: hours.data,
 				overtime: input.overtime,

@@ -7,6 +7,7 @@ import { daysOver } from "~/leave/rules.server";
 import { codedName } from "~/lib/codes";
 import { shownName } from "~/organisations/people";
 import { pricingOf } from "~/projects/money.server";
+import { workPackageLabel } from "~/projects/work-packages";
 import { hourlyPrice, MULTIPLIER_ONE, wholeMinutes } from "~/rates/price";
 import { addDays, type Day, dayOf } from "~/time/calendar";
 import { formatDay } from "~/time/format";
@@ -143,7 +144,7 @@ export async function uninvoicedTime(
 ): Promise<{ entries: PreviewEntry[]; leftOut: string[] }> {
 	const none = { entries: [], leftOut: [] };
 	if (projectIds.length === 0) return none;
-	const [found, pricing, tasks, projects] = await Promise.all([
+	const [found, pricing, tasks, projects, packages] = await Promise.all([
 		scope.timeEntries.select((t) =>
 			and(
 				among(t.projectId, projectIds),
@@ -157,6 +158,7 @@ export async function uninvoicedTime(
 		pricingOf(scope, organisation.currency),
 		scope.tasks.select(),
 		scope.projects.select((p) => among(p.id, projectIds)),
+		scope.workPackages.select((w) => among(w.projectId, projectIds)),
 	]);
 	if (found.length === 0) return none;
 
@@ -175,6 +177,8 @@ export async function uninvoicedTime(
 	const taskName = new Map(tasks.map((t) => [t.id, t.name]));
 	// A line made from time names the project by its code and name (TS-115a).
 	const projectName = new Map(projects.map((p) => [p.id, codedName(p.code, p.name)]));
+	// And its work package by its code and name (TS-115b).
+	const packageName = new Map(packages.map((wp) => [wp.id, workPackageLabel(wp)]));
 
 	const items = entries.map((entry) => {
 		const person = personById.get(entry.userId);
@@ -195,6 +199,9 @@ export async function uninvoicedTime(
 			id: entry.id,
 			projectId: entry.projectId,
 			projectName: projectName.get(entry.projectId) ?? "",
+			workPackageId: entry.workPackageId,
+			workPackageName:
+				entry.workPackageId === null ? null : (packageName.get(entry.workPackageId) ?? null),
 			taskId: entry.taskId,
 			taskName: entry.taskId ? (taskName.get(entry.taskId) ?? null) : null,
 			userId: entry.userId,

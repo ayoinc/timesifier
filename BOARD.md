@@ -94,6 +94,22 @@ Builder: an AI session on branch `ts-126-export-everything`, pull request #105. 
 - [x] TS-126b, pull request on branch `ts-126b-export-bell`: the notice is in the bell. Ready (`export-ready`) and not made (`export-failed`) are notifications for the owner who asked alone, leading to Workspace settings › Export everything; the every-minute sender sends the one email, on by default, and My account › Notifications has a switch for each, for owners; `tellOwner`'s direct email is gone. Decisions 68 and 71 have its note; the privacy notice names it among the notifications. Tests: `test/exports/export-everything.test.ts` ("telling the owner who asked"), `test/notifications/choices.test.ts`, `test/claims.test.ts`; `e2e/export-everything.spec.ts` sees it in the bell, with axe.
 - [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
 
+### TS-115b · Work packages
+
+Builder: an AI session on branch `ts-115b-work-packages`, pull request #110. Builds the owner's decision 2 of `research/projects-model.md`. Decision 73 is this card's. Migration `0038_work_packages` only adds: `work_packages`, `time_entries.work_package_id` and three triggers. Delivery managers are TS-115c's. It waits only on the owner's screenshots.
+
+- [x] A project's work packages: code unique in the project whatever its case, name, days, open or closed, budget, billable, archived. Test: `test/projects/work-packages.test.ts` ("the database").
+- [x] The database refuses an entry on another project's or organisation's work package, on insert and update, and a work package moving project. Test: `test/projects/work-packages.test.ts` ("the database").
+- [x] While a project has an open work package, a new or changed entry names one, open and of that project, on track, the timer, a cell, a calendar slot, edit, copy, undo, the API and the import; a closed one takes no new time and keeps what it has; old entries are untouched. Test: `test/projects/work-packages.test.ts`.
+- [x] The picker, the Week grid's rows, the Day view and the calendar name the work package. Tests: `test/timesheet/sheets.test.ts`, `test/projects/project-picker.test.ts`.
+- [x] Projects › a project › Work packages: list, add, edit, close, reopen, archive, with budget progress equal to the sums. Test: `test/projects/work-packages.test.ts` ("budget progress and reports", "who manages work packages").
+- [x] Reports group by work package, totals equal the entries, and the CSV has `work_package_code`; invoice lines carry the code. Tests: `test/projects/work-packages.test.ts`, `test/billing/overtime.test.ts`, `test/reports/report.test.ts`.
+- [x] The API: `/work_packages`, `work_package_id` and `work_package` on entries; `docs/api.md` and `docs/openapi.yaml` kept in step. Tests: `test/projects/work-packages.test.ts` ("the API"), `test/integrations/api.test.ts`.
+- [x] Owners, admins and the client's account managers manage them; Finance, managers, members and contractors 403, a stranger 404. Test: `test/projects/work-packages.test.ts`.
+- [x] The privacy notice and `docs/security.md` say what is stored and who manages it. Test: `test/claims.test.ts`.
+- [x] Browser specs with keyboard and axe at 390px and 1280px, light and dark, and screenshots in `cmux-assets/browser/timesifier/TS-115b/`. Test: `e2e/work-packages.spec.ts` (the picker, the Week grid, the Day view and the calendar, the Work packages tab as an owner, an admin, the client's account manager and a member, and an old entry edited).
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline.
+
 ### TS-115a · Codes, How you work, and who creates projects
 
 Builder: an AI session on branch `ts-115a-codes`, pull request #100. Builds the owner's decisions 1 (codes), 5 (who creates projects) and 8 (How you work) of `research/projects-model.md`; work packages, project teams and the time share are later cards. Decisions 42 and 67 are this card's, and it amends decisions 25 and 65. Migration `0034_codes_and_work_model`, after #91's `0032_pins` and #105's `0033_organisation_exports`. It waits only on the owner's screenshots. Left over: dropping `clients_enabled` (Backlog, "Drop `clients_enabled` (after TS-115a)").

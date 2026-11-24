@@ -6,12 +6,10 @@ import { AddIcon } from "~/components/icons/AddIcon";
 import { RemoveIcon } from "~/components/icons/RemoveIcon";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Tooltip } from "~/components/Tooltip";
-import { codedName } from "~/lib/codes";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { addDays, type Day } from "~/time/calendar";
 import { formatMonth, nearWord } from "~/time/format";
-
 import { type Aim, stepsAround } from "./aim";
 import { CalendarMonth } from "./CalendarMonth";
 import { CalendarWeek } from "./CalendarWeek";
@@ -27,6 +25,7 @@ import {
 } from "./calendar-sheets";
 import { EntryFields } from "./DayView";
 import { formatDuration } from "./durations";
+import { useEntryName } from "./entry-names";
 import { useReport, useReported } from "./feedback";
 import { dayNumber, useClockFormat, usePeriodFormat } from "./format";
 import { useNow } from "./live";
@@ -69,10 +68,7 @@ export function CalendarView({
 	const formatPeriod = usePeriodFormat();
 	const clock = useClockFormat(zone);
 	const navigate = useNavigate();
-	const projectName = (id: string) => {
-		const project = projects.find((p) => p.id === id);
-		return project ? codedName(project.code, project.name) : "";
-	};
+	const projectName = useEntryName(projects);
 	const canTrack = projects.some((p) => !p.archived);
 
 	const [said, setSaid] = useState<string | null>(null);

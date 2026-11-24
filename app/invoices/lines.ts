@@ -13,12 +13,13 @@ import type { Day } from "~/time/calendar";
  * minor units of the invoice's one currency.
  */
 
-/** How tracked time becomes lines: one per project, per task, per person, or per entry. */
-export const Grouping = z.enum(["project", "task", "person", "entry"]);
+/** How tracked time becomes lines: one per project, per work package, per task, per person, or per entry. */
+export const Grouping = z.enum(["project", "work-package", "task", "person", "entry"]);
 export type Grouping = z.infer<typeof Grouping>;
 
 export const GROUPING_LABELS: Record<Grouping, string> = {
 	project: "One line per project",
+	"work-package": "One line per work package",
 	task: "One line per task",
 	person: "One line per person",
 	entry: "One line per entry",
@@ -32,6 +33,9 @@ export interface TimeItem {
 	id: string;
 	projectId: string;
 	projectName: string;
+	/** Its work package (TS-115b) and that work package's code and name, "WP2 Build"; null for none. */
+	workPackageId: string | null;
+	workPackageName: string | null;
 	taskId: string | null;
 	taskName: string | null;
 	userId: string;
@@ -73,15 +77,21 @@ export function hoursMilli(minutes: number): number {
 	return roundHalfUp(minutes * MILLI, MINUTES_PER_HOUR);
 }
 
-/** What identifies an item's line under `grouping`. */
+/**
+ * What identifies an item's line under `grouping`. Below the project, a line
+ * is of one work package (TS-115b), so the code it carries is its entries' own.
+ */
 function keyOf(item: TimeItem, grouping: Grouping): string {
+	const wp = item.workPackageId ?? "";
 	switch (grouping) {
 		case "project":
 			return item.projectId;
+		case "work-package":
+			return `${item.projectId}/${wp}`;
 		case "task":
-			return `${item.projectId}/${item.taskId ?? ""}`;
+			return `${item.projectId}/${wp}/${item.taskId ?? ""}`;
 		case "person":
-			return `${item.projectId}/${item.userId}`;
+			return `${item.projectId}/${wp}/${item.userId}`;
 		case "entry":
 			return item.id;
 	}
@@ -95,19 +105,26 @@ function lineDescription(items: readonly TimeItem[], grouping: Grouping): string
 	return first.overtimeApart ? `${said} (overtime)` : said;
 }
 
-/** What a line of `first`'s group under `grouping` says, overtime aside. */
+/**
+ * What a line of `first`'s group under `grouping` says, overtime aside. Below
+ * the project, it carries the work package's code and name after the project's
+ * (TS-115b): "ACME-001 · Website › WP2 Build: Design".
+ */
 function groupDescription(first: TimeItem, grouping: Grouping): string {
+	const project =
+		grouping !== "project" && first.workPackageName
+			? `${first.projectName} › ${first.workPackageName}`
+			: first.projectName;
 	switch (grouping) {
 		case "project":
-			return first.projectName;
+		case "work-package":
+			return project;
 		case "task":
-			return `${first.projectName}: ${first.taskName ?? "No task"}`;
+			return `${project}: ${first.taskName ?? "No task"}`;
 		case "person":
-			return `${first.projectName}: ${first.personName}`;
+			return `${project}: ${first.personName}`;
 		case "entry":
-			return [first.projectName, first.description ?? first.taskName, first.day]
-				.filter(Boolean)
-				.join(": ");
+			return [project, first.description ?? first.taskName, first.day].filter(Boolean).join(": ");
 	}
 }
 

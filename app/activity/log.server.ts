@@ -232,6 +232,7 @@ const STEPS: Record<string, string> = {
 	joined: "Joined",
 	made: "Made",
 	failed: "Could not make",
+	closed: "Closed",
 	downloaded: "Downloaded",
 };
 
@@ -240,6 +241,7 @@ const NOUNS: Record<string, string> = {
 	time_entry: "a time entry",
 	period: "a week",
 	project: "project",
+	work_package: "work package",
 	client: "client",
 	membership: "member",
 	invitation: "an invitation",
@@ -277,6 +279,7 @@ const NOUNS: Record<string, string> = {
 const FIELD_LABELS: Record<string, string> = {
 	hours: "Hours",
 	projectId: "Project",
+	workPackageId: "Work package",
 	clientId: "Client",
 	duplicatedFromId: "Duplicated from",
 	taskId: "Task",
@@ -370,6 +373,7 @@ interface Names {
 /** The tables a record names things in, each looked up for the ids that can be its own. */
 type Named =
 	| "projects"
+	| "workPackages"
 	| "clients"
 	| "teams"
 	| "tasks"
@@ -383,6 +387,7 @@ type Named =
 /** The table whose row a record's subject is, for each kind of subject that has a name or number. */
 const SUBJECT_TABLES: Partial<Record<string, Named>> = {
 	project: "projects",
+	work_package: "workPackages",
 	budget: "projects",
 	client: "clients",
 	team: "teams",
@@ -397,6 +402,7 @@ const SUBJECT_TABLES: Partial<Record<string, Named>> = {
 /** The table a changed field's id is a row of. `userId` is a person; `tags` holds comma-joined tag ids. */
 const FIELD_TABLES: Partial<Record<string, Named>> = {
 	projectId: "projects",
+	workPackageId: "workPackages",
 	clientId: "clients",
 	duplicatedFromId: "projects",
 	teamId: "teams",
@@ -451,6 +457,9 @@ async function namesOf(scope: OrganisationScope, records: readonly RecordRow[]):
 					.from(users)
 					.where(among(users.id, people)),
 		read("projects", (w) => scope.projects.select((p) => among(p.id, w))).then(named),
+		read("workPackages", (w) => scope.workPackages.select((p) => among(p.id, w))).then((rows) =>
+			rows.map((row) => [row.id, `${row.code} ${row.name}`] as const),
+		),
 		read("clients", (w) => scope.clients.select((c) => among(c.id, w))).then(named),
 		read("teams", (w) => scope.teams.select((t) => among(t.id, w))).then(named),
 		read("tasks", (w) => scope.tasks.select((t) => among(t.id, w))).then(named),

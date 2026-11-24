@@ -57,6 +57,9 @@ function entry(
 		clientId: "c1",
 		client: "Initech",
 		clientCode: null,
+		workPackageId: null,
+		workPackageCode: null,
+		workPackage: null,
 		description: "Work",
 		day: dayOf(typeof startedAt === "number" ? startedAt : Date.parse(startedAt), "UTC"),
 		startedAt: typeof startedAt === "number" ? startedAt : Date.parse(startedAt),
@@ -538,7 +541,7 @@ describe("a cell of the CSV", () => {
 	it("ends each line with CRLF", () => {
 		expect(csvLine(["a", "b"])).toBe("a,b\r\n");
 		expect(csvLine(CSV_COLUMNS)).toBe(
-			"entry_id,person,project_code,project,client_code,client,description,started_at,ended_at,duration_seconds,overtime\r\n",
+			"entry_id,person,project_code,project,work_package_code,client_code,client,description,started_at,ended_at,duration_seconds,overtime\r\n",
 		);
 	});
 
@@ -609,6 +612,7 @@ describe("a row of the CSV", () => {
 			"",
 			"Site",
 			"",
+			"",
 			"Initech",
 			"=1+1",
 			"2026-11-03T23:30:00Z",
@@ -616,7 +620,7 @@ describe("a row of the CSV", () => {
 			"3600",
 			"no",
 		]);
-		expect(rowCells(row, false)[5]).toBe("");
+		expect(rowCells(row, false)[6]).toBe("");
 		expect(csvLine(rowCells(row, true))).toContain(",'=1+1,");
 	});
 
@@ -629,7 +633,7 @@ describe("a row of the CSV", () => {
 			now,
 		);
 		if (!row) throw new Error("a row expected");
-		expect(rowCells(row, true).slice(5)).toEqual([
+		expect(rowCells(row, true).slice(6)).toEqual([
 			"",
 			"",
 			"2026-11-04T09:00:00Z",

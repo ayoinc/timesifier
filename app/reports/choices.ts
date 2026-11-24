@@ -32,11 +32,12 @@ export const RANGE_LABELS: Record<Range, string> = {
 	custom: "Custom range",
 };
 
-export const GROUPS = ["project", "client", "day"] as const;
+export const GROUPS = ["project", "work-package", "client", "day"] as const;
 export type Grouping = (typeof GROUPS)[number];
 
 export const GROUP_LABELS: Record<Grouping, string> = {
 	project: "Project",
+	"work-package": "Work package",
 	client: "Client",
 	day: "Day",
 };

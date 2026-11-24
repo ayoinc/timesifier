@@ -260,6 +260,13 @@
 			"when": 1795489262687,
 			"tag": "0037_people_import",
 			"breakpoints": true
+		},
+		{
+			"idx": 37,
+			"version": "6",
+			"when": 1795500629996,
+			"tag": "0038_work_packages",
+			"breakpoints": true
 		}
 	]
 }

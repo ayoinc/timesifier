@@ -172,12 +172,12 @@ export default function Privacy({
 		),
 		"Time and approvals": (
 			<>
-				Each time entry: whose it is, its project and task, its start and its end, its description
-				and tags, whether it is billable or overtime, and the import that brought it, if one did.
-				Each timesheet period once it is submitted, with every step it took (submitted, withdrawn,
-				approved, returned or reopened), who took it, when, and the comment given. Each request to
-				work overtime or on a day off: its days, the hours asked for, the reason, and who decided
-				it, when and what they said.
+				Each time entry: whose it is, its project, work package and task, its start and its end, its
+				description and tags, whether it is billable or overtime, and the import that brought it, if
+				one did. Each timesheet period once it is submitted, with every step it took (submitted,
+				withdrawn, approved, returned or reopened), who took it, when, and the comment given. Each
+				request to work overtime or on a day off: its days, the hours asked for, the reason, and who
+				decided it, when and what they said.
 			</>
 		),
 		Leave: (
@@ -200,7 +200,9 @@ export default function Privacy({
 		"Projects, tasks and budgets": (
 			<>
 				The organisation's projects, tasks and tags, how each project bills, and its budgets,
-				including a budget for one person on a project. A record of each budget alert sent.
+				including a budget for one person on a project. Each project's work packages: their codes,
+				names, days, whether they are open, billable or archived, and their budgets. A record of
+				each budget alert sent.
 			</>
 		),
 		"Clients and their contacts": (

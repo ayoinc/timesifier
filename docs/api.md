@@ -19,7 +19,7 @@ A token acts as the person who made it, with their role and teams as they are at
 | `time:read`         | Read time entries, and `GET /me`                    |
 | `time:write`        | Add, change and delete the maker's own time entries |
 | `descriptions:read` | Read entry descriptions and expense notes           |
-| `projects:read`     | Read projects, clients and tasks                    |
+| `projects:read`     | Read projects, work packages, clients and tasks     |
 | `people:read`       | Read people and their leave                         |
 | `expenses:read`     | Read expenses                                       |
 | `invoices:read`     | Read invoices                                       |
@@ -84,11 +84,17 @@ Query: `per_page`, `cursor`. By `id`. `id`, `name`, `role`, `is_contractor`; `em
 
 `id`, `name`, `code` (`ACME-001`, or null), `client` (`{ id, name, code }` or null), `archived`; for those who see money also `billing_type`, `rate_mode`, `fee_minor`, `currency`, `budget`.
 
-A client's or project's `code` is how the organisation refers to it, and is unique in the organisation whatever its letters' case. Wherever an answer names a client or project, it gives `{ id, name, code }`.
+A client's or project's `code` is how the organisation refers to it, and is unique in the organisation whatever its letters' case. Wherever an answer names a client, project or work package, it gives `{ id, name, code }`.
 
 ### `GET /tasks` — `projects:read`
 
 `id`, `name`, `archived`, `billable_by_default`, `common`, and `projects`: `[{ id, billable }]`.
+
+### `GET /work_packages` — `projects:read`
+
+Query: `project_id`. Each project's work packages (TS-115b), archived ones too, by project then code: `id`, `project_id`, `code` (`WP2`, unique in its project whatever its letters' case), `name`, `starts_on`, `ends_on`, `state` (`open` or `closed`), `billable`, `archived`, and `budget` (`{ kind, amount }`: `hours` in minutes for everyone, `fees` in minor units only for those who see money; null otherwise).
+
+While a project has an open work package, every new or changed entry of it names one, open and of that project; a closed one takes no new time, and the time already on it stays. Entries from before keep what they have.
 
 ### `GET /time_entries` — `time:read`
 
@@ -101,6 +107,8 @@ Query: `from`, `to` (days, at most 366 apart, both included, matched against eac
 	"project": { "id": "…", "name": "Apollo", "code": "INI-001" },
 	"client": { "id": "…", "name": "Initech", "code": "INI" },
 	"task": { "id": "…", "name": "Design" },
+	"work_package_id": "…",
+	"work_package": { "id": "…", "name": "Build", "code": "WP2" },
 	"spent_date": "2026-11-03",
 	"started_at": "2026-11-03T09:00:00.000Z",
 	"ended_at": "2026-11-03T10:30:00.000Z",
@@ -129,15 +137,16 @@ One entry, or 404.
 	"spent_date": "2026-11-03",
 	"hours": 1.5,
 	"description": "Pairing",
-	"task_id": "…"
+	"task_id": "…",
+	"work_package_id": "…"
 }
 ```
 
-`started_at` (ISO 8601 with offset) may replace or go with `spent_date`; without it the entry is placed on the day as the Timesheet's week grid places one. `hours` is above 0 and at most 24, and hours that round to no minutes answer `422`. `user_id`, if sent, must be the maker's. `overtime` (default `false`) records the hours as overtime. The Timesheet's rules hold: regular time past the day's expected hours, or overtime the organisation does not allow, past its caps or past approved hours, answers `422` `invalid` with what the day has left in its `message`. Answers `201` with the entry and `Location`.
+`started_at` (ISO 8601 with offset) may replace or go with `spent_date`; without it the entry is placed on the day as the Timesheet's week grid places one. `hours` is above 0 and at most 24, and hours that round to no minutes answer `422`. `user_id`, if sent, must be the maker's. `overtime` (default `false`) records the hours as overtime. `work_package_id` is required while the project has an open work package: none answers `422` `work_package_required`, and a closed one `409` `work_package_closed`. The Timesheet's rules hold: regular time past the day's expected hours, or overtime the organisation does not allow, past its caps or past approved hours, answers `422` `invalid` with what the day has left in its `message`. Answers `201` with the entry and `Location`.
 
 ### `PATCH /time_entries/{id}` — `time:write`
 
-Any of `project_id`, `task_id`, `started_at`, `ended_at` or `hours` (not both), `description` (null clears it), `overtime`. The maker's own entries that have ended. An end after now ("That is ahead of now.") or an entry longer than 24 hours answers `422` `invalid`, and an entry on an invoice `409` `invoiced`. Each refusal's `message` is the Timesheet's sentence.
+Any of `project_id`, `task_id`, `work_package_id` (left out, the entry keeps its own), `started_at`, `ended_at` or `hours` (not both), `description` (null clears it), `overtime`. A change that adds time to an entry on a closed work package, or moves it to one, answers `409` `work_package_closed`. The maker's own entries that have ended. An end after now ("That is ahead of now.") or an entry longer than 24 hours answers `422` `invalid`, and an entry on an invoice `409` `invoiced`. Each refusal's `message` is the Timesheet's sentence.
 
 ### `DELETE /time_entries/{id}` — `time:write`
 

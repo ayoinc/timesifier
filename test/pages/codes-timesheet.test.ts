@@ -162,7 +162,7 @@ describe("the project picker's list with codes (TS-115a)", () => {
 	const shape = (query: string, model: WorkModel = "both", recent: string[] = []) =>
 		projectSections(PROJECTS, recent, query, termsOf(model, "Cost centres")).map((section) => [
 			section.title,
-			section.projects.map((project) => project.id),
+			section.options.map((option) => option.id),
 		]);
 
 	it("names each client by its code first, and sorts projects by code", () => {
