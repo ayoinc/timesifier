@@ -412,6 +412,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 		"../app/budgets/budget.server.ts": [
 			"a budget alert, to the organisation's owners and admins and, for a budget in hours, to the managers",
 		],
+		"../app/exports/job.server.ts": [
+			"a notice that an export of everything is ready, or could not be made, to the owner who asked for it",
+		],
 		"../app/integrations/webhooks.server.ts": [
 			"a notice that a webhook was switched off, to the person who added it",
 		],

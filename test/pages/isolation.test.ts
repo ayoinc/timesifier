@@ -161,6 +161,9 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/account",
 				"/app/acme/account/calendar",
 				"/app/acme/settings/members",
+				// The export of everything and its ZIP (TS-126).
+				"/app/acme/settings/export",
+				"/app/acme/settings/export/download",
 				// Any other address: `*`, stood in for by `x`.
 				"/app/acme/x",
 			].sort(),

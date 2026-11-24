@@ -418,6 +418,10 @@ export default function Privacy({
 							</li>
 							<li>a notice that a webhook was switched off, to the person who added it;</li>
 							<li>
+								a notice that an export of everything is ready, or could not be made, to the owner
+								who asked for it;
+							</li>
+							<li>
 								a notice that a verified domain's DNS record is missing, to the organisation's
 								owners, once each time it has been missing for {facts.domainWarnDays} days; after{" "}
 								{facts.domainUnverifyDays} days the domain stops being verified;
@@ -583,11 +587,11 @@ export default function Privacy({
 						It can be accepted for {INVITATION_DAYS} days. Its record stays with the organisation.
 					</Row>
 					<Row term="An export of everything">
-						An owner's export of everything the organisation holds is kept for{" "}
-						{EXPORT_KEEP_DAYS} days from when it is made, then its file and its record are deleted
-						by a job that runs every hour. Asking for another deletes the one before. It is a copy
-						as it stood when it was made, so something deleted since, such as the receipts of a
-						deleted account, stays in it until it is deleted.
+						An owner's export of everything the organisation holds is kept for {EXPORT_KEEP_DAYS}{" "}
+						days from when it is made, then its file and its record are deleted by a job that runs
+						every hour. Asking for another deletes the one before. It is a copy as it stood when it
+						was made, so something deleted since, such as the receipts of a deleted account, stays
+						in it until it is deleted.
 					</Row>
 					<Row term="Your organisation's work">
 						<p>
