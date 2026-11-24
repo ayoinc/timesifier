@@ -26,7 +26,14 @@ export const STORED = [
 		rows: [
 			{
 				term: "The organisation and its people",
-				tables: ["organisations", "memberships", "invitations", "teams", "team_members"],
+				tables: [
+					"organisations",
+					"memberships",
+					"invitations",
+					"invitation_plans",
+					"teams",
+					"team_members",
+				],
 			},
 			{
 				term: "Time and approvals",
@@ -103,7 +110,7 @@ export const STORED = [
 		rows: [
 			{ term: "API tokens", tables: ["api_tokens"] },
 			{ term: "Webhooks", tables: ["webhooks", "webhook_deliveries"] },
-			{ term: "Imports", tables: ["import_jobs"] },
+			{ term: "Imports", tables: ["import_jobs", "people_imports"] },
 			{ term: "Calendar feeds", tables: ["calendar_feeds"] },
 		],
 	},

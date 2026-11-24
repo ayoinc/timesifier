@@ -20,9 +20,15 @@ export interface FieldState {
 	isActive?: boolean;
 }
 
-/** The 56px box the control, the label and the line sit in. */
-export function fieldContainer({ isDisabled }: FieldState): string {
-	return cx("group/field relative h-14", isDisabled ? "text-disabled" : "text-on-surface");
+/**
+ * The box the control, the label and the line sit in: 56px (`h-14`), or at least
+ * that (`min-h-14`) for a text area, which is as tall as its lines.
+ */
+export function fieldContainer(
+	{ isDisabled }: FieldState,
+	height: "h-14" | "min-h-14" = "h-14",
+): string {
+	return cx("group/field relative", height, isDisabled ? "text-disabled" : "text-on-surface");
 }
 
 /**

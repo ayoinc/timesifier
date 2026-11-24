@@ -7,7 +7,9 @@ import { runAutoLock, runLockReach } from "~/locks/locks.server";
 import { deleteExpiredNotifications } from "~/notifications/bell.server";
 import { sendWaitingNotifications } from "~/notifications/mail.server";
 import { runReminders } from "~/notifications/reminders.server";
+import { sendWaitingInvitations } from "~/onboarding/onboarding.server";
 import { recheckDomains } from "~/organisations/domains.server";
+import { MAIL_BATCH } from "~/platform/limits";
 import { sendWaitingMail } from "~/platform/mail.server";
 
 /**
@@ -16,10 +18,12 @@ import { sendWaitingMail } from "~/platform/mail.server";
  * duty runs on its own: one that fails is logged and the next still runs.
  *
  * - Every minute: the webhooks' deliveries that are due are sent (TS-087),
- *   the next mailings to account holders, within the day's cap (TS-099), and
- *   the emails of notifications that wait (TS-049); then one step of the
- *   oldest export of everything being made (TS-126); then, but in the hour's
- *   first minute, the reminders go on from where the last run stopped.
+ *   then the invitation emails waiting from "Invite many" and people imports
+ *   (TS-108), then the next mailings to account holders: one batch between
+ *   them, within the day's cap (TS-099), and the emails of notifications that
+ *   wait (TS-049); then one step of the oldest export of everything being
+ *   made (TS-126); then, but in the hour's first minute, the reminders go on
+ *   from where the last run stopped.
  * - Every hour: auto-lock (TS-065), then the lock date reaching the days that
  *   have ended since (D7: timers on them stopped, weeks auto-submitted); recurring invoices that are due are issued
  *   and overdue invoices are reminded (TS-074, TS-078). Exports of everything
@@ -63,9 +67,14 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 	if (controller.cron === EVERY_MINUTE) {
 		// The hour's first minute is the hourly run's: its reminders follow auto-lock and the lock date.
 		const hoursFirst = now % HOUR_MS < MINUTE_MS;
+		// The invitations and the mailings share one batch (TS-108).
+		let invitations = 0;
 		await runEach({
 			webhooks: () => dispatchWebhooks({ now }),
-			mail: () => sendWaitingMail(new Date(now)),
+			invitations: async () => {
+				invitations = await sendWaitingInvitations(new Date(now));
+			},
+			mail: () => sendWaitingMail(new Date(now), MAIL_BATCH - invitations),
 			notificationEmails: () => sendWaitingNotifications(new Date(now)),
 			exports: () => advanceExports(new Date(now)),
 			...(hoursFirst ? {} : { reminders: () => runReminders(now) }),

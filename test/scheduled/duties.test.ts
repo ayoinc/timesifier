@@ -14,6 +14,7 @@ import { runAutoLock, runLockReach } from "~/locks/locks.server";
 import { deleteExpiredNotifications } from "~/notifications/bell.server";
 import { sendWaitingNotifications } from "~/notifications/mail.server";
 import { runReminders } from "~/notifications/reminders.server";
+import { sendWaitingInvitations } from "~/onboarding/onboarding.server";
 import { recheckDomains } from "~/organisations/domains.server";
 import { sendWaitingMail } from "~/platform/mail.server";
 import worker from "../../workers/app";
@@ -28,6 +29,7 @@ vi.mock("~/locks/locks.server", { spy: true });
 vi.mock("~/notifications/bell.server", { spy: true });
 vi.mock("~/notifications/mail.server", { spy: true });
 vi.mock("~/notifications/reminders.server", { spy: true });
+vi.mock("~/onboarding/onboarding.server", { spy: true });
 vi.mock("~/organisations/domains.server", { spy: true });
 vi.mock("~/platform/mail.server", { spy: true });
 
@@ -55,6 +57,7 @@ function stubbed(failing: string[]) {
 			if (failing.includes(name)) throw new Error(`${name} is down`);
 		}) as unknown as F);
 	stub("webhooks", dispatchWebhooks);
+	stub("invitations", sendWaitingInvitations);
 	stub("mail", sendWaitingMail);
 	stub("notificationEmails", sendWaitingNotifications);
 	stub("exports", advanceExports);
@@ -99,12 +102,19 @@ describe("the scheduled duties", () => {
 		vi.spyOn(console, "error").mockImplementation(() => {});
 		const ran = stubbed(["webhooks"]);
 		await trigger(EVERY_MINUTE, HOUR_TWO + 60_000);
-		expect(ran).toEqual(["webhooks", "mail", "notificationEmails", "exports", "reminders"]);
+		expect(ran).toEqual([
+			"webhooks",
+			"invitations",
+			"mail",
+			"notificationEmails",
+			"exports",
+			"reminders",
+		]);
 		expect(vi.mocked(runReminders)).toHaveBeenCalledWith(HOUR_TWO + 60_000);
 
 		ran.length = 0;
 		await trigger(EVERY_MINUTE, HOUR_TWO);
-		expect(ran).toEqual(["webhooks", "mail", "notificationEmails", "exports"]);
+		expect(ran).toEqual(["webhooks", "invitations", "mail", "notificationEmails", "exports"]);
 	});
 
 	it("daily: one failing stops none of the others", async () => {

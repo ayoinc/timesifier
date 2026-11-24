@@ -2808,6 +2808,120 @@ export const importJobs = sqliteTable(
 );
 
 /**
+ * One CSV import of people (TS-108, docs/decisions.md entry 72): a dry run
+ * first, then imported, and perhaps reverted, which withdraws the invitations
+ * it sent that are still waiting and what was to happen when they were
+ * accepted. People who joined stay. A table of its own, not `import_jobs`:
+ * that table's kind check names the time import's kinds, and changing it
+ * would mean making the live table again.
+ */
+export const peopleImports = sqliteTable(
+	"people_imports",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		/** `previewed`, `imported` or `reverted`. */
+		status: text("status").notNull().default("previewed"),
+		fileName: text("file_name").notNull(),
+		rowCount: integer("row_count").notNull().default(0),
+		importedCount: integer("imported_count").notNull().default(0),
+		skippedCount: integer("skipped_count").notNull().default(0),
+		/** The uploaded file's text while it is a dry run; emptied once it is imported. */
+		source: text("source"),
+		/** Which column of the file holds each field, by the field's name. */
+		mapping: text("mapping", { mode: "json" }).$type<Record<string, string>>(),
+		/** The rows that were not sent, by line, with why. */
+		skipped: text("skipped", { mode: "json" }).$type<{ line: number; reason: string }[]>(),
+		createdBy: text("created_by")
+			.notNull()
+			.references(() => users.id),
+		importedAt: integer("imported_at", { mode: "timestamp_ms" }),
+		revertedAt: integer("reverted_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("people_imports_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("people_imports_organisation_id_created_at_idx").on(
+			table.organisationId,
+			table.createdAt,
+		),
+		check(
+			"people_imports_status_known",
+			sql`${table.status} IN ('previewed', 'imported', 'reverted')`,
+		),
+		check(
+			"people_imports_counts_not_negative",
+			sql`${table.rowCount} >= 0 AND ${table.importedCount} >= 0 AND ${table.skippedCount} >= 0`,
+		),
+	],
+);
+
+/**
+ * What is to happen when an invitation sent with others is accepted (TS-108,
+ * docs/decisions.md entry 72): an invitation from "Invite many" or from a
+ * people import, one row each. The person joins `teamId`; the member at
+ * `managerEmail` then manages that team; and `scheduleId` is theirs from
+ * `startsOn`, or from the day they join if that is later. `name` is the name
+ * the import gave, which becomes the person's own when they join if their
+ * account has none. The team and the schedule are looked for again when the
+ * person joins, so one deleted since is simply not applied.
+ *
+ * The invitation's email waits here (`mailState`) and the scheduled work sends
+ * it a few a minute, within the day's cap on mail (`app/platform/limits.ts`).
+ * The row goes with its invitation, and with its import.
+ */
+export const invitationPlans = sqliteTable(
+	"invitation_plans",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		invitationId: text("invitation_id")
+			.notNull()
+			.references(() => invitations.id, { onDelete: "cascade" }),
+		/** The people import that sent it; null for "Invite many". */
+		importId: text("import_id"),
+		name: text("name"),
+		teamId: text("team_id"),
+		/** The address of the person who is to manage `teamId`, in lower case. */
+		managerEmail: text("manager_email"),
+		scheduleId: text("schedule_id"),
+		/** The day `scheduleId` starts for them, `YYYY-MM-DD`. */
+		startsOn: text("starts_on"),
+		/** Who sent it: the person the changes made when it is accepted are recorded as. */
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		/** `waiting`, `sending`, `sent`, or `withdrawn` when it was cancelled before it went. */
+		mailState: text("mail_state").notNull().default("waiting"),
+		/** When the email was taken to be sent, then when it was sent. */
+		mailedAt: integer("mailed_at", { mode: "timestamp_ms" }),
+		/** When it was accepted and the plan applied. */
+		appliedAt: integer("applied_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("invitation_plans_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("invitation_plans_invitation_id_unique").on(table.invitationId),
+		index("invitation_plans_organisation_id_import_id_idx").on(
+			table.organisationId,
+			table.importId,
+		),
+		index("invitation_plans_mail_state_mailed_at_idx").on(table.mailState, table.mailedAt),
+		foreignKey({
+			name: "invitation_plans_import_fk",
+			columns: [table.organisationId, table.importId],
+			foreignColumns: [peopleImports.organisationId, peopleImports.id],
+		}).onDelete("cascade"),
+		check(
+			"invitation_plans_mail_state_known",
+			sql`${table.mailState} IN ('waiting', 'sending', 'sent', 'withdrawn')`,
+		),
+	],
+);
+
+/**
  * A secret calendar (ICS) address listing approved leave (B3): a person's
  * own, or a team's for its manager. Only the token's hash is kept; revoking it
  * makes the address answer 404. It goes with the membership or the team.

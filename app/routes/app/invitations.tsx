@@ -1,20 +1,28 @@
 import { env } from "cloudflare:workers";
 import { useState } from "react";
+import { Link } from "react-router";
 import * as z from "zod";
 
 import { changes, record } from "~/activity/activity.server";
 import { INVITATION_LIFETIME_SECONDS } from "~/auth/invitation-email";
 import { Button } from "~/components/Button";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { parseRequest } from "~/lib/validate";
+import { knownOf, plansOf, roomFor, sendInvitations } from "~/onboarding/onboarding.server";
+import { decidePeople, MANY_MAX, rowsOfAddresses, splitAddresses } from "~/onboarding/people";
 import { cancelInvitation, inviteMember, listOpenInvitations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { declined, done, refused, unavailable } from "~/organisations/outcome.server";
 import { AS_ROLE } from "~/organisations/people";
+import { NOT_ALLOWED } from "~/organisations/problems";
 import { allows, InvitedRole } from "~/organisations/roles";
+import { mailOrigin } from "~/platform/mail.server";
 import { useTimeZone } from "~/routes/auth/AccountSettings";
+import { peopleImportPath } from "~/shell/destinations";
+import { ACTION_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
 import { TeamTabs } from "~/teams/TeamTabs";
 import { dayOf } from "~/time/calendar";
@@ -25,9 +33,11 @@ import { FormSheet } from "./FormSheet";
 import { RoleChoice } from "./RoleChoice";
 import { useOrganisation } from "./useOrganisation";
 
-// The invitations of an organisation, a page of Team: sending one, and the
-// ones waiting to be accepted, for a role that may send them. The server
-// refuses them to any other role, so for that role they are not asked for.
+// The invitations of an organisation, a page of Team: sending one, sending
+// many at once with one role and perhaps a team (TS-108), and the ones waiting
+// to be accepted, for a role that may send them. The server refuses them to
+// any other role, so for that role they are not asked for. A CSV of people is
+// imported on a page of its own below this one.
 
 const TITLE = "Invitations";
 /** The roles an invitation can give, the usual one first. */
@@ -35,24 +45,53 @@ const INVITED_ROLES = ["member", "finance", "admin"] as const satisfies readonly
 	typeof InvitedRole
 >[];
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
+/** The longest list of addresses "Invite many" reads: each at most 254 characters and a separator. */
+const ADDRESSES_MAX_LENGTH = MANY_MAX * 256;
+/** The Team field's choice of no team. */
+const NO_TEAM = "none";
 
 export function meta() {
 	return [{ title: `${TITLE} · Timesifier` }];
 }
 
-/** The invitations still waiting, for a role that may send them. */
+/** The invitations still waiting, with what each is to bring, and the room for more, for a role that may send them. */
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { organisation, role } = context.get(membershipContext);
+	const { organisation, role, user } = context.get(membershipContext);
 	const canInvite = allows(role, { invitation: ["create"] });
 	const invitations = canInvite ? await listOpenInvitations(request, organisation.id) : null;
 	if (invitations && !invitations.ok) throw unavailable(invitations);
+	const scope = organisationScope(env.DB, organisation.id);
+	const open = invitations?.data ?? [];
+	const [plans, teams, room] = canInvite
+		? await Promise.all([
+				plansOf(
+					scope,
+					open.map((each) => each.id),
+				),
+				scope.teams.select(),
+				roomFor(organisation.id, user.id, new Date()),
+			])
+		: [new Map(), [], null];
 
 	return {
 		canInvite,
 		canCancel: allows(role, { invitation: ["cancel"] }),
-		invitations:
-			invitations?.data.map(({ id, email, role, expiresAt }) => ({ id, email, role, expiresAt })) ??
-			[],
+		invitations: open.map(({ id, email, role, expiresAt }) => {
+			const plan = plans.get(id);
+			return {
+				id,
+				email,
+				role,
+				expiresAt,
+				name: plan?.name ?? null,
+				team: plan?.team ?? null,
+				emailWaiting: plan?.emailWaiting === true,
+			};
+		}),
+		teams: teams
+			.map((team) => ({ id: team.id, name: team.name }))
+			.sort((a, b) => a.name.localeCompare(b.name)),
+		room,
 	};
 }
 
@@ -63,6 +102,12 @@ const form = z.discriminatedUnion("intent", [
 	// The address is checked below, where a mistake in it can be answered in words.
 	z.object({ intent: z.literal("invite"), email: z.string().trim().max(254), role: InvitedRole }),
 	z.object({ intent: z.literal("cancel"), invitationId: Id }),
+	z.object({
+		intent: z.literal("many"),
+		addresses: z.string().max(ADDRESSES_MAX_LENGTH),
+		role: InvitedRole,
+		teamId: Id.default(NO_TEAM),
+	}),
 ]);
 
 /**
@@ -73,7 +118,7 @@ const form = z.discriminatedUnion("intent", [
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
-	const { organisation, user } = context.get(membershipContext);
+	const { organisation, user, role } = context.get(membershipContext);
 	const { id } = organisation;
 	const scope = organisationScope(env.DB, id);
 
@@ -111,16 +156,69 @@ export async function action({ request, context }: Route.ActionArgs) {
 			);
 			return done("Invitation cancelled. Its link no longer works.");
 		}
+
+		case "many": {
+			if (!allows(role, { invitation: ["create"] })) return declined(NOT_ALLOWED, 403);
+			const addresses = splitAddresses(input.addresses);
+			if (addresses.length === 0) return declined("Enter at least one email address.");
+			if (addresses.length > MANY_MAX) {
+				return declined(
+					`That is ${addresses.length} addresses. Send at most ${MANY_MAX} at once, or import a CSV of people.`,
+				);
+			}
+			const known = await knownOf(scope, Date.now());
+			const wantsTeam = input.teamId !== NO_TEAM;
+			const team = wantsTeam
+				? [...known.teams.values()].find((each) => each.id === input.teamId)
+				: undefined;
+			if (wantsTeam && !team) return declined("That team is no longer there. Choose another.");
+			// An address pasted twice, in any case, is sent once and reported once.
+			const seen = new Set<string>();
+			const firsts: string[] = [];
+			const repeats = new Set<string>();
+			for (const address of addresses) {
+				const key = address.toLowerCase();
+				if (seen.has(key)) repeats.add(address);
+				else {
+					seen.add(key);
+					firsts.push(address);
+				}
+			}
+			const twice = [...repeats];
+			const outcomes = decidePeople(rowsOfAddresses(firsts, input.role, team?.name ?? ""), known);
+			const notSent = [
+				...outcomes.flatMap((o) => (o.ok ? [] : [`${o.email}: ${o.problems.join(" ")}`])),
+				...twice.map((address) => `${address}: It is in the list twice; one invitation is enough.`),
+			];
+			const report = notSent.length > 0 ? ` Not sent: ${notSent.join(" ")}` : "";
+			const plans = outcomes.flatMap((o) => (o.ok ? [o.plan] : []));
+			if (plans.length === 0) return declined(`Nothing was sent.${report}`);
+			const sent = await sendInvitations(scope, user.id, plans, {
+				origin: mailOrigin(request),
+			});
+			if (!sent.ok) return declined(`${sent.problem}${report}`, 403);
+			return done(
+				`${sent.sent === 1 ? "An invitation is" : `${sent.sent} invitations are`} on the way${team ? `, each into ${team.name}` : ""}. Their links work once and expire in ${INVITATION_DAYS} days.${report}`,
+			);
+		}
 	}
 }
 
 type Invitation = Route.ComponentProps["loaderData"]["invitations"][number];
 
 /** The sheets of this page. One is open at a time. */
-type Task = "invite" | "cancel";
+type Task = "invite" | "many" | "cancel";
+
+/** The room left, in a sentence: the seats, and the sender's invitations today when they are fewer. */
+function roomSentence(room: { seats: number; seatsLeft: number; cap: number; capLeft: number }) {
+	const seats = `${room.seatsLeft === 0 ? "No seat is" : room.seatsLeft === 1 ? "One seat is" : `${room.seatsLeft} seats are`} left on the plan, of ${room.seats}.`;
+	return room.capLeft < room.seatsLeft
+		? `${seats} You may send ${room.capLeft} more ${room.capLeft === 1 ? "invitation" : "invitations"} in the next 24 hours.`
+		: seats;
+}
 
 export default function Invitations({ loaderData }: Route.ComponentProps) {
-	const { invitations, canInvite, canCancel } = loaderData;
+	const { invitations, canInvite, canCancel, teams, room } = loaderData;
 	const organisation = useOrganisation();
 
 	const [task, setTask] = useState<Task | null>(null);
@@ -149,9 +247,18 @@ export default function Invitations({ loaderData }: Route.ComponentProps) {
 
 			{canInvite && (
 				<div className="max-w-200">
-					<div className="mt-10">
+					<div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-3">
 						<Button onPress={() => setTask("invite")}>Invite a person</Button>
+						<Button variant="outlined" onPress={() => setTask("many")}>
+							Invite many
+						</Button>
+						<Link className={ACTION_LINK} to={peopleImportPath(organisation.slug)}>
+							Import people from a CSV
+						</Link>
 					</div>
+					{room && (
+						<p className="mt-3 text-body-medium text-on-surface-variant">{roomSentence(room)}</p>
+					)}
 
 					{invitations.length > 0 ? (
 						<div className="mt-10">
@@ -160,11 +267,17 @@ export default function Invitations({ loaderData }: Route.ComponentProps) {
 									{invitations.map((each) => (
 										<LedgerRow
 											key={each.id}
-											title={<span className="wrap-anywhere">{each.email}</span>}
+											title={
+												<span className="wrap-anywhere">
+													{each.name ? `${each.name} · ${each.email}` : each.email}
+												</span>
+											}
 											detail={
 												<>
-													Invited as {AS_ROLE[each.role]}. Expires{" "}
+													Invited as {AS_ROLE[each.role]}
+													{each.team ? `, into ${each.team}` : ""}. Expires{" "}
 													{formatDayWithYear(dayOf(Date.parse(each.expiresAt), zone))}.
+													{each.emailWaiting ? " Its email is waiting its turn to be sent." : ""}
 												</>
 											}
 											action={
@@ -216,6 +329,44 @@ export default function Invitations({ loaderData }: Route.ComponentProps) {
 					maxLength={254}
 				/>
 				<RoleChoice roles={INVITED_ROLES} defaultValue="member" />
+			</FormSheet>
+
+			<FormSheet
+				title="Invite many people"
+				intent="many"
+				submitLabel="Send invitations"
+				isOpen={task === "many"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<p>
+					Each address gets its own invitation to {organisation.name}, with the same role
+					{teams.length > 0 ? " and team" : ""}. Members, addresses already invited and any listed
+					twice are named and not sent.
+				</p>
+				<TextField
+					label="Email addresses"
+					name="addresses"
+					rows={6}
+					autoFocus
+					isRequired
+					maxLength={ADDRESSES_MAX_LENGTH}
+					description={`One a line, or separated by commas. At most ${MANY_MAX}.`}
+				/>
+				<RoleChoice roles={INVITED_ROLES} defaultValue="member" />
+				{teams.length > 0 && (
+					<Select
+						label="Team"
+						name="teamId"
+						defaultValue={NO_TEAM}
+						options={[
+							{ id: NO_TEAM, label: "No team" },
+							...teams.map((team) => ({ id: team.id, label: team.name })),
+						]}
+						description="They join it when they accept."
+					/>
+				)}
+				{room && <p>{roomSentence(room)}</p>}
 			</FormSheet>
 
 			<FormSheet

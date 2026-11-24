@@ -280,6 +280,8 @@ export function destinationPath(slug: string, id: DestinationId): string {
 export const MEMBERS_SEGMENT = `${destination("team").segment}/members`;
 /** What follows the organisation in the address of its invitations: a page of Team. */
 export const INVITATIONS_SEGMENT = `${destination("team").segment}/invitations`;
+/** What follows the organisation in the address of the people import (TS-108): below Invitations, for owners and admins. */
+export const PEOPLE_IMPORT_SEGMENT = `${INVITATIONS_SEGMENT}/import`;
 
 /** What follows the organisation in the address of its work schedules (TS-097): a page of Workspace settings, for owners and admins. */
 export const SCHEDULES_SEGMENT = `${destination("settings").segment}/schedules`;
@@ -305,6 +307,12 @@ export function membersPath(slug: string): string {
 /** The address of the invitations page of the organisation with this slug. */
 export function invitationsPath(slug: string): string {
 	return `${organisationPath(slug)}/${INVITATIONS_SEGMENT}`;
+}
+
+/** The address of the people import of the organisation with this slug, at one import if given. */
+export function peopleImportPath(slug: string, importId?: string): string {
+	const path = `${organisationPath(slug)}/${PEOPLE_IMPORT_SEGMENT}`;
+	return importId ? `${path}?${new URLSearchParams({ import: importId })}` : path;
 }
 
 /**

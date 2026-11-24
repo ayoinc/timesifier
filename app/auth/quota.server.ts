@@ -20,6 +20,14 @@ export type Cap = {
 	seconds: number;
 };
 
+/** Invitations one person may send in any 24 hours, across every organisation; "Invite many" and a people import may send up to the organisation's seats (TS-108). */
+export const INVITATIONS_PER_SENDER: Cap = { max: 20, seconds: 24 * 60 * 60 };
+
+/** The key one person's invitations are counted under, wherever they are sent from. */
+export function invitationsKey(userId: string): string {
+	return `invitations:${userId}`;
+}
+
 /**
  * Takes one use of `key`, and says whether there was one to take.
  *

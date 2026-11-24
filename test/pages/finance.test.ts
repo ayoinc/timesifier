@@ -8,6 +8,7 @@ import { recordExpense } from "~/expenses/expenses.server";
 import { startImport } from "~/import/import.server";
 import { createDraft } from "~/invoices/invoices.server";
 import { createRecurring } from "~/invoices/recurring.server";
+import { startPeopleImport } from "~/onboarding/onboarding.server";
 import {
 	type Access,
 	activityScopeOf,
@@ -98,6 +99,7 @@ interface World {
 	expense: string;
 	/** A previewed import of clients, Ada's. */
 	importJob: string;
+	peopleImport: string;
 	/** A saved report of the column's own, Mine. */
 	saved: string;
 	/** A draft invoice to Initech, of one line. */
@@ -169,6 +171,13 @@ async function world(column: Column): Promise<World> {
 		"Client\nGlobex\n",
 	);
 	if (!started.ok) throw new Error("seed failed");
+	const people = await startPeopleImport(
+		organisationScope(env.DB, acme.id),
+		ada.user.id,
+		"people.csv",
+		"Email\nnew@x.example\n",
+	);
+	if (!people.ok) throw new Error("seed failed");
 	const entry = await seedEntry(
 		acme.id,
 		grace.userId,
@@ -269,6 +278,7 @@ async function world(column: Column): Promise<World> {
 		category: category.id,
 		expense: expense.id,
 		importJob: started.id,
+		peopleImport: people.id,
 		saved: await saveReport(
 			organisationScope(env.DB, acme.id),
 			who.user.id,
@@ -680,6 +690,16 @@ const ROLE_TABLE: Record<string, Row> = {
 					"select count(*) from import_jobs where id = ? and status = 'previewed'",
 					w.importJob,
 				)) === 0,
+			post: by<Post>("done", "done", 404, 404, 404),
+		},
+	},
+	"routes/app/invitations.import": {
+		page: by(200, 200, 404, 404, 404),
+		form: {
+			fields: (w) => ({ intent: "discard", importId: w.peopleImport }),
+			doneStatus: 202,
+			made: async (w) =>
+				(await count("select count(*) from people_imports where id = ?", w.peopleImport)) === 0,
 			post: by<Post>("done", "done", 404, 404, 404),
 		},
 	},

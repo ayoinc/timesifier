@@ -19,6 +19,7 @@ import {
 import type { BatchItem } from "drizzle-orm/batch";
 import { type DrizzleD1Database, drizzle } from "drizzle-orm/d1";
 import type { AnySQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { jsonTable } from "./among";
 import {
 	activityRecords,
 	apiTokens,
@@ -36,6 +37,7 @@ import {
 	expenses,
 	expenseTags,
 	importJobs,
+	invitationPlans,
 	invitations,
 	invoiceLineSources,
 	invoiceLines,
@@ -49,6 +51,7 @@ import {
 	organisationDomains,
 	organisationExports,
 	payments,
+	peopleImports,
 	periodEvents,
 	periods,
 	pins,
@@ -191,6 +194,18 @@ export interface ScopedAccessor<T extends TenantTable> {
 		 * later statement of the same batch can depend on an earlier one.
 		 */
 		insertWhen(row: Values<T>, condition: SQL): ScopedStatement<never>;
+		/**
+		 * Adds every row of `rows` in one statement, whatever their number: they
+		 * go to D1 as one JSON value (decision 40), not as a bound parameter a
+		 * value. With `condition`, only the rows for which it holds as the
+		 * statement runs: a condition on nothing but other tables adds all of
+		 * them or none, and one given as a function may read a column of the row
+		 * being added through `column`.
+		 */
+		insertMany(
+			rows: Values<T>[],
+			condition?: SQL | ((column: (key: keyof NewRow<T> & string) => SQL) => SQL),
+		): ScopedStatement<never>;
 		update(changes: Partial<Values<T>>, filter: Filter<T>): ScopedStatement<Row<T>>;
 		delete(filter: Filter<T>): ScopedStatement<Row<T>>;
 	};
@@ -229,6 +244,25 @@ export function scopedAccessor<T extends TenantTable>(
 		// The scope's id is spread last: values arriving from an untyped source
 		// (a form, a JSON body) cannot place a row in another organisation.
 		(Array.isArray(rows) ? rows : [rows]).map((row) => ({ ...row, organisationId }));
+	/**
+	 * Every column of `row`, in the table's order, as `insert … select` writes
+	 * them: the given value, else the column's default, else null; each as the
+	 * driver stores it, or as SQL.
+	 */
+	const columnValues = (row: Values<T>): unknown[] => {
+		const given = { ...row, organisationId } as Record<string, unknown>;
+		return Object.entries(getTableColumns(tenantTable)).map(([key, column]) => {
+			const value =
+				given[key] !== undefined
+					? given[key]
+					: column.defaultFn
+						? column.defaultFn()
+						: column.hasDefault
+							? column.default
+							: null;
+			return value instanceof SQL || value === null ? value : column.mapToDriverValue(value);
+		});
+	};
 	const statements = {
 		insert(rows: Values<T> | Values<T>[]) {
 			return { query: db.insert(tenantTable).values(withOrganisation(rows)).returning() };
@@ -243,29 +277,38 @@ export function scopedAccessor<T extends TenantTable>(
 			};
 		},
 		insertWhen(row: Values<T>, condition: SQL) {
-			// Every column, in the table's order, as `insert … select` writes
-			// them: the given value, else the column's default, else null.
-			const given = { ...row, organisationId } as Record<string, unknown>;
-			const values = Object.entries(getTableColumns(tenantTable)).map(([key, column]) => {
-				const value =
-					given[key] !== undefined
-						? given[key]
-						: column.defaultFn
-							? column.defaultFn()
-							: column.hasDefault
-								? column.default
-								: null;
-				return value instanceof SQL
-					? value
-					: value === null
-						? sql`null`
-						: sql`${column.mapToDriverValue(value)}`;
-			});
+			const values = columnValues(row).map((value) =>
+				value instanceof SQL ? value : value === null ? sql`null` : sql`${value}`,
+			);
 			// A built `insert`, not `db.run`: D1's batch takes prepared statements only.
 			return {
 				query: db
 					.insert(tenantTable)
 					.select(sql`select ${sql.join(values, sql`, `)} where ${condition}`),
+			} as unknown as ScopedStatement<never>;
+		},
+		insertMany(
+			rows: Values<T>[],
+			condition?: SQL | ((column: (key: keyof NewRow<T> & string) => SQL) => SQL),
+		) {
+			// Each row as an array of the driver's values, in the table's order. A
+			// value given as SQL is the same for every row, so it is written once.
+			if (rows.length === 0) throw new Error("insertMany needs at least one row.");
+			const keys = Object.keys(getTableColumns(tenantTable));
+			const given = rows.map(columnValues);
+			const column = (key: string) => sql`json_extract(value, ${`$[${keys.indexOf(key)}]`})`;
+			const values = (given[0] ?? []).map((value, index) =>
+				value instanceof SQL ? value : column(keys[index] ?? ""),
+			);
+			const table = jsonTable(
+				given.map((row) => row.map((value) => (value instanceof SQL ? null : value))),
+			);
+			const holds = typeof condition === "function" ? condition(column) : condition;
+			const where = holds ? sql` where ${holds}` : sql``;
+			return {
+				query: db
+					.insert(tenantTable)
+					.select(sql`select ${sql.join(values, sql`, `)} from ${table}${where}`),
 			} as unknown as ScopedStatement<never>;
 		},
 		update(changes: Partial<Values<T>>, filter: Filter<T>) {
@@ -407,6 +450,8 @@ export const tenantTables = {
 	webhooks,
 	webhookDeliveries,
 	importJobs,
+	peopleImports,
+	invitationPlans,
 	calendarFeeds,
 	workRequests,
 	timesheetRuleVersions,

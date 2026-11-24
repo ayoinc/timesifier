@@ -84,7 +84,7 @@ import {
 } from "~/organisations/access";
 import { Role } from "~/organisations/roles";
 import { NOTICE_DAYS, PLAN_DETAILS, PLANS, PRICE_CURRENCY, PRICES, pounds } from "~/plans/plans";
-import { SIGN_IN_DAYS, SUPPORT_HOURS } from "~/platform/limits";
+import { DAILY_MAIL_CAP, MAIL_BATCH, SIGN_IN_DAYS, SUPPORT_HOURS } from "~/platform/limits";
 import { REPORT_VIEWS } from "~/reports/views";
 import { SIGN_IN_PATH } from "~/routes/auth/paths";
 import { COLOR_SCHEME_COOKIE } from "~/shell/color-scheme.server";
@@ -431,6 +431,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 			"an invoice or an estimate, as a PDF, to the billing contacts of a client",
 			"a reminder of an overdue invoice, with its PDF, to the client's billing contacts",
 		],
+		"../app/onboarding/onboarding.server.ts": [
+			`an invitation sent with others, from Invite many or a CSV import of people, to each address an owner or admin invites, with the same content, at most ${MAIL_BATCH} a minute`,
+		],
 		"../app/platform/brand.server.ts": [
 			"a test of Timesifier's brand, to the platform owner who asked for it",
 		],
@@ -450,6 +453,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 	const text = words(await page(PRIVACY_PATH));
 	for (const sentence of Object.values(said).flat()) expect(text).toContain(sentence);
 	expect(text).toContain(`at most ${DOCUMENT_EMAILS.max} invoice and estimate emails in 24 hours`);
+	expect(text).toContain(
+		`Invitations sent with others share one cap with product announcements and the newsletter: at most ${DAILY_MAIL_CAP} of them a day`,
+	);
 	expect(words(await page(TERMS_PATH))).toContain(
 		`An organisation can send at most ${DOCUMENT_EMAILS.max} in 24 hours.`,
 	);

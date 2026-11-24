@@ -140,7 +140,9 @@ for (const viewport of [
 			await expect(inviting).toBeHidden();
 			await expectFocusShown(invite);
 
-			// The invitation that is waiting.
+			// Invite many and the import of people come first, then the invitation that is waiting.
+			await tabTo(page, page.getByRole("button", { name: "Invite many" }));
+			await tabTo(page, page.getByRole("link", { name: "Import people from a CSV" }));
 			const cancel = page.getByRole("button", { name: `Cancel the invitation to ${guest.email}` });
 			await tabTo(page, cancel);
 			await page.keyboard.press("Enter");

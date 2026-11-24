@@ -6,8 +6,8 @@
  * `biome.json` refuses an import of `~/db/schema` or `~/db/scope` anywhere else.
  */
 
-// A list of any length as one bound parameter (decision 40).
-export { among, latestAmong, notAmong } from "./among";
+// A list of any length as one bound parameter (decision 40); rows to insert likewise (TS-108).
+export { among, jsonTable, latestAmong, notAmong } from "./among";
 // Whether Invoices and Estimates are there, read with the organisation (TS-115a).
 export { keepsBillingColumn } from "./billing";
 // A share of an invocation's queries, counted as D1 counts them (decision 69).

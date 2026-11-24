@@ -25,6 +25,14 @@ export function notAmong(column: SQLWrapper, values: Iterable<string | number>):
 }
 
 /**
+ * `rows` as a table to select from, its `value` column one row each: many rows
+ * inserted as one bound parameter however many they are (`insertMany`, TS-108).
+ */
+export function jsonTable(rows: readonly unknown[]): SQL {
+	return sql`json_each(${JSON.stringify(rows)})`;
+}
+
+/**
  * The latest of `values` on or before `value` (they compare as SQL does), or
  * null when none is: one bound parameter however many they are. Reports and
  * budgets group time by the latest rate start on or before its day, so each
