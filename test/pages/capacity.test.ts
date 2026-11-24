@@ -141,6 +141,39 @@ describe("This week as a capacity table", () => {
 		);
 	});
 
+	it("leads with a headline that is the sum of the rows, each row's expected the same as Reports'", async () => {
+		const page = await text(week(), people.owner);
+		const minutes = (figure: string) => {
+			const [h = "0", m = "0"] = figure.split(":");
+			return Number(h) * 60 + Number(m);
+		};
+		// The rows: from the sheet's count of people to its footer.
+		const rows = page.slice(page.indexOf("6 people"), page.indexOf("Week's total 103:30"));
+		const sumOf = (pattern: RegExp) =>
+			[...rows.matchAll(pattern)].reduce((all, m) => all + minutes(m[1] ?? ""), 0);
+		const headline = page.match(/Week's total: (\d+:\d\d) of (\d+:\d\d) expected/);
+		expect(headline?.slice(1)).toEqual(["103:30", "198:45"]);
+		expect(sumOf(/(\d+:\d\d) logged/g)).toBe(minutes("103:30"));
+		expect(sumOf(/(\d+:\d\d) expected/g)).toBe(minutes("198:45"));
+
+		const reports = await text(
+			"/app/acme/reports?range=custom&from=2026-01-05&to=2026-01-11",
+			people.owner,
+		);
+		const theirs = reports.slice(reports.indexOf("Worked, expected and leave"));
+		for (const [name, expected] of [
+			["ada", "37:30"],
+			["grace", "37:30"],
+			["hedy", "33:45"],
+			["ida", "37:30"],
+			["katherine", "37:30"],
+			["linus", "15:00"],
+		]) {
+			expect(theirs).toMatch(new RegExp(`${name}@example\\.com ${expected} expected`));
+			expect(page).toMatch(new RegExp(`${name}@example\\.com .*?logged.*? ${expected} expected`));
+		}
+	});
+
 	it("draws each week as a meter that reads out its figures, leave hatched, overtime past the end", async () => {
 		const response = await open(week(), people.owner);
 		const html = await response.text();

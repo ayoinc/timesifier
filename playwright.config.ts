@@ -34,7 +34,7 @@ const SETUP = /auth\.setup\.ts/;
 // writes for another test, which then fails with a 500. They run after every
 // other Chromium test, one at a time.
 const SEEDS_THE_DATABASE =
-	/[\\/](?:dpa-acceptance|people|projects-search|reports|sweep-rest|usual-and-owed|zz-fixes-shots)\.spec\.ts$/;
+	/[\\/](?:capacity|dpa-acceptance|people|projects-search|reports|sweep-rest|usual-and-owed|zz-fixes-shots)\.spec\.ts$/;
 // The tests of company sign-in (TS-104): the pages as they are where the
 // deployment has a client at Google and at Microsoft. They run against a server
 // of their own that has both, so "Sign in with Google" and "Sign in with

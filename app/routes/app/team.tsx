@@ -34,6 +34,7 @@ import { declined, done } from "~/organisations/outcome.server";
 import { shownName } from "~/organisations/people";
 import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { pinnedPeopleIds, pinPerson } from "~/pins/pins.server";
+import { Headline } from "~/reports/RangeSteps";
 import { type ScheduleView, scheduleView } from "~/schedules/schedules";
 import { formerPlace, placesOf, scheduleBookOf } from "~/schedules/schedules.server";
 import { destination, destinationPath } from "~/shell/destinations";
@@ -491,134 +492,142 @@ function ThisWeek({ data }: { data: WeekData }) {
 							</Link>
 						</EmptySheet>
 					) : (
-						<div className="mt-6 max-w-200">
-							<Ledger
-								heading={week.label}
-								note={
-									filter === ""
-										? `${everyone} ${everyone === 1 ? "person" : "people"}`
-										: `${page.total} of ${everyone}`
-								}
-							>
-								<LedgerRows label="People">
-									{people.map((p) => (
-										<LedgerRow
-											key={p.id}
-											title={
-												<Link
-													to={`${thisWeek}&${PERSON_PARAM}=${p.id}`}
-													className={`${ACTION_LINK} wrap-anywhere`}
-												>
-													{p.name}
-												</Link>
-											}
-											detail={
-												<>
-													{p.pinned && <span className="block text-on-surface">Pinned</span>}
-													{p.address && <span className="block wrap-anywhere">{p.address}</span>}
-													{p.now && <span className="block text-on-surface">{p.now}</span>}
-													{statusLabel(p.status)}
-													{p.running && " · Timer running"}
-													{p.leaveDays.length > 0 && (
-														<span className="block">Leave: {p.leaveDays.join(", ")}</span>
-													)}
-												</>
-											}
-											value={
-												<>
-													{hours(p.seconds)}
-													<span className="sr-only"> logged</span>
-													{p.split && (
-														<span className="block text-body-medium text-on-surface-variant">
-															{p.split}
-														</span>
-													)}
-													<span className="block text-body-medium text-on-surface-variant">
-														{hours(p.expectedSeconds)} expected
-														{p.leaveSeconds > 0 && ` · ${hours(p.leaveSeconds)} leave`}
-													</span>
-												</>
-											}
-											action={
-												<MenuTrigger>
-													<Button
-														variant="text"
-														id={`person-actions-${p.id}`}
-														aria-label={`Actions for ${p.name}`}
-													>
-														Actions
-													</Button>
-													<Menu
-														align="end"
-														onAction={(chosen) => {
-															pinning.current = p.id;
-															pin.submit(
-																{ intent: "pin", userId: p.id, pinned: String(chosen === "pin") },
-																{ method: "post" },
-															);
-														}}
-													>
-														{p.pinned ? (
-															<MenuItem id="unpin">Unpin</MenuItem>
-														) : (
-															<MenuItem id="pin">Pin</MenuItem>
-														)}
-													</Menu>
-												</MenuTrigger>
-											}
-										>
-											<CapacityMeter
-												id={p.id}
-												label={`${p.name}'s week`}
-												capacity={p}
-												leaveSeconds={p.leaveSeconds}
-											/>
-											<span className="mt-1 block text-body-medium text-on-surface-variant">
-												{capacityLine(p)}
-											</span>
-											{p.schedule && (
-												<span className="block text-body-medium text-on-surface-variant">
-													{p.schedule.name}, {p.schedule.weekLabel}. {p.schedule.reason}.
-												</span>
-											)}
-										</LedgerRow>
-									))}
-								</LedgerRows>
-								{/* The week's total, of everyone the filter keeps: past one page, more than are listed. */}
-								<LedgerTotal
-									label={page.pages > 1 ? `${totalLabel}, all ${page.total}` : totalLabel}
-									value={
-										<>
-											{hours(total.seconds)}
-											{total.split && (
-												<span className="block text-body-medium text-on-surface-variant">
-													{total.split}
-												</span>
-											)}
-											<span className="block text-body-medium text-on-surface-variant">
-												{hours(total.expectedSeconds)} expected
-											</span>
-											<span className="block text-body-medium text-on-surface-variant">
-												{capacityLine(total)}
-											</span>
-										</>
+						<>
+							{/* The figure the week is about, as Reports leads with it (S2-08). */}
+							<Headline
+								label={totalLabel}
+								value={hours(total.seconds)}
+								beside={`of ${hours(total.expectedSeconds)} expected`}
+							/>
+							<div className="mt-6 max-w-200">
+								<Ledger
+									heading={week.label}
+									note={
+										filter === ""
+											? `${everyone} ${everyone === 1 ? "person" : "people"}`
+											: `${page.total} of ${everyone}`
 									}
-								/>
-							</Ledger>
-							{page.pages > 1 && (
-								<div className="mt-4">
-									<Pager
-										label="Pages of people"
-										first={page.first}
-										shown={people.length}
-										total={page.total}
-										size={PAGE_SIZE}
-										previous={page.number > 1 ? pageAt(page.number - 1) : null}
-										next={page.number < page.pages ? pageAt(page.number + 1) : null}
+								>
+									<LedgerRows label="People">
+										{people.map((p) => (
+											<LedgerRow
+												key={p.id}
+												title={
+													<Link
+														to={`${thisWeek}&${PERSON_PARAM}=${p.id}`}
+														className={`${ACTION_LINK} wrap-anywhere`}
+													>
+														{p.name}
+													</Link>
+												}
+												detail={
+													<>
+														{p.pinned && <span className="block text-on-surface">Pinned</span>}
+														{p.address && <span className="block wrap-anywhere">{p.address}</span>}
+														{p.now && <span className="block text-on-surface">{p.now}</span>}
+														{statusLabel(p.status)}
+														{p.running && " · Timer running"}
+														{p.leaveDays.length > 0 && (
+															<span className="block">Leave: {p.leaveDays.join(", ")}</span>
+														)}
+													</>
+												}
+												value={
+													<>
+														{hours(p.seconds)}
+														<span className="sr-only"> logged</span>
+														{p.split && (
+															<span className="block text-body-medium text-on-surface-variant">
+																{p.split}
+															</span>
+														)}
+														<span className="block text-body-medium text-on-surface-variant">
+															{hours(p.expectedSeconds)} expected
+															{p.leaveSeconds > 0 && ` · ${hours(p.leaveSeconds)} leave`}
+														</span>
+													</>
+												}
+												action={
+													<MenuTrigger>
+														<Button
+															variant="text"
+															id={`person-actions-${p.id}`}
+															aria-label={`Actions for ${p.name}`}
+														>
+															Actions
+														</Button>
+														<Menu
+															align="end"
+															onAction={(chosen) => {
+																pinning.current = p.id;
+																pin.submit(
+																	{ intent: "pin", userId: p.id, pinned: String(chosen === "pin") },
+																	{ method: "post" },
+																);
+															}}
+														>
+															{p.pinned ? (
+																<MenuItem id="unpin">Unpin</MenuItem>
+															) : (
+																<MenuItem id="pin">Pin</MenuItem>
+															)}
+														</Menu>
+													</MenuTrigger>
+												}
+											>
+												<CapacityMeter
+													id={p.id}
+													label={`${p.name}'s week`}
+													capacity={p}
+													leaveSeconds={p.leaveSeconds}
+												/>
+												<span className="mt-1 block text-body-medium text-on-surface-variant">
+													{capacityLine(p)}
+												</span>
+												{p.schedule && (
+													<span className="block text-body-medium text-on-surface-variant">
+														{p.schedule.name}, {p.schedule.weekLabel}. {p.schedule.reason}.
+													</span>
+												)}
+											</LedgerRow>
+										))}
+									</LedgerRows>
+									{/* The week's total, of everyone the filter keeps: past one page, more than are listed. */}
+									<LedgerTotal
+										label={page.pages > 1 ? `${totalLabel}, all ${page.total}` : totalLabel}
+										value={
+											<>
+												{hours(total.seconds)}
+												{total.split && (
+													<span className="block text-body-medium text-on-surface-variant">
+														{total.split}
+													</span>
+												)}
+												<span className="block text-body-medium text-on-surface-variant">
+													{hours(total.expectedSeconds)} expected
+												</span>
+												<span className="block text-body-medium text-on-surface-variant">
+													{capacityLine(total)}
+												</span>
+											</>
+										}
 									/>
-								</div>
-							)}
-						</div>
+								</Ledger>
+								{page.pages > 1 && (
+									<div className="mt-4">
+										<Pager
+											label="Pages of people"
+											first={page.first}
+											shown={people.length}
+											total={page.total}
+											size={PAGE_SIZE}
+											previous={page.number > 1 ? pageAt(page.number - 1) : null}
+											next={page.number < page.pages ? pageAt(page.number + 1) : null}
+										/>
+									</div>
+								)}
+							</div>
+						</>
 					)}
 				</>
 			)}

@@ -437,7 +437,7 @@ describe("what reads a person's schedule", () => {
 	it("Team: the manager sees the schedule, why, and the time expected", async () => {
 		const team = await text("/app/acme/team", roles.people.manager);
 		expect(team).toMatch(
-			/linus@example\.com .*15:00 expected Short, Monday to Wednesday, 09:00–14:00 · 15:00 a week\. From the team Design\./,
+			/linus@example\.com .*15:00 expected Actions 15:00 under · 0% of capacity Short, Monday to Wednesday, 09:00–14:00 · 15:00 a week\. From the team Design\./,
 		);
 		const one = await text(
 			`/app/acme/team?person=${roles.people.member.user.id}`,
