@@ -1,7 +1,17 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+
 import type { Browser, Locator, Page } from "@playwright/test";
 
 import { destinationPath, invitationsPath, organisationPath } from "../app/shell/destinations";
-import { foundInMessageSentBy, newPerson, ownAddress, signIn, TIME_WITH_TURNS } from "./auth";
+import {
+	foundInMessageSentBy,
+	newPerson,
+	ownAddress,
+	setName,
+	signIn,
+	TIME_WITH_TURNS,
+} from "./auth";
 import { SIGNED_OUT } from "./auth-state";
 import { contrast, EMPTY_INPUT, OVER_SEVERAL_ELEMENTS, problems, UNDER_AN_OVERLAY } from "./axe";
 import { destinationLinks, expect, openShell, test } from "./fixtures";
@@ -290,6 +300,196 @@ for (const viewport of [
 					"Monday09:00–17:30, 1:00 break · 7:30",
 				);
 				await expectNoProblems(page, "My account");
+			});
+		});
+	}
+}
+
+// Leave from the contract (TS-098b, decision 76), with the keyboard: an
+// owner moves the leave year to 6 April in Settings › Leave; gives
+// themselves a contract from tomorrow, answering the Give sheet's question
+// about the days before it while its preview says what each answer makes of
+// this leave year's balance; adds two days in the Contract page's adjustment
+// sheet; and reads it all on Time off. Axe scans each page and sheet at both
+// window sizes in both schemes. The sums are test/leave/entitlement.test.ts's;
+// who may do what is test/pages/time-off.test.ts's.
+//
+// With TS098B_SHOTS set to a folder, each view axe scans is also
+// photographed there.
+
+const SHOTS = process.env.TS098B_SHOTS;
+
+/**
+ * Scans the page, and photographs it first when shots are asked for: a page
+ * whole, a sheet as the window shows it, since a sheet does not scroll with
+ * the page.
+ */
+async function scanned(page: Page, shot: string, unmeasurable: string[] = []) {
+	const found = await problems(page, unmeasurable);
+	if (SHOTS) {
+		mkdirSync(SHOTS, { recursive: true });
+		await page.screenshot({
+			path: join(SHOTS, `${shot}.png`),
+			fullPage: unmeasurable !== IN_A_SHEET,
+		});
+	}
+	expect(found, `problems in ${shot}`).toEqual([]);
+}
+
+/** A field the sheet has scrolled partly out of its top: axe cannot see the colour behind it. */
+const PARTLY_SCROLLED_AWAY = "elmPartiallyObscured";
+const IN_A_SHEET = [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS, EMPTY_INPUT, PARTLY_SCROLLED_AWAY];
+
+/**
+ * Presses Tab until `element` holds the focus. A button's focus shows as an
+ * outline; a field's as its own indicator, which the screenshots show.
+ */
+async function tabTo(page: Page, element: Locator) {
+	for (let presses = 0; presses < 60; presses += 1) {
+		if (await element.evaluate((e) => e === document.activeElement)) break;
+		await page.keyboard.press("Tab");
+	}
+	await expect(element).toBeFocused();
+	const shown = await element.evaluate(
+		(e) => e.tagName !== "BUTTON" || getComputedStyle(e).outlineStyle !== "none",
+	);
+	expect(shown, "the focus is shown").toBe(true);
+}
+
+/** Chooses `option` in the select labelled `label`, with the keyboard: Enter opens it, typing finds the option. */
+async function chooseByKeyboard(page: Page, scope: Locator, label: string, option: string) {
+	await tabTo(page, scope.getByRole("button", { name: new RegExp(`${label}$`) }));
+	await page.keyboard.press("Enter");
+	const options = page.getByRole("listbox", { name: label });
+	await expect(options).toBeVisible();
+	await page.keyboard.type(option);
+	await expect(options.getByRole("option", { name: option, exact: true })).toBeFocused();
+	await page.keyboard.press("Enter");
+	await expect(options).toBeHidden();
+}
+
+for (const viewport of [
+	{ width: 390, height: 844 },
+	{ width: 1280, height: 800 },
+]) {
+	for (const colorScheme of ["light", "dark"] as const) {
+		test.describe(`in a window ${viewport.width}px wide, in the ${colorScheme} scheme`, () => {
+			test.use({ viewport, chosenScheme: colorScheme });
+
+			test("Time off shows the leave year's balance from the contract", async ({ page }) => {
+				const at = `${viewport.width}-${colorScheme}`;
+				const today = dayFromToday(0);
+				// The leave year from 6 April that today falls in, as the pages name it.
+				const starts = Number(today.slice(0, 4)) - (today.slice(5) < "04-06" ? 1 : 0);
+				const label = `6 April ${starts} – 5 April ${starts + 1}`;
+				await signIn(page, newPerson().email);
+				const { slug } = await createOrganisation(page);
+				await setName(page, "Ada Lovelace");
+				const main = page.getByRole("main");
+
+				// Settings › Leave: the leave year moves to 6 April.
+				await openShell(page, destinationPath(slug, "settings"));
+				const leaveYear = page.getByRole("list", { name: "Leave year", exact: true });
+				await expect(leaveYear).toContainText("1 January");
+				await tabTo(page, page.getByRole("button", { name: "Change the leave year" }));
+				await page.keyboard.press("Enter");
+				const yearSheet = page.getByRole("dialog", { name: "Change the leave year" });
+				await expect(yearSheet).toBeVisible();
+				await scanned(page, `settings-leave-year-sheet-${at}`, IN_A_SHEET);
+				await chooseByKeyboard(page, yearSheet, "Starts in", "April");
+				await chooseByKeyboard(page, yearSheet, "On day", "6");
+				await tabTo(page, yearSheet.getByRole("button", { name: "Save" }));
+				await page.keyboard.press("Enter");
+				await expect(yearSheet).toBeHidden();
+				await expect(main.getByRole("status").first()).toContainText(
+					"The leave year starts on 6 April.",
+				);
+				await expect(leaveYear).toContainText("6 April");
+				await leaveYear.scrollIntoViewIfNeeded();
+				await scanned(page, `settings-leave-${at}`);
+
+				// Team › Ada › Contract: she has none, and gives herself one from tomorrow.
+				await openShell(page, destinationPath(slug, "team"));
+				await page
+					.getByRole("list", { name: "People" })
+					.getByRole("link", { name: "Ada Lovelace" })
+					.click();
+				await page
+					.getByRole("group", { name: "Their pages" })
+					.getByRole("link", { name: "Contract" })
+					.click();
+				await expect(main).toContainText("You have no contract here.");
+				await tabTo(page, main.getByRole("button", { name: "Give a contract" }));
+				await page.keyboard.press("Enter");
+				const give = page.getByRole("dialog", { name: "Give Ada Lovelace a contract" });
+				await expect(give).toBeVisible();
+				await give.getByLabel("First day").fill(dayFromToday(1));
+				await give.getByRole("textbox", { name: /^Pay, in / }).fill("30000");
+				await give.getByLabel("Annual leave, days a year").fill("25");
+
+				// She joined today, less than 28 days before: the sheet suggests counting nothing before it.
+				const question = give.getByRole("radiogroup", { name: "Earlier this leave year" });
+				const nothing = question.getByRole("radio", { name: /^Count nothing/ });
+				const allowance = question.getByRole("radio", { name: /^Count at the usual allowance/ });
+				await expect(nothing).toBeChecked();
+				const preview = give.getByRole("status").filter({ hasText: /^This year/ });
+				await expect(preview).toHaveText(/^This year: 25 days → \d+(\.5)? days?$/);
+				await expect(preview).not.toHaveText("This year: 25 days → 25 days");
+				await scanned(page, `contract-give-question-nothing-${at}`, IN_A_SHEET);
+				// The arrow keys move the answer, and the preview follows it.
+				await tabTo(page, nothing);
+				await page.keyboard.press("ArrowUp");
+				await expect(allowance).toBeChecked();
+				await expect(preview).toHaveText("This year: 25 days → 25 days");
+				await scanned(page, `contract-give-question-allowance-${at}`, IN_A_SHEET);
+				await tabTo(page, give.getByRole("button", { name: "Give contract" }));
+				await page.keyboard.press("Enter");
+				await expect(give).toBeHidden();
+
+				// The Contract page: this leave year's balance from the contract.
+				const balance = page.getByRole("list", { name: `Annual leave, ${label}`, exact: true });
+				await expect(balance).toContainText("From the contract: 25 days this leave year.");
+				await expect(balance).toContainText("25 days left");
+				await balance.scrollIntoViewIfNeeded();
+				await scanned(page, `contract-balance-${at}`);
+
+				// The adjustment sheet: two days more, with a reason, by keyboard.
+				await tabTo(page, main.getByRole("button", { name: "Adjust annual leave" }));
+				await page.keyboard.press("Enter");
+				const adjust = page.getByRole("dialog", { name: "Adjust Ada Lovelace's annual leave" });
+				await expect(adjust).toBeVisible();
+				await expect(adjust.getByRole("button", { name: /Leave year$/ })).toContainText(label);
+				await scanned(page, `contract-adjust-sheet-${at}`, IN_A_SHEET);
+				await tabTo(page, adjust.getByRole("textbox", { name: "More or less" }));
+				await page.keyboard.type("2");
+				await tabTo(page, adjust.getByRole("textbox", { name: "Reason" }));
+				await page.keyboard.type("Opening balance from the old system");
+				await page.keyboard.press("Enter");
+				await expect(adjust).toBeHidden();
+				await expect(main.getByRole("status").first()).toContainText(
+					`Annual leave in ${label} is adjusted. 27 days left.`,
+				);
+				await expect(balance).toContainText("Adjusted: 2 days.");
+				await expect(balance).toContainText(
+					"Added: 2 days“Opening balance from the old system”Ada Lovelace,",
+				);
+				await balance.scrollIntoViewIfNeeded();
+				await scanned(page, `contract-adjusted-${at}`);
+
+				// Time off: the balance of the leave year, from the contract, with the adjustment.
+				await openShell(page, destinationPath(slug, "time-off"));
+				await expect(
+					page.getByRole("heading", { level: 2, name: `Your balance, ${label}` }),
+				).toBeVisible();
+				const balances = page.getByRole("list", { name: `Your balance, ${label}`, exact: true });
+				await expect(balances).toContainText(
+					"From the contract: 25 days this leave year. Adjusted: 2 days. Taken: 0 days.",
+				);
+				await expect(balances).toContainText("27 days left");
+				await expect(balances).toContainText(
+					"Annual leave added: 2 days“Opening balance from the old system”",
+				);
+				await scanned(page, `time-off-balance-${at}`);
 			});
 		});
 	}
