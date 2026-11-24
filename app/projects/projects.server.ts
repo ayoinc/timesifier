@@ -224,10 +224,31 @@ export interface ProjectInput {
 }
 
 /**
+ * The code a new project is given (TS-115a): the one typed, else the
+ * pattern's next when its rule has one. A problem when what is typed is no
+ * code or another project's, or when none is given where the rule requires
+ * one. The pattern's number is taken last, once nothing else can refuse it.
+ */
+async function newProjectCode(
+	scope: OrganisationScope,
+	typed: string | undefined,
+	workCode: boolean,
+): Promise<{ code: string | null } | { problem: string }> {
+	const given = typedCode(typed);
+	if (given === false) return { problem: CODE_PROBLEM };
+	if (given !== null) {
+		return (await codeTaken(scope, codeKey(given)))
+			? { problem: PROJECT_CODE_TAKEN }
+			: { code: given };
+	}
+	const rule = codeRuleFor(await projectCodeRules(scope.organisationId), workCode);
+	if (rule.pattern !== null) return { code: (await nextPatternCodes(scope, 1))[0] ?? null };
+	return rule.required ? { problem: rule.problem } : { code: null };
+}
+
+/**
  * Adds a project with the name typed, the client given, which is active, and
- * its code: the one typed, or else the pattern's next. Without either, an
- * organisation that requires codes refuses it. A work code has no client and
- * bills nothing.
+ * its code (`newProjectCode`). A work code has no client and bills nothing.
  */
 export async function createProject(
 	scope: OrganisationScope,
@@ -243,21 +264,13 @@ export async function createProject(
 	const name = recordName(typed);
 	if (name === null) return { ok: false, problem: RECORD_NAME_PROBLEM };
 	const key = nameKey(name);
-	const given = typedCode(typedProjectCode);
-	if (given === false) return { ok: false, problem: CODE_PROBLEM };
 	if (await nameTaken(scope, key)) return { ok: false, problem: PROJECT_NAME_TAKEN };
-	if (given !== null && (await codeTaken(scope, codeKey(given)))) {
-		return { ok: false, problem: PROJECT_CODE_TAKEN };
-	}
 	if (clientId !== null && !(await findActiveClient(scope, clientId))) {
 		return { ok: false, problem: CLIENT_NOT_OFFERED };
 	}
-	const rule = codeRuleFor(await projectCodeRules(scope.organisationId), workCode);
-	if (given === null && rule.required && rule.pattern === null) {
-		return { ok: false, problem: rule.problem };
-	}
-	const code =
-		given ?? (rule.pattern === null ? null : ((await nextPatternCodes(scope, 1))[0] ?? null));
+	const coded = await newProjectCode(scope, typedProjectCode, workCode);
+	if ("problem" in coded) return { ok: false, problem: coded.problem };
+	const { code } = coded;
 	const id = uuidv7();
 	try {
 		await scope.batch([
@@ -405,16 +418,18 @@ export async function offeredCopyName(scope: OrganisationScope, name: string): P
  * Makes a project of the shape of `sourceId` under the name typed (TS-122,
  * S2-06): its client, how it bills, its currency, overtime rate and budget
  * with its lines and alert, its tasks with their billable flags, its tags,
- * and its rates with their dates. Never its time, expenses, invoices or
- * dates. The copy is active, whatever the source is, and the log records the
- * project it was duplicated from. One batch: the copy is whole or not there.
- * Null for no such project here.
+ * and its rates with their dates. Never its time, expenses, invoices, dates or
+ * code: the copy's code is typed, or given by the rule of a project like it
+ * (`newProjectCode`, TS-115a). The copy is active, whatever the source is,
+ * and the log records the project it was duplicated from. One batch: the copy
+ * is whole or not there. Null for no such project here.
  */
 export async function duplicateProject(
 	scope: OrganisationScope,
 	actor: string,
 	sourceId: string,
 	typed: string,
+	typedProjectCode?: string,
 ): Promise<{ ok: true; name: string; id: string } | { ok: false; problem: string } | null> {
 	const [source] = await scope.projects.select((p) => eq(p.id, sourceId), { limit: 1 });
 	if (!source) return null;
@@ -422,6 +437,10 @@ export async function duplicateProject(
 	if (name === null) return { ok: false, problem: RECORD_NAME_PROBLEM };
 	const key = nameKey(name);
 	if (await nameTaken(scope, key)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+	const workCode = source.clientId === null && source.billingType === "non_billable";
+	const coded = await newProjectCode(scope, typedProjectCode, workCode);
+	if ("problem" in coded) return { ok: false, problem: coded.problem };
+	const { code } = coded;
 	const [tasks, tags, rates, lines] = await Promise.all([
 		scope.projectTasks.select((t) => eq(t.projectId, sourceId)),
 		scope.projectTags.select((t) => eq(t.projectId, sourceId)),
@@ -435,6 +454,8 @@ export async function duplicateProject(
 				id,
 				name,
 				nameKey: key,
+				code,
+				codeKey: code === null ? null : codeKey(code),
 				clientId: source.clientId,
 				billingType: source.billingType,
 				rateMode: source.rateMode,
@@ -484,15 +505,17 @@ export async function duplicateProject(
 				actor,
 				"project.created",
 				{ type: "project", id },
-				changes(null, { name, clientId: source.clientId, duplicatedFromId: sourceId }, [
+				changes(null, { name, clientId: source.clientId, code, duplicatedFromId: sourceId }, [
 					"name",
 					"clientId",
+					"code",
 					"duplicatedFromId",
 				]),
 			),
 		]);
 	} catch (error) {
 		if (isNameClash(error)) return { ok: false, problem: PROJECT_NAME_TAKEN };
+		if (isCodeClash(error)) return { ok: false, problem: PROJECT_CODE_TAKEN };
 		throw error;
 	}
 	return { ok: true, name, id };

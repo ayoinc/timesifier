@@ -74,15 +74,6 @@ export function mayManageTasks(role: Role): boolean {
 	return isAdministrator(role);
 }
 
-/**
- * Whether `role` may duplicate a project, which copies its rates and budget:
- * owners and admins, never a person who may not see what is copied (TS-122,
- * decision 65).
- */
-export function mayDuplicateProjects(role: Role): boolean {
-	return isAdministrator(role);
-}
-
 /** Whether `role` may make API tokens, webhooks and imports, and move the lock date. */
 export function mayManageIntegrations(role: Role): boolean {
 	return isAdministrator(role);

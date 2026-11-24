@@ -11,7 +11,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { createContext, data } from "react-router";
 import type { SignedIn } from "~/auth/auth.server";
 import { configuredProviders } from "~/auth/providers";
-import { organisationScope, organisations } from "~/db";
+import { keepsBillingColumn, organisationScope, organisations } from "~/db";
 import type { Viewer } from "~/shell/destinations";
 import { managedPlaces } from "~/teams/teams.server";
 import { hasClients, WorkModel } from "~/workspace/work-model";
@@ -32,6 +32,8 @@ export type Membership = {
 		workModel: WorkModel;
 		/** What it calls internal work, in the plural ("Work codes"). */
 		internalTerm: string;
+		/** Whether its Invoices and Estimates are there: it has clients, or holds one (TS-115a). */
+		keepsBilling: boolean;
 		/** When its logo was uploaded, for the logo's address in the band; null for no logo (TS-100). */
 		logoVersion: number | null;
 		/** Who may open its pages (TS-104): anyone signed in, or company sign-in. */
@@ -68,6 +70,7 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 			weekStartsOn: organisations.weekStartsOn,
 			workModel: organisations.workModel,
 			internalTerm: organisations.internalTerm,
+			keepsBilling: keepsBillingColumn,
 			logoVersion: organisations.brandLogoVersion,
 			signInPolicy: organisations.signInPolicy,
 			signInProvider: organisations.signInProvider,
@@ -87,11 +90,13 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 	// A role this application does not know grants nothing.
 	const role = Role.safeParse(membership?.role);
 	if (!organisation || !role.success) return null;
-	const { signInPolicy, signInProvider, signInTenant, workModel, ...rest } = organisation;
+	const { signInPolicy, signInProvider, signInTenant, workModel, keepsBilling, ...rest } =
+		organisation;
 	return {
 		organisation: {
 			...rest,
 			workModel: WorkModel.parse(workModel),
+			keepsBilling: Boolean(keepsBilling),
 			signIn: policyOf({ signInPolicy, signInProvider, signInTenant }),
 		},
 		role: role.data,
@@ -102,7 +107,12 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 
 /** What decides the destinations a member is shown (`app/shell/destinations.ts`). */
 export function viewerOf({ role, managesTeams, organisation }: Membership): Viewer {
-	return { role, managesTeams, clientsEnabled: hasClients(organisation.workModel) };
+	return {
+		role,
+		managesTeams,
+		clientsEnabled: hasClients(organisation.workModel),
+		keepsBilling: organisation.keepsBilling,
+	};
 }
 
 /**

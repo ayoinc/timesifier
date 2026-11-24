@@ -93,7 +93,6 @@ import {
 	INTERNAL_TERM_MAX_LENGTH,
 	INTERNAL_TERM_PROBLEM,
 	InternalTerm,
-	singular,
 	WORK_MODEL_HINTS,
 	WORK_MODEL_LABELS,
 	WORK_MODELS,
@@ -655,7 +654,7 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 							}
 							detail={
 								organisation.workModel === "internal"
-									? `${singular(organisation.internalTerm)} codes, such as OPS-01, shown first wherever one appears.`
+									? `Codes for ${workTerms("internal", organisation.internalTerm).projects}, such as OPS-01, shown first wherever one appears.`
 									: "Codes, such as ACME-001, shown first wherever a client or a project appears."
 							}
 							action={change("project-codes", "the codes")}
@@ -663,7 +662,7 @@ export default function Settings({ loaderData, params }: Route.ComponentProps) {
 						{organisation.workModel === "both" && (
 							<LedgerRow
 								title={loaderData.codes.workCodeRequired ? "Required" : "Optional"}
-								detail={`${singular(organisation.internalTerm)} codes, such as OPS-01, typed for each: the pattern numbers projects only.`}
+								detail={`Codes for ${workTerms("internal", organisation.internalTerm).projects}, such as OPS-01, typed for each: the pattern numbers projects only.`}
 								action={change(
 									"project-codes",
 									`the codes of ${workTerms("internal", organisation.internalTerm).projects}`,

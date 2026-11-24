@@ -47,12 +47,13 @@ const Form = z.object({
 });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { scope, organisation, today, locale } = await billingOf(context, request);
+	const { makes, scope, organisation, today, locale } = await billingOf(context, request);
 	const [estimates, clients] = await Promise.all([
 		listEstimates(scope),
 		scope.clients.select((c) => isNull(c.archivedAt), { orderBy: (c) => [asc(c.name)] }),
 	]);
 	return {
+		makes,
 		today,
 		currency: organisation.currency,
 		clients: clients.map((c) => ({ id: c.id, label: c.name })),
@@ -92,7 +93,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function Estimates({ loaderData }: Route.ComponentProps) {
-	const { estimates, clients } = loaderData;
+	const { estimates, clients, makes } = loaderData;
 	return (
 		<>
 			<PageHeading>{label}</PageHeading>
@@ -126,35 +127,38 @@ export default function Estimates({ loaderData }: Route.ComponentProps) {
 				</Ledger>
 			</div>
 
-			<Section id="new-estimate" heading="New estimate">
-				{clients.length === 0 ? (
-					<p className="mt-4 text-body-large text-on-surface-variant">
-						Add a client first: an estimate is for one client.
-					</p>
-				) : (
-					<ActionForm intent="create" submitLabel="Start estimate" className="mt-4 max-w-120">
-						{(field) => (
-							<>
-								<Select label="Client" options={clients} isRequired {...field("clientId")} />
-								<TextField
-									label="Currency"
-									defaultValue={loaderData.currency}
-									isRequired
-									{...field("currency")}
-								/>
-								<TextField
-									label="Issue date"
-									type="date"
-									defaultValue={loaderData.today}
-									isRequired
-									{...field("issuedOn")}
-								/>
-								<TextField label="Subject" {...field("subject")} />
-							</>
-						)}
-					</ActionForm>
-				)}
-			</Section>
+			{/* Under Internal work nothing new is billed (TS-115a). */}
+			{makes && (
+				<Section id="new-estimate" heading="New estimate">
+					{clients.length === 0 ? (
+						<p className="mt-4 text-body-large text-on-surface-variant">
+							Add a client first: an estimate is for one client.
+						</p>
+					) : (
+						<ActionForm intent="create" submitLabel="Start estimate" className="mt-4 max-w-120">
+							{(field) => (
+								<>
+									<Select label="Client" options={clients} isRequired {...field("clientId")} />
+									<TextField
+										label="Currency"
+										defaultValue={loaderData.currency}
+										isRequired
+										{...field("currency")}
+									/>
+									<TextField
+										label="Issue date"
+										type="date"
+										defaultValue={loaderData.today}
+										isRequired
+										{...field("issuedOn")}
+									/>
+									<TextField label="Subject" {...field("subject")} />
+								</>
+							)}
+						</ActionForm>
+					)}
+				</Section>
+			)}
 		</>
 	);
 }

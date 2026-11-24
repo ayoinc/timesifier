@@ -20,7 +20,7 @@ import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { tagOptions } from "~/tags/tags.server";
-import { inTerms } from "~/workspace/work-model";
+import { hasClients, inTerms } from "~/workspace/work-model";
 
 import type { Route } from "./+types/reports.expenses";
 import { useTerms } from "./useOrganisation";
@@ -98,6 +98,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const expenses = await reportedExpenses(report);
 	const groups = groupExpenses(expenses, expenseGroup);
 	const totals = expenseTotals(expenses);
+	// Under Internal work nothing is billable, so no line says what is (TS-115a).
+	const bills = hasClients(membership.organisation.workModel);
 	const exportSearch = withGroup(frame.tabSearch, expenseGroup, tag);
 
 	return data(
@@ -107,12 +109,18 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				groups: groups.map((group) => ({
 					key: group.key,
 					label: group.label,
-					detail: `${group.count} ${group.count === 1 ? "expense" : "expenses"} · Billable ${moneyWords(group.billable)} · To pay back ${moneyWords(group.reimbursable)}`,
+					detail: [
+						`${group.count} ${group.count === 1 ? "expense" : "expenses"}`,
+						bills ? `Billable ${moneyWords(group.billable)}` : null,
+						`To pay back ${moneyWords(group.reimbursable)}`,
+					]
+						.filter(Boolean)
+						.join(" · "),
 					total: moneyWords(group.total),
 				})),
 				count: totals.count,
 				total: moneyWords(totals.total),
-				billable: moneyWords(totals.billable),
+				billable: bills ? moneyWords(totals.billable) : null,
 				reimbursable: moneyWords(totals.reimbursable),
 				exportPath: expenseReportExportPath(slug, exportSearch),
 			},
@@ -170,7 +178,7 @@ export default function ExpenseReport({ loaderData }: Route.ComponentProps) {
 									No expenses in this range.
 								</p>
 							)}
-							<LedgerTotal label="Billable" value={report.billable} />
+							{report.billable !== null && <LedgerTotal label="Billable" value={report.billable} />}
 							<LedgerTotal label="To pay back" value={report.reimbursable} />
 							<LedgerTotal label="Total" value={report.total} />
 						</Ledger>

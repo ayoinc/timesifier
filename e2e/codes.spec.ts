@@ -363,7 +363,7 @@ for (const viewport of [
 					await expect(sheet).toBeHidden();
 					await expect(page.getByText("How you work is now Internal work.")).toBeVisible();
 					await expect(main).toContainText("No invoices or estimates. Time goes to cost centres.");
-					await expect(main).toContainText("Cost centre codes, such as OPS-01");
+					await expect(main).toContainText("Codes for cost centres, such as OPS-01");
 					await expectInNavigation(page, "Cost centres", true);
 					for (const gone of ["Clients", "Invoices", "Estimates", "Projects"]) {
 						await expectInNavigation(page, gone, false);

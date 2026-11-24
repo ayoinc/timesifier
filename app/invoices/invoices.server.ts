@@ -19,6 +19,7 @@ import {
 	totalsOf,
 } from "./documents.server";
 import type { DraftLine } from "./lines";
+import { makesBilling, NOTHING_BILLED_INTERNALLY } from "./makes.server";
 import { balanceOf, OWING, type Settled } from "./status";
 
 /**
@@ -160,6 +161,7 @@ export async function createDraft(
 	source: "web" | "system" = "web",
 ): Promise<{ ok: true; id: string } | { ok: false; problem: string }> {
 	if (draft.lines.length === 0) return { ok: false, problem: NOTHING_TO_INVOICE };
+	if (!(await makesBilling(scope))) return { ok: false, problem: NOTHING_BILLED_INTERNALLY };
 	const [details, taxes, taxIds] = await Promise.all([
 		invoiceDetailsOf(scope),
 		taxesOf(scope),

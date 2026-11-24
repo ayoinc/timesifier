@@ -17,6 +17,7 @@ import { type SourceRequest, sourcesFor } from "~/invoices/sources.server";
 import { parseRequest } from "~/lib/validate";
 import { formatMoney } from "~/money/money";
 import { moneyText, parseMoney } from "~/money/typed";
+import { notFound } from "~/organisations/membership.server";
 import { declined } from "~/organisations/outcome.server";
 import type { Outcome } from "~/organisations/problems";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
@@ -111,7 +112,9 @@ function sourceRequest(
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { scope, organisation, now, locale } = await billingOf(context, request);
+	const { makes, scope, organisation, now, locale } = await billingOf(context, request);
+	// Under Internal work no new invoice is made, so there is no page to make one (TS-115a).
+	if (!makes) throw notFound();
 	const choices = choicesIn(new URL(request.url).searchParams) ?? {};
 	const clients = await scope.clients.select((c) => isNull(c.archivedAt), {
 		orderBy: (c) => [asc(c.nameKey)],
@@ -234,7 +237,8 @@ function offered(locale: string) {
 export async function action({ request, context }: Route.ActionArgs) {
 	const choices = await parseRequest(request, Choices);
 	if (!choices.client) return declined("Choose a client.");
-	const { scope, organisation, now, today, membership } = await billingOf(context, request);
+	const { makes, scope, organisation, now, today, membership } = await billingOf(context, request);
+	if (!makes) throw notFound();
 	const offeredProjects = await sourcesFor(
 		scope,
 		organisation,

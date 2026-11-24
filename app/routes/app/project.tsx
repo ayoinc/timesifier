@@ -53,7 +53,7 @@ import {
 	projectPath,
 	projectTabIn,
 } from "~/projects/projects";
-import { offeredCopyName } from "~/projects/projects.server";
+import { offeredCopyName, projectCodeRules } from "~/projects/projects.server";
 import { changeBilling, changeBudget, changeOvertimeRate } from "~/projects/settings.server";
 import { resolveRate } from "~/rates/rates";
 import { ratesForProject, setRate } from "~/rates/rates.server";
@@ -119,29 +119,30 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 	const url = new URL(request.url);
 	const asked = projectTabIn(url.searchParams);
 	const tab = tabs.includes(asked) ? asked : "overview";
+	const { organisation } = membership;
+	// Who may duplicate it follows who may create one for its client (decisions 42 and 65).
+	const duplicates = mayCreateProject(
+		membership.role,
+		hasClients(organisation.workModel) ? await managedClientIds(scope, membership.user.id) : [],
+		page.project.client?.id ?? null,
+	);
 	return {
 		page,
 		tab,
 		tabs,
 		managesRates,
 		managesTasks,
-		showsClients: hasClients(membership.organisation.workModel),
-		/**
-		 * The name a copy of the project is offered (TS-122, S2-06), to those who
-		 * may create a project for its client (decisions 42 and 65); null to anyone
-		 * else.
-		 */
-		copyName: mayCreateProject(
-			membership.role,
-			hasClients(membership.organisation.workModel)
-				? await managedClientIds(scope, membership.user.id)
-				: [],
-			page.project.client?.id ?? null,
-		)
-			? await offeredCopyName(scope, page.project.name)
-			: null,
+		showsClients: hasClients(organisation.workModel),
+		/** The name a copy of the project is offered (TS-122, S2-06) to those who may duplicate it; null to anyone else. */
+		copyName: duplicates ? await offeredCopyName(scope, page.project.name) : null,
+		/** The code rules its copy follows (TS-115a), for those who may duplicate it. */
+		codes: duplicates ? await projectCodeRules(organisation.id) : null,
 		// Read only for Overview, where it is shown, and only for those who see rates.
-		profit: tab === "overview" ? await projectProfit(membership, page.project.id, url, now) : null,
+		// Read only for Overview, and not under Internal work, where nothing earns revenue (TS-115a).
+		profit:
+			tab === "overview" && hasClients(organisation.workModel)
+				? await projectProfit(membership, page.project.id, url, now)
+				: null,
 	};
 }
 
@@ -447,7 +448,8 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 							? codedName(project.client.code, project.client.name)
 							: "No client"
 						: null,
-					BILLING_TYPE_LABELS[project.billingType],
+					// Under Internal work nothing is billable, so nothing says how it bills (TS-115a).
+					loaderData.showsClients ? BILLING_TYPE_LABELS[project.billingType] : null,
 					project.archived ? "Archived" : null,
 				]
 					.filter(Boolean)
@@ -470,9 +472,10 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 				</div>
 			)}
 			{/* The copy is made by Projects' action; its page opens once it is made. */}
-			{loaderData.copyName !== null && (
+			{loaderData.copyName !== null && loaderData.codes !== null && (
 				<DuplicateSheet
 					project={project}
+					codes={loaderData.codes}
 					offered={loaderData.copyName}
 					isOpen={duplicating}
 					onClose={() => setDuplicating(false)}
@@ -518,14 +521,17 @@ function Overview({ data }: { data: Data }) {
 	return (
 		<>
 			<Ledger heading="Hours" note="To date">
-				<LedgerRows label="Hours to date">
-					<LedgerRow title="Billable" value={page.hours.billable} />
-					<LedgerRow title="Non-billable" value={page.hours.nonBillable} />
-					{page.amount !== null && (
-						<LedgerRow title={`Billable amount, ${page.project.currency}`} value={page.amount} />
-					)}
-					{page.project.fee !== null && <LedgerRow title="Fixed fee" value={page.project.fee} />}
-				</LedgerRows>
+				{/* Under Internal work nothing is billable: the hours are their total alone (TS-115a). */}
+				{data.showsClients && (
+					<LedgerRows label="Hours to date">
+						<LedgerRow title="Billable" value={page.hours.billable} />
+						<LedgerRow title="Non-billable" value={page.hours.nonBillable} />
+						{page.amount !== null && (
+							<LedgerRow title={`Billable amount, ${page.project.currency}`} value={page.amount} />
+						)}
+						{page.project.fee !== null && <LedgerRow title="Fixed fee" value={page.project.fee} />}
+					</LedgerRows>
+				)}
 				<LedgerTotal label="Total hours" value={page.hours.total} />
 			</Ledger>
 
@@ -602,7 +608,7 @@ function Overview({ data }: { data: Data }) {
 				</Section>
 			)}
 
-			{page.missingRates && page.missingRates.count > 0 && (
+			{data.showsClients && page.missingRates && page.missingRates.count > 0 && (
 				<Section
 					id="missing-rates"
 					heading="Missing rate"
@@ -763,7 +769,9 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 	const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
 	const [billing, setBilling] = useState<{ ids: string[]; billable: boolean } | null>(null);
 	const listed = page.tasks.filter((t) => t.id !== "");
-	const taskRates = page.seesRates && page.project.rateMode === "task";
+	// Under Internal work nothing is billable: no task says whether it is, nor has a rate (TS-115a).
+	const bills = data.showsClients && page.project.billingType !== "non_billable";
+	const taskRates = data.showsClients && page.seesRates && page.project.rateMode === "task";
 
 	return (
 		<>
@@ -790,9 +798,11 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 									detail={[
 										task.id === ""
 											? "Entries from before it had tasks"
-											: task.billable
-												? "Billable"
-												: "Non-billable",
+											: !data.showsClients
+												? null
+												: task.billable
+													? "Billable"
+													: "Non-billable",
 										taskRates && task.id !== "" ? rateWords(task.rate, task.defaultRate) : null,
 									]
 										.filter(Boolean)
@@ -813,7 +823,7 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 															setRating({ level: "project-task", key: task.id, name: task.name });
 													}}
 												>
-													{managesTasks && page.project.billingType !== "non_billable" ? (
+													{managesTasks && bills ? (
 														<MenuItem id="billable">
 															{task.billable ? "Set non-billable" : "Set billable"}
 														</MenuItem>
@@ -834,7 +844,7 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 					)}
 				</Ledger>
 			</div>
-			{managesTasks && listed.length > 1 && page.project.billingType !== "non_billable" && (
+			{managesTasks && listed.length > 1 && bills && (
 				<p className="mt-4 flex flex-wrap gap-3">
 					<Button
 						variant="outlined"
@@ -859,9 +869,13 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 				onClose={() => setAdding(false)}
 				onDone={onSaid}
 			>
-				<p>
-					{t("It is billable here if it is billable by default, unless the project bills nothing.")}
-				</p>
+				{data.showsClients && (
+					<p>
+						{t(
+							"It is billable here if it is billable by default, unless the project bills nothing.",
+						)}
+					</p>
+				)}
 				<Select
 					label="Task"
 					name="taskId"
@@ -997,7 +1011,7 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 		<>
 			<Ledger heading="Settings">
 				<LedgerRows label={t("The project's settings")}>
-					{managesRates && (
+					{managesRates && data.showsClients && (
 						<LedgerRow
 							title="Billing"
 							detail={[

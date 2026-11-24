@@ -40,13 +40,14 @@ const Form = z.object({
 });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { scope, organisation, today } = await billingOf(context, request);
+	const { makes, scope, organisation, today } = await billingOf(context, request);
 	const [rows, clients, details] = await Promise.all([
 		recurringOf(scope),
 		scope.clients.select((c) => isNull(c.archivedAt), { orderBy: (c) => [asc(c.name)] }),
 		invoiceDetailsOf(scope),
 	]);
 	return {
+		makes,
 		slug: organisation.slug,
 		today,
 		currency: organisation.currency,
@@ -88,7 +89,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function RecurringInvoices({ loaderData }: Route.ComponentProps) {
-	const { slug, rows, clients } = loaderData;
+	const { slug, rows, clients, makes } = loaderData;
 	return (
 		<>
 			<PageHeading>Recurring invoices</PageHeading>
@@ -122,60 +123,63 @@ export default function RecurringInvoices({ loaderData }: Route.ComponentProps) 
 				</Ledger>
 			</div>
 
-			<Section id="new-recurring" heading="New recurring invoice">
-				{clients.length === 0 ? (
-					<p className="mt-4 text-body-large text-on-surface-variant">Add a client first.</p>
-				) : (
-					<ActionForm intent="create" submitLabel="Set up" className="mt-4 max-w-120">
-						{(field) => (
-							<>
-								<Select label="Client" options={clients} isRequired {...field("clientId")} />
-								<Select
-									label="How often"
-									options={FREQUENCY_OPTIONS}
-									defaultValue="monthly"
-									isRequired
-									{...field("frequency")}
-								/>
-								<TextField
-									label="First issue date"
-									type="date"
-									defaultValue={loaderData.today}
-									isRequired
-									{...field("startsOn")}
-								/>
-								<TextField
-									label="Last issue date"
-									type="date"
-									description="Leave empty to go on until stopped."
-									{...field("endsOn")}
-								/>
-								<TextField
-									label="Currency"
-									defaultValue={loaderData.currency}
-									isRequired
-									{...field("currency")}
-								/>
-								<TextField
-									label="Payment terms (days)"
-									inputMode="numeric"
-									defaultValue={loaderData.paymentTermsDays}
-									isRequired
-									{...field("paymentTermsDays")}
-								/>
-								<TextField label="Subject" {...field("subject")} />
-								<TextField label="Notes" {...field("notes")} />
-								<Checkbox name="sendAutomatically" value="on">
-									Send each invoice to the client's contacts when it is made
-								</Checkbox>
-								<Checkbox name="includeUninvoicedTime" value="on">
-									Add the client's uninvoiced time and expenses
-								</Checkbox>
-							</>
-						)}
-					</ActionForm>
-				)}
-			</Section>
+			{/* Under Internal work nothing new is billed (TS-115a). */}
+			{makes && (
+				<Section id="new-recurring" heading="New recurring invoice">
+					{clients.length === 0 ? (
+						<p className="mt-4 text-body-large text-on-surface-variant">Add a client first.</p>
+					) : (
+						<ActionForm intent="create" submitLabel="Set up" className="mt-4 max-w-120">
+							{(field) => (
+								<>
+									<Select label="Client" options={clients} isRequired {...field("clientId")} />
+									<Select
+										label="How often"
+										options={FREQUENCY_OPTIONS}
+										defaultValue="monthly"
+										isRequired
+										{...field("frequency")}
+									/>
+									<TextField
+										label="First issue date"
+										type="date"
+										defaultValue={loaderData.today}
+										isRequired
+										{...field("startsOn")}
+									/>
+									<TextField
+										label="Last issue date"
+										type="date"
+										description="Leave empty to go on until stopped."
+										{...field("endsOn")}
+									/>
+									<TextField
+										label="Currency"
+										defaultValue={loaderData.currency}
+										isRequired
+										{...field("currency")}
+									/>
+									<TextField
+										label="Payment terms (days)"
+										inputMode="numeric"
+										defaultValue={loaderData.paymentTermsDays}
+										isRequired
+										{...field("paymentTermsDays")}
+									/>
+									<TextField label="Subject" {...field("subject")} />
+									<TextField label="Notes" {...field("notes")} />
+									<Checkbox name="sendAutomatically" value="on">
+										Send each invoice to the client's contacts when it is made
+									</Checkbox>
+									<Checkbox name="includeUninvoicedTime" value="on">
+										Add the client's uninvoiced time and expenses
+									</Checkbox>
+								</>
+							)}
+						</ActionForm>
+					)}
+				</Section>
+			)}
 		</>
 	);
 }

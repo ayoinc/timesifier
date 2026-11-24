@@ -23,7 +23,7 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
-import { CODE_MAX_LENGTH, codedName, codeProblem, codeRuleFor } from "~/lib/codes";
+import { codedName } from "~/lib/codes";
 import { nameKey, RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import {
@@ -39,6 +39,7 @@ import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
 import { PINNED_TITLE } from "~/pins/pins";
 import { pinnedProjectIds, pinProject } from "~/pins/pins.server";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
+import { CodeField } from "~/projects/CodeField";
 import { DuplicateSheet } from "~/projects/DuplicateSheet";
 import { type ListedBudget, listedBudgets } from "~/projects/project.server";
 import {
@@ -218,7 +219,7 @@ const form = z.discriminatedUnion("intent", [
 	}),
 	z.object({ intent: z.literal("archive"), projectId: Id }),
 	z.object({ intent: z.literal("restore"), projectId: Id }),
-	z.object({ intent: z.literal("duplicate"), projectId: Id, name: Name }),
+	z.object({ intent: z.literal("duplicate"), projectId: Id, name: Name, code: Code }),
 	z.object({
 		intent: z.literal("pin"),
 		projectId: Id,
@@ -317,7 +318,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "duplicate": {
 			const refused = await refusal(input.projectId);
 			if (refused) return refused;
-			const copy = await duplicateProject(scope, membership.user.id, input.projectId, input.name);
+			const copy = await duplicateProject(scope, user.id, input.projectId, input.name, input.code);
 			if (copy === null) throw notFound();
 			if (!copy.ok) return declined(copy.problem);
 			return { ...done(`Project duplicated: ${copy.name}.`), changed: [copy.id] };
@@ -548,8 +549,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			return (
 				<>
 					{pinnedSection}
-					{rest.length > 0 &&
-						section("others", t("Other projects"), rest, listName, showsClients)}
+					{rest.length > 0 && section("others", t("Other projects"), rest, listName, showsClients)}
 				</>
 			);
 		}
@@ -601,32 +601,6 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 			: []),
 		...loaderData.createClients.map(({ id, name, code }) => ({ id, label: codedName(code, name) })),
 	];
-	const codeField = (workCode: boolean, defaultValue?: string | null, key?: string) => {
-		const rule = codeRuleFor(codes, workCode);
-		return (
-			<TextField
-				key={key}
-				label="Code"
-				name="code"
-				defaultValue={defaultValue ?? undefined}
-				autoComplete="off"
-				maxLength={CODE_MAX_LENGTH}
-				isRequired={rule.required && rule.pattern === null}
-				validate={codeProblem}
-				description={
-					rule.pattern
-						? `Leave it empty to number it after ${rule.pattern}.`
-						: rule.required
-							? workCode && codes.workCodes
-								? `Every ${codes.workCode} here has a code, for example OPS-01.`
-								: t("Every project here has a code, for example ACME-001.")
-							: workCode && codes.workCodes
-								? "Optional, for example OPS-01."
-								: "Optional, for example ACME-001."
-				}
-			/>
-		);
-	};
 	const createsWorkCode = (createClient ?? createOptions[0]?.id ?? NO_CLIENT) === NO_CLIENT;
 
 	return (
@@ -716,7 +690,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
 				/>
-				{codeField(createsWorkCode)}
+				<CodeField rules={codes} workCode={createsWorkCode} />
 				{showsClients && createOptions.length > 0 && (
 					<Select
 						label="Client"
@@ -757,7 +731,12 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
 				/>
-				{codeField(project?.internal ?? false, project?.code, `code-${project?.id}`)}
+				<CodeField
+					key={`code-${project?.id}`}
+					rules={codes}
+					workCode={project?.internal ?? false}
+					defaultValue={project?.code}
+				/>
 				{givesClients && (
 					<Select
 						key={`client-${project?.id}`}
@@ -812,6 +791,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 
 			<DuplicateSheet
 				project={project}
+				codes={codes}
 				offered={project ? copyName(project.name, takenNames) : ""}
 				isOpen={task === "duplicate"}
 				onClose={close}

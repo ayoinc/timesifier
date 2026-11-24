@@ -90,8 +90,8 @@ const LIST = [
 		segment: "invoices",
 		heading: "Bill",
 		audience: "finance",
-		// Hidden under Internal work (TS-115a), as Clients is.
-		needsClients: true,
+		// Hidden under Internal work while there is none (TS-115a).
+		needsBilling: true,
 	},
 	{
 		id: "estimates",
@@ -99,7 +99,7 @@ const LIST = [
 		segment: "estimates",
 		heading: "Bill",
 		audience: "finance",
-		needsClients: true,
+		needsBilling: true,
 	},
 	{
 		id: "approvals",
@@ -155,6 +155,12 @@ export interface Destination {
 	audience: Audience;
 	/** Whether it is shown only while the organisation has clients: hidden under Internal work (TS-115a). */
 	needsClients?: boolean;
+	/**
+	 * Whether it is shown only while the organisation bills: it has clients, or,
+	 * under Internal work, still holds an invoice or an estimate, which stays
+	 * reachable (TS-115a, decision 67).
+	 */
+	needsBilling?: boolean;
 	/** The shorter words its link shows in the bar under 600px; its label is still what is read out. */
 	barLabel?: string;
 }
@@ -181,12 +187,15 @@ export interface Viewer {
 	managesTeams: boolean;
 	/** Whether the organisation has clients: it does not work internally (`hasClients`). */
 	clientsEnabled: boolean;
+	/** Whether it has clients or holds any invoice or estimate: Invoices and Estimates are there (`keepsBilling`). */
+	keepsBilling: boolean;
 }
 
 /** Whether `viewer` is shown the destination `id`, and so may open it and every page below it. */
 export function canSee(viewer: Viewer, id: DestinationId): boolean {
-	const { audience, needsClients } = destination(id);
+	const { audience, needsClients, needsBilling } = destination(id);
 	if (needsClients && !viewer.clientsEnabled) return false;
+	if (needsBilling && !viewer.keepsBilling) return false;
 	const administrator = viewer.role === "owner" || viewer.role === "admin";
 	const finance = administrator || viewer.role === "finance";
 	switch (audience) {

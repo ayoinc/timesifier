@@ -116,7 +116,7 @@ describe("codeRuleFor", () => {
 describe("the work-code checkbox in Settings", () => {
 	it("is offered under Both alone, in the organisation's words", async () => {
 		// Its row on How you work; the checkbox is in the sheet it opens (e2e/codes.spec.ts).
-		const line = "Cost centre codes, such as OPS-01, typed for each";
+		const line = "Codes for cost centres, such as OPS-01, typed for each";
 		expect(textOf(await pageBody(await open(SETTINGS, ada)))).toContain(line);
 		await env.DB.prepare("update organisations set work_model = 'client_projects' where id = ?")
 			.bind(acme.id)
@@ -135,6 +135,34 @@ describe("the work-code checkbox in Settings", () => {
 			.run();
 		expect(await setRules(false, true)).not.toContain("cost centre");
 		expect(await value("select work_code_required from organisations")).toBe(0);
+	});
+});
+
+describe("How you work's lines on codes, for any term (TS-115a)", () => {
+	const lines = async () => textOf(await pageBody(await open(SETTINGS, ada)));
+	const setTerm = (model: string, term: string) =>
+		env.DB.prepare("update organisations set work_model = ?, internal_term = ? where id = ?")
+			.bind(model, term, acme.id)
+			.run();
+
+	it.each([
+		["Work codes", "Codes for work codes"],
+		["Activities", "Codes for activities"],
+	])("under Both with %s, say %s and never double the word", async (term, said) => {
+		await setTerm("both", term);
+		const text = await lines();
+		expect(text).toContain(`${said}, such as OPS-01, typed for each`);
+		expect(text).not.toMatch(/codes? codes/i);
+	});
+
+	it.each([
+		["Work codes", "Codes for work codes"],
+		["Activities", "Codes for activities"],
+	])("under Internal work with %s, say %s", async (term, said) => {
+		await setTerm("internal", term);
+		const text = await lines();
+		expect(text).toContain(`${said}, such as OPS-01, shown first wherever one appears.`);
+		expect(text).not.toMatch(/codes? codes/i);
 	});
 });
 

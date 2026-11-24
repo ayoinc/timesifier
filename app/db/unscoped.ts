@@ -11,7 +11,7 @@
  *   the triggers, which have no organisation to start from: they find the
  *   exports by status here and do the rest through the export's organisation.
  */
-import { and, asc, eq, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import {
@@ -40,7 +40,11 @@ export function expiredExports(database: D1Database, now: Date) {
 		.where(lte(organisationExports.expiresAt, now));
 }
 
-/** Recurring invoice templates, in any organisation, whose next issue date is on or before `latest`. */
+/**
+ * Recurring invoice templates, in any organisation, whose next issue date is
+ * on or before `latest`; none of an organisation under Internal work, which
+ * makes no new invoice (TS-115a).
+ */
 export function dueRecurringInvoices(database: D1Database, latest: string) {
 	return drizzle(database)
 		.select({
@@ -52,7 +56,13 @@ export function dueRecurringInvoices(database: D1Database, latest: string) {
 		})
 		.from(recurringInvoices)
 		.innerJoin(organisations, eq(organisations.id, recurringInvoices.organisationId))
-		.where(and(isNull(recurringInvoices.stoppedAt), lte(recurringInvoices.nextIssueOn, latest)));
+		.where(
+			and(
+				isNull(recurringInvoices.stoppedAt),
+				lte(recurringInvoices.nextIssueOn, latest),
+				ne(organisations.workModel, "internal"),
+			),
+		);
 }
 
 /** Every organisation that sends late payment reminders, with its rule. */

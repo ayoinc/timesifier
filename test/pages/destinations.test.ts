@@ -101,11 +101,11 @@ const SHOWN: Record<string, string[]> = {
 };
 
 const VIEWERS: Record<string, Viewer> = {
-	owner: { role: "owner", managesTeams: false, clientsEnabled: true },
-	admin: { role: "admin", managesTeams: false, clientsEnabled: true },
-	finance: { role: "finance", managesTeams: false, clientsEnabled: true },
-	manager: { role: "member", managesTeams: true, clientsEnabled: true },
-	member: { role: "member", managesTeams: false, clientsEnabled: true },
+	owner: { role: "owner", managesTeams: false, clientsEnabled: true, keepsBilling: true },
+	admin: { role: "admin", managesTeams: false, clientsEnabled: true, keepsBilling: true },
+	finance: { role: "finance", managesTeams: false, clientsEnabled: true, keepsBilling: true },
+	manager: { role: "member", managesTeams: true, clientsEnabled: true, keepsBilling: true },
+	member: { role: "member", managesTeams: false, clientsEnabled: true, keepsBilling: true },
 };
 
 /** What the bar under 600px holds for each kind of person, and what More holds under its headings. */
@@ -279,9 +279,18 @@ describe("the list of destinations", () => {
 	it("hides Clients, Invoices and Estimates from everyone under Internal work, and nothing else", () => {
 		const billing = ["clients", "invoices", "estimates"];
 		for (const viewer of Object.values(VIEWERS)) {
-			const off = { ...viewer, clientsEnabled: false };
+			const off = { ...viewer, clientsEnabled: false, keepsBilling: false };
 			for (const { id } of destinations) {
 				expect(canSee(off, id), id).toBe(billing.includes(id) ? false : canSee(viewer, id));
+			}
+		}
+	});
+
+	it("keeps Invoices and Estimates under Internal work while the organisation holds one, to whoever saw them", () => {
+		for (const viewer of Object.values(VIEWERS)) {
+			const holding = { ...viewer, clientsEnabled: false, keepsBilling: true };
+			for (const { id } of destinations) {
+				expect(canSee(holding, id), id).toBe(id === "clients" ? false : canSee(viewer, id));
 			}
 		}
 	});

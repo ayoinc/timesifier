@@ -196,6 +196,8 @@ export async function projectPage(
 			name: project.name,
 			/** Its code (TS-115a), shown first; null for none. */
 			code: project.code,
+			/** No client and bills nothing: under Both, a work code (TS-115a). */
+			internal: project.clientId === null && project.billingType === "non_billable",
 			archived: project.archivedAt !== null,
 			client: client ? { id: client.id, name: client.name, code: client.code } : null,
 			billingType: priced.billingType,

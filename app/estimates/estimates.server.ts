@@ -18,6 +18,7 @@ import {
 	totalsOf,
 } from "~/invoices/documents.server";
 import { createDraft, type LineInput, type Result } from "~/invoices/invoices.server";
+import { makesBilling, NOTHING_BILLED_INTERNALLY } from "~/invoices/makes.server";
 import type { PrintedDocument } from "~/invoices/pdf";
 import { codeKey } from "~/lib/codes";
 import { required } from "~/lib/deployment";
@@ -93,6 +94,7 @@ export async function createEstimate(
 	actor: string,
 	input: EstimateDetails & { clientId: string; currency: string },
 ): Promise<Result> {
+	if (!(await makesBilling(scope))) return { ok: false, problem: NOTHING_BILLED_INTERNALLY };
 	const [client] = await scope.clients.select(
 		(c) => and(eq(c.id, input.clientId), isNull(c.archivedAt)),
 		{ limit: 1 },

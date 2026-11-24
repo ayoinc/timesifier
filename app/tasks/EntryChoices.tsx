@@ -46,7 +46,10 @@ export function EntryChoices({
 	const [taskId, setTaskId] = useState<string | null>(startsAt);
 	// A task of another project is no choice here: the field moves to this project's first.
 	const shownTask = tasks.some((task) => task.id === taskId) ? taskId : startsAt;
-	const billable = tasks.find((task) => task.id === shownTask)?.billable;
+	// Under Internal work nothing is billable, so nothing says so (TS-115a).
+	const billable = terms.clients
+		? tasks.find((task) => task.id === shownTask)?.billable
+		: undefined;
 	const over = projectId !== null && (choices?.overBudget.includes(projectId) ?? false);
 
 	return (

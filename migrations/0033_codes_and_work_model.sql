@@ -22,8 +22,9 @@ ALTER TABLE `organisations` ADD `project_code_next` integer;--> statement-breakp
 ALTER TABLE `projects` ADD `code` text;--> statement-breakpoint
 ALTER TABLE `projects` ADD `code_key` text;--> statement-breakpoint
 CREATE UNIQUE INDEX `projects_organisation_id_code_key_unique` ON `projects` (`organisation_id`,`code_key`);--> statement-breakpoint
--- Existing organisations keep what they see (TS-115a, decision 67): Both where
--- Clients was on, and Internal work where it was off, still saying "Projects".
-UPDATE `organisations` SET
-	`work_model` = CASE WHEN `clients_enabled` = 1 THEN 'both' ELSE 'internal' END,
-	`internal_term` = CASE WHEN `clients_enabled` = 1 THEN `internal_term` ELSE 'Projects' END;
+-- Existing organisations keep what they see (TS-115a, decisions 8 and 67):
+-- Client projects where Clients was on, so a project with no client stays
+-- under "No client", and Internal work where it was off, still saying
+-- "Projects". Clients on is the column's default; only the others change.
+UPDATE `organisations` SET `work_model` = 'internal', `internal_term` = 'Projects'
+	WHERE `clients_enabled` = 0;

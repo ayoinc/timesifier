@@ -10,6 +10,7 @@ import { ActionForm } from "~/invoices/ActionForm";
 import { BillingTabs } from "~/invoices/BillingTabs";
 import { billingOf } from "~/invoices/context.server";
 import { readForm, refuse } from "~/invoices/form.server";
+import { NOTHING_BILLED_INTERNALLY } from "~/invoices/makes.server";
 import { invoicePath } from "~/invoices/paths";
 import { invoiceFunds, openRetainer, retainersOf } from "~/invoices/retainers.server";
 import { CurrencyCode, formatMoney } from "~/money/money";
@@ -47,7 +48,7 @@ const Form = z.discriminatedUnion("intent", [
 ]);
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { scope, organisation, locale } = await billingOf(context, request);
+	const { makes, scope, organisation, locale } = await billingOf(context, request);
 	const [retainers, clients, projects] = await Promise.all([
 		retainersOf(scope),
 		scope.clients.select((c) => isNull(c.archivedAt), { orderBy: (c) => [asc(c.name)] }),
@@ -62,6 +63,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				});
 	const clientName = new Map(clients.map((c) => [c.id, c.name]));
 	return {
+		makes,
 		slug: organisation.slug,
 		currency: organisation.currency,
 		clients: clients.map((c) => ({ id: c.id, label: c.name })),
@@ -97,11 +99,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export async function action({ request, context }: Route.ActionArgs) {
-	const { scope, organisation, membership, today } = await billingOf(context, request);
+	const { makes, scope, organisation, membership, today } = await billingOf(context, request);
 	const form = await readForm(request, Form);
 	if ("refusal" in form) return form.refusal;
 	const { input } = form;
 	if (input.intent === "open") {
+		if (!makes)
+			return refuse(NOTHING_BILLED_INTERNALLY, { projectId: [NOTHING_BILLED_INTERNALLY] });
 		const opened = await openRetainer(
 			scope,
 			membership.user.id,
@@ -129,7 +133,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 export default function Retainers({ loaderData }: Route.ComponentProps) {
-	const { slug, retainers, clients, projects } = loaderData;
+	const { slug, retainers, clients, projects, makes } = loaderData;
 	return (
 		<>
 			<PageHeading>Retainers</PageHeading>
@@ -198,32 +202,35 @@ export default function Retainers({ loaderData }: Route.ComponentProps) {
 				)}
 			</div>
 
-			<Section id="new-retainer" heading="New retainer">
-				{clients.length === 0 ? (
-					<p className="mt-4 text-body-large text-on-surface-variant">Add a client first.</p>
-				) : (
-					<ActionForm intent="open" submitLabel="Open retainer" className="mt-4 max-w-120">
-						{(field) => (
-							<>
-								<Select label="Client" options={clients} isRequired {...field("clientId")} />
-								<Select
-									label="For"
-									options={projects}
-									defaultValue="all"
-									isRequired
-									{...field("projectId")}
-								/>
-								<TextField
-									label="Currency"
-									defaultValue={loaderData.currency}
-									isRequired
-									{...field("currency")}
-								/>
-							</>
-						)}
-					</ActionForm>
-				)}
-			</Section>
+			{/* Under Internal work nothing new is billed (TS-115a). */}
+			{makes && (
+				<Section id="new-retainer" heading="New retainer">
+					{clients.length === 0 ? (
+						<p className="mt-4 text-body-large text-on-surface-variant">Add a client first.</p>
+					) : (
+						<ActionForm intent="open" submitLabel="Open retainer" className="mt-4 max-w-120">
+							{(field) => (
+								<>
+									<Select label="Client" options={clients} isRequired {...field("clientId")} />
+									<Select
+										label="For"
+										options={projects}
+										defaultValue="all"
+										isRequired
+										{...field("projectId")}
+									/>
+									<TextField
+										label="Currency"
+										defaultValue={loaderData.currency}
+										isRequired
+										{...field("currency")}
+									/>
+								</>
+							)}
+						</ActionForm>
+					)}
+				</Section>
+			)}
 		</>
 	);
 }

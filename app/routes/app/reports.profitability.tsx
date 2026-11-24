@@ -114,6 +114,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	]);
 	const { currency } = money;
 	const amount = (minor: number) => formatMoney(minor, currency, DEFAULT_LOCALE);
+	const bills = hasClients(membership.organisation.workModel);
 	const costRates = await personCostRates(scope, report.choices, currency, report.today);
 	const figures = profit && {
 		totals: {
@@ -122,12 +123,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			cost: amount(profit.totals.costMinor),
 			margin: percentLabel(profit.totals.margin),
 		},
+		// Under Internal work nothing is billable, so no project says how it bills,
+		// nor that its time has no billable rate (TS-115a).
 		projects: profit.lines.map((line) => ({
 			id: line.projectId,
 			name: line.project,
 			client: hasClients(membership.organisation.workModel) ? line.client : null,
-			type:
-				line.billingType === "fixed_fee"
+			type: !bills
+				? null
+				: line.billingType === "fixed_fee"
 					? "Fixed fee"
 					: line.billingType === "hourly"
 						? "Hourly"
@@ -140,7 +144,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			margin: percentLabel(line.margin),
 			profit: line.profitMinor === null ? "—" : amount(line.profitMinor),
 			otherCurrency: line.currency !== currency ? line.currency : null,
-			missingRate: line.missingRateSeconds > 0 ? hoursAndMinutes(line.missingRateSeconds) : null,
+			missingRate:
+				bills && line.missingRateSeconds > 0 ? hoursAndMinutes(line.missingRateSeconds) : null,
 		})),
 		missingCost: profit.missingCost.map((p) => ({
 			id: p.id,
@@ -203,9 +208,11 @@ export default function Profitability({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>
-				{t("What each project earned and cost in")} {loaderData.currency}: revenue from billable
-				time or a fixed fee spread over its days, cost from each person's cost rate and every
-				expense.
+				{t("What each project earned and cost in")} {loaderData.currency}:{" "}
+				{terms.clients
+					? "revenue from billable time or a fixed fee spread over its days, cost"
+					: "cost"}{" "}
+				from each person's cost rate and every expense.
 			</PageLead>
 			<ReportTabs
 				slug={loaderData.slug}

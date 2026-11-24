@@ -78,9 +78,7 @@ describe("projectSections", () => {
 			projectSections(PROJECTS, ["copy", "web", "admin"], query, CLIENT_PROJECT_TERMS, [
 				"web",
 				"audit",
-			]).map(
-				(section) => [section.title, section.projects.map((project) => project.id)],
-			);
+			]).map((section) => [section.title, section.projects.map((project) => project.id)]);
 		expect(pinnedShape("")).toEqual([
 			[PINNED_TITLE, ["audit", "web"]],
 			[RECENT_TITLE, ["copy", "admin"]],

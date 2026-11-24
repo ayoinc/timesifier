@@ -161,3 +161,111 @@ describe("who creates projects (decision 42)", () => {
 		expect(await create(max, "Gone", globex)).toEqual({ status: 403, stored: 0 });
 	});
 });
+
+// Who keeps a project (decisions 42 and 65): editing, archiving, restoring and
+// duplicating it follow who may create one for its client. Owners and admins
+// keep every project, an account manager their own clients' projects, and
+// nobody else any: they are offered no Edit and no Duplicate, and the server
+// refuses them, changing nothing. Finance keeps what the rates rules give it.
+
+/** A project for each of Globex and Initech, besides "Existing", which has no client. */
+async function seedClientProjects() {
+	const scope = organisationScope(env.DB, acme.id);
+	const [g, i] = await scope.projects.insert([
+		{ name: "Globex site", nameKey: "globex site", clientId: globex },
+		{ name: "Initech site", nameKey: "initech site", clientId: initech },
+	]);
+	const existing = await value<string>("select id from projects where name = 'Existing'");
+	if (!g || !i || !existing) throw new Error("No project was stored.");
+	return { "Globex site": g.id, "Initech site": i.id, Existing: existing };
+}
+
+/** What `who` is offered on the Projects page and on each project's page, and the server's answers. */
+async function keeping(who: Person, projectId: string, name: string) {
+	const main = (await pageBody(await open(PROJECTS, who))).match(/<main[\s\S]*<\/main>/)?.[0] ?? "";
+	const page = await open(`${PROJECTS}/${projectId}`, who);
+	const pageHtml = page.status === 200 ? await pageBody(page) : "";
+	const ask = async (fields: Record<string, string>) =>
+		(await submit(PROJECTS, { projectId, ...fields }, who, { byScript: true })).status;
+	const edit = await ask({ intent: "rename", name: `${name} renamed` });
+	const archive = await ask({ intent: "archive" });
+	const restore = await ask({ intent: "restore" });
+	const duplicate = await ask({ intent: "duplicate", name: `${name} (copy)` });
+	return {
+		editOffered: main.includes(`aria-label="Edit ${name}"`),
+		duplicateOffered: pageHtml.includes(`aria-label="Actions for ${name}"`),
+		statuses: [edit, archive, restore, duplicate],
+		renamed: await value("select count(*) from projects where name = ?", `${name} renamed`),
+		copied: await value("select count(*) from projects where name = ?", `${name} (copy)`),
+	};
+}
+
+/** Each role, and whether it keeps the Globex project, the Initech one, and the one with no client. */
+const KEEPS: [Who, boolean, boolean, boolean][] = [
+	["owner", true, true, true],
+	["admin", true, true, true],
+	["finance", false, false, false],
+	["account manager", true, false, false],
+	["manager", false, false, false],
+	["member", false, false, false],
+	["contractor", false, false, false],
+];
+
+describe("who edits, archives and duplicates projects (decisions 42 and 65)", () => {
+	it.each(KEEPS)(
+		"a %s keeps Globex's project %s, Initech's %s, and the one with no client %s",
+		async (role, ...keeps) => {
+			const ids = await seedClientProjects();
+			const who = await as(role);
+			const names = ["Globex site", "Initech site", "Existing"] as const;
+			for (const [n, name] of names.entries()) {
+				const kept = keeps[n];
+				const seen = await keeping(who, ids[name], name);
+				expect(seen, name).toEqual({
+					editOffered: kept,
+					duplicateOffered: kept,
+					statuses: kept ? [200, 200, 200, 200] : [403, 403, 403, 403],
+					renamed: kept ? 1 : 0,
+					copied: kept ? 1 : 0,
+				});
+				// A refused archive left it as it was.
+				if (!kept) {
+					expect(
+						await value("select archived_at from projects where id = ?", ids[name]),
+					).toBeNull();
+				}
+			}
+		},
+	);
+
+	it("a stranger is answered 404 for each, and nothing changes", async () => {
+		const ids = await seedClientProjects();
+		const who = await as("stranger");
+		const statuses = await Promise.all(
+			(["rename", "archive", "restore", "duplicate"] as const).map(
+				async (intent) =>
+					(
+						await submit(
+							PROJECTS,
+							{ intent, projectId: ids["Globex site"], name: "Taken over" },
+							who,
+							{ byScript: true },
+						)
+					).status,
+			),
+		);
+		expect(statuses).toEqual([404, 404, 404, 404]);
+		expect(await value("select count(*) from projects where name = 'Taken over'")).toBe(0);
+	});
+
+	it("an account manager keeps none under Internal work, where no project has their client", async () => {
+		const ids = await seedClientProjects();
+		const max = await as("account manager");
+		await env.DB.prepare("update organisations set work_model = 'internal' where id = ?")
+			.bind(acme.id)
+			.run();
+		const seen = await keeping(max, ids["Globex site"], "Globex site");
+		expect(seen.statuses).toEqual([403, 403, 403, 403]);
+		expect(seen.editOffered).toBe(false);
+	});
+});

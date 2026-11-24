@@ -279,7 +279,8 @@ export default function Reports({ loaderData }: Route.ComponentProps) {
 							<LedgerTotal label="Total" value={report.total} />
 						</Ledger>
 
-						<BillableSplit split={report.split} range={loaderData.range} />
+						{/* Under Internal work nothing is billable (TS-115a). */}
+						{terms.clients && <BillableSplit split={report.split} range={loaderData.range} />}
 						<p className="mt-2">
 							<DownloadLink href={report.exportPath} className={ACTION_LINK}>
 								Export as CSV
