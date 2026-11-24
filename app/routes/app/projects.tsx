@@ -1,18 +1,22 @@
 import { env } from "cloudflare:workers";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocale } from "react-aria";
 import {
 	Link,
 	type ShouldRevalidateFunctionArgs,
+	useFetcher,
 	useRevalidator,
 	useSearchParams,
 } from "react-router";
 import * as z from "zod";
 
+import { BudgetBar, budgetFigure } from "~/budgets/BudgetBar";
 import { activeClients } from "~/clients/clients.server";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
-import { FilterBar, FilterField } from "~/components/FilterBar";
+import { FilterBar, FilterField, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
+import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
@@ -20,6 +24,7 @@ import { importPath } from "~/integrations/paths";
 import { nameKey, RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import {
+	mayDuplicateProjects,
 	mayManageClients,
 	mayManageIntegrations,
 	maySeeRates,
@@ -28,23 +33,35 @@ import {
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
-import { NOT_ALLOWED } from "~/organisations/problems";
+import { NOT_ALLOWED, type Outcome } from "~/organisations/problems";
+import { PINNED_TITLE } from "~/pins/pins";
+import { pinnedProjectIds, pinProject } from "~/pins/pins.server";
 import { ArchiveTabs } from "~/projects/ArchiveTabs";
+import { DuplicateSheet } from "~/projects/DuplicateSheet";
+import { type ListedBudget, listedBudgets } from "~/projects/project.server";
 import {
+	BY_NAME,
+	byNearestLimit,
+	copyName,
 	defaultRatesPath,
 	groupedByClient,
 	keptTab,
+	NEAREST_LIMIT,
 	NO_CLIENT,
 	onlySearchChanged,
 	onlyTabChanged,
+	type ProjectSort,
 	projectMatches,
 	projectPath,
 	SEARCH_PARAM,
+	SORT_PARAM,
 	searchIn,
+	sortIn,
 } from "~/projects/projects";
 import {
 	changeProject,
 	createProject,
+	duplicateProject,
 	listProjects,
 	type ProjectResult,
 	projectHours,
@@ -80,35 +97,58 @@ export type HoursOf = "everyone" | "teams" | "own";
 
 /**
  * Every project, or those the address searches for, each with its hours to
- * date; and the clients a project may be given when the person may give one.
+ * date and, for those who oversee the work, its budget for the current period
+ * as the project page counts it (TS-122, S2-07); and the clients a project
+ * may be given when the person may give one. `?sort=limit` orders the
+ * projects nearest their limit first. The projects the viewer pinned are
+ * marked, to head the active list (S2-09).
  */
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const scope = organisationScope(env.DB, membership.organisation.id);
 	const showsClients = membership.organisation.clientsEnabled;
 	const givesClients = showsClients && mayManageClients(membership.role);
-	const query = searchIn(new URL(request.url).searchParams);
+	const search = new URL(request.url).searchParams;
+	const query = searchIn(search);
 	const access = await accessOf(membership);
 	const whose = timeScopeOf(access);
-	const [projects, hours, clients] = await Promise.all([
+	const now = Date.now();
+	const [projects, hours, clients, pinned] = await Promise.all([
 		listProjects(scope, { query, byClient: showsClients }),
-		projectHours(scope, whose, Date.now()),
+		projectHours(scope, whose, now),
 		givesClients ? activeClients(scope) : [],
+		pinnedProjectIds(scope, membership.user.id),
 	]);
+	const isPinned = new Set(pinned);
+	const budgets = await listedBudgets(
+		scope,
+		membership,
+		projects.filter((p) => !p.archived).map((p) => p.id),
+		now,
+	);
+	const seesBudgets = maySeeRates(membership.role) || membership.managesTeams;
+	const sort = seesBudgets ? sortIn(search) : BY_NAME;
+	const rows = projects.map((project) => ({
+		...project,
+		client: showsClients ? project.client : null,
+		hours: hoursAndMinutes(hours.get(project.id) ?? 0),
+		budget: budgets.get(project.id) ?? null,
+		pinned: isPinned.has(project.id),
+	}));
 	const hoursOf: HoursOf = whose.everyone ? "everyone" : access.managed.size > 0 ? "teams" : "own";
 	return {
-		projects: projects.map((project) => ({
-			...project,
-			client: showsClients ? project.client : null,
-			hours: hoursAndMinutes(hours.get(project.id) ?? 0),
-		})),
+		projects: sort === NEAREST_LIMIT ? byNearestLimit(rows) : rows,
 		query,
+		sort,
+		seesBudgets,
 		showsClients,
 		hoursOf,
 		clients: clients.map(({ id, name }) => ({ id, name })),
 		givesClients,
 		/** Whether the default rates are the viewer's to see (TS-067). */
 		seesRates: maySeeRates(membership.role),
+		/** Whether the viewer may duplicate a project: owners and admins (decision 65). */
+		duplicates: mayDuplicateProjects(membership.role),
 	};
 }
 
@@ -130,18 +170,26 @@ const Id = z.string().min(1).max(64);
 const Name = z.string();
 const Client = z.string().max(64).optional();
 
-/** The four things this page can ask for. A form says which with its `intent`. */
+/** The things this page can ask for. A form says which with its `intent`. */
 const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("create"), name: Name, clientId: Client }),
 	z.object({ intent: z.literal("rename"), projectId: Id, name: Name, clientId: Client }),
 	z.object({ intent: z.literal("archive"), projectId: Id }),
 	z.object({ intent: z.literal("restore"), projectId: Id }),
+	z.object({ intent: z.literal("duplicate"), projectId: Id, name: Name }),
+	z.object({
+		intent: z.literal("pin"),
+		projectId: Id,
+		pinned: z.enum(["true", "false"]).transform((value) => value === "true"),
+	}),
 ]);
 
 /**
- * Creates, renames, archives or restores a project of the organisation in the
- * address; no form names an organisation, and a project of another is no
- * project here, so it answers 404 and nothing changes.
+ * Creates, renames, archives, restores, duplicates or pins a project of the
+ * organisation in the address; no form names an organisation, and a project
+ * of another is no project here, so it answers 404 and nothing changes.
+ * Owners and admins duplicate a project (TS-122, decision 65); anyone pins
+ * one to the top of their own lists, and nobody else's (S2-09).
  */
 export async function action({ request, context }: Route.ActionArgs) {
 	const input = await parseRequest(request, form);
@@ -186,6 +234,20 @@ export async function action({ request, context }: Route.ActionArgs) {
 				await setProjectArchived(scope, membership.user.id, input.projectId, false),
 				(name) => `${name} is restored. The timer offers it again.`,
 			);
+
+		case "duplicate": {
+			if (!mayDuplicateProjects(membership.role)) return declined(NOT_ALLOWED, 403);
+			const copy = await duplicateProject(scope, membership.user.id, input.projectId, input.name);
+			if (copy === null) throw notFound();
+			if (!copy.ok) return declined(copy.problem);
+			return { ...done(`Project duplicated: ${copy.name}.`), changed: [copy.id] };
+		}
+
+		case "pin": {
+			const change = await pinProject(scope, membership.user.id, input.projectId, input.pinned);
+			if (change === "missing") throw notFound();
+			return done(input.pinned ? "Project pinned to the top." : "Project unpinned.");
+		}
 	}
 }
 
@@ -198,7 +260,7 @@ function answer(result: ProjectResult, said: (name: string) => string) {
 type Project = Route.ComponentProps["loaderData"]["projects"][number];
 
 /** The sheets of this page. One is open at a time. */
-type Task = "create" | "rename" | "archive" | "restore";
+type Task = "create" | "rename" | "archive" | "restore" | "duplicate";
 
 /** The sentence that says whose hours a project's figure adds up. */
 const HOURS_SAID: Record<HoursOf, string> = {
@@ -208,6 +270,11 @@ const HOURS_SAID: Record<HoursOf, string> = {
 		"The projects everyone tracks time against, each with the hours you and your teams have tracked on it to date, a running timer included.",
 	own: "The projects everyone tracks time against, each with the hours you have tracked on it to date, a running timer included.",
 };
+
+/** The id of a project's Actions button, which keeps the focus when the row moves. */
+function actionsId(projectId: string): string {
+	return `project-actions-${projectId}`;
+}
 
 export default function Projects({ loaderData }: Route.ComponentProps) {
 	const { clients, givesClients, showsClients, hoursOf } = loaderData;
@@ -232,38 +299,108 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 	const [project, setProject] = useState<Project | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
+	// Every project's name the page holds, for the name a copy is offered.
+	const takenNames = new Set(loaderData.projects.map((each) => nameKey(each.name)));
+	// Pin and Unpin need no sheet: the item says what it does, and is undone
+	// the same way (S2-09). The row moves between the pinned and the rest, so
+	// its Actions button, made again there, is given the focus back.
+	const pin = useFetcher<Outcome>();
+	const pinning = useRef<string | null>(null);
+	const pinAnswer = pin.state === "idle" ? pin.data : undefined;
+	useEffect(() => {
+		if (!pinAnswer) return;
+		setSaid(pinAnswer.ok ? pinAnswer.said : pinAnswer.problem);
+		if (pinning.current) document.getElementById(actionsId(pinning.current))?.focus();
+		pinning.current = null;
+	}, [pinAnswer]);
 
 	const create = <Button onPress={() => setTask("create")}>Create project</Button>;
 
 	// A project's name opens its own page (harvest-taste.md item 11); Edit
-	// opens its sheet, which edits it and holds Archive or Restore: two things,
-	// so no menu (docs/design-direction.md, rule 2).
-	const list = (shown: Project[], label: string) => (
+	// opens its sheet, which edits it and holds Archive or Restore. Actions
+	// holds Pin or Unpin (TS-122, S2-09), and for owners and admins what makes
+	// another project of it: Duplicate (S2-06).
+	const list = (shown: Project[], label: string, withClient = false) => (
 		<LedgerRows label={label}>
 			{shown.map((each) => (
 				<LedgerRow
 					key={each.id}
 					title={
-						<Link
-							to={projectPath(organisation.slug, each.id)}
-							className={cx(ACTION_LINK, "wrap-anywhere")}
-						>
-							{each.name}
-						</Link>
+						<>
+							<Link
+								to={projectPath(organisation.slug, each.id)}
+								className={cx(ACTION_LINK, "wrap-anywhere")}
+							>
+								{each.name}
+							</Link>
+							{each.budget && (
+								<BudgetBar
+									thin
+									label={`Budget of ${each.name} spent`}
+									percent={each.budget.percent}
+									over={each.budget.over}
+								/>
+							)}
+						</>
+					}
+					detail={
+						(each.budget || (withClient && each.client)) && (
+							<>
+								{withClient && each.client && (
+									<span className="block wrap-anywhere">{each.client.name}</span>
+								)}
+								{each.budget && <BudgetLine budget={each.budget} />}
+							</>
+						)
 					}
 					action={
-						// React Aria's button presses on key up, as every button that opens a
-						// sheet here does, so the sheet's field keeps the focus it is given.
-						<Button
-							variant="text"
-							aria-label={`Edit ${each.name}`}
-							onPress={() => {
-								setProject(each);
-								setTask("rename");
-							}}
-						>
-							Edit
-						</Button>
+						<>
+							{/* React Aria's button presses on key up, as every button that opens a
+							sheet here does, so the sheet's field keeps the focus it is given. */}
+							<Button
+								variant="text"
+								aria-label={`Edit ${each.name}`}
+								onPress={() => {
+									setProject(each);
+									setTask("rename");
+								}}
+							>
+								Edit
+							</Button>
+							{(!each.archived || each.pinned || loaderData.duplicates) && (
+								<MenuTrigger>
+									<Button
+										variant="text"
+										id={actionsId(each.id)}
+										aria-label={`Actions for ${each.name}`}
+									>
+										Actions
+									</Button>
+									<Menu
+										align="end"
+										onAction={(chosen) => {
+											if (chosen === "duplicate") {
+												setProject(each);
+												setTask("duplicate");
+												return;
+											}
+											pinning.current = each.id;
+											pin.submit(
+												{ intent: "pin", projectId: each.id, pinned: String(chosen === "pin") },
+												{ method: "post" },
+											);
+										}}
+									>
+										{each.pinned ? (
+											<MenuItem id="unpin">Unpin</MenuItem>
+										) : (
+											!each.archived && <MenuItem id="pin">Pin</MenuItem>
+										)}
+										{loaderData.duplicates && <MenuItem id="duplicate">Duplicate</MenuItem>}
+									</Menu>
+								</MenuTrigger>
+							)}
+						</>
 					}
 					value={each.hours}
 				/>
@@ -284,21 +421,52 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 				</p>
 			);
 		}
-		// While Clients is off no project shows a client, so there are no groups.
-		if (!showsClients) return list(shown, listName);
-		return groupedByClient(shown).map(({ client, projects: inGroup }) => {
-			const name = client
-				? `${client.name}${client.archived ? " (archived client)" : ""}`
-				: "No client";
+		// The projects the viewer pinned head the active list, in its order (S2-09).
+		const pinned = archived ? [] : shown.filter((each) => each.pinned);
+		const rest = pinned.length === 0 ? shown : shown.filter((each) => !each.pinned);
+		const heading = (text: string) => (
+			<h2 className="wrap-anywhere px-4 pt-3 text-title-small text-on-surface-variant @sm:px-5">
+				{text}
+			</h2>
+		);
+		const pinnedSection = pinned.length > 0 && (
+			<section className="border-t border-outline-variant">
+				{heading(PINNED_TITLE)}
+				{list(pinned, `${listName}: ${PINNED_TITLE}`, showsClients)}
+			</section>
+		);
+		// While Clients is off no project shows a client, so there are no groups;
+		// nor while the list is ordered by its budgets, an order across clients.
+		if (!showsClients || loaderData.sort === NEAREST_LIMIT) {
+			if (!pinnedSection) return list(rest, listName, showsClients);
 			return (
-				<section key={client?.id ?? NO_CLIENT} className="border-t border-outline-variant">
-					<h2 className="wrap-anywhere px-4 pt-3 text-title-small text-on-surface-variant @sm:px-5">
-						{name}
-					</h2>
-					{list(inGroup, `${listName}: ${name}`)}
-				</section>
+				<>
+					{pinnedSection}
+					{rest.length > 0 && (
+						<section className="border-t border-outline-variant">
+							{heading("Other projects")}
+							{list(rest, `${listName}: other projects`, showsClients)}
+						</section>
+					)}
+				</>
 			);
-		});
+		}
+		return (
+			<>
+				{pinnedSection}
+				{groupedByClient(rest).map(({ client, projects: inGroup }) => {
+					const name = client
+						? `${client.name}${client.archived ? " (archived client)" : ""}`
+						: "No client";
+					return (
+						<section key={client?.id ?? NO_CLIENT} className="border-t border-outline-variant">
+							{heading(name)}
+							{list(inGroup, `${listName}: ${name}`)}
+						</section>
+					);
+				})}
+			</>
+		);
 	};
 
 	const active = projects.filter((each) => !each.archived);
@@ -360,6 +528,7 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 									param={SEARCH_PARAM}
 									live
 								/>
+								{loaderData.seesBudgets && <SortField sort={loaderData.sort} />}
 							</FilterBar>
 						</div>
 						<div className="mt-6">
@@ -482,6 +651,76 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 				<input type="hidden" name="projectId" value={project?.id ?? ""} />
 				<p>It moves back to Active and the timer offers it again.</p>
 			</FormSheet>
+
+			<DuplicateSheet
+				project={project}
+				offered={project ? copyName(project.name, takenNames) : ""}
+				isOpen={task === "duplicate"}
+				onClose={close}
+				onDone={setSaid}
+			/>
 		</>
+	);
+}
+
+/**
+ * The order of the list, sent in the address with the search: by name, or the
+ * budgets nearest their limit first (TS-122, S2-07). It applies as soon as it
+ * changes. By name is the order without one, so the address leaves it out: a
+ * search alone stays `?q=…`.
+ */
+function SortField({ sort }: { sort: ProjectSort }) {
+	const apply = useApplyFilters();
+	const [chosen, setChosen] = useState<ProjectSort>(sort);
+	// The address changed (applied, Back, a link): show what it holds.
+	useEffect(() => setChosen(sort), [sort]);
+	return (
+		<div className="min-w-0 grow basis-44">
+			<Select
+				label="Sort"
+				options={[
+					{ id: BY_NAME, label: "Name" },
+					{ id: NEAREST_LIMIT, label: "Nearest budget limit" },
+				]}
+				value={chosen}
+				onChange={(id) => {
+					setChosen(id === NEAREST_LIMIT ? NEAREST_LIMIT : BY_NAME);
+					// The hidden field holds the new value once React has drawn it.
+					setTimeout(apply, 0);
+				}}
+			/>
+			{/* Empty for by name, which the bar leaves out of the address. */}
+			<input
+				type="hidden"
+				name={SORT_PARAM}
+				value={chosen === NEAREST_LIMIT ? NEAREST_LIMIT : ""}
+			/>
+		</div>
+	);
+}
+
+/**
+ * Where a project's budget stands, as its row's second line: "62% of 40:00 ·
+ * 15:12 left", in error once over. Past the project's alert the line says so
+ * in words: the design has no warning colour (docs/design-direction.md,
+ * "Colour").
+ */
+function BudgetLine({ budget }: { budget: ListedBudget }) {
+	const { locale } = useLocale();
+	const figure = (value: number) => budgetFigure(budget, value, locale);
+	const share =
+		budget.percent === null
+			? `${figure(budget.spent)} of a budget of ${figure(0)}`
+			: `${budget.percent}% of ${figure(budget.amount)}`;
+	const left = budget.over
+		? `${figure(-budget.remaining)} over`
+		: `${figure(budget.remaining)} left`;
+	const alert =
+		budget.alertReached !== null && !budget.over ? ` · past the ${budget.alertReached}% alert` : "";
+	return (
+		<span className={cx("block tabular-nums", budget.over && "text-error")}>
+			{share} · {left}
+			{alert}
+		</span>
 	);
 }

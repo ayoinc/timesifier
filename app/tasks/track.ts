@@ -27,6 +27,8 @@ export interface TrackChoices {
 	entries: Record<string, { taskId: string | null; tagIds: string[] }>;
 	/** The person's recent projects, most recent first, archived ones left out: the head of the project picker. */
 	recent: string[];
+	/** The projects the person pinned, in the order they pinned them: first in the project picker (TS-122, S2-09). */
+	pinned: string[];
 	/** The client's name of each active project that has a client, by project id. */
 	clients: Record<string, string>;
 }

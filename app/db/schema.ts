@@ -2379,6 +2379,57 @@ export const savedReportShares = sqliteTable(
 );
 
 /**
+ * A project or a person one member pinned to the top of their own lists
+ * (TS-122, S2-09; docs/decisions.md entry 65): Projects and Track time's
+ * picker for a project, Team for a person. Each row is one of the two, never
+ * both. It is the pinner's alone, and goes with their membership, the
+ * project, or the pinned person's membership.
+ */
+export const pins = sqliteTable(
+	"pins",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		projectId: text("project_id"),
+		personId: text("person_id"),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("pins_organisation_id_user_id_project_id_unique").on(
+			table.organisationId,
+			table.userId,
+			table.projectId,
+		),
+		uniqueIndex("pins_organisation_id_user_id_person_id_unique").on(
+			table.organisationId,
+			table.userId,
+			table.personId,
+		),
+		index("pins_organisation_id_project_id_idx").on(table.organisationId, table.projectId),
+		index("pins_organisation_id_person_id_idx").on(table.organisationId, table.personId),
+		foreignKey({
+			name: "pins_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "pins_project_fk",
+			columns: [table.organisationId, table.projectId],
+			foreignColumns: [projects.organisationId, projects.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "pins_person_fk",
+			columns: [table.organisationId, table.personId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
+		check("pins_one_of", sql`(${table.projectId} IS NULL) <> (${table.personId} IS NULL)`),
+	],
+);
+
+/**
  * A token for the public API (B20). The token is shown once; only its keyed
  * hash is kept (`app/integrations/tokens.server.ts`), with its first eight
  * characters as `prefix` so a list can tell tokens apart. `scopes` is what it

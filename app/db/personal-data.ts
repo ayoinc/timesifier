@@ -88,6 +88,7 @@ export const STORED = [
 				tables: ["expenses", "expense_tags", "expense_categories", "expense_category_prices"],
 			},
 			{ term: "Saved reports", tables: ["saved_reports", "saved_report_shares"] },
+			{ term: "Pinned projects and people", tables: ["pins"] },
 			{ term: "Support access", tables: ["support_grants"] },
 			{ term: "Verified domains", tables: ["organisation_domains", "membership_removals"] },
 		],

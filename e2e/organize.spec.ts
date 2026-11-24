@@ -168,7 +168,10 @@ test("a project is created, renamed and archived with the keyboard alone", async
 		await page.keyboard.press("Tab");
 	}
 	await expectFocusShown(row);
-	await expect(page.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
+	// Beside Edit, the row's Actions holds Pin and Duplicate (TS-122, S2-09 and S2-06).
+	await expect(page.getByRole("button", { name: "Actions for Design", exact: true })).toHaveCount(
+		1,
+	);
 	await page.keyboard.press("Enter");
 	const renaming = page.getByRole("dialog", { name: "Edit Design" });
 	const name = renaming.getByLabel("Project name");

@@ -271,6 +271,7 @@ const FIELD_LABELS: Record<string, string> = {
 	hours: "Hours",
 	projectId: "Project",
 	clientId: "Client",
+	duplicatedFromId: "Duplicated from",
 	taskId: "Task",
 	kindId: "Kind of leave",
 	description: "Description",
@@ -384,6 +385,7 @@ const SUBJECT_TABLES: Partial<Record<string, Named>> = {
 const FIELD_TABLES: Partial<Record<string, Named>> = {
 	projectId: "projects",
 	clientId: "clients",
+	duplicatedFromId: "projects",
 	teamId: "teams",
 	taskId: "tasks",
 	kindId: "leaveKinds",

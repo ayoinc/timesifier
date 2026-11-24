@@ -3,6 +3,7 @@ import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { projectBudgets } from "~/budgets/budget.server";
 import { among, type OrganisationScope } from "~/db";
 import type { Membership } from "~/organisations/membership.server";
+import { pinnedProjectIds } from "~/pins/pins.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { recentProjectIds } from "~/projects/recent.server";
 import { tagOptions, tagsOfEntries } from "~/tags/tags.server";
@@ -14,7 +15,7 @@ import type { TrackChoices } from "./track";
  * TS-085, TS-069): each project's active tasks, the organisation's tags, the
  * projects over budget whose people are warned, the task and tags of each
  * entry shown, so its sheet starts at what it has, and for the project picker
- * the person's recent projects and each project's client.
+ * the person's pinned and recent projects and each project's client.
  */
 export async function trackChoices(
 	scope: OrganisationScope,
@@ -25,7 +26,7 @@ export async function trackChoices(
 	// The entries shown may still be on their way: the Timesheet reads them
 	// beside these (TS-114), and only the two reads of the entries wait for them.
 	const shown = Promise.resolve(shownEntryIds);
-	const [byProject, tags, overBudget, entries, entryTags, recent, withClient, clients] =
+	const [byProject, tags, overBudget, entries, entryTags, recent, pinned, withClient, clients] =
 		await Promise.all([
 			tasksOfProjects(scope),
 			tagOptions(scope),
@@ -35,6 +36,7 @@ export async function trackChoices(
 			),
 			shown.then((ids) => tagsOfEntries(scope, ids)),
 			recentProjectIds(scope, membership.user.id),
+			pinnedProjectIds(scope, membership.user.id),
 			scope.projects.select((p) => and(isNull(p.archivedAt), isNotNull(p.clientId))),
 			scope.clients.select(),
 		]);
@@ -57,6 +59,7 @@ export async function trackChoices(
 			entries.map((e) => [e.id, { taskId: e.taskId, tagIds: entryTags.get(e.id) ?? [] }]),
 		),
 		recent,
+		pinned,
 		clients: Object.fromEntries(
 			withClient.flatMap((p) => {
 				const client = p.clientId === null ? undefined : clientNames.get(p.clientId);
