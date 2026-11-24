@@ -45,6 +45,7 @@ import {
 	leaveRequests,
 	membershipRemovals,
 	memberships,
+	notifications,
 	organisationDomains,
 	organisationExports,
 	payments,
@@ -412,6 +413,7 @@ export const tenantTables = {
 	organisationDomains,
 	membershipRemovals,
 	supportGrants,
+	notifications,
 	organisationExports,
 } as const;
 

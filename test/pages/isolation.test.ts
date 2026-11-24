@@ -92,7 +92,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports and a report's people, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access, Wellbeing and Sign-in, My account and its data, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports and a report's people, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access, Wellbeing and Sign-in, My account and its data, the bell's notifications, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -160,6 +160,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/settings/sign-in",
 				"/app/acme/account",
 				"/app/acme/account/calendar",
+				// The bell's list, and marking it read (TS-049).
+				"/app/acme/notifications",
 				"/app/acme/settings/members",
 				// The export of everything and its ZIP (TS-126).
 				"/app/acme/settings/export",
@@ -191,6 +193,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/invoices.settings",
 			"routes/app/members",
 			"routes/app/menu",
+			"routes/app/notifications",
 			"routes/app/project",
 			"routes/app/projects",
 			"routes/app/rates",
@@ -283,6 +286,7 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/integrations.import": { intent: "discard", importId: "i-acme" },
 		"routes/app/menu": { menu: "hidden", back: "/app/acme" },
 		"routes/app/calendar-feeds": { intent: "feed-create", follow: "me" },
+		"routes/app/notifications": { intent: "read" },
 		"routes/app/expenses": { intent: "delete", expenseId: "e-ada" },
 		"routes/app/tasks": { intent: "create-tag", name: "Taken over" },
 		"routes/app/project": { intent: "add-task", taskId: "t-general" },

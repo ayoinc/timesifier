@@ -59,6 +59,21 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-049 · Notifications and reminders
+
+Builder: an AI session on branch `ts-049-notifications`, pull request #102. Decisions 68 and 69. Migrations `0035_notifications` (renumbered from 0034 at merge; its snapshot follows `0034_codes_and_work_model` from TS-115a) and `0036_reminder_pass` (renumbered from 0037), additive, next to each other and in order; the SQL of neither changed. The bell is in the band beside the profile menu; My account › Notifications holds an email switch per kind. The reminders make at most 300 of an invocation's 1,000 D1 queries a run, every minute, from where the last stopped (decision 69); one Queue message per organisation is TS-049b's.
+
+- [x] A notification is made for each event and each opens its page: a week submitted, to its deciders (D5, D6 and the fallback to owners and admins); a week approved, returned or reopened, to its person with the reason; a request for leave or extra work, to its deciders, and its decision to its person; what the system did at the lock date; a budget past its alert; and the reminders of the deadline, of weeks waiting and of a running timer, each in its person's zone, once in its period. Tests: `test/notifications/events.test.ts` ("a week submitted", "a week decided", "a request", "what the system does", "what nobody is told", role by role with a stranger), `test/notifications/reminders.test.ts` (London, Tokyo and Los Angeles; once in a period; nobody on leave), `test/pages/money-rules.test.ts` ("a budget's alert"); its link followed in `e2e/notifications.spec.ts`.
+- [x] An owner, admin or manager asks one person, or everyone listed, to submit from Approvals › Not submitted: "Remind" on a row and "Remind all", each with a confirmation; only those the asker decides for, once the week has ended, once a day for each week. Two Reminds of the same person on the same day, from one decider or two, store one notification and send one email. Tests: `test/notifications/events.test.ts`, "asked to submit (Approvals › Not submitted)" (one person, pressed twice by two deciders, Remind all from a manager and an owner, a week still open, a person not the asker's, a member who decides nobody's).
+- [x] The band shows the number unread on the bell; opening the bell marks everything read and the count goes to 0; an item, reached with Tab, follows its link; Escape gives the focus back. The band stays 80px with the bell in it (TS-123). Tests: `test/notifications/events.test.ts`, "the bell's list" (the person's own, in their organisation alone; a stranger's post marks nothing); `test/organisations/request-memo.test.ts` (one read of the count a page); `e2e/notifications.spec.ts` (keyboard and axe at 390 and 1280 px, light and dark).
+- [x] A person turns each kind's email on or off in My account › Notifications, for themselves in every organisation; a kind for deciders or budgets is offered only to those who can receive it; a kind turned off still shows in the bell. Tests: `test/notifications/choices.test.ts`, `test/notifications/mail.test.ts` ("is not sent when its person turned the kind off"), `test/platform/personal-data.test.ts` (the choices in the export); `e2e/notifications.spec.ts` (a switch by keyboard, kept on reload).
+- [x] Emails: at most 100 a run, oldest first; one more than a day old is never sent; the first that fails stops the run. Notifications are kept 90 days, and the privacy notice and `/security` say so. Tests: `test/notifications/mail.test.ts`, `test/claims.test.ts` ("the security page says how long each thing is kept").
+- [x] A run of the reminders reads only organisations with a timer running, a week waiting (the partial index `periods_submitted_idx`) or a deadline due within 25 hours; with nothing to do it is five queries, and a minute whose hour's pass is finished is one, however many organisations there are. Test: `test/notifications/reminders.test.ts`, "the hourly run's reads (decision 69)" (each set from its partial index, by the query plan).
+- [x] A run makes at most 300 of the invocation's 1,000 D1 queries (`REMINDER_QUERIES_PER_RUN`), counted as D1 counts them and refused past the share, and goes last in its invocation; it stops cleanly when its share is spent, and the runs of the following minutes go on from where it stopped, each reminder once. Reminders are due at or after their moment, so one a run did not reach is still sent in its period. The pass's lease runs out after two minutes, so a run that dies holding it blocks nothing, and two runs at once never check the same item. Tests: `test/notifications/reminders-pass.test.ts` ("a run's share of the invocation's queries": six timers with a share of 60; "a reminder a run did not reach": a timer past its hours at 15:30 sent at 17:30 when the 16:00 run had no room, the deadline's at 09:40, weeks waiting at 19:30; "the pass's lease": taken over once run out, one of two runs at once, a run that lost it writes nothing).
+- [x] Each scheduled duty, in every cron, runs on its own: one that fails is logged and the others still run, auto-lock, the lock date and billing before the reminders. Test: `test/scheduled/duties.test.ts`.
+- [x] Browser spec `e2e/notifications.spec.ts`; screenshots in `cmux-assets/browser/timesifier/TS-049/`. A section reached by its anchor now keeps its rule in view below the band (`Section`, `app/shell/PageHeading.tsx`).
+- [x] typecheck, lint and tests pass in the pipeline: run 45315964640 on `90f52a9` (the budgeted reminders, with TS-125 merged in), every job green on its first attempt; the final head's run, after TS-126 was merged in and the share set at 300, is named on the pull request.
+
 ### TS-126 · Export everything
 
 Builder: an AI session on branch `ts-126-export-everything`, pull request #105. Closes gap 18 of `research/corporate-readiness.md`: one ZIP of every table the organisation owns, plus receipts and logos. Decision 71. Migration `0033_organisation_exports`, after #100's 0033 and #102's 0034; renumbered at merge. Until #102 (TS-049, the bell) merges, the owner is told by email alone.
@@ -772,14 +787,17 @@ Depends on: TS-012b, TS-013.
 - [ ] A returned period shows the reason and can be corrected and submitted again (test).
 - Open for the owner: the default period, and whether a submission requires a full set of expected hours.
 
-### TS-049 · Notifications and reminders
+### TS-049b · Each organisation's reminders on a Queue
 
-Depends on: TS-046, TS-047.
+Depends on: TS-049.
 
-- [ ] A notification is created for: a reminder to submit, an approval request, a returned period, an approval outcome; each opens its record (tests).
-- [ ] A manager, admin or owner sends a reminder from Approvals, Not submitted, to one person or all listed (test).
-- [ ] The header shows the number unread; opening one marks it read (test).
-- [ ] A person turns each kind of email reminder on or off in My account (test).
+Decision 69 bounds the reminders: at most 300 of an invocation's 1,000 D1 queries a run, every minute, one pass over every organisation with work, from where the last run stopped. That pass is shared: at about 750 organisations with work in an hour (about 17,000 queries), a reminder can come an hour late. The long-term fix is a Queue per organisation, so each has an invocation, and its 1,000 queries, of its own.
+
+- [ ] The hourly run reads which organisations have work (`remindableOrganisations` and the deadlines due within 25 hours) and sends one message per organisation to a Cloudflare Queue; the consumer runs that organisation's reminders, and `reminder_pass` and the every-minute run of the reminders are removed. The keys still make each reminder once in its period, and each is still due at or after its moment (tests).
+- [ ] A message that fails is retried by the Queue and then goes to a dead-letter queue that is logged; a retry sends nothing twice (test).
+- [ ] The running timers of an organisation are checked against their days' rules in a fixed number of queries, not about 10 each (a test that counts the queries for 1 and for 50 running timers).
+- [ ] A test of the consumer with 200 organisations with work, each in its own message, shows no invocation over 1,000 queries, each counted by `countedDatabase` (`app/db/budget.ts`).
+- [ ] `docs/decisions.md` entry 69 gains the Queue's evidence; `wrangler.jsonc` binds the queue and its dead-letter queue in each environment.
 
 ### TS-050 · Help and support
 

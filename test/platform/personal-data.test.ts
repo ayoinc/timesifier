@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { organisationScope } from "~/db";
+import { organisationScope, setNotificationChoice } from "~/db";
 import { crc32 } from "~/lib/zip";
 import { personalDataResponse } from "~/platform/personal-data.server";
 import { dayOf } from "~/time/calendar";
@@ -150,6 +150,17 @@ describe("a person's data", () => {
 		expect([...everything.matchAll(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g)].map(([found]) => found)).toEqual(
 			["ada@example.com"],
 		);
+	});
+
+	it("holds which kinds of notification's email they turned off (TS-049)", async () => {
+		const ada = await person(mailbox, "ada@example.com");
+		await setNotificationChoice(env.DB, ada.user.id, "budget", false);
+		const files = await unzip(
+			new Uint8Array(await personalDataResponse(ada.user.id, NOW).arrayBuffer()),
+		);
+		expect(JSON.parse(files.get("account.json") ?? "").notificationEmails).toEqual({
+			budget: false,
+		});
 	});
 
 	it("is an empty ZIP for an account that is not there", async () => {

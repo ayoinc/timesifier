@@ -5,6 +5,8 @@ import { type OrganisationScope, uuidv7 } from "~/db";
 import { someoneElseDecides } from "~/leave/leave.server";
 import type { DayRule } from "~/leave/rules";
 import { daysOver } from "~/leave/rules.server";
+import { weeksSubmitted } from "~/notifications/notify.server";
+import { notificationStatements } from "~/notifications/words";
 import { PeriodStatus, periodBounds, periodContaining, periodOfWeek, statusAfter } from "./periods";
 
 /**
@@ -129,6 +131,15 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 		{ type: "period", id, ownerId: userId },
 		changes({ status }, { status: "submitted" }, ["status"]),
 	);
+	// Its deciders are told it waits for them (TS-049), in the same batch.
+	const told = notificationStatements(
+		scope,
+		await weeksSubmitted(
+			scope,
+			[{ userId, startsOn: period.startsOn, endsOn: period.endsOn, bySystem: false, alone }],
+			now,
+		),
+	);
 	if (row) {
 		await scope.batch([
 			scope.periods.statements.update(
@@ -138,6 +149,7 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 			event,
 			recorded,
 			...approval,
+			...told,
 		]);
 	} else {
 		await scope.batch([
@@ -152,6 +164,7 @@ export async function submitPeriod(scope: OrganisationScope, step: Step) {
 			event,
 			recorded,
 			...approval,
+			...told,
 		]);
 	}
 	return { ok: true as const, period, alone };

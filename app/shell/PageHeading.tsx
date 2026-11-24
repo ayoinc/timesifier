@@ -47,7 +47,8 @@ export function Section({ id, heading, lead, className, children }: SectionProps
 			aria-labelledby={id}
 			className={cx("mt-10 border-t-2 border-on-surface pt-4", className)}
 		>
-			<h2 id={id} className="text-headline-medium text-balance">
+			{/* Arrived at by its anchor, the section's rule stays in view above it (TS-049). */}
+			<h2 id={id} className="scroll-mt-6 text-headline-medium text-balance">
 				{heading}
 			</h2>
 			{lead && <p className="mt-2 max-w-160 text-body-medium text-on-surface-variant">{lead}</p>}

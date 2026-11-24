@@ -42,6 +42,7 @@ import { halfDaysLabel, LEAVE_TEXT_MAX_LENGTH } from "~/leave/kinds";
 import {
 	calendarOf,
 	decideLeave,
+	type LeaveContext,
 	leaveContext,
 	leaveDecidablePeople,
 	requestsToDecide,
@@ -52,11 +53,18 @@ import { spanLabel } from "~/leave/words";
 import { decideWork, workToDecide } from "~/leave/work.server";
 import { parseRequest } from "~/lib/validate";
 import { formatMoney, type Money, totalsByCurrency } from "~/money/money";
-import { isAdministrator, mayApproveAfterRefusals, mayReopenPeriods } from "~/organisations/access";
+import { notify } from "~/notifications/notify.server";
+import { submitAsked } from "~/notifications/words";
+import {
+	type Access,
+	isAdministrator,
+	mayApproveAfterRefusals,
+	mayReopenPeriods,
+} from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
-import { membershipContext } from "~/organisations/membership.server";
+import { type Membership, membershipContext } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
-import { shownName } from "~/organisations/people";
+import { nameOrEmail, shownName } from "~/organisations/people";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { PERIOD_COMMENT_MAX_LENGTH, periodContaining } from "~/periods/periods";
 import { destination, destinationPath } from "~/shell/destinations";
@@ -184,13 +192,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		by && !mayApproveAfterRefusals(access, by)
 			? refusedBeforeSentence(by.map((id) => refusers.get(id) ?? ""))
 			: null;
-	// A person whose whole period was leave, public holidays and days not worked
-	// had nothing to submit (TS-061).
-	const periodDays = daysFrom(viewed.period.startsOn, viewed.period.endsOn);
-	const notSubmitted =
-		approvals.notSubmitted?.filter(
-			(person) => !nothingExpected(calendarOf(leave, person.id), periodDays),
-		) ?? null;
+	const notSubmitted = stillToSubmit(approvals.notSubmitted, leave, viewed.period);
 	// When a timesheet was submitted or decided, in the form every page uses.
 	const date = { format: (instant: number) => formatDayAndTime(instant, viewed.zone) };
 	const secondsOf = (personId: string) =>
@@ -378,6 +380,73 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	};
 }
 
+/**
+ * Of those who have not submitted `period`, the ones with something to
+ * submit: a person whose whole period was leave, public holidays and days not
+ * worked had nothing to submit (TS-061). Null while the period is open.
+ */
+function stillToSubmit(
+	notSubmitted: Person[] | null,
+	leave: LeaveContext,
+	period: { startsOn: Day; endsOn: Day },
+): Person[] | null {
+	const days = daysFrom(period.startsOn, period.endsOn);
+	return (
+		notSubmitted?.filter((person) => !nothingExpected(calendarOf(leave, person.id), days)) ?? null
+	);
+}
+
+/**
+ * Asks `personId`, or everyone Not submitted lists, to submit the week that
+ * starts on `startsOn` (TS-049): those the asker decides for, as the list
+ * shows them, once a day for each week (`submitAsked`).
+ */
+async function remindToSubmit(
+	request: Request,
+	membership: Membership,
+	access: Access,
+	startsOn: string,
+	personId: string | null,
+) {
+	const day = Day.safeParse(startsOn);
+	if (!day.success) return declined("That week is not one this page knows.");
+	const scope = organisationScope(env.DB, membership.organisation.id);
+	const url = new URL(request.url);
+	url.searchParams.set(WEEK_PARAM, day.data);
+	const now = Date.now();
+	const viewed = await viewedPeriod(membership, url, 0, now);
+	const people = await decidablePeople(scope, membership.organisation, access);
+	const ids = people.map((p) => p.id);
+	const [approvals, leave] = await Promise.all([
+		approvalsFor(scope, people, viewed.period, viewed.today),
+		leaveContext(scope, ids, viewed.period.startsOn, viewed.period.endsOn),
+	]);
+	const listed = stillToSubmit(approvals.notSubmitted, leave, viewed.period);
+	if (listed === null) {
+		return declined("This week has not ended yet, so nobody is asked to submit it.", 409);
+	}
+	const asked = personId === null ? listed : listed.filter((p) => p.id === personId);
+	if (asked.length === 0) {
+		return declined(
+			personId === null
+				? "Everyone has submitted this week."
+				: "They have submitted this week, or it is not yours to ask for.",
+			409,
+		);
+	}
+	const by = nameOrEmail(membership.user);
+	await notify(
+		scope,
+		asked.map((p) => submitAsked({ userId: p.id, ...viewed.period }, by, viewed.today)),
+	);
+	const [one] = asked;
+	return done(
+		asked.length === 1 && one
+			? `${one.name} is asked to submit the week of ${periodLabel(viewed.period)}.`
+			: `${asked.length} people are asked to submit the week of ${periodLabel(viewed.period)}.`,
+	);
+}
+
 const Id = z.string().min(1).max(64);
 /** A reason: required, on as many lines as it takes, up to the limit. */
 const Comment = z.string().trim().min(1).max(PERIOD_COMMENT_MAX_LENGTH);
@@ -392,6 +461,8 @@ const form = z.discriminatedUnion("intent", [
 		requestId: Id,
 		comment: z.string().trim().max(LEAVE_TEXT_MAX_LENGTH).optional(),
 	}),
+	z.object({ intent: z.literal("remind"), startsOn: z.string(), personId: Id }),
+	z.object({ intent: z.literal("remind-all"), startsOn: z.string() }),
 ]);
 
 const COMMENT_PROBLEM = `Say why, in 1 to ${PERIOD_COMMENT_MAX_LENGTH} characters.`;
@@ -464,6 +535,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 	const scope = organisationScope(env.DB, membership.organisation.id);
 
 	switch (input.intent) {
+		case "remind":
+			return remindToSubmit(request, membership, access, input.startsOn, input.personId);
+		case "remind-all":
+			return remindToSubmit(request, membership, access, input.startsOn, null);
 		case "approve-leave":
 		case "refuse-leave": {
 			const result = await decideLeave(scope, access, input.requestId, {
@@ -581,6 +656,8 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 		| "refuse-leave"
 		| "approve-work"
 		| "refuse-work"
+		| "remind"
+		| "remind-all"
 		| null
 	>(null);
 	const [target, setTarget] = useState<Target | null>(null);
@@ -650,6 +727,13 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 				{query.status === "pending" && counts.pending > 1 && (
 					<div className="mb-4">
 						<Button onPress={() => open("all", null)}>Approve all {counts.pending}</Button>
+					</div>
+				)}
+				{query.status === "not-submitted" && (counts["not-submitted"] ?? 0) > 1 && (
+					<div className="mb-4">
+						<Button variant="outlined" onPress={() => open("remind-all", null)}>
+							Remind all {counts["not-submitted"]}
+						</Button>
 					</div>
 				)}
 				{rows === null ? (
@@ -744,6 +828,14 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 															Return
 														</Button>
 													</span>
+												) : query.status === "not-submitted" ? (
+													<Button
+														variant="text"
+														aria-label={`Remind ${p.person.name} to submit`}
+														onPress={() => open("remind", { id: p.person.id, name: p.person.name })}
+													>
+														Remind
+													</Button>
 												) : (
 													canReopen &&
 													query.status === "approved" && (
@@ -990,6 +1082,37 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 					Every timesheet waiting for the week of {week.label} is approved at once, but for any with
 					a day over its limit or a timer still running: those are left for you to look at one at a
 					time.
+				</p>
+			</FormSheet>
+
+			<FormSheet
+				title={`Remind ${target?.name ?? ""} to submit?`}
+				intent="remind"
+				submitLabel="Remind"
+				isOpen={task === "remind"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="startsOn" value={week.period.startsOn} />
+				<input type="hidden" name="personId" value={target?.id ?? ""} />
+				<p>
+					{target?.name} is told, in the bell and by email unless they have turned that off, that
+					you asked them to submit their timesheet for the week of {week.label}.
+				</p>
+			</FormSheet>
+
+			<FormSheet
+				title={`Remind all ${counts["not-submitted"] ?? 0} to submit?`}
+				intent="remind-all"
+				submitLabel="Remind all"
+				isOpen={task === "remind-all"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="startsOn" value={week.period.startsOn} />
+				<p>
+					Everyone who has not submitted the week of {week.label} is told, in the bell and by email
+					unless they have turned that off, that you asked them to submit it.
 				</p>
 			</FormSheet>
 

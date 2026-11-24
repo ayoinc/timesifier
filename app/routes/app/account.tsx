@@ -13,10 +13,17 @@ import { Radio, RadioGroup } from "~/components/Radio";
 import { Select } from "~/components/Select";
 import { Switch } from "~/components/Switch";
 import { TextField } from "~/components/TextField";
-import { organisationScope, platformData } from "~/db";
+import {
+	notificationChoicesOf,
+	organisationScope,
+	platformData,
+	setNotificationChoice,
+} from "~/db";
 import { calendarFeedsPath } from "~/integrations/paths";
 import { PRIVACY_EMAIL } from "~/landing/Site";
 import { parseRequest } from "~/lib/validate";
+import { KIND_WORDS, NOTIFICATION_KINDS, NotificationKind } from "~/notifications/kinds";
+import { NOTIFICATIONS_ANCHOR } from "~/notifications/paths";
 import { leaveOrganisation, listOrganisations } from "~/organisations/api.server";
 import { membershipContext } from "~/organisations/membership.server";
 import { nameProblem } from "~/organisations/name";
@@ -68,7 +75,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { role, user, organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
-	const [organisations, ownZone, zone, book, places, owners, mail] = await Promise.all([
+	const [organisations, ownZone, zone, book, places, owners, mail, choices] = await Promise.all([
 		listOrganisations(request),
 		ownZoneOf(membership),
 		zoneOfMember(membership),
@@ -79,7 +86,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			? organisationScope(env.DB, organisation.id).memberships.select((m) => eq(m.role, "owner"))
 			: [],
 		platformData.mailChoices(env.DB, user.id),
+		notificationChoicesOf(env.DB, user.id),
 	]);
+	// The kinds that can reach this person here: those for deciders and budgets
+	// only for an owner, an admin or a manager of a team (TS-049).
+	const decides = role === "owner" || role === "admin" || membership.managesTeams;
 	return {
 		role,
 		hasOthers: organisations.ok && organisations.data.length > 1,
@@ -95,6 +106,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		),
 		/** Which kinds of mail from Timesifier the person takes (TS-099). */
 		mail: mail ?? { newsletter: false, announcements: false },
+		/** Each kind of notification that can reach them, and whether its email is on (TS-049). */
+		notifications: NOTIFICATION_KINDS.filter(
+			(kind) => decides || KIND_WORDS[kind].audience === "everyone",
+		).map((kind) => ({ kind, email: choices.get(kind) ?? true })),
 	};
 }
 
@@ -117,6 +132,12 @@ const form = z.union([
 		z.object({
 			intent: z.literal("mail"),
 			kind: z.enum(["announcement", "newsletter"]),
+			on: z.enum(["on", "off"]).transform((on) => on === "on"),
+		}),
+		// One kind of notification's email turned on or off, for the person alone (TS-049).
+		z.object({
+			intent: z.literal("notification"),
+			kind: NotificationKind,
 			on: z.enum(["on", "off"]).transform((on) => on === "on"),
 		}),
 	]),
@@ -167,6 +188,18 @@ export async function action({ request, url, context }: Route.ActionArgs) {
 			await platformData.setMailChoice(env.DB, user.id, input.kind, input.on);
 			const { said } = MAIL_CHOICES[input.kind];
 			return done(input.on ? `You will get ${said}.` : `You will no longer get ${said}.`);
+		}
+
+		case "notification": {
+			// The person's own choice, the same in every organisation: no other person's is reachable from here.
+			const { user } = context.get(membershipContext);
+			await setNotificationChoice(env.DB, user.id, input.kind, input.on);
+			const { label } = KIND_WORDS[input.kind];
+			return done(
+				input.on
+					? `You will get an email for “${label}”.`
+					: `You will no longer get an email for “${label}”. It still shows in the bell.`,
+			);
 		}
 
 		case "leave": {
@@ -308,17 +341,43 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 			</Section>
 
 			<Section
+				id={NOTIFICATIONS_ANCHOR}
+				heading="Notifications"
+				lead="Every notification shows in the bell at the top of the page. These choose which also come by email, the same in every organisation you belong to."
+				className="max-w-200"
+			>
+				<Ledger heading="Email me about">
+					<LedgerRows>
+						{loaderData.notifications.map(({ kind, email }) => (
+							<ChoiceRow
+								key={kind}
+								intent="notification"
+								kind={kind}
+								title={KIND_WORDS[kind].label}
+								detail={KIND_WORDS[kind].description}
+								isOn={email}
+								onDone={setSaid}
+							/>
+						))}
+					</LedgerRows>
+				</Ledger>
+			</Section>
+
+			<Section
 				id="mail"
 				heading="Mail from Timesifier"
-				lead="Sign-in codes and mail about your work always come. These two are up to you, and each message has a link that stops it."
+				lead="Sign-in codes always come. These two are up to you, and each message has a link that stops it."
 				className="max-w-200"
 			>
 				<Ledger heading="What we may send you">
 					<LedgerRows>
 						{(Object.keys(MAIL_CHOICES) as (keyof typeof MAIL_CHOICES)[]).map((kind) => (
-							<MailRow
+							<ChoiceRow
 								key={kind}
+								intent="mail"
 								kind={kind}
+								title={MAIL_CHOICES[kind].title}
+								detail={MAIL_CHOICES[kind].detail}
 								isOn={loaderData.mail[MAIL_CHOICES[kind].field]}
 								onDone={setSaid}
 							/>
@@ -462,18 +521,27 @@ export default function Account({ loaderData }: Route.ComponentProps) {
 	);
 }
 
-/** One kind of mail from Timesifier: a switch that takes effect at once. */
-function MailRow({
+/**
+ * One choice of what reaches the person by email, a kind of mail from
+ * Timesifier (TS-099) or of notification (TS-049): a switch that takes effect
+ * at once, posting `intent` and `kind` with "on" or "off".
+ */
+function ChoiceRow({
+	intent,
 	kind,
+	title,
+	detail,
 	isOn,
 	onDone,
 }: {
-	kind: keyof typeof MAIL_CHOICES;
+	intent: "mail" | "notification";
+	kind: string;
+	title: string;
+	detail: string;
 	isOn: boolean;
 	onDone: (said: string) => void;
 }) {
 	const fetcher = useFetcher<Outcome>();
-	const { title, detail } = MAIL_CHOICES[kind];
 	// While the change is on its way, the switch shows what was asked for.
 	const on = fetcher.formData ? fetcher.formData.get("on") === "on" : isOn;
 	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
@@ -488,10 +556,7 @@ function MailRow({
 				<Switch
 					isSelected={on}
 					onChange={(selected) =>
-						fetcher.submit(
-							{ intent: "mail", kind, on: selected ? "on" : "off" },
-							{ method: "post" },
-						)
+						fetcher.submit({ intent, kind, on: selected ? "on" : "off" }, { method: "post" })
 					}
 				>
 					{title}

@@ -144,8 +144,8 @@ export function ProfileMenu({
 	);
 }
 
-/** Calls `run` when it leaves the page: put inside the menu, when the menu has gone. */
-function WhenGone({ run }: { run: () => void }) {
+/** Calls `run` when it leaves the page: put inside a menu or popover, when it has gone (the bell too). */
+export function WhenGone({ run }: { run: () => void }) {
 	const latest = useRef(run);
 	useEffect(() => {
 		latest.current = run;

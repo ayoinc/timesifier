@@ -5,8 +5,9 @@ import { invitationEmail } from "~/auth/invitation-email";
 import { signInCodeEmail } from "~/auth/sign-in-code-email";
 import { MADE_WITH } from "~/brand/made-with";
 import { builtInPlatformBrand } from "~/brand/platform-brand.server";
-import { budgetAlertEmail } from "~/budgets/budget.server";
 import { documentMessage } from "~/invoices/mail.server";
+import { notificationEmail } from "~/notifications/email";
+import { NOTIFICATION_KINDS } from "~/notifications/kinds";
 import { EMAIL_COLOURS } from "~/styles/email-colours";
 
 // The look of every message the application sends (docs/design-direction.md,
@@ -20,6 +21,8 @@ const LINK = "https://timesifier.example/invitations/9f2c61d0b7";
 const ESTIMATE_LINK = "https://timesifier.example/estimate/0192/abc";
 const PLATFORM = builtInPlatformBrand();
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+/** The words of the link that stops a kind of notification's email, beside the reason (TS-049). */
+const UNSUBSCRIBE = "Turn these emails off";
 
 /** An organisation with a logo and a colour of its own. */
 const HARBOUR: OrganisationLook = {
@@ -52,19 +55,27 @@ const PLATFORM_MESSAGES: Record<string, Case> = {
 		),
 		organisation: null,
 	},
-	"a budget alert": {
-		message: budgetAlertEmail(
+	// A notification's email of every kind (TS-049), the budget alert among them.
+	...Object.fromEntries(
+		NOTIFICATION_KINDS.map((kind) => [
+			`a notification: ${kind}`,
 			{
-				projectName: "Rebrand",
-				organisationName: "Harbour & Sons",
-				percent: 80,
-				threshold: 75,
-				link: "https://timesifier.example/app/harbour/projects/1",
+				message: notificationEmail(
+					{
+						kind,
+						title: "Ada submitted their timesheet for 16–22 November 2026.",
+						body: "The reason given: Tuesday & Wednesday are missing.",
+						path: "/approvals",
+						organisationName: "Harbour & Sons",
+						slug: "harbour",
+						origin: "https://timesifier.example",
+					},
+					PLATFORM,
+				),
+				organisation: null,
 			},
-			PLATFORM,
-		),
-		organisation: null,
-	},
+		]),
+	),
 };
 const CLIENT_MESSAGES: Record<string, Case> = {
 	"an invoice": {
@@ -147,7 +158,9 @@ describe.each(Object.entries(MESSAGES))("%s, in the frame", (_, { message, organ
 		expect(message.html.match(/<h1\b/g)).toHaveLength(1);
 		expect(message.html).toContain(`border-top:1px solid ${EMAIL_COLOURS.rule};`);
 		const words = shown(message.html);
-		expect(words.at(-2)).toMatch(/^You (?:got this email|are getting this|are a billing contact) /);
+		// The way to stop mail of a kind, where there is one, follows the reason in its line.
+		const reason = words.at(-2) === UNSUBSCRIBE ? words.at(-3) : words.at(-2);
+		expect(reason).toMatch(/^You (?:got this email|are getting this|are a billing contact) /);
 		expect(words.at(-1)).toBe(
 			organisation ? MADE_WITH : `${PLATFORM.emailFooter} ${PLATFORM.tagline}`,
 		);

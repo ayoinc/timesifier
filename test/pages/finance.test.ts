@@ -648,6 +648,20 @@ const ROLE_TABLE: Record<string, Row> = {
 	// What Track time and the day title's month read (TS-093): each person's own, whatever their role.
 	"routes/app/timesheet.day": { page: every(200) },
 	"routes/app/timesheet.month": { page: every(200) },
+	// The bell's list (TS-049): each person's own, whatever their role; opening it marks theirs read.
+	"routes/app/notifications": {
+		page: every(200),
+		form: {
+			fields: () => ({ intent: "read" }),
+			made: async (w) =>
+				(await count(
+					"select count(*) from notifications where organisation_id = ? and user_id = ? and read_at is null",
+					w.acme.id,
+					w.who.user.id,
+				)) === 0,
+			post: every("done"),
+		},
+	},
 	"routes/app/integrations": {
 		page: by(200, 200, 404, 404, 404),
 		form: {

@@ -7,6 +7,7 @@ import { among, type OrganisationScope, organisationScope, users, waitingFor } f
 import { halvesCovered } from "~/leave/days";
 import { daysOverOf } from "~/leave/rules.server";
 import { lockDateOf, lockReachFor } from "~/locks/locks.server";
+import { notificationStatements, weekDecided } from "~/notifications/words";
 import {
 	type Access,
 	isAdministrator,
@@ -300,6 +301,8 @@ function statementsOf(
 			{ type: "period", id: period.id, ownerId: period.userId },
 			summary,
 		),
+		// Its person is told, with the reason (TS-049).
+		...notificationStatements(scope, [weekDecided(period, decision.action, comment)]),
 	] as const;
 }
 

@@ -28,6 +28,7 @@ import { IcoRegistration, R2_HOLDS, TIME_TRAVEL_DAYS } from "~/landing/trust";
 import { WhoSeesWhat } from "~/landing/WhoSees";
 
 import { setting } from "~/lib/deployment";
+import { NOTIFICATION_RETENTION_DAYS } from "~/notifications/kinds";
 import { UNVERIFY_AFTER_DAYS, WARN_AFTER_DAYS } from "~/organisations/domains.server";
 import { SIGN_IN_DAYS } from "~/platform/limits";
 
@@ -67,6 +68,7 @@ export function loader({ request }: Route.LoaderArgs) {
 		providers: configuredProviders(env),
 		facts: {
 			activityDays: ACTIVITY_RETENTION_DAYS,
+			notificationDays: NOTIFICATION_RETENTION_DAYS,
 			webhookSwitchOff: SWITCH_OFF_AFTER,
 			documentEmails: DOCUMENT_EMAILS.max,
 			feedLeaveDays: LEAVE_DAYS_BACK,
@@ -111,9 +113,10 @@ export default function Privacy({
 			<>
 				Your name, your email address, whether a sign-in code, Google or Microsoft has proved the
 				address is yours, your time zone once it is set, whether you take Timesifier's product
-				announcements and its newsletter, and when your account was closed, if it was. If you sign
-				in with Google or Microsoft: which, and your account's identifier there. No token from
-				either is kept, so Timesifier cannot act for you at Google or Microsoft.
+				announcements and its newsletter, which kinds of notification you have turned the email of
+				off, and when your account was closed, if it was. If you sign in with Google or Microsoft:
+				which, and your account's identifier there. No token from either is kept, so Timesifier
+				cannot act for you at Google or Microsoft.
 			</>
 		),
 		"Your sign-ins": (
@@ -299,6 +302,16 @@ export default function Privacy({
 				and when, so that a person removed cannot join again by the domain until they are invited.
 			</>
 		),
+		Notifications: (
+			<>
+				Each notification shown in a person's bell: whom it is for, its kind, its words, the page it
+				opens, when it was made and read, and whether its email waits, was sent or was skipped.
+				Where a person gave a reason, such as a manager returning a week or deciding a request, the
+				notification holds it, as the record it is about does. A notification only tells a person
+				what they may already see in the organisation. And how far the reminders have got: the last
+				organisation and running timer they checked, by their numbers alone.
+			</>
+		),
 	};
 
 	return (
@@ -415,8 +428,13 @@ export default function Privacy({
 								when the organisation has reminders on;
 							</li>
 							<li>
-								a budget alert, to the organisation's owners and admins and, for a budget in hours,
-								to the managers of the teams of the people who tracked time to the project;
+								a notification, to the person it is for, unless they turned that kind's email off on
+								My account: a timesheet or a request waiting for their decision, their own timesheet
+								or request decided, their week submitted or their timer stopped by Timesifier, a
+								reminder of a running timer, of the timesheet deadline or of timesheets still
+								waiting, and a budget alert, to the organisation's owners and admins and, for a
+								budget in hours, to the managers of the teams of the people who tracked time to the
+								project; each with a link that turns its kind off;
 							</li>
 							<li>a notice that a webhook was switched off, to the person who added it;</li>
 							<li>
@@ -585,6 +603,10 @@ export default function Privacy({
 					<Row term="Your sign-ins">
 						Each is deleted {SIGN_IN_DAYS} days after it was made, by a job that runs every day.
 					</Row>
+					<Row term="A notification">
+						Each is deleted {facts.notificationDays} days after it was made, by a job that runs
+						every day. Its email is sent within a day of it, or not at all.
+					</Row>
 					<Row term="An invitation">
 						It can be accepted for {INVITATION_DAYS} days. Its record stays with the organisation.
 					</Row>
@@ -598,7 +620,7 @@ export default function Privacy({
 					<Row term="Your organisation's work">
 						<p>
 							Until it is deleted in Timesifier, or the organisation is. Nothing in it is deleted
-							for its age, except the activity log and the exports of everything.
+							for its age, except the activity log, notifications and the exports of everything.
 						</p>
 						<ul className="mt-2 list-disc ps-6">
 							<li>

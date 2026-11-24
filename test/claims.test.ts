@@ -68,6 +68,7 @@ import {
 } from "~/landing/trust";
 import { DEFAULT_KINDS, KIND_KEYS } from "~/leave/kinds";
 import { LOCK_LABELS } from "~/locks/locks";
+import { NOTIFICATION_RETENTION_DAYS } from "~/notifications/kinds";
 import {
 	type Access,
 	mayChangeExpensesOf,
@@ -412,7 +413,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 		"../app/auth/organisations.server.ts": [
 			"an invitation, to the address an owner or admin invites",
 		],
-		"../app/budgets/budget.server.ts": [
+		"../app/notifications/mail.server.ts": [
+			"a notification, to the person it is for, unless they turned that kind's email off on My account",
+			"a timesheet or a request waiting for their decision, their own timesheet or request decided",
 			"a budget alert, to the organisation's owners and admins and, for a budget in hours, to the managers",
 		],
 		"../app/exports/job.server.ts": [
@@ -1043,6 +1046,11 @@ it("the security page says how long each thing is kept from the constant that ke
 	);
 	const retention = await part(SECURITY_PATH, "retention");
 	expect(retention).toContain(`Sign-ins Each is deleted ${SIGN_IN_DAYS} days after it was made.`);
+	// Notifications (TS-049): the daily job deletes by NOTIFICATION_RETENTION_DAYS.
+	expect(source("../app/notifications/bell.server.ts")).toContain("NOTIFICATION_RETENTION_DAYS *");
+	expect(retention).toContain(
+		`Notifications Each is deleted ${NOTIFICATION_RETENTION_DAYS} days after it was made, read or not.`,
+	);
 	// Logs and traces: kept by Cloudflare for WORKERS_LOGS_DAYS, and both are on.
 	expect(wrangler).toMatch(/"logs": \{ "enabled": true/);
 	expect(wrangler).toMatch(/"traces": \{ "enabled": true/);

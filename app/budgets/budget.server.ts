@@ -1,12 +1,9 @@
-import { env } from "cloudflare:workers";
 import { and, eq, gte, inArray, lte, or, type SQL, type SQLWrapper, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
-import { sendEmail } from "~/auth/email.server";
-import { compose, type PlatformLook } from "~/auth/email-frame";
 import { billableMinuteMinor } from "~/billing/billable";
-import { getPlatformBrand } from "~/brand/platform-brand.server";
-import { among, latestAmong, type OrganisationScope, users } from "~/db";
+import { among, latestAmong, type OrganisationScope } from "~/db";
 import { roundHalfUp } from "~/money/money";
+import { notify } from "~/notifications/notify.server";
+import { budgetCrossed } from "~/notifications/words";
 import type { OrganisationMoney, Pricing } from "~/projects/money.server";
 import { type PricedProject, priceTime } from "~/rates/price";
 import { dayOf } from "~/time/calendar";
@@ -358,28 +355,22 @@ function isAlertClash(error: unknown): boolean {
 	return false;
 }
 
-/** Where the alert's link goes, and the organisation's name for its words. */
-export interface AlertPlace {
-	organisationName: string;
-	/** The project's page, on the host the change was made on. */
-	link: string;
-}
-
 /**
  * Tells the people who look after `project` once its budget for the current
  * period reaches the project's alert percentage (B7). The `budget_alerts`
  * row is the record that it was told: its unique index lets one write in a
  * period through, so two changes crossing at once, or crossing again after
- * dropping back, send nothing more. Owners and admins are told of every
+ * dropping back, tell nothing more. Owners and admins are told of every
  * budget; for an hours budget, so are the managers of the teams of the
  * people who tracked time to the project. A fees budget is money, which a
- * manager never sees. Each is sent one email. Returns whether an alert went out.
+ * manager never sees. Each is told by a notification, and by its email
+ * unless they turned budget alerts' emails off (TS-049). Returns whether an
+ * alert went out.
  */
 export async function alertIfCrossed(
 	scope: OrganisationScope,
 	project: BudgetedProject,
 	figures: BudgetFigures | null,
-	place: AlertPlace,
 	now: number,
 ): Promise<boolean> {
 	const threshold = project.budgetAlertPercent;
@@ -403,22 +394,23 @@ export async function alertIfCrossed(
 		if (isAlertClash(error)) return false;
 		throw error;
 	}
-	const recipients = await alertRecipients(scope, project.id, figures.hours);
-	const message = budgetAlertEmail(
-		{
-			projectName: project.name,
-			organisationName: place.organisationName,
-			percent: figures.total.percent,
+	const used =
+		figures.total.percent === null
+			? "has spent past its budget of nothing"
+			: `has used ${figures.total.percent}% of its budget`;
+	await notify(
+		scope,
+		budgetCrossed(
+			await alertRecipients(scope, project.id, figures.hours),
+			project,
+			used,
 			threshold,
-			link: place.link,
-		},
-		await getPlatformBrand(env),
+		),
 	);
-	for (const to of recipients) await sendEmail({ to, ...message });
 	return true;
 }
 
-/** The addresses an alert goes to: owners and admins, and for hours the managers of those who tracked time to it. */
+/** The people an alert goes to: owners and admins, and for hours the managers of those who tracked time to it. */
 async function alertRecipients(
 	scope: OrganisationScope,
 	projectId: string,
@@ -444,41 +436,5 @@ async function alertRecipients(
 			}
 		}
 	}
-	if (ids.size === 0) return [];
-	const rows = await drizzle(env.DB)
-		.select({ email: users.email })
-		.from(users)
-		.where(among(users.id, ids));
-	return rows.map((row) => row.email).sort();
-}
-
-/** The message an alert sends. Its subject and heading hold nothing anybody typed. */
-export function budgetAlertEmail(
-	alert: {
-		projectName: string;
-		organisationName: string;
-		percent: number | null;
-		threshold: number;
-		link: string;
-	},
-	platform: PlatformLook,
-) {
-	const used =
-		alert.percent === null
-			? "has spent past its budget of nothing"
-			: `has used ${alert.percent}% of its budget`;
-	return compose(
-		{
-			subject: "A project has reached its budget alert on Timesifier",
-			heading: "Budget alert",
-			parts: [
-				`The project “${alert.projectName}” in “${alert.organisationName}” ${used}, past the alert at ${alert.threshold}%.`,
-				{ action: "Open the project", link: alert.link },
-				"You are told once for each budget period. Tracking time to the project is not stopped.",
-			],
-			reason:
-				"You got this email because you are an owner or admin of this organisation on Timesifier, or manage a team with someone in it who tracked time to this project.",
-		},
-		platform,
-	);
+	return [...ids].sort();
 }

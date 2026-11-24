@@ -3,7 +3,6 @@ import { and, eq, gte, isNotNull, ne } from "drizzle-orm";
 import { organisationScope } from "~/db";
 import type { Membership } from "~/organisations/membership.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
-import { projectPath } from "~/projects/projects";
 
 import { alertIfCrossed, projectBudgets } from "./budget.server";
 
@@ -12,13 +11,9 @@ import { alertIfCrossed, projectBudgets } from "./budget.server";
  * touched whose budget has crossed its alert (TS-069). The projects are those
  * of the person's entries written since `since`: the ones a change could take
  * over. An entry that was deleted or moved away takes spending down, which
- * sends nothing. `origin` is the host the change was made on, for the link.
+ * tells nobody.
  */
-export async function alertBudgetsAfter(
-	membership: Membership,
-	since: number,
-	origin: string,
-): Promise<void> {
+export async function alertBudgetsAfter(membership: Membership, since: number): Promise<void> {
 	const { organisation, user } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
 	const written = await scope.timeEntries.select((e) =>
@@ -41,15 +36,6 @@ export async function alertBudgetsAfter(
 		pricing: await pricingOf(scope, money.currency),
 	});
 	for (const project of projects) {
-		await alertIfCrossed(
-			scope,
-			project,
-			budgets.get(project.id) ?? null,
-			{
-				organisationName: organisation.name,
-				link: `${origin}${projectPath(organisation.slug, project.id)}`,
-			},
-			now,
-		);
+		await alertIfCrossed(scope, project, budgets.get(project.id) ?? null, now);
 	}
 }
