@@ -96,7 +96,7 @@ Builder: an AI session on branch `ts-126-export-everything`, pull request #105. 
 
 ### TS-115b · Work packages
 
-Builder: an AI session on branch `ts-115b-work-packages`. Builds the owner's decision 2 of `research/projects-model.md`. Decision 73 is this card's. Migration `0038_work_packages` only adds: `work_packages`, `time_entries.work_package_id` and three triggers. Delivery managers are TS-115c's.
+Builder: an AI session on branch `ts-115b-work-packages`, pull request #110. Builds the owner's decision 2 of `research/projects-model.md`. Decision 73 is this card's. Migration `0038_work_packages` only adds: `work_packages`, `time_entries.work_package_id` and three triggers. Delivery managers are TS-115c's. It waits only on the owner's screenshots.
 
 - [x] A project's work packages: code unique in the project whatever its case, name, days, open or closed, budget, billable, archived. Test: `test/projects/work-packages.test.ts` ("the database").
 - [x] The database refuses an entry on another project's or organisation's work package, on insert and update, and a work package moving project. Test: `test/projects/work-packages.test.ts` ("the database").
@@ -108,7 +108,7 @@ Builder: an AI session on branch `ts-115b-work-packages`. Builds the owner's dec
 - [x] Owners, admins and the client's account managers manage them; Finance, managers, members and contractors 403, a stranger 404. Test: `test/projects/work-packages.test.ts`.
 - [x] The privacy notice and `docs/security.md` say what is stored and who manages it. Test: `test/claims.test.ts`.
 - [x] Browser specs with keyboard and axe at 390px and 1280px, light and dark, and screenshots in `cmux-assets/browser/timesifier/TS-115b/`. Test: `e2e/work-packages.spec.ts` (the picker, the Week grid, the Day view and the calendar, the Work packages tab as an owner, an admin, the client's account manager and a member, and an old entry edited).
-- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline.
 
 ### TS-115a · Codes, How you work, and who creates projects
 
