@@ -1,10 +1,10 @@
 import * as z from "zod";
 
-import { BASIS_POINTS, CurrencyCode, formatMoney } from "~/money/money";
+import { BASIS_POINTS, formatMoney } from "~/money/money";
 import { versionOn } from "~/schedules/schedules";
-import { addDays, Day } from "~/time/calendar";
+import { addDays, type Day } from "~/time/calendar";
 import { formatDayWithYear, LOCALE } from "~/time/format";
-
+import type { TermsFields } from "./forms";
 import { type ContractSpan, END_OF_TIME, overlaps, spanOn } from "./spans";
 
 /**
@@ -228,42 +228,6 @@ export function contractOwnsHours(contracts: readonly Contract[], day: Day): boo
 	const contract = spanOn(contracts, day);
 	return contract !== undefined && versionOn(contract, day).scheduleId !== null;
 }
-
-// What a form sends.
-
-const Optional = <T extends z.ZodType>(schema: T) =>
-	z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
-
-/** A multiplier as a form sends it: its basis points as text. */
-const MultiplierField = z.preprocess(
-	(value) => (value === "" || value === undefined ? undefined : Number(value)),
-	z
-		.number()
-		.refine((n): n is Multiplier => (MULTIPLIERS as readonly number[]).includes(n))
-		.optional(),
-);
-
-/** The terms as the contract sheets send them; amounts are read with the currency afterwards. */
-export const TermsFields = z.object({
-	jobTitle: Optional(z.string().trim().min(1).max(JOB_TITLE_MAX_LENGTH)),
-	scheduleId: Optional(z.string().min(1).max(64)),
-	payBasis: PayBasis,
-	pay: z.string().trim().min(1).max(30),
-	currency: CurrencyCode,
-	overtimePay: OvertimePay,
-	overtimeMultiplier: MultiplierField,
-	restDayMultiplier: MultiplierField,
-	leaveDays: Optional(z.coerce.number().int().min(0).max(366)),
-});
-export type TermsFields = z.infer<typeof TermsFields>;
-
-/** The contract's own fields, as the sheet that gives or changes one sends them. */
-export const ContractFields = TermsFields.extend({
-	kind: OfferedKind,
-	endsOn: Optional(Day),
-	worksNumber: Optional(z.string().trim().min(1).max(WORKS_NUMBER_MAX_LENGTH)),
-});
-export type ContractFields = z.infer<typeof ContractFields>;
 
 /**
  * The multipliers a version keeps: none while overtime is not paid or

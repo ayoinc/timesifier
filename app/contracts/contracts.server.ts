@@ -9,7 +9,6 @@ import { addDays, type Day, dayOf } from "~/time/calendar";
 
 import {
 	type Contract,
-	type ContractFields,
 	type ContractTerms,
 	contractAssignments,
 	contractOwnsHours,
@@ -20,8 +19,8 @@ import {
 	multipliersOf,
 	overlapOf,
 	payWords,
-	type TermsFields,
 } from "./contracts";
+import type { ContractFields, TermsFields } from "./forms";
 import { contractsOf } from "./read.server";
 
 /**

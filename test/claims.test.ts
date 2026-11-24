@@ -21,6 +21,7 @@ import {
 } from "~/browser-errors/report";
 import { BrowserErrorReportSchema } from "~/browser-errors/report.server";
 import { mayCreateProject } from "~/clients/managers.server";
+import { CONTRACT_KEEP_YEARS, TAX_YEAR_END } from "~/contracts/contracts";
 import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
@@ -71,14 +72,17 @@ import { LOCK_LABELS } from "~/locks/locks";
 import { NOTIFICATION_RETENTION_DAYS } from "~/notifications/kinds";
 import {
 	type Access,
+	mayChangeContractOf,
 	mayChangeExpensesOf,
 	mayChangeTimeOf,
 	mayDecideLeaveOf,
 	mayDecidePeriodOf,
 	mayInvoice,
 	mayManageIntegrations,
+	maySeeContractOf,
 	maySeeExpensesOf,
 	maySeeLeaveKindOf,
+	maySeePayOf,
 	maySeeRates,
 	maySeeTimeOf,
 } from "~/organisations/access";
@@ -545,6 +549,26 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 	expect(maySeeTimeOf(manager, "stranger")).toBe(false);
 	expect(maySeeRates(manager.role)).toBe(false);
 
+	// Contracts (TS-098a): owners, admins and Finance read everyone's with the pay; a
+	// manager their teams' without it; anyone their own with it. Owners and admins
+	// change them, never their own while another could; Finance and managers never.
+	for (const role of ["owner", "admin", "finance"] as const) {
+		expect(maySeeContractOf(as(role), colleague) && maySeePayOf(as(role), colleague), role).toBe(
+			true,
+		);
+	}
+	for (const role of ["owner", "admin"] as const) {
+		expect(mayChangeContractOf(as(role), colleague, 1), role).toBe(true);
+		expect(mayChangeContractOf(as(role), me, 1), role).toBe(false);
+	}
+	expect(mayChangeContractOf(as("owner"), me, 0)).toBe(true);
+	expect(mayChangeContractOf(as("finance"), colleague, 1)).toBe(false);
+	expect(maySeeContractOf(manager, colleague)).toBe(true);
+	expect(maySeePayOf(manager, colleague) || mayChangeContractOf(manager, colleague, 1)).toBe(false);
+	expect(maySeeContractOf(manager, "stranger")).toBe(false);
+	expect(maySeeContractOf(as("member"), me) && maySeePayOf(as("member"), me)).toBe(true);
+	expect(maySeeContractOf(as("member"), colleague)).toBe(false);
+
 	// A member sees their own and not a colleague's, nor the kind of their leave.
 	const member = as("member");
 	expect(maySeeTimeOf(member, me) && !maySeeTimeOf(member, colleague)).toBe(true);
@@ -568,7 +592,15 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 		expect(text, path).toContain(
 			"That a colleague is on leave, but not which kind, unless Finance manages their team",
 		);
-		expect(text, path).toContain("never their own. A manager sees no rate, invoice or estimate.");
+		expect(text, path).toContain(
+			"never their own. A manager sees no rate, pay, invoice or estimate.",
+		);
+		expect(text, path).toContain(
+			"everyone's contracts with their pay; the whole activity log; the integrations. They invite and remove people, and give, change and end contracts, never their own while another owner or admin could.",
+		);
+		expect(text, path).toContain("Finance changes no contract");
+		expect(text, path).toContain("contracts without their pay");
+		expect(text, path).toContain("leave and contract with its pay");
 		expect(text, path).toContain(`grants support access, for ${SUPPORT_HOURS.join(" or ")} hours`);
 		expect(text, path).toContain(
 			"names as a client's account manager creates that client's projects",
@@ -999,6 +1031,7 @@ const sources = import.meta.glob<string>(
 		"../e2e/*-keyboard.spec.ts",
 		"../e2e/landing.spec.ts",
 		"../app/db/platform.ts",
+		"../app/contracts/contracts.ts",
 		"../app/**/*.server.ts",
 		"../workers/scheduled.ts",
 		"../workers/security-headers.ts",
@@ -1072,6 +1105,22 @@ it("the security page says how long each thing is kept from the constant that ke
 	);
 	expect(retention).toContain(
 		`Exports of everything Each is deleted ${EXPORT_KEEP_DAYS} days after it is made, by a job that runs every hour.`,
+	);
+	// Contracts (TS-098a): the daily job deletes those ended CONTRACT_KEEP_YEARS
+	// years before the end of a tax year ending on TAX_YEAR_END (5 April).
+	expect(TAX_YEAR_END).toBe("04-05");
+	expect(source("../app/contracts/contracts.ts")).toMatch(
+		/return `\$\{lastOver - CONTRACT_KEEP_YEARS\}-\$\{TAX_YEAR_END\}`;/,
+	);
+	expect(source("../workers/scheduled.ts")).toContain(
+		"contracts: () => deleteExpiredContracts(env.DB, new Date(now)),",
+	);
+	expect(retention).toContain(
+		`Contracts Each that has ended is deleted, with its changes, ${CONTRACT_KEEP_YEARS} years after the end of the tax year (5 April) in which it ended, by a job that runs every day.`,
+	);
+	expect(CONTRACT_KEEP_YEARS).toBe(3);
+	expect(words(await page(PRIVACY_PATH))).toContain(
+		"A contract that has ended is kept, with its changes, until three years after the end of the tax year (5 April) in which it ended, as HMRC asks of payroll records, and then deleted by a job that runs every day.",
 	);
 	const copies = `Timesifier keeps no other copy of the database, a receipt or a logo, besides the export of everything an owner asks for, which is deleted ${EXPORT_KEEP_DAYS} days after it is made.`;
 	expect(words(await page(SECURITY_PATH))).toContain(copies);

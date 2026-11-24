@@ -11,7 +11,6 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import {
 	CHOSEN_END_REASONS,
-	ContractFields,
 	END_REASON_LABELS,
 	EndReason,
 	JOB_TITLE_MAX_LENGTH,
@@ -33,6 +32,7 @@ import {
 	giveContract,
 	otherAdministrators,
 } from "~/contracts/contracts.server";
+import { ContractFields } from "~/contracts/forms";
 import { contractsOf } from "~/contracts/read.server";
 import { type ContractDefaults, contractsView, defaultsOf } from "~/contracts/view";
 import { type OrganisationScope, organisationScope, users } from "~/db";
@@ -264,8 +264,19 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 		sheets,
 	} = loaderData;
 	const [task, setTask] = useState<Task | null>(null);
+	// What the sheets were last opened with. The answer to a sheet's own form
+	// changes the page's data (a contract given has no Give, an ended one no
+	// Change or End), and a sheet drawn from that data would be taken away, or
+	// made anew, before it could hand the answer over and close. Each opening
+	// draws them afresh, so their fields start from the page as it is then.
+	const [opened, setOpened] = useState<{ count: number; sheets: Sheets } | null>(null);
 	const [said, setSaid] = useState<string | null>(null);
 	const close = () => setTask(null);
+	const begin = (next: Task) => {
+		if (!sheets) return;
+		setOpened((last) => ({ count: (last?.count ?? 0) + 1, sheets }));
+		setTask(next);
+	};
 	const whose = isYou ? "your" : "their";
 
 	return (
@@ -307,16 +318,16 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 						<div className="flex flex-wrap gap-2">
 							{sheets.change && (
 								<>
-									<Button variant="tonal" onPress={() => setTask("change")}>
+									<Button variant="tonal" onPress={() => begin("change")}>
 										Change contract
 									</Button>
-									<Button variant="text" onPress={() => setTask("end")}>
+									<Button variant="text" onPress={() => begin("end")}>
 										End contract
 									</Button>
 								</>
 							)}
 							{sheets.give && (
-								<Button variant="text" onPress={() => setTask("give")}>
+								<Button variant="text" onPress={() => begin("give")}>
 									Give a new contract
 								</Button>
 							)}
@@ -337,13 +348,13 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 					{isYou ? "You have" : "They have"} no contract here
 					{earlier.length > 0 ? " today" : ""}.{" "}
 					{sheets?.give
-						? "Give one to set their hours, pay and leave from a day."
-						: "Their hours come from their team, role or the organisation's default."}
+						? `Give one to set ${whose} hours, pay and leave from a day.`
+						: `${isYou ? "Your" : "Their"} hours come from ${whose} team, role or the organisation's default.`}
 				</EmptySheet>
 			)}
 			{!current && sheets?.give && (
 				<div className="mt-4 max-w-200">
-					<Button variant="filled" onPress={() => setTask("give")}>
+					<Button variant="filled" onPress={() => begin("give")}>
 						Give a contract
 					</Button>
 				</div>
@@ -363,33 +374,34 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 				</div>
 			)}
 
-			{sheets && (
+			{opened && (
 				<>
 					<TermsSheet
-						key={`give:${sheets.give?.from ?? ""}`}
+						key={`give:${opened.count}`}
 						task="give"
 						isOpen={task === "give"}
 						onClose={close}
 						onDone={setSaid}
 						name={person.name}
-						sheets={sheets}
-						from={sheets.give?.from ?? today}
+						sheets={opened.sheets}
+						from={opened.sheets.give?.from ?? today}
 						defaults={null}
 					/>
-					{sheets.change && (
+					{opened.sheets.change && (
 						<>
 							<TermsSheet
-								key={`change:${sheets.change.firstDay}`}
+								key={`change:${opened.count}`}
 								task="change"
 								isOpen={task === "change"}
 								onClose={close}
 								onDone={setSaid}
 								name={person.name}
-								sheets={sheets}
-								from={sheets.change.firstDay}
-								defaults={sheets.change}
+								sheets={opened.sheets}
+								from={opened.sheets.change.firstDay}
+								defaults={opened.sheets.change}
 							/>
 							<FormSheet
+								key={`end:${opened.count}`}
 								title={`End ${person.name}'s contract`}
 								intent="end"
 								submitLabel="End contract"
@@ -397,13 +409,13 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 								onClose={close}
 								onDone={setSaid}
 							>
-								<input type="hidden" name="contractId" value={sheets.change.id} />
+								<input type="hidden" name="contractId" value={opened.sheets.change.id} />
 								<TextField
 									label="Last day"
 									name="lastDay"
 									type="date"
-									defaultValue={sheets.change.endsOn ?? today}
-									min={sheets.change.startsOn}
+									defaultValue={opened.sheets.change.endsOn ?? today}
+									min={opened.sheets.change.startsOn}
 									isRequired
 									description="The last day it covers. From the next, their hours come from their team, role or the default."
 								/>
@@ -411,7 +423,9 @@ export default function Contract({ loaderData }: Route.ComponentProps) {
 									label="Why it ends"
 									name="reason"
 									defaultValue={
-										sheets.change.kind === "fixed_term" ? "end_of_term" : CHOSEN_END_REASONS[0]
+										opened.sheets.change.kind === "fixed_term"
+											? "end_of_term"
+											: CHOSEN_END_REASONS[0]
 									}
 									isRequired
 									options={CHOSEN_END_REASONS.map((id) => ({ id, label: END_REASON_LABELS[id] }))}
