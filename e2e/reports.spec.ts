@@ -196,18 +196,18 @@ test("the export downloads the rows on screen as a UTF-8 CSV named for the range
 	expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
 	const lines = bytes.subarray(3).toString("utf8").split("\r\n");
 	expect(lines[0]).toBe(
-		"entry_id,person,project_code,project,client_code,client,description,started_at,ended_at,duration_seconds,overtime",
+		"entry_id,person,project_code,project,work_package_code,client_code,client,description,started_at,ended_at,duration_seconds,overtime",
 	);
 	expect(lines.at(-1)).toBe("");
 	const rows = lines.slice(1, -1);
 	// One row an entry: the one across midnight too.
 	expect(rows).toHaveLength(3);
-	// Neither the projects nor the client has a code: those columns are empty.
+	// Neither the projects nor the client has a code, and no project a work package: those columns are empty.
 	expect(rows.join("\n")).toContain(
-		',,Website,,Initech,"Release, overnight",2026-10-06T22:30:00Z,2026-10-07T00:30:00Z,7200,no',
+		',,Website,,,Initech,"Release, overnight",2026-10-06T22:30:00Z,2026-10-07T00:30:00Z,7200,no',
 	);
 	expect(rows.join("\n")).toContain(
-		",,Internal,,,'=SUM(A1:A9),2026-10-08T14:00:00Z,2026-10-08T14:45:00Z,2700,no",
+		",,Internal,,,,'=SUM(A1:A9),2026-10-08T14:00:00Z,2026-10-08T14:45:00Z,2700,no",
 	);
 	// The duration is the column before `overtime` (TS-095), the last one.
 	const seconds = rows.reduce((sum, row) => sum + Number(row.split(",").at(-2)), 0);

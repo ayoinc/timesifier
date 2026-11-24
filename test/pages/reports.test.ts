@@ -106,6 +106,7 @@ async function exported(who: Person, query: string) {
 		"person",
 		"project_code",
 		"project",
+		"work_package_code",
 		"client_code",
 		"client",
 		"description",
