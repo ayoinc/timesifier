@@ -134,6 +134,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/team",
 				"/app/acme/team/members",
 				"/app/acme/team/invitations",
+				// Importing people from a CSV (TS-108).
+				"/app/acme/team/invitations/import",
 				"/app/acme/approvals",
 				"/app/acme/reports",
 				"/app/acme/reports/export",
@@ -183,6 +185,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/integrations",
 			"routes/app/integrations.import",
 			"routes/app/invitations",
+			"routes/app/invitations.import",
 			"routes/app/invoices.$invoice",
 			"routes/app/invoices.new",
 			"routes/app/invoices.recurring",
@@ -338,6 +341,8 @@ describe("a member of one organisation asking for another organisation's address
 		// An export of everything a stranger would make of another organisation; none is made.
 		"routes/app/export-everything": { intent: "export" },
 		"routes/app/sign-in-settings": { intent: "add-domain", domain: "acme-works.com" },
+		// An import of people a stranger would revert in another organisation; none is.
+		"routes/app/invitations.import": { intent: "revert", importId: "i-theirs" },
 	};
 
 	it.each(withAction)(
