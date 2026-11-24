@@ -41,6 +41,7 @@ import { organisationScope, organisations } from "~/db";
 import { addUsualCategories } from "~/expenses/categories.server";
 import { termsOf } from "~/expenses/expenses.server";
 import { deleteOrganisationReceipts } from "~/expenses/receipts.server";
+import { deleteOrganisationExports } from "~/exports/job.server";
 import { DPA_VERSION } from "~/landing/trust";
 import { acceptDpa } from "~/organisations/dpa.server";
 import {
@@ -107,12 +108,14 @@ const companySignInRequired = () =>
 
 /**
  * Deletes the organisation's receipts in R2 before its row, which no foreign
- * key reaches. Should one delete fail, the organisation is not deleted and says
- * so, and asking again deletes what is left (docs/security.md, "Receipts").
+ * key reaches, and its exports of everything (TS-126) in the same bucket.
+ * Should one delete fail, the organisation is not deleted and says so, and
+ * asking again deletes what is left (docs/security.md, "Receipts").
  */
 async function deleteReceiptsFirst(organisationId: string): Promise<void> {
 	try {
 		await deleteOrganisationReceipts(organisationId);
+		await deleteOrganisationExports(organisationId);
 	} catch (error) {
 		console.error(
 			`organisation: receipts not deleted, ${error instanceof Error ? error.name : "unknown"}`,

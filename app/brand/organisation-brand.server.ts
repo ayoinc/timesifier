@@ -83,6 +83,11 @@ export function logoFile(organisationId: string) {
 	return env.BRAND.get(logoKey(organisationId));
 }
 
+/** The PNG drawn from the stored logo of `organisationId`, or null when none is stored. */
+export function logoRenditionFile(organisationId: string) {
+	return env.BRAND.get(renditionKey(organisationId));
+}
+
 /**
  * A stored logo as an answer: its own type and size, kept privately for a year,
  * since its address carries the upload's time. An SVG is drawn by `<img>`, where

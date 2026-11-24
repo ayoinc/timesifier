@@ -41,4 +41,5 @@ export const KIND_LABELS: Record<SubjectType, string> = {
 	public_holiday: "Public holidays",
 	work_request: "Requests for work",
 	user: "People's time zones",
+	organisation_export: "Exports of everything",
 };

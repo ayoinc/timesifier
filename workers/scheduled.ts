@@ -1,5 +1,6 @@
 import { deleteExpiredActivity } from "~/activity/activity.server";
 import { platformData } from "~/db";
+import { advanceExports, deleteExpiredExports } from "~/exports/job.server";
 import { dispatchWebhooks } from "~/integrations/webhooks.server";
 import { runBillingSchedule } from "~/invoices/schedule.server";
 import { runAutoLock, runLockReach } from "~/locks/locks.server";
@@ -11,10 +12,12 @@ import { sendWaitingMail } from "~/platform/mail.server";
  * Each run is one short sequence of named steps, chosen by its trigger.
  *
  * - Every minute: the webhooks' deliveries that are due are sent (TS-087), and
- *   the next mailings to account holders, within the day's cap (TS-099).
+ *   the next mailings to account holders, within the day's cap (TS-099); then
+ *   one step of the oldest export of everything being made (TS-126).
  * - Every hour: auto-lock (TS-065), then the lock date reaching the days that
  *   have ended since (D7: timers on them stopped, weeks auto-submitted); recurring invoices that are due are issued
- *   and overdue invoices are reminded (TS-074, TS-078).
+ *   and overdue invoices are reminded (TS-074, TS-078). Exports of everything
+ *   7 days old are deleted, file and row (TS-126).
  * - Every day at 03:17 UTC: rows past their retention are deleted: activity
  *   records after 730 days (TS-072), sign-ins after 90 (TS-099). TS-033 adds
  *   the other tables here. Every organisation's domains are looked up again
@@ -32,11 +35,13 @@ export async function scheduled(controller: ScheduledController, env: Env): Prom
 	if (controller.cron === EVERY_MINUTE) {
 		await dispatchWebhooks({ now });
 		await sendWaitingMail(new Date(now));
+		await advanceExports(new Date(now));
 	}
 	if (controller.cron === HOURLY) {
 		await runAutoLock(now);
 		await runLockReach(now);
 		await runBillingSchedule(now);
+		await deleteExpiredExports(new Date(now));
 	}
 	if (controller.cron === DAILY) {
 		await deleteExpiredActivity(env.DB, new Date(now));

@@ -15,6 +15,7 @@ import { organisationScope } from "~/db";
 import { keepCategory, listCategories } from "~/expenses/categories.server";
 import { ExpenseCategories } from "~/expenses/ExpenseCategories";
 import { termsOf } from "~/expenses/expenses.server";
+import { EVERYTHING_EXPORT_SEGMENT, EXPORT_KEEP_DAYS } from "~/exports/paths";
 import { DPA_PATH } from "~/landing/Site";
 import { LARGEST_ALLOWANCE_DAYS, LEAVE_NAME_MAX_LENGTH } from "~/leave/kinds";
 import { LeaveSettings } from "~/leave/LeaveSettings";
@@ -792,6 +793,14 @@ function PlanSection({
 									</Link>
 								}
 								detail="Rough signs of overwork and missed rest across your people, with no names."
+							/>
+							<LedgerRow
+								title={
+									<Link to={`${home}/${EVERYTHING_EXPORT_SEGMENT}`} className={TEXT_LINK}>
+										Export everything
+									</Link>
+								}
+								detail={`One ZIP of everything your organisation holds, kept for ${EXPORT_KEEP_DAYS} days.`}
 							/>
 						</LedgerRows>
 					</Ledger>
