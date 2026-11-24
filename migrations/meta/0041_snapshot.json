@@ -2,7 +2,7 @@
 	"version": "6",
 	"dialect": "sqlite",
 	"id": "6f6e1a7f-3509-4b36-bb37-18e1b134579b",
-	"prevId": "0022cb6d-76b1-4f39-a291-2bdd3e6325fd",
+	"prevId": "c61be8f8-f170-4093-a2c6-2815c49a20ce",
 	"tables": {
 		"accounts": {
 			"name": "accounts",
@@ -3578,15 +3578,6 @@
 					"onDelete": "cascade",
 					"onUpdate": "no action"
 				},
-				"leave_adjustments_created_by_users_id_fk": {
-					"name": "leave_adjustments_created_by_users_id_fk",
-					"tableFrom": "leave_adjustments",
-					"tableTo": "users",
-					"columnsFrom": ["created_by"],
-					"columnsTo": ["id"],
-					"onDelete": "set null",
-					"onUpdate": "no action"
-				},
 				"leave_adjustments_user_id_users_id_fk": {
 					"name": "leave_adjustments_user_id_users_id_fk",
 					"tableFrom": "leave_adjustments",
@@ -3594,6 +3585,15 @@
 					"columnsFrom": ["user_id"],
 					"columnsTo": ["id"],
 					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"leave_adjustments_created_by_users_id_fk": {
+					"name": "leave_adjustments_created_by_users_id_fk",
+					"tableFrom": "leave_adjustments",
+					"tableTo": "users",
+					"columnsFrom": ["created_by"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
 					"onUpdate": "no action"
 				},
 				"leave_adjustments_kind_fk": {
@@ -4803,6 +4803,14 @@
 					"notNull": true,
 					"autoincrement": false,
 					"default": false
+				},
+				"project_tracking": {
+					"name": "project_tracking",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'anyone'"
 				},
 				"work_code_required": {
 					"name": "work_code_required",
@@ -6038,6 +6046,172 @@
 			"compositePrimaryKeys": {},
 			"uniqueConstraints": {},
 			"checkConstraints": {}
+		},
+		"project_members": {
+			"name": "project_members",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"organisation_id": {
+					"name": "organisation_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"project_id": {
+					"name": "project_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"user_id": {
+					"name": "user_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"role": {
+					"name": "role",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'member'"
+				},
+				"starts_on": {
+					"name": "starts_on",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"ends_on": {
+					"name": "ends_on",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"source_kind": {
+					"name": "source_kind",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'manual'"
+				},
+				"source_id": {
+					"name": "source_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_by": {
+					"name": "created_by",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"project_members_organisation_id_id_unique": {
+					"name": "project_members_organisation_id_id_unique",
+					"columns": ["organisation_id", "id"],
+					"isUnique": true
+				},
+				"project_members_project_user_starts_on_index": {
+					"name": "project_members_project_user_starts_on_index",
+					"columns": ["organisation_id", "project_id", "user_id", "starts_on"],
+					"isUnique": false
+				},
+				"project_members_user_index": {
+					"name": "project_members_user_index",
+					"columns": ["organisation_id", "user_id"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {
+				"project_members_organisation_id_organisations_id_fk": {
+					"name": "project_members_organisation_id_organisations_id_fk",
+					"tableFrom": "project_members",
+					"tableTo": "organisations",
+					"columnsFrom": ["organisation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"project_members_user_id_users_id_fk": {
+					"name": "project_members_user_id_users_id_fk",
+					"tableFrom": "project_members",
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"project_members_created_by_users_id_fk": {
+					"name": "project_members_created_by_users_id_fk",
+					"tableFrom": "project_members",
+					"tableTo": "users",
+					"columnsFrom": ["created_by"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"project_members_project_fk": {
+					"name": "project_members_project_fk",
+					"tableFrom": "project_members",
+					"tableTo": "projects",
+					"columnsFrom": ["organisation_id", "project_id"],
+					"columnsTo": ["organisation_id", "id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {
+				"project_members_role_known": {
+					"name": "project_members_role_known",
+					"value": "\"project_members\".\"role\" IN ('member', 'delivery_manager')"
+				},
+				"project_members_starts_on_is_a_day": {
+					"name": "project_members_starts_on_is_a_day",
+					"value": "date(\"project_members\".\"starts_on\") IS \"project_members\".\"starts_on\""
+				},
+				"project_members_ends_on_is_a_day": {
+					"name": "project_members_ends_on_is_a_day",
+					"value": "\"project_members\".\"ends_on\" IS NULL OR (date(\"project_members\".\"ends_on\") IS \"project_members\".\"ends_on\" AND \"project_members\".\"ends_on\" >= \"project_members\".\"starts_on\")"
+				},
+				"project_members_source_kind_known": {
+					"name": "project_members_source_kind_known",
+					"value": "\"project_members\".\"source_kind\" IN ('manual', 'import', 'contract')"
+				}
+			}
 		},
 		"project_tags": {
 			"name": "project_tags",
@@ -7803,6 +7977,164 @@
 			"compositePrimaryKeys": {},
 			"uniqueConstraints": {},
 			"checkConstraints": {}
+		},
+		"setup_imports": {
+			"name": "setup_imports",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"organisation_id": {
+					"name": "organisation_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"status": {
+					"name": "status",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'previewed'"
+				},
+				"file_name": {
+					"name": "file_name",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"row_count": {
+					"name": "row_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"imported_count": {
+					"name": "imported_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"skipped_count": {
+					"name": "skipped_count",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"source": {
+					"name": "source",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"mapping": {
+					"name": "mapping",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"skipped": {
+					"name": "skipped",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created": {
+					"name": "created",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_by": {
+					"name": "created_by",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"imported_at": {
+					"name": "imported_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"reverted_at": {
+					"name": "reverted_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"setup_imports_organisation_id_id_unique": {
+					"name": "setup_imports_organisation_id_id_unique",
+					"columns": ["organisation_id", "id"],
+					"isUnique": true
+				},
+				"setup_imports_organisation_id_created_at_idx": {
+					"name": "setup_imports_organisation_id_created_at_idx",
+					"columns": ["organisation_id", "created_at"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {
+				"setup_imports_organisation_id_organisations_id_fk": {
+					"name": "setup_imports_organisation_id_organisations_id_fk",
+					"tableFrom": "setup_imports",
+					"tableTo": "organisations",
+					"columnsFrom": ["organisation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"setup_imports_created_by_users_id_fk": {
+					"name": "setup_imports_created_by_users_id_fk",
+					"tableFrom": "setup_imports",
+					"tableTo": "users",
+					"columnsFrom": ["created_by"],
+					"columnsTo": ["id"],
+					"onDelete": "no action",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {
+				"setup_imports_status_known": {
+					"name": "setup_imports_status_known",
+					"value": "\"setup_imports\".\"status\" IN ('previewed', 'imported', 'reverted')"
+				},
+				"setup_imports_counts_not_negative": {
+					"name": "setup_imports_counts_not_negative",
+					"value": "\"setup_imports\".\"row_count\" >= 0 AND \"setup_imports\".\"imported_count\" >= 0 AND \"setup_imports\".\"skipped_count\" >= 0"
+				}
+			}
 		},
 		"sign_ins": {
 			"name": "sign_ins",
