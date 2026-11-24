@@ -13,7 +13,7 @@ export const STORED = [
 	{
 		heading: "Your account",
 		rows: [
-			{ term: "Your account", tables: ["users", "accounts"] },
+			{ term: "Your account", tables: ["users", "accounts", "notification_choices"] },
 			{ term: "Your sessions", tables: ["sessions"] },
 			{ term: "Your sign-ins", tables: ["sign_ins"] },
 			{ term: "Mail from Timesifier", tables: ["mailings", "mailing_deliveries"] },
@@ -71,7 +71,10 @@ export const STORED = [
 					"budget_alerts",
 				],
 			},
-			{ term: "Clients and their contacts", tables: ["clients", "client_contacts"] },
+			{
+				term: "Clients and their contacts",
+				tables: ["clients", "client_contacts", "client_managers"],
+			},
 			{
 				term: "Rates, invoices and estimates",
 				tables: [
@@ -99,6 +102,7 @@ export const STORED = [
 			{ term: "Support access", tables: ["support_grants"] },
 			{ term: "Exports of everything", tables: ["organisation_exports"] },
 			{ term: "Verified domains", tables: ["organisation_domains", "membership_removals"] },
+			{ term: "Notifications", tables: ["notifications", "reminder_pass"] },
 		],
 	},
 	{

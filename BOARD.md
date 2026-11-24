@@ -59,6 +59,21 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-049 · Notifications and reminders
+
+Builder: an AI session on branch `ts-049-notifications`, pull request #102. Decisions 68 and 69. Migrations `0035_notifications` (renumbered from 0034 at merge; its snapshot follows `0034_codes_and_work_model` from TS-115a) and `0036_reminder_pass` (renumbered from 0037), additive, next to each other and in order; the SQL of neither changed. The bell is in the band beside the profile menu; My account › Notifications holds an email switch per kind. The reminders make at most 300 of an invocation's 1,000 D1 queries a run, every minute, from where the last stopped (decision 69); one Queue message per organisation is TS-049b's.
+
+- [x] A notification is made for each event and each opens its page: a week submitted, to its deciders (D5, D6 and the fallback to owners and admins); a week approved, returned or reopened, to its person with the reason; a request for leave or extra work, to its deciders, and its decision to its person; what the system did at the lock date; a budget past its alert; and the reminders of the deadline, of weeks waiting and of a running timer, each in its person's zone, once in its period. Tests: `test/notifications/events.test.ts` ("a week submitted", "a week decided", "a request", "what the system does", "what nobody is told", role by role with a stranger), `test/notifications/reminders.test.ts` (London, Tokyo and Los Angeles; once in a period; nobody on leave), `test/pages/money-rules.test.ts` ("a budget's alert"); its link followed in `e2e/notifications.spec.ts`.
+- [x] An owner, admin or manager asks one person, or everyone listed, to submit from Approvals › Not submitted: "Remind" on a row and "Remind all", each with a confirmation; only those the asker decides for, once the week has ended, once a day for each week. Two Reminds of the same person on the same day, from one decider or two, store one notification and send one email. Tests: `test/notifications/events.test.ts`, "asked to submit (Approvals › Not submitted)" (one person, pressed twice by two deciders, Remind all from a manager and an owner, a week still open, a person not the asker's, a member who decides nobody's).
+- [x] The band shows the number unread on the bell; opening the bell marks everything read and the count goes to 0; an item, reached with Tab, follows its link; Escape gives the focus back. The band stays 80px with the bell in it (TS-123). Tests: `test/notifications/events.test.ts`, "the bell's list" (the person's own, in their organisation alone; a stranger's post marks nothing); `test/organisations/request-memo.test.ts` (one read of the count a page); `e2e/notifications.spec.ts` (keyboard and axe at 390 and 1280 px, light and dark).
+- [x] A person turns each kind's email on or off in My account › Notifications, for themselves in every organisation; a kind for deciders or budgets is offered only to those who can receive it; a kind turned off still shows in the bell. Tests: `test/notifications/choices.test.ts`, `test/notifications/mail.test.ts` ("is not sent when its person turned the kind off"), `test/platform/personal-data.test.ts` (the choices in the export); `e2e/notifications.spec.ts` (a switch by keyboard, kept on reload).
+- [x] Emails: at most 100 a run, oldest first; one more than a day old is never sent; the first that fails stops the run. Notifications are kept 90 days, and the privacy notice and `/security` say so. Tests: `test/notifications/mail.test.ts`, `test/claims.test.ts` ("the security page says how long each thing is kept").
+- [x] A run of the reminders reads only organisations with a timer running, a week waiting (the partial index `periods_submitted_idx`) or a deadline due within 25 hours; with nothing to do it is five queries, and a minute whose hour's pass is finished is one, however many organisations there are. Test: `test/notifications/reminders.test.ts`, "the hourly run's reads (decision 69)" (each set from its partial index, by the query plan).
+- [x] A run makes at most 300 of the invocation's 1,000 D1 queries (`REMINDER_QUERIES_PER_RUN`), counted as D1 counts them and refused past the share, and goes last in its invocation; it stops cleanly when its share is spent, and the runs of the following minutes go on from where it stopped, each reminder once. Reminders are due at or after their moment, so one a run did not reach is still sent in its period. The pass's lease runs out after two minutes, so a run that dies holding it blocks nothing, and two runs at once never check the same item. Tests: `test/notifications/reminders-pass.test.ts` ("a run's share of the invocation's queries": six timers with a share of 60; "a reminder a run did not reach": a timer past its hours at 15:30 sent at 17:30 when the 16:00 run had no room, the deadline's at 09:40, weeks waiting at 19:30; "the pass's lease": taken over once run out, one of two runs at once, a run that lost it writes nothing).
+- [x] Each scheduled duty, in every cron, runs on its own: one that fails is logged and the others still run, auto-lock, the lock date and billing before the reminders. Test: `test/scheduled/duties.test.ts`.
+- [x] Browser spec `e2e/notifications.spec.ts`; screenshots in `cmux-assets/browser/timesifier/TS-049/`. A section reached by its anchor now keeps its rule in view below the band (`Section`, `app/shell/PageHeading.tsx`).
+- [x] typecheck, lint and tests pass in the pipeline: run 45315964640 on `90f52a9` (the budgeted reminders, with TS-125 merged in), every job green on its first attempt; the final head's run, after TS-126 was merged in and the share set at 300, is named on the pull request.
+
 ### TS-126 · Export everything
 
 Builder: an AI session on branch `ts-126-export-everything`, pull request #105. Closes gap 18 of `research/corporate-readiness.md`: one ZIP of every table the organisation owns, plus receipts and logos. Decision 71. Migration `0033_organisation_exports`, after #100's 0033 and #102's 0034; renumbered at merge. Until #102 (TS-049, the bell) merges, the owner is told by email alone.
@@ -78,9 +93,31 @@ Builder: an AI session on branch `ts-126-export-everything`, pull request #105. 
 - [x] Browser spec: an owner asks, sees it being made, then ready after the every-minute trigger's step, downloads it from the keyboard, sees it expire and the hourly trigger delete it; an admin is never shown it; axe at 390 and 1280 px, light and dark (`e2e/export-everything.spec.ts`); screenshots in `cmux-assets/browser/timesifier/TS-126/`.
 - [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
 
+### TS-115a · Codes, How you work, and who creates projects
+
+Builder: an AI session on branch `ts-115a-codes`, pull request #100. Builds the owner's decisions 1 (codes), 5 (who creates projects) and 8 (How you work) of `research/projects-model.md`; work packages, project teams and the time share are later cards. Decisions 42 and 67 are this card's, and it amends decisions 25 and 65. Migration `0034_codes_and_work_model`, after #91's `0032_pins` and #105's `0033_organisation_exports`. It waits only on the owner's screenshots. Left over: dropping `clients_enabled` (Backlog, "Drop `clients_enabled` (after TS-115a)").
+
+- [x] A client and a project each have an optional code, shown first wherever they appear (`ACME-001 · Website`): on the Timesheet and in the picker, which finds a project by its code or its client's, on Projects, Clients and a project's page, in Reports and their export, on invoices and estimates, and in the API and the import. Tests: `test/pages/codes-timesheet.test.ts`, `test/reports/codes.test.ts`, `test/billing/documents.test.ts`, `test/integrations/codes.test.ts`.
+- [x] Two codes that differ only in capitals or in how the letters are written are the same in an organisation, archived ones included, and the unique index refuses the second even when two writes pass the check at once; another organisation may use it. Test: `test/pages/codes-unique.test.ts`.
+- [x] An organisation may require a code on every project and give a pattern such as `PRJ-0001`, which numbers a project left without one, widening past its digits, by one statement, so two creations at once differ; creating, starting from an estimate and importing all number by it. Tests: `test/projects/pattern-codes.test.ts` ("gives two creations at once different numbers"), `test/integrations/codes.test.ts`.
+- [x] How you work is asked on `/app/new` and changed by owners and admins on Workspace settings, between Client projects, Internal work and Both. Tests: `test/pages/app.test.ts` ("starts it working by %s, as the person chose"), `test/pages/settings.test.ts` ("the general settings: default time zone, week start and How you work").
+- [x] Under Both a project with no client that bills nobody is a work code, grouped apart, with its own code rule that no pattern numbers. Tests: `test/pages/work-code-rule.test.ts`, `test/pages/codes-timesheet.test.ts` ("keeps work codes with the projects that have no client outside Both").
+- [x] Under Internal work no page says "project" or "client"; the organisation's own term is said, with the article it takes ("Create an activity"). Tests: `test/pages/internal-words.test.ts`, `test/workspace/work-model.test.ts`, `test/pages/codes-timesheet.test.ts` ("the Timesheet under Internal work").
+- [x] Under Internal work nothing says billable: not a project's page, Reports, nor Track time's task field. Tests: `test/pages/internal-billable.test.ts`; `e2e/codes.spec.ts`, "4. an Internal-work organisation's Timesheet says Work codes…" (no "Billable" with a task chosen) against "1. Track time's picker…" (says "Billable" under Both).
+- [x] Under Internal work Clients is gone (404), and Invoices and Estimates stay while the organisation holds any invoice or estimate, to whoever saw them. Tests: `test/pages/destinations.test.ts` ("keeps Invoices and Estimates under Internal work while the organisation holds one, to whoever saw them"; "Clients, Invoices and Estimates are hidden and 404 for everyone under Internal work").
+- [x] Whether it holds one adds no statement: two `EXISTS` in the statement that reads the organisation. Test: `test/organisations/keeps-billing.test.ts` ("adds no statement…").
+- [x] Switching from Both to Internal work while holding invoices and estimates keeps each reachable, offers no new invoice, estimate, recurring invoice or retainer (nor Make invoice, Invoice funds or Uninvoiced's Invoice), refuses each on the server and stores nothing, and the hourly schedule issues none of its recurring invoices until it is back to Both. Test: `test/pages/internal-billing.test.ts`.
+- [x] Owners, admins and a client's account managers create projects, an account manager only for their clients; nobody else is offered Create, and the server refuses them with 403. Tests: `test/pages/project-creators.test.ts` ("who creates projects (decision 42)"), `test/integrations/codes.test.ts` ("starting a project from an estimate").
+- [x] Editing, archiving, restoring and Duplicate follow the same rule as creating a project for that client, on the page and at the server; a stranger gets 404. Test: `test/pages/project-creators.test.ts` ("who edits, archives and duplicates projects (decisions 42 and 65)").
+- [x] A copy's code is never its source's: none, the pattern's next, or one typed that no other project has; a work code's copy follows the work codes' rule. Test: `test/pages/projects-duplicate.test.ts` ("the copy's code (TS-115a)").
+- [x] The Code field's example is OPS-01 for a work code and anything under Internal work, and ACME-001 for a client project. Test: `e2e/codes.spec.ts` ("2. Create on Projects gives a client project's code as its example…", "4. …Projects page is Work codes…", "3. the account manager is offered Create…").
+- [x] Migration 0034 makes an organisation with Clients on Client projects and one with Clients off Internal work called "Projects", and shows each what it was shown before, but the empty Invoices and Estimates of one with Clients off holding none. Test: `test/db/work-model-migration.test.ts`.
+- [x] Each part works by the keyboard alone and axe finds nothing, at 390px and 1280px in light and dark; on `/app/new` each radio's ring is centred on its label's first line. Test: `e2e/codes.spec.ts`.
+- [ ] The owner has accepted the screenshots at 390px and 1280px in both colour schemes, in `cmux-assets/browser/timesifier/TS-115a/`.
+
 ### TS-108 · Company onboarding
 
-Builder: an AI session on branch `ts-108-onboarding`. An owner or admin invites many people at once, or imports them from a CSV with a dry run and a revert. Decision 72 is this card's. Migration `0036_people_import` only adds: `people_imports` and `invitation_plans`; `import_jobs` and the time import are untouched.
+Builder: an AI session on branch `ts-108-onboarding`, pull request #106. An owner or admin invites many people at once, or imports them from a CSV with a dry run and a revert. Decision 72 is this card's. Migration `0037_people_import` (renumbered from 0036 at merge, after #102's `0036_reminder_pass`) only adds: `people_imports` and `invitation_plans`; `import_jobs` and the time import are untouched.
 
 - [x] Invite many on Invitations: up to 200 addresses with one role and team, the seats left shown, members, waiting invitations and repeats reported and not sent. Tests: `test/organisations/onboarding.test.ts` ("Invite many"); `e2e/onboarding.spec.ts`.
 - [x] Import people from a CSV: a dry run with each row's outcome, Invite, Discard, earlier imports and Revert at any age, people who joined staying. Team, manager, schedule from a start date and name applied when each person accepts. Tests: `test/organisations/onboarding.test.ts` ("importing people from a CSV"); `e2e/onboarding.spec.ts`.
@@ -691,6 +728,12 @@ The navigation these cards build towards, by role, is in `docs/navigation.md` (a
 
 Cards TS-064 to TS-089 come from `docs/research/harvest-b2b.md`, observed in Harvest's application with rea on 2026-11-11. Its cards B3 to B22 are TS-065 to TS-084, kept in this build order: TS-065 B22, TS-066 B4, TS-067 B5, TS-068 B8, TS-069 B7, TS-070 B9, TS-071 B6, TS-072 B17, TS-073 B10, TS-074 B11, TS-075 B16, TS-076 B19, TS-077 B12, TS-078 B13, TS-079 B15, TS-080 B18, TS-081 B20, TS-082 B14, TS-083 B21, TS-084 B3. B1 and B2 are in TS-061 with TS-040 and TS-042. TS-085 to TS-089 are what the owner asked for that the research leaves out. The owner's decisions: a Finance role (from TS-064), a lock date, rates seen only by owners, admins and Finance, never managers, an activity log kept 730 days, and invoicing before import. The tables of every card are in TS-064's schema.
 
+### Drop `clients_enabled` (after TS-115a)
+
+From TS-115a (decision 67). Waits until the release with migration 0034 has run in production long enough that no Worker of an earlier release can be rolled back to.
+
+- [ ] A migration that ships alone drops `organisations.clients_enabled`, which nothing reads since 0034 (`hasClients(work_model)` decides), and `changeGeneral` and `startWorkModel` in `app/workspace/general.server.ts` stop writing it; `docs/architecture.md` and `docs/security.md` lose their lines about it, and `test/db/work-model-migration.test.ts` stops reading it.
+
 ### TS-113b · Fast at company size, the rest
 
 From TS-113 (`research/corporate/scale-test.md`, D8 and D9, and its "After TS-113" section). Waits for TS-111d and TS-111e, which change Approvals, Time off and Work schedules; the lines below are at `ts-113-scale` (a3d335a) and will move.
@@ -753,14 +796,17 @@ Depends on: TS-012b, TS-013.
 - [ ] A returned period shows the reason and can be corrected and submitted again (test).
 - Open for the owner: the default period, and whether a submission requires a full set of expected hours.
 
-### TS-049 · Notifications and reminders
+### TS-049b · Each organisation's reminders on a Queue
 
-Depends on: TS-046, TS-047.
+Depends on: TS-049.
 
-- [ ] A notification is created for: a reminder to submit, an approval request, a returned period, an approval outcome; each opens its record (tests).
-- [ ] A manager, admin or owner sends a reminder from Approvals, Not submitted, to one person or all listed (test).
-- [ ] The header shows the number unread; opening one marks it read (test).
-- [ ] A person turns each kind of email reminder on or off in My account (test).
+Decision 69 bounds the reminders: at most 300 of an invocation's 1,000 D1 queries a run, every minute, one pass over every organisation with work, from where the last run stopped. That pass is shared: at about 750 organisations with work in an hour (about 17,000 queries), a reminder can come an hour late. The long-term fix is a Queue per organisation, so each has an invocation, and its 1,000 queries, of its own.
+
+- [ ] The hourly run reads which organisations have work (`remindableOrganisations` and the deadlines due within 25 hours) and sends one message per organisation to a Cloudflare Queue; the consumer runs that organisation's reminders, and `reminder_pass` and the every-minute run of the reminders are removed. The keys still make each reminder once in its period, and each is still due at or after its moment (tests).
+- [ ] A message that fails is retried by the Queue and then goes to a dead-letter queue that is logged; a retry sends nothing twice (test).
+- [ ] The running timers of an organisation are checked against their days' rules in a fixed number of queries, not about 10 each (a test that counts the queries for 1 and for 50 running timers).
+- [ ] A test of the consumer with 200 organisations with work, each in its own message, shows no invocation over 1,000 queries, each counted by `countedDatabase` (`app/db/budget.ts`).
+- [ ] `docs/decisions.md` entry 69 gains the Queue's evidence; `wrangler.jsonc` binds the queue and its dead-letter queue in each environment.
 
 ### TS-050 · Help and support
 

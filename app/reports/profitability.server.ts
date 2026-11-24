@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
 import { type OrganisationScope, uuidv7 } from "~/db";
+import { codedName } from "~/lib/codes";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import type { RateRow } from "~/rates/rates";
 import type { Day } from "~/time/calendar";
@@ -39,7 +40,10 @@ export async function costRatesOf(scope: OrganisationScope): Promise<RateRow[]> 
 	}));
 }
 
-/** The projects as profitability reads them, by id, with the billable rates. */
+/**
+ * The projects as profitability reads them, by id, with the billable rates.
+ * A project and its client are named by code and name, code first (TS-115a).
+ */
 async function profitProjects(
 	scope: OrganisationScope,
 	currency: string,
@@ -49,14 +53,14 @@ async function profitProjects(
 		scope.projects.select(),
 		scope.clients.select(),
 	]);
-	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const clientNames = new Map(clients.map((c) => [c.id, codedName(c.code, c.name)]));
 	const projects = new Map<string, ProfitProject>();
 	for (const row of rows) {
 		const priced = pricing.projects.get(row.id);
 		if (!priced) continue;
 		projects.set(row.id, {
 			...priced,
-			name: row.name,
+			name: codedName(row.code, row.name),
 			client: row.clientId ? (clientNames.get(row.clientId) ?? null) : null,
 			feeMinor: row.feeMinor,
 			startsOn: row.startsOn,

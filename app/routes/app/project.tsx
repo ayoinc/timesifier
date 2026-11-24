@@ -8,6 +8,7 @@ import * as z from "zod";
 import { BillingType } from "~/billing/billable";
 import { BudgetBar, budgetFigure } from "~/budgets/BudgetBar";
 import { BudgetKind, isHoursBudget } from "~/budgets/budget";
+import { managedClientIds, mayCreateProject } from "~/clients/managers.server";
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
@@ -19,15 +20,11 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { quantityText } from "~/invoices/lines";
+import { codedName } from "~/lib/codes";
 import { parseRequest } from "~/lib/validate";
 import { isCurrencyCode } from "~/money/money";
 import { moneyText, parseBudgetHours, parseMoney } from "~/money/typed";
-import {
-	mayDuplicateProjects,
-	mayManageRates,
-	mayManageTasks,
-	timeScopeOf,
-} from "~/organisations/access";
+import { mayManageRates, mayManageTasks, timeScopeOf } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -56,7 +53,7 @@ import {
 	projectPath,
 	projectTabIn,
 } from "~/projects/projects";
-import { offeredCopyName } from "~/projects/projects.server";
+import { offeredCopyName, projectCodeRules } from "~/projects/projects.server";
 import { changeBilling, changeBudget, changeOvertimeRate } from "~/projects/settings.server";
 import { resolveRate } from "~/rates/rates";
 import { ratesForProject, setRate } from "~/rates/rates.server";
@@ -74,10 +71,11 @@ import {
 	setProjectTaskBillable,
 } from "~/tasks/tasks.server";
 import { Day, dayOf } from "~/time/calendar";
+import { hasClients, inTerms, termsOf } from "~/workspace/work-model";
 
 import type { Route } from "./+types/project";
 import { FormSheet } from "./FormSheet";
-import { useOrganisation } from "./useOrganisation";
+import { useOrganisation, useTerms } from "./useOrganisation";
 
 // A project's own page (harvest-taste.md item 11): Overview, with its hours,
 // what they are worth, its profit over a range (TS-071) and its budget; Tasks,
@@ -121,22 +119,30 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 	const url = new URL(request.url);
 	const asked = projectTabIn(url.searchParams);
 	const tab = tabs.includes(asked) ? asked : "overview";
+	const { organisation } = membership;
+	// Who may duplicate it follows who may create one for its client (decisions 42 and 65).
+	const duplicates = mayCreateProject(
+		membership.role,
+		hasClients(organisation.workModel) ? await managedClientIds(scope, membership.user.id) : [],
+		page.project.client?.id ?? null,
+	);
 	return {
 		page,
 		tab,
 		tabs,
 		managesRates,
 		managesTasks,
-		showsClients: membership.organisation.clientsEnabled,
-		/**
-		 * The name a copy of the project is offered (TS-122, S2-06), to the owners
-		 * and admins who may duplicate it (decision 65); null to anyone else.
-		 */
-		copyName: mayDuplicateProjects(membership.role)
-			? await offeredCopyName(scope, page.project.name)
-			: null,
+		showsClients: hasClients(organisation.workModel),
+		/** The name a copy of the project is offered (TS-122, S2-06) to those who may duplicate it; null to anyone else. */
+		copyName: duplicates ? await offeredCopyName(scope, page.project.name) : null,
+		/** The code rules its copy follows (TS-115a), for those who may duplicate it. */
+		codes: duplicates ? await projectCodeRules(organisation.id) : null,
 		// Read only for Overview, where it is shown, and only for those who see rates.
-		profit: tab === "overview" ? await projectProfit(membership, page.project.id, url, now) : null,
+		// Read only for Overview, and not under Internal work, where nothing earns revenue (TS-115a).
+		profit:
+			tab === "overview" && hasClients(organisation.workModel)
+				? await projectProfit(membership, page.project.id, url, now)
+				: null,
 	};
 }
 
@@ -309,7 +315,11 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 						: "A budget's lines are the project's tasks, or the organisation's people.",
 				);
 			}
-			return done(kind === "none" ? "The project has no budget." : "Budget saved.");
+			return done(
+				kind === "none"
+					? `The ${termsOf(membership.organisation.workModel, membership.organisation.internalTerm).project} has no budget.`
+					: "Budget saved.",
+			);
 		}
 
 		case "overtime-rate": {
@@ -421,19 +431,25 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 	const [duplicating, setDuplicating] = useState(false);
 	const navigate = useNavigate();
 	const { project } = page;
+	const { terms } = organisation;
 
 	return (
 		<>
 			<p className="text-body-large">
 				<Link to={destinationPath(organisation.slug, "projects")} className={TEXT_LINK}>
-					← Projects
+					← {terms.Projects}
 				</Link>
 			</p>
-			<PageHeading>{project.name}</PageHeading>
+			<PageHeading>{codedName(project.code, project.name)}</PageHeading>
 			<PageLead>
 				{[
-					loaderData.showsClients ? (project.client?.name ?? "No client") : null,
-					BILLING_TYPE_LABELS[project.billingType],
+					loaderData.showsClients
+						? project.client
+							? codedName(project.client.code, project.client.name)
+							: "No client"
+						: null,
+					// Under Internal work nothing is billable, so nothing says how it bills (TS-115a).
+					loaderData.showsClients ? BILLING_TYPE_LABELS[project.billingType] : null,
 					project.archived ? "Archived" : null,
 				]
 					.filter(Boolean)
@@ -456,9 +472,10 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 				</div>
 			)}
 			{/* The copy is made by Projects' action; its page opens once it is made. */}
-			{loaderData.copyName !== null && (
+			{loaderData.copyName !== null && loaderData.codes !== null && (
 				<DuplicateSheet
 					project={project}
+					codes={loaderData.codes}
 					offered={loaderData.copyName}
 					isOpen={duplicating}
 					onClose={() => setDuplicating(false)}
@@ -476,7 +493,7 @@ export default function Project({ loaderData }: Route.ComponentProps) {
 			</p>
 			<div className="mt-6">
 				<LinkTabs
-					label="Project pages"
+					label={inTerms("Project pages", terms)}
 					tabs={tabs.map((id) => ({
 						id,
 						label: TAB_LABELS[id],
@@ -499,18 +516,22 @@ function Overview({ data }: { data: Data }) {
 	const { page } = data;
 	const { locale } = useLocale();
 	const organisation = useOrganisation();
+	const t = (text: string) => inTerms(text, organisation.terms);
 	const { budget } = page;
 	return (
 		<>
 			<Ledger heading="Hours" note="To date">
-				<LedgerRows label="Hours to date">
-					<LedgerRow title="Billable" value={page.hours.billable} />
-					<LedgerRow title="Non-billable" value={page.hours.nonBillable} />
-					{page.amount !== null && (
-						<LedgerRow title={`Billable amount, ${page.project.currency}`} value={page.amount} />
-					)}
-					{page.project.fee !== null && <LedgerRow title="Fixed fee" value={page.project.fee} />}
-				</LedgerRows>
+				{/* Under Internal work nothing is billable: the hours are their total alone (TS-115a). */}
+				{data.showsClients && (
+					<LedgerRows label="Hours to date">
+						<LedgerRow title="Billable" value={page.hours.billable} />
+						<LedgerRow title="Non-billable" value={page.hours.nonBillable} />
+						{page.amount !== null && (
+							<LedgerRow title={`Billable amount, ${page.project.currency}`} value={page.amount} />
+						)}
+						{page.project.fee !== null && <LedgerRow title="Fixed fee" value={page.project.fee} />}
+					</LedgerRows>
+				)}
 				<LedgerTotal label="Total hours" value={page.hours.total} />
 			</Ledger>
 
@@ -522,7 +543,7 @@ function Overview({ data }: { data: Data }) {
 					heading="Budget"
 					lead={`${BUDGET_KIND_LABELS[budget.kind]}, ${
 						budget.period.endsOn === null
-							? "over the whole project"
+							? t("over the whole project")
 							: `for ${dayLabel(budget.period.startsOn)} to ${dayLabel(budget.period.endsOn)}`
 					}.${page.alertSentOn ? ` The alert went out on ${dayLabel(page.alertSentOn)}.` : ""}`}
 				>
@@ -587,7 +608,7 @@ function Overview({ data }: { data: Data }) {
 				</Section>
 			)}
 
-			{page.missingRates && page.missingRates.count > 0 && (
+			{data.showsClients && page.missingRates && page.missingRates.count > 0 && (
 				<Section
 					id="missing-rates"
 					heading="Missing rate"
@@ -621,6 +642,7 @@ function Overview({ data }: { data: Data }) {
  */
 function Profit({ profit }: { profit: NonNullable<Data["profit"]> }) {
 	const { figures } = profit;
+	const terms = useTerms();
 	return (
 		<Section
 			id="profit"
@@ -654,7 +676,7 @@ function Profit({ profit }: { profit: NonNullable<Data["profit"]> }) {
 					</>
 				) : (
 					<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
-						No time, expenses or fee on this project in this range.
+						{inTerms("No time, expenses or fee on this project in this range.", terms)}
 					</p>
 				)}
 			</Ledger>
@@ -710,9 +732,10 @@ function RateSheet({
 	onClose: () => void;
 	onDone: (said: string) => void;
 }) {
+	const terms = useTerms();
 	return (
 		<FormSheet
-			title={`Rate for ${target?.name ?? "this project"}`}
+			title={`Rate for ${target?.name ?? inTerms("this project", terms)}`}
 			intent="rate"
 			submitLabel="Save rate"
 			isOpen={target !== null}
@@ -739,12 +762,16 @@ function RateSheet({
 
 function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) {
 	const { page, managesTasks, managesRates } = data;
+	const terms = useTerms();
+	const t = (text: string) => inTerms(text, terms);
 	const [adding, setAdding] = useState(false);
 	const [rating, setRating] = useState<Parameters<typeof RateSheet>[0]["target"]>(null);
 	const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
 	const [billing, setBilling] = useState<{ ids: string[]; billable: boolean } | null>(null);
 	const listed = page.tasks.filter((t) => t.id !== "");
-	const taskRates = page.seesRates && page.project.rateMode === "task";
+	// Under Internal work nothing is billable: no task says whether it is, nor has a rate (TS-115a).
+	const bills = data.showsClients && page.project.billingType !== "non_billable";
+	const taskRates = data.showsClients && page.seesRates && page.project.rateMode === "task";
 
 	return (
 		<>
@@ -755,7 +782,7 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 				<Ledger heading="Tasks" note={listed.length}>
 					{page.tasks.length === 0 ? (
 						<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
-							This project has no tasks. Its entries have none until one is added.
+							{t("This project has no tasks. Its entries have none until one is added.")}
 						</p>
 					) : (
 						<LedgerRows label="Tasks and their hours">
@@ -771,9 +798,11 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 									detail={[
 										task.id === ""
 											? "Entries from before it had tasks"
-											: task.billable
-												? "Billable"
-												: "Non-billable",
+											: !data.showsClients
+												? null
+												: task.billable
+													? "Billable"
+													: "Non-billable",
 										taskRates && task.id !== "" ? rateWords(task.rate, task.defaultRate) : null,
 									]
 										.filter(Boolean)
@@ -794,7 +823,7 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 															setRating({ level: "project-task", key: task.id, name: task.name });
 													}}
 												>
-													{managesTasks && page.project.billingType !== "non_billable" ? (
+													{managesTasks && bills ? (
 														<MenuItem id="billable">
 															{task.billable ? "Set non-billable" : "Set billable"}
 														</MenuItem>
@@ -803,7 +832,7 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 														<MenuItem id="rate">Set rate</MenuItem>
 													) : null}
 													{managesTasks ? (
-														<MenuItem id="remove">Remove from project</MenuItem>
+														<MenuItem id="remove">{t("Remove from project")}</MenuItem>
 													) : null}
 												</Menu>
 											</MenuTrigger>
@@ -815,7 +844,7 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 					)}
 				</Ledger>
 			</div>
-			{managesTasks && listed.length > 1 && page.project.billingType !== "non_billable" && (
+			{managesTasks && listed.length > 1 && bills && (
 				<p className="mt-4 flex flex-wrap gap-3">
 					<Button
 						variant="outlined"
@@ -840,7 +869,13 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 				onClose={() => setAdding(false)}
 				onDone={onSaid}
 			>
-				<p>It is billable here if it is billable by default, unless the project bills nothing.</p>
+				{data.showsClients && (
+					<p>
+						{t(
+							"It is billable here if it is billable by default, unless the project bills nothing.",
+						)}
+					</p>
+				)}
 				<Select
 					label="Task"
 					name="taskId"
@@ -863,9 +898,9 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 				))}
 				<input type="hidden" name="billable" value={String(billing?.billable ?? false)} />
 				<p>
-					{billing?.ids.length === 1 ? "The task's" : "The tasks'"} entries on this project change
-					with {billing?.ids.length === 1 ? "it" : "them"}, back to the first. Entries already on an
-					invoice keep what they were billed as.
+					{t(
+						`${billing?.ids.length === 1 ? "The task's" : "The tasks'"} entries on this project change with ${billing?.ids.length === 1 ? "it" : "them"}, back to the first. Entries already on an invoice keep what they were billed as.`,
+					)}
 				</p>
 			</FormSheet>
 
@@ -889,6 +924,7 @@ function Tasks({ data, onSaid }: { data: Data; onSaid: (said: string) => void })
 function Team({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) {
 	const { page, managesRates } = data;
 	const organisation = useOrganisation();
+	const t = (text: string) => inTerms(text, organisation.terms);
 	const [rating, setRating] = useState<Parameters<typeof RateSheet>[0]["target"]>(null);
 	const personRates = page.seesRates && page.project.rateMode === "person";
 	return (
@@ -896,7 +932,7 @@ function Team({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) 
 			<Ledger heading="People" note={page.people.length}>
 				{page.people.length === 0 ? (
 					<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
-						Nobody whose time you can see has tracked time to this project yet.
+						{t("Nobody whose time you can see has tracked time to this project yet.")}
 					</p>
 				) : (
 					<LedgerRows label="People and their hours">
@@ -926,7 +962,7 @@ function Team({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) 
 			</Ledger>
 			{personRates && (
 				<p className="mt-4 max-w-160 text-body-medium text-on-surface-variant">
-					A rate set here is for this project alone. Each person's default rate is on{" "}
+					{t("A rate set here is for this project alone.")} Each person's default rate is on{" "}
 					<Link to={defaultRatesPath(organisation.slug)} className={TEXT_LINK}>
 						Default rates
 					</Link>
@@ -940,6 +976,8 @@ function Team({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) 
 
 function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void }) {
 	const { page, managesRates, managesTasks } = data;
+	const terms = useTerms();
+	const t = (text: string) => inTerms(text, terms);
 	const { project } = page;
 	const [open, setOpen] = useState<"billing" | "budget" | "overtime" | "tags" | null>(null);
 	const overtimeRate = project.overtimeRateMilli ?? 1000;
@@ -972,8 +1010,8 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 	return (
 		<>
 			<Ledger heading="Settings">
-				<LedgerRows label="The project's settings">
-					{managesRates && (
+				<LedgerRows label={t("The project's settings")}>
+					{managesRates && data.showsClients && (
 						<LedgerRow
 							title="Billing"
 							detail={[
@@ -1064,7 +1102,7 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 				onDone={onSaid}
 			>
 				<RadioGroup
-					label="Project type"
+					label={t("Project type")}
 					name="billingType"
 					value={billingType}
 					onChange={setBillingType}
@@ -1099,7 +1137,7 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 				/>
 				{billingType !== "non_billable" && (
 					<TextField
-						label="Project rate an hour"
+						label={t("Project rate an hour")}
 						name="rate"
 						inputMode="decimal"
 						autoComplete="off"
@@ -1199,7 +1237,7 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 						</Checkbox>
 						{budgetKind === "total_fees" && (
 							<Checkbox name="includesExpenses" defaultSelected={project.budgetIncludesExpenses}>
-								Count the project's expenses
+								{t("Count the project's expenses")}
 							</Checkbox>
 						)}
 					</>
@@ -1253,7 +1291,7 @@ function Settings({ data, onSaid }: { data: Data; onSaid: (said: string) => void
 				onClose={close}
 				onDone={onSaid}
 			>
-				<p>A project's tags count for its entries when a report is filtered by tag.</p>
+				<p>{t("A project's tags count for its entries when a report is filtered by tag.")}</p>
 				<TagPicker tags={page.tags} selected={page.tagIds} />
 			</FormSheet>
 		</>

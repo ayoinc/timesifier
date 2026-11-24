@@ -3,6 +3,8 @@ import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { changes, recordStatement, recordStatementWhen } from "~/activity/activity.server";
 import { workRefusersOf } from "~/approvals/refusals.server";
 import { among, type OrganisationScope, type ScopedAccessor, uuidv7 } from "~/db";
+import { notify, requestWaiting } from "~/notifications/notify.server";
+import { requestDecided } from "~/notifications/words";
 import {
 	type Access,
 	mayApproveAfterRefusals,
@@ -198,6 +200,13 @@ export async function requestWork(
 			changes(null, made, WORK_FIELDS),
 		),
 	]);
+	// What waits is told to those who decide it (TS-049).
+	if (status === "pending") {
+		await notify(
+			scope,
+			await requestWaiting(scope, { ...request, type: "work", userId }, now.getTime()),
+		);
+	}
 	return { ok: true, status, alone };
 }
 
@@ -235,7 +244,22 @@ async function stepWork(
 		),
 		scope.workRequests.statements.update(change, (w) => and(eq(w.id, row.id), eq(w.status, from))),
 	]);
-	return changed.length === 1 ? "done" : "stale";
+	if (changed.length !== 1) return "stale";
+	// Its person is told of a decision on it, with the reason (TS-049).
+	if (
+		change.status === "approved" ||
+		change.status === "refused" ||
+		change.status === "cancelled"
+	) {
+		await notify(scope, [
+			requestDecided(
+				{ ...row, type: "work", kind: WorkKind.parse(row.kind) },
+				change.status,
+				change.comment ?? null,
+			),
+		]);
+	}
+	return "done";
 }
 
 async function workRow(scope: OrganisationScope, id: string) {

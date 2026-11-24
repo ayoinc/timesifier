@@ -6,8 +6,10 @@ import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { CheckIcon } from "~/components/icons/CheckIcon";
 import type { Outcome } from "~/organisations/problems";
+import { useTerms } from "~/routes/app/useOrganisation";
 import { destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
+import { inTerms } from "~/workspace/work-model";
 
 import { useTrackTime } from "./TrackTime";
 import { weekPath } from "./views";
@@ -24,6 +26,7 @@ export interface GettingStarted {
 
 const STEPS = ["project", "entry", "week"] as const satisfies readonly (keyof GettingStarted)[];
 
+/** Each step in words; "project" is the organisation's own word for it (TS-115a). */
 const LABELS: Record<keyof GettingStarted, string> = {
 	project: "Add a project",
 	entry: "Track an entry",
@@ -62,6 +65,7 @@ export function GettingStartedList({ steps, slug }: { steps: GettingStarted; slu
 	const fetcher = useFetcher<Outcome>({ key: PUT_AWAY });
 	const answer = fetcher.state === "idle" ? fetcher.data : undefined;
 
+	const terms = useTerms();
 	const openTrackTime = useTrackTime();
 	// Tracking an entry is done here: the step opens the Track time sheet (taste HT-C).
 	const targets: Record<Exclude<keyof GettingStarted, "entry">, string> = {
@@ -99,7 +103,7 @@ export function GettingStartedList({ steps, slug }: { steps: GettingStarted; slu
 						</span>
 						{steps[step] ? (
 							<span className="text-body-large text-on-surface-variant">
-								{LABELS[step]}
+								{inTerms(LABELS[step], terms)}
 								<span className="sr-only"> (done)</span>
 							</span>
 						) : step === "entry" ? (
@@ -107,11 +111,11 @@ export function GettingStartedList({ steps, slug }: { steps: GettingStarted; slu
 								onPress={() => openTrackTime()}
 								className={cx(TEXT_LINK, "cursor-pointer text-start")}
 							>
-								{LABELS[step]}
+								{inTerms(LABELS[step], terms)}
 							</AriaButton>
 						) : (
 							<Link to={targets[step]} className={TEXT_LINK}>
-								{LABELS[step]}
+								{inTerms(LABELS[step], terms)}
 							</Link>
 						)}
 					</li>

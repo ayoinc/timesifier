@@ -1,4 +1,4 @@
-import { env, waitUntil } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, gt, isNull, type SQLWrapper, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
@@ -18,6 +18,7 @@ import {
 	uuidv7,
 	verifications,
 } from "~/db";
+import { inBackground } from "~/lib/background.server";
 import { InvitedRole } from "~/organisations/roles";
 import { planStanding } from "~/plans/plans.server";
 import { MAIL_BATCH } from "~/platform/limits";
@@ -249,7 +250,7 @@ export async function sendInvitations(
 					: capProblem(rows.length, again.capLeft, again.cap),
 		};
 	}
-	waitUntil(sendWaitingInvitations(now, undefined, origin));
+	inBackground(sendWaitingInvitations(now, undefined, origin));
 	return { ok: true, sent: rows.length };
 }
 

@@ -20,6 +20,7 @@ import {
 	CSP_REPORT_FIELDS,
 } from "~/browser-errors/report";
 import { BrowserErrorReportSchema } from "~/browser-errors/report.server";
+import { mayCreateProject } from "~/clients/managers.server";
 import { STORED } from "~/db/personal-data";
 import * as schema from "~/db/schema";
 import { uuidv7 } from "~/db/uuidv7";
@@ -67,6 +68,7 @@ import {
 } from "~/landing/trust";
 import { DEFAULT_KINDS, KIND_KEYS } from "~/leave/kinds";
 import { LOCK_LABELS } from "~/locks/locks";
+import { NOTIFICATION_RETENTION_DAYS } from "~/notifications/kinds";
 import {
 	type Access,
 	mayChangeExpensesOf,
@@ -411,7 +413,9 @@ it("the notice names every email the application sends, and whom it goes to", as
 		"../app/auth/organisations.server.ts": [
 			"an invitation, to the address an owner or admin invites",
 		],
-		"../app/budgets/budget.server.ts": [
+		"../app/notifications/mail.server.ts": [
+			"a notification, to the person it is for, unless they turned that kind's email off on My account",
+			"a timesheet or a request waiting for their decision, their own timesheet or request decided",
 			"a budget alert, to the organisation's owners and admins and, for a budget in hours, to the managers",
 		],
 		"../app/exports/job.server.ts": [
@@ -497,7 +501,7 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 	const pages = [PRIVACY_PATH, SECURITY_PATH];
 	for (const path of pages) {
 		const html = await page(path);
-		for (const term of [...Object.values(rows), "Managers", "Contractors"]) {
+		for (const term of [...Object.values(rows), "Managers", "Account managers", "Contractors"]) {
 			expect(html, `${path}: ${term}`).toContain(
 				`<dt class="text-title-medium wrap-anywhere">${term}</dt>`,
 			);
@@ -555,6 +559,11 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 		expect(mayChangeExpensesOf(as(role, [colleague]), colleague), role).toBe(false);
 	}
 
+	// An account manager creates that client's projects and no other's (decision 42).
+	expect(mayCreateProject("member", ["globex"], "globex")).toBe(true);
+	expect(mayCreateProject("member", ["globex"], "initech")).toBe(false);
+	expect(mayCreateProject("finance", [], "globex")).toBe(false);
+
 	for (const path of pages) {
 		const text = words(await page(path));
 		expect(text, path).toContain("Nobody changes another person's time entries or expenses");
@@ -563,6 +572,9 @@ it("Who sees what names every role, and says of each what access.ts lets it do",
 		);
 		expect(text, path).toContain("never their own. A manager sees no rate, invoice or estimate.");
 		expect(text, path).toContain(`grants support access, for ${SUPPORT_HOURS.join(" or ")} hours`);
+		expect(text, path).toContain(
+			"names as a client's account manager creates that client's projects",
+		);
 	}
 	const notice = words(await page(PRIVACY_PATH));
 	expect(notice).toContain("An owner or admin can give Timesifier an address");
@@ -1040,6 +1052,11 @@ it("the security page says how long each thing is kept from the constant that ke
 	);
 	const retention = await part(SECURITY_PATH, "retention");
 	expect(retention).toContain(`Sign-ins Each is deleted ${SIGN_IN_DAYS} days after it was made.`);
+	// Notifications (TS-049): the daily job deletes by NOTIFICATION_RETENTION_DAYS.
+	expect(source("../app/notifications/bell.server.ts")).toContain("NOTIFICATION_RETENTION_DAYS *");
+	expect(retention).toContain(
+		`Notifications Each is deleted ${NOTIFICATION_RETENTION_DAYS} days after it was made, read or not.`,
+	);
 	// Logs and traces: kept by Cloudflare for WORKERS_LOGS_DAYS, and both are on.
 	expect(wrangler).toMatch(/"logs": \{ "enabled": true/);
 	expect(wrangler).toMatch(/"traces": \{ "enabled": true/);

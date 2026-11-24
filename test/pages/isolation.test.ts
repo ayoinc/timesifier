@@ -92,7 +92,7 @@ describe("the list of an organisation's routes", () => {
 		expect(underAddress.sort()).toEqual(ofAnOrganisation.map(({ id }) => id).sort());
 	});
 
-	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports and a report's people, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access, Wellbeing and Sign-in, My account and its data, the moved address and the catch-all", () => {
+	it("holds the layout, the fifteen destinations, the pages of Team, a project's page and the default rates, the exports of Reports and a report's people, the Expenses view, a receipt, the logo, the Contractors report and its export, the export of the Activity log, the invoices ZIP of Integrations, an entry's history, the pages of Invoices and Estimates, Support access, Wellbeing and Sign-in, My account and its data, the bell's notifications, the moved address and the catch-all", () => {
 		expect(ofAnOrganisation.map(({ address }) => address).sort()).toEqual(
 			[
 				"/app/acme",
@@ -162,6 +162,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/settings/sign-in",
 				"/app/acme/account",
 				"/app/acme/account/calendar",
+				// The bell's list, and marking it read (TS-049).
+				"/app/acme/notifications",
 				"/app/acme/settings/members",
 				// The export of everything and its ZIP (TS-126).
 				"/app/acme/settings/export",
@@ -194,6 +196,7 @@ describe("the list of an organisation's routes", () => {
 			"routes/app/invoices.settings",
 			"routes/app/members",
 			"routes/app/menu",
+			"routes/app/notifications",
 			"routes/app/project",
 			"routes/app/projects",
 			"routes/app/rates",
@@ -221,7 +224,11 @@ describe("a member of one organisation asking for another organisation's address
 		const address = await addressFor(route, acme.id);
 		// A member is answered the page, or the redirect of a moved address, or,
 		// at an address that holds no page, the 404 drawn in their own shell.
-		expect((await open(address, ada)).status).toBe(memberStatus(route));
+		const mine = await open(address, ada);
+		expect(mine.status).toBe(memberStatus(route));
+		// Read to its end: a file such as the account's data is read from the
+		// database as it is taken, and the test waits for that (test/setup.ts).
+		await mine.arrayBuffer();
 
 		const theirs = await open(address, grace);
 		const nobodys = await open(inNobodys(address), grace);
@@ -282,6 +289,7 @@ describe("a member of one organisation asking for another organisation's address
 		"routes/app/integrations.import": { intent: "discard", importId: "i-acme" },
 		"routes/app/menu": { menu: "hidden", back: "/app/acme" },
 		"routes/app/calendar-feeds": { intent: "feed-create", follow: "me" },
+		"routes/app/notifications": { intent: "read" },
 		"routes/app/expenses": { intent: "delete", expenseId: "e-ada" },
 		"routes/app/tasks": { intent: "create-tag", name: "Taken over" },
 		"routes/app/project": { intent: "add-task", taskId: "t-general" },

@@ -90,8 +90,36 @@ export const organisations = sqliteTable("organisations", {
 	timeZone: text("time_zone").notNull().default("UTC"),
 	/** The day a timesheet period starts on, as ISO counts it: 1 is Monday, 7 is Sunday. */
 	weekStartsOn: integer("week_starts_on").notNull().default(1),
-	/** Whether the Clients destination and the client field are shown. Turning it off deletes nothing. */
+	/**
+	 * Superseded by `workModel` (TS-115a, decision 67): no longer read. It is
+	 * written beside `workModel` (on unless the organisation works internally),
+	 * so a rollback reads the same answer; a later migration, which ships
+	 * alone, takes it away.
+	 */
 	clientsEnabled: integer("clients_enabled", { mode: "boolean" }).notNull().default(true),
+	/**
+	 * How the organisation works (TS-115a, decision 67): `client_projects`,
+	 * `internal` (no clients, invoices or estimates; projects are called
+	 * `internalTerm`) or `both` (client projects, and work codes beside them).
+	 * `app/workspace/work-model.ts` reads it.
+	 */
+	workModel: text("work_model").notNull().default("client_projects"),
+	/** What projects are called under `internal`, and work codes under `both`, in the plural: "Work codes" unless an owner or admin names it. */
+	internalTerm: text("internal_term").notNull().default("Work codes"),
+	/** Whether a project must have a code (TS-115a); under `both`, a client project, as work codes have their own. */
+	projectCodeRequired: integer("project_code_required", { mode: "boolean" })
+		.notNull()
+		.default(false),
+	/** Under `both`, whether a work code must have a code (TS-115a). The pattern never numbers one: its code is typed. */
+	workCodeRequired: integer("work_code_required", { mode: "boolean" }).notNull().default(false),
+	/**
+	 * The pattern a new project without a code is numbered by, as typed, for
+	 * example `PRJ-0001`: everything before its last digits, then the next
+	 * number in as many digits. Null for no pattern.
+	 */
+	projectCodePattern: text("project_code_pattern"),
+	/** The number the pattern gives next; null while there is no pattern. Taken by one `UPDATE … RETURNING`, so two projects made at once never share one. */
+	projectCodeNext: integer("project_code_next"),
 	/** The currency of money nobody has given another one: ISO 4217, three upper-case letters (B5, B10). */
 	currency: text("currency").notNull().default("GBP"),
 	/** The lock date (B22): a local date on and before which no entry, expense or leave changes. Null when there is none. */
@@ -346,6 +374,116 @@ export const membershipRemovals = sqliteTable(
 	],
 );
 
+/**
+ * What a person is told in one organisation (TS-049, decisions 68 and 69):
+ * a week or a request waiting for them or decided, what the system did for
+ * them, a budget alert, a reminder. The bell in the shell counts the unread
+ * ones and lists them all. Its words are written once, for the person it is
+ * for, from what they may see in the organisation as it is made, and its
+ * link is a path below the organisation (`/approvals`), so a new slug still
+ * leads there. A reminder carries its `key` ("deadline:2026-11-20"): the
+ * unique index lets one through for each person and period. Its email waits
+ * in `email_state` until the scheduled work sends it, or skips it for a
+ * person who has turned that kind off. It goes with the person's membership,
+ * and is deleted 90 days after it was made (`NOTIFICATION_RETENTION_DAYS`),
+ * by the daily job.
+ */
+export const notifications = sqliteTable(
+	"notifications",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		/** The person it is for. */
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** One of `NOTIFICATION_KINDS` (`app/notifications/kinds.ts`). */
+		kind: text("kind").notNull(),
+		/** What happened, in one sentence. */
+		title: text("title").notNull(),
+		/** What follows it, such as the reason a week was returned; null for nothing. */
+		body: text("body"),
+		/** Where it leads, below the organisation's address: `/approvals`. */
+		path: text("path").notNull(),
+		/** The period a reminder is for, which it is sent once in; null for an event. */
+		key: text("key"),
+		/** `none` for no email, `waiting` until it is sent, then `sent` or `skipped`. */
+		emailState: text("email_state").notNull().default("none"),
+		readAt: integer("read_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("notifications_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("notifications_organisation_id_user_id_created_at_idx").on(
+			table.organisationId,
+			table.userId,
+			table.createdAt,
+		),
+		uniqueIndex("notifications_key_unique")
+			.on(table.organisationId, table.userId, table.key)
+			.where(sql`${table.key} IS NOT NULL`),
+		index("notifications_email_waiting_idx")
+			.on(table.createdAt)
+			.where(sql`${table.emailState} = 'waiting'`),
+		index("notifications_created_at_idx").on(table.createdAt),
+		foreignKey({
+			name: "notifications_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
+		check(
+			"notifications_email_state_known",
+			sql`${table.emailState} IN ('none', 'waiting', 'sent', 'skipped')`,
+		),
+	],
+);
+
+/**
+ * The kinds of notification a person has turned email off for, or back on
+ * (TS-049, decision 69). A kind with no row sends email. The same in every
+ * organisation the person belongs to, as their other mail choices are, and
+ * written only by the person themselves, from My account.
+ */
+export const notificationChoices = sqliteTable(
+	"notification_choices",
+	{
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** One of `NOTIFICATION_KINDS`. */
+		kind: text("kind").notNull(),
+		email: integer("email", { mode: "boolean" }).notNull(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [primaryKey({ columns: [table.userId, table.kind] })],
+);
+
+/**
+ * Where the reminders stand (TS-049, decision 69): one row, `reminders`. A
+ * pass checks every organisation with work once, in the order of their ids,
+ * the organisation's own reminders first and then each running timer in the
+ * order of its id; `last_organisation` and `last_entry` are the ids of the
+ * last it checked, a place in that order and not a reference (an empty
+ * `last_entry`: the organisation's own, no timer yet). A pass starts
+ * in each hour once the one before is finished, and each run of the scheduled
+ * work goes on from where the last stopped. A run holds the row while it
+ * works, by its `lease_token`, until `leased_until`: a run that dies holding
+ * it holds it no longer than that, and the next run takes it.
+ */
+export const reminderPass = sqliteTable("reminder_pass", {
+	name: text("name").primaryKey(),
+	/** The hour the pass started, in milliseconds since the epoch. */
+	startedAt: integer("started_at").notNull(),
+	lastOrganisation: text("last_organisation"),
+	lastEntry: text("last_entry"),
+	/** When the pass checked its last organisation; null while it goes on. */
+	finishedAt: integer("finished_at"),
+	leaseToken: text("lease_token"),
+	leasedUntil: integer("leased_until").notNull().default(0),
+});
+
 // The tables of the features under the navigation's headings (TS-053). Each
 // carries an `organisation_id` and is reached through `organisationScope`.
 // A reference from one of them to another is a pair of columns, the
@@ -373,12 +511,48 @@ export const clients = sqliteTable(
 		archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
 		/** The client's currency, ISO 4217 (B10). Null means the organisation's. */
 		currency: text("currency"),
+		/** Its code (TS-115a), for example `ACME`; null for none. Unique in the organisation by `code_key`, as a name is. */
+		code: text("code"),
+		codeKey: text("code_key"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
 	(table) => [
 		uniqueIndex("clients_organisation_id_id_unique").on(table.organisationId, table.id),
 		uniqueIndex("clients_organisation_id_name_key_unique").on(table.organisationId, table.nameKey),
+		uniqueIndex("clients_organisation_id_code_key_unique").on(table.organisationId, table.codeKey),
+	],
+);
+
+/**
+ * A client's account managers (TS-115a, decision 42): members who create
+ * projects for that client. Owners and admins name them on Clients › a client.
+ * The client and the member are of the row's own organisation, which the pairs
+ * of columns make the database hold; a member who leaves stops being one.
+ */
+export const clientManagers = sqliteTable(
+	"client_managers",
+	{
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		clientId: text("client_id").notNull(),
+		userId: text("user_id").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.clientId, table.userId] }),
+		index("client_managers_organisation_id_user_id_idx").on(table.organisationId, table.userId),
+		foreignKey({
+			name: "client_managers_client_fk",
+			columns: [table.organisationId, table.clientId],
+			foreignColumns: [clients.organisationId, clients.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "client_managers_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
 	],
 );
 
@@ -445,11 +619,15 @@ export const projects = sqliteTable(
 		 * multiplier, in thousandths. 1000 (×1, the rate itself) to 10000 (×10).
 		 */
 		overtimeRateMilli: integer("overtime_rate_milli").notNull().default(1000),
+		/** Its code (TS-115a), for example `ACME-001`; null for none. Unique in the organisation by `code_key`, as a name is. */
+		code: text("code"),
+		codeKey: text("code_key"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
 	(table) => [
 		uniqueIndex("projects_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("projects_organisation_id_code_key_unique").on(table.organisationId, table.codeKey),
 		uniqueIndex("projects_organisation_id_name_key_unique").on(table.organisationId, table.nameKey),
 		index("projects_organisation_id_client_id_idx").on(table.organisationId, table.clientId),
 		foreignKey({
@@ -612,6 +790,11 @@ export const periods = sqliteTable(
 			table.status,
 			table.startsOn,
 		),
+		// The organisations with a week waiting, read across all of them by the
+		// hourly reminders (TS-049): it holds the submitted weeks alone.
+		index("periods_submitted_idx")
+			.on(table.organisationId)
+			.where(sql`${table.status} = 'submitted'`),
 		check(
 			"periods_status_known",
 			sql`${table.status} IN ('submitted', 'withdrawn', 'approved', 'returned')`,

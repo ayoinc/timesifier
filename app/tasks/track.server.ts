@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 
 import { projectBudgets } from "~/budgets/budget.server";
 import { among, type OrganisationScope } from "~/db";
@@ -7,15 +7,18 @@ import { pinnedProjectIds } from "~/pins/pins.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { recentProjectIds } from "~/projects/recent.server";
 import { tagOptions, tagsOfEntries } from "~/tags/tags.server";
+import { hasClients } from "~/workspace/work-model";
 import { tasksOfProjects } from "./tasks.server";
-import type { TrackChoices } from "./track";
+import type { ProjectChoice, TrackChoices } from "./track";
 
 /**
  * What Track time and an entry's sheet offer beside the project (TS-066,
  * TS-085, TS-069): each project's active tasks, the organisation's tags, the
  * projects over budget whose people are warned, the task and tags of each
  * entry shown, so its sheet starts at what it has, and for the project picker
- * the person's pinned and recent projects and each project's client.
+ * the person's pinned and recent projects and each project's code, client
+ * and the client's code, and whether it is a work code (TS-115a). An
+ * organisation that shows no clients is given none.
  */
 export async function trackChoices(
 	scope: OrganisationScope,
@@ -26,7 +29,8 @@ export async function trackChoices(
 	// The entries shown may still be on their way: the Timesheet reads them
 	// beside these (TS-114), and only the two reads of the entries wait for them.
 	const shown = Promise.resolve(shownEntryIds);
-	const [byProject, tags, overBudget, entries, entryTags, recent, pinned, withClient, clients] =
+	const showsClients = hasClients(membership.organisation.workModel);
+	const [byProject, tags, overBudget, entries, entryTags, recent, pinned, active, clients] =
 		await Promise.all([
 			tasksOfProjects(scope),
 			tagOptions(scope),
@@ -37,10 +41,10 @@ export async function trackChoices(
 			shown.then((ids) => tagsOfEntries(scope, ids)),
 			recentProjectIds(scope, membership.user.id),
 			pinnedProjectIds(scope, membership.user.id),
-			scope.projects.select((p) => and(isNull(p.archivedAt), isNotNull(p.clientId))),
-			scope.clients.select(),
+			scope.projects.select((p) => isNull(p.archivedAt)),
+			showsClients ? scope.clients.select() : [],
 		]);
-	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const clientOf = new Map(clients.map((c) => [c.id, { name: c.name, code: c.code }]));
 	return {
 		tasks: Object.fromEntries(
 			[...byProject].map(([projectId, list]) => [
@@ -60,11 +64,15 @@ export async function trackChoices(
 		),
 		recent,
 		pinned,
-		clients: Object.fromEntries(
-			withClient.flatMap((p) => {
-				const client = p.clientId === null ? undefined : clientNames.get(p.clientId);
-				return client === undefined ? [] : [[p.id, client]];
-			}),
+		projects: Object.fromEntries(
+			active.map((p): [string, ProjectChoice] => [
+				p.id,
+				{
+					code: p.code,
+					client: (p.clientId === null ? undefined : clientOf.get(p.clientId)) ?? null,
+					workCode: p.clientId === null && p.billingType === "non_billable",
+				},
+			]),
 		),
 	};
 }

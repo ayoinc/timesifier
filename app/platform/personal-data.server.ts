@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
-import { organisationScope, platformData, users } from "~/db";
+import { notificationChoicesOf, organisationScope, platformData, users } from "~/db";
 import { type ZipEntry, zip } from "~/lib/zip";
 import { minorDigits } from "~/money/money";
 import { BYTE_ORDER_MARK, csvLine, isoInstant } from "~/reports/csv";
@@ -42,7 +42,10 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 		.where(eq(users.id, userId))
 		.limit(1);
 	if (!person) return;
-	const account = await platformData.platformAccount(env.DB, userId, now);
+	const [account, choices] = await Promise.all([
+		platformData.platformAccount(env.DB, userId, now),
+		notificationChoicesOf(env.DB, userId),
+	]);
 	yield file(
 		"account.json",
 		JSON.stringify(
@@ -51,6 +54,9 @@ async function* personalFiles(userId: string, now: Date): AsyncGenerator<ZipEntr
 				createdAt: person.createdAt.toISOString(),
 				organisations:
 					account?.organisations.map(({ name, slug, role }) => ({ name, slug, role })) ?? [],
+				// The kinds of notification whose email they turned off or on again (TS-049). The
+				// notifications themselves name other people and go after 90 days: they are not here.
+				notificationEmails: Object.fromEntries(choices),
 			},
 			null,
 			2,

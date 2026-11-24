@@ -118,6 +118,8 @@ const malformedInput: Record<string, () => Request | Promise<Request>> = {
 		formFromAMember("/app/acme/account/calendar", `intent=feed-create&follow=${"x".repeat(65)}`),
 	// The menu is hidden or shown; this asks for it folded.
 	"routes/app/menu": () => formFromAMember("/app/acme/menu", "menu=folded&back=/app/acme"),
+	// Opening the bell posts "read"; nothing else marks anything.
+	"routes/app/notifications": () => formFromAMember("/app/acme/notifications", "intent=unread"),
 	// The API reads a JSON body; this one is cut short. The token is a real one.
 	"routes/api.v1.$": async () => {
 		await freshDatabase();

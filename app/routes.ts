@@ -14,6 +14,7 @@ import {
 	OPENAPI_PATH,
 } from "./integrations/paths";
 import { BILLING_SEGMENTS, ESTIMATE_LINK_SEGMENT } from "./invoices/paths";
+import { NOTIFICATIONS_SEGMENT } from "./notifications/paths";
 import {
 	ACCOUNT_ID_PARAM,
 	ACCOUNTS_PATH,
@@ -117,6 +118,8 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	route(EVERYTHING_DOWNLOAD_SEGMENT, "routes/app/export-everything.download.ts"),
 	route(CALENDAR_FEEDS_SEGMENT, "routes/app/calendar-feeds.tsx"),
 	route(MENU_SEGMENT, "routes/app/menu.ts"),
+	// TS-049: the bell's list, and marking it read.
+	route(NOTIFICATIONS_SEGMENT, "routes/app/notifications.ts"),
 	...Object.keys(MOVED).map((segment) =>
 		route(segment, "routes/app/moved.tsx", { id: `routes/app/moved/${segment}` }),
 	),

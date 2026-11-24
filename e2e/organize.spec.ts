@@ -212,26 +212,47 @@ test("a project is created, renamed and archived with the keyboard alone", async
 	);
 });
 
-test("Clients turned off with the keyboard leaves the navigation, and its page is 404", async ({
+test("How you work changed to Internal work with the keyboard takes Clients, Invoices and Estimates from the navigation, and Clients' page is 404", async ({
 	page,
 }) => {
 	const slug = await ownNewOrganisation(page);
 	await openShell(page, destinationPath(slug, "settings"));
 	const navigation = page.getByRole("navigation").first();
-	await expect(navigation.getByRole("link", { name: "Clients" })).toBeVisible();
+	const linked = (name: string) =>
+		navigation.getByRole("link", { name, exact: true, includeHidden: true });
+	await expect(linked("Clients").first()).toBeAttached();
 
-	const clients = page.getByRole("switch", { name: "Clients" });
-	await expect(clients).toBeChecked();
-	await clients.focus();
-	await page.keyboard.press("Space");
-	await expect(page.getByRole("status")).toContainText("Clients is off.");
-	await expect(clients).not.toBeChecked();
-	await expect(navigation.getByRole("link", { name: "Clients" })).toHaveCount(0);
+	const change = page.getByRole("button", { name: "Change how you work" });
+	const sheet = page.getByRole("dialog", { name: "Change how you work" });
+	const model = (name: string) => sheet.getByRole("radio", { name: new RegExp(`^${name}`) });
+	const save = sheet.getByRole("button", { name: "Save" });
+
+	await change.focus();
+	await page.keyboard.press("Enter");
+	await expect(sheet).toBeVisible();
+	await model("Client projects").focus();
+	await page.keyboard.press("ArrowDown");
+	await expect(model("Internal work")).toBeChecked();
+	await save.focus();
+	await page.keyboard.press("Enter");
+	await expect(sheet).toBeHidden();
+	await expect(page.getByRole("status")).toContainText("How you work is now Internal work.");
+	for (const name of ["Clients", "Invoices", "Estimates"]) {
+		await expect(linked(name)).toHaveCount(0);
+	}
 
 	const response = await page.request.get(destinationPath(slug, "clients"));
 	expect(response.status()).toBe(404);
 
-	await page.keyboard.press("Space");
-	await expect(page.getByRole("status")).toContainText("Clients is on.");
-	await expect(navigation.getByRole("link", { name: "Clients" })).toBeVisible();
+	await change.focus();
+	await page.keyboard.press("Enter");
+	await model("Internal work").focus();
+	await page.keyboard.press("ArrowUp");
+	await expect(model("Client projects")).toBeChecked();
+	await save.focus();
+	await page.keyboard.press("Enter");
+	await expect(page.getByRole("status")).toContainText("How you work is now Client projects.");
+	for (const name of ["Clients", "Invoices", "Estimates"]) {
+		await expect(linked(name).first()).toBeAttached();
+	}
 });

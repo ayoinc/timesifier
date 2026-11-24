@@ -1,5 +1,6 @@
 import { data } from "react-router";
 
+import { bodyOf } from "~/lib/background.server";
 import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, CSV_COLUMNS, csvLine, rowCells } from "~/reports/csv";
@@ -35,18 +36,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const report = await reportRequest(membership, new URL(request.url), Date.now());
 	// A custom range the page would refuse with a field error is no file.
 	if ("problem" in report) throw data("Bad Request", { status: 400 });
-	const chunks = csvChunks(report);
-	const encoder = new TextEncoder();
-	const body = new ReadableStream<Uint8Array>({
-		async pull(controller) {
-			const next = await chunks.next();
-			if (next.done) controller.close();
-			else controller.enqueue(encoder.encode(next.value));
-		},
-		async cancel() {
-			await chunks.return(undefined);
-		},
-	});
+	const body = bodyOf(csvChunks(report)).pipeThrough(new TextEncoderStream());
 	const { organisation } = membership;
 	const filename = exportFilename(
 		organisation.name,

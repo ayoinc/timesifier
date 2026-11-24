@@ -4,6 +4,7 @@ import { Link, Outlet, useParams } from "react-router";
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
 import { logoPath } from "~/brand/paths";
 import { organisationCountOf } from "~/db";
+import { unreadCountOf } from "~/notifications/bell.server";
 import { maySeeRates } from "~/organisations/access";
 import {
 	membershipContext,
@@ -27,6 +28,7 @@ import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { layoutShouldRevalidate } from "~/shell/revalidation";
 import { finishRunningTransition } from "~/shell/transitions";
 import { navigationTimer } from "~/timesheet/navigation.server";
+import { termsOf } from "~/workspace/work-model";
 
 import type { Route } from "./+types/organisation";
 
@@ -106,10 +108,11 @@ export const shouldRevalidate = layoutShouldRevalidate;
 export async function loader({ context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const { organisation, role } = membership;
-	const [pendingApprovals, timer, organisationCount] = await Promise.all([
+	const [pendingApprovals, timer, organisationCount, unreadNotifications] = await Promise.all([
 		pendingApprovalsOf(membership),
 		navigationTimer(membership),
 		organisationCountOf(env.DB, membership.user.id),
+		unreadCountOf(membership),
 	]);
 	return {
 		name: organisation.name,
@@ -121,6 +124,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 				: logoPath(organisation.slug, organisation.logoVersion),
 		role,
 		destinations: visibleDestinations(viewerOf(membership)),
+		/** What the organisation calls projects and work codes (TS-115a): the navigation and every page read them. */
+		terms: termsOf(organisation.workModel, organisation.internalTerm),
 		/**
 		 * What waits for this person's decision, for the Approvals link: the
 		 * periods (TS-047) and the requests for leave (TS-061).
@@ -131,6 +136,8 @@ export async function loader({ context }: Route.LoaderArgs) {
 		userId: membership.user.id,
 		/** How many organisations the person belongs to: with more than one, the menu lists them (W31). */
 		organisationCount,
+		/** How many of the person's notifications here are unread, for the bell's badge (TS-049). */
+		unreadNotifications,
 	};
 }
 

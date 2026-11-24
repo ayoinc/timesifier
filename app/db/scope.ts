@@ -27,6 +27,7 @@ import {
 	budgetLines,
 	calendarFeeds,
 	clientContacts,
+	clientManagers,
 	clients,
 	entryTags,
 	estimateLines,
@@ -46,6 +47,7 @@ import {
 	leaveRequests,
 	membershipRemovals,
 	memberships,
+	notifications,
 	organisationDomains,
 	organisationExports,
 	payments,
@@ -401,6 +403,7 @@ export const tenantTables = {
 	invitations,
 	clients,
 	clientContacts,
+	clientManagers,
 	projects,
 	timeEntries,
 	periods,
@@ -455,6 +458,7 @@ export const tenantTables = {
 	organisationDomains,
 	membershipRemovals,
 	supportGrants,
+	notifications,
 	organisationExports,
 } as const;
 

@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectBudget } from "~/budgets/budget.server";
 import { type OrganisationScope, organisationScope, users } from "~/db";
+import { sendWaitingNotifications } from "~/notifications/mail.server";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
 import { projectPath } from "~/projects/projects";
 import { destinationPath } from "~/shell/destinations";
@@ -460,7 +461,17 @@ describe("a monthly budget", () => {
 
 describe("a budget's alert", () => {
 	const subject = "A project has reached its budget alert on Timesifier";
-	const alerts = () => mailbox.sent().filter((message) => message.subject === subject);
+	// The alert is a notification (TS-049): its email goes when the scheduled work sends what
+	// waits, in no order among those made together.
+	const alerts = async () => {
+		await sendWaitingNotifications(new Date());
+		return mailbox
+			.sent()
+			.filter((message) => message.subject === subject)
+			.sort((a, b) => a.to.localeCompare(b.to));
+	};
+	const inApp = () =>
+		value("select count(*) from notifications where kind = 'budget' and read_at is null");
 
 	it("goes out once a period, to owners, admins and the managers of those who tracked, when time crosses it", async () => {
 		clockAt(T0);
@@ -474,18 +485,20 @@ describe("a budget's alert", () => {
 			);
 
 		expect((await track()).status).toBe(200);
-		expect(alerts().map(({ to }) => to)).toEqual([
+		expect((await alerts()).map(({ to }) => to)).toEqual([
 			"ada@example.com",
 			"grace@example.com",
 			"hedy@example.com",
 		]);
-		expect(alerts()[0]?.text).toContain(`${projectPath(ACME, site)}`);
+		expect((await alerts())[0]?.text).toContain(`${projectPath(ACME, site)}`);
 		expect(await value("select count(*) from budget_alerts")).toBe(1);
+		expect(await inApp()).toBe(3);
 
 		// Past it again, and over: nothing more this period.
 		expect((await track()).status).toBe(200);
-		expect(alerts()).toHaveLength(3);
+		expect(await alerts()).toHaveLength(3);
 		expect(await value("select count(*) from budget_alerts")).toBe(1);
+		expect(await inApp()).toBe(3);
 	});
 
 	it("of a fees budget goes to owners and admins, not to managers, who see no money", async () => {
@@ -497,7 +510,7 @@ describe("a budget's alert", () => {
 			people.member,
 		);
 		expect(tracked.status).toBe(200);
-		expect(alerts().map(({ to }) => to)).toEqual(["ada@example.com", "grace@example.com"]);
+		expect((await alerts()).map(({ to }) => to)).toEqual(["ada@example.com", "grace@example.com"]);
 	});
 
 	it("is not sent below it, nor with no alert set", async () => {
@@ -514,7 +527,8 @@ describe("a budget's alert", () => {
 			{ intent: "track", projectId: site, day: "2026-11-10", hours: "1" },
 			people.member,
 		);
-		expect(alerts()).toEqual([]);
+		expect(await alerts()).toEqual([]);
+		expect(await inApp()).toBe(0);
 	});
 });
 

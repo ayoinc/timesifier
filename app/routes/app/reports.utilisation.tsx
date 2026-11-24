@@ -17,6 +17,7 @@ import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { formatDuration } from "~/time/format";
 
 import type { Route } from "./+types/reports.utilisation";
+import { useTerms } from "./useOrganisation";
 
 // The Utilisation view of Reports (TS-068, B8): for a range, each person's
 // capacity (their working week less public holidays and approved leave),
@@ -125,15 +126,17 @@ function Figures({
 	range,
 	opened,
 }: Shown & Pick<Route.ComponentProps["loaderData"], "range" | "opened">) {
+	// Under Internal work nothing is billable, so no line says what is (TS-115a).
+	const bills = useTerms().clients;
 	const detail = (line: ShownFigures) =>
-		`${line.logged} of ${line.capacity} capacity${line.overtime ? `, ${line.overtime} of it overtime` : ""} · ${line.billable} billable, ${line.billableUtilisation}`;
+		`${line.logged} of ${line.capacity} capacity${line.overtime ? `, ${line.overtime} of it overtime` : ""}${bills ? ` · ${line.billable} billable, ${line.billableUtilisation}` : ""}`;
 
 	return (
 		<>
 			<Headline
 				label="Utilisation"
 				value={total.utilisation}
-				beside={`${total.logged} of ${total.capacity} · billable ${total.billableUtilisation}`}
+				beside={`${total.logged} of ${total.capacity}${bills ? ` · billable ${total.billableUtilisation}` : ""}`}
 			/>
 			<SaveReport opened={opened} />
 
@@ -169,7 +172,7 @@ function Figures({
 				<Section
 					id="teams"
 					heading="Teams"
-					lead="Each team's members added together: their capacity, what they tracked and what bills."
+					lead={`Each team's members added together: their capacity${bills ? ", what they tracked and what bills" : " and what they tracked"}.`}
 				>
 					<div className="max-w-200">
 						<Ledger heading="By team" note={range}>

@@ -90,7 +90,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 	const since = Date.now();
 	const outcome = await timesheetAction(request, membership);
 	// A change that takes a project past its budget alert tells those who look after it (TS-069).
-	await alertBudgetsAfter(membership, since, new URL(request.url).origin);
+	await alertBudgetsAfter(membership, since);
 	return outcome;
 }
 

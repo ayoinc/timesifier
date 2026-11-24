@@ -29,8 +29,20 @@ export interface TrackChoices {
 	recent: string[];
 	/** The projects the person pinned, in the order they pinned them: first in the project picker (TS-122, S2-09). */
 	pinned: string[];
-	/** The client's name of each active project that has a client, by project id. */
-	clients: Record<string, string>;
+	/** What the picker shows and groups by beside each active project's name, by project id (TS-115a). */
+	projects: Record<string, ProjectChoice>;
+}
+
+/**
+ * An active project as the picker offers it: its code, its client with the
+ * client's code (null where it has none, or where the organisation shows no
+ * clients), and whether it is a work code, a project with no client that is
+ * not billable, grouped apart where the organisation works by both (TS-115a).
+ */
+export interface ProjectChoice {
+	code: string | null;
+	client: { name: string; code: string | null } | null;
+	workCode: boolean;
 }
 
 /** The form field that sends an entry's task. */

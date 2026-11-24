@@ -86,17 +86,24 @@ export function byNearestLimit<
 
 /**
  * Whether a project is one the words `query` find, as `listProjects` finds it:
- * by its name, or by its client's while the organisation shows clients.
+ * by its name or code, or by its client's name or code while the organisation
+ * shows clients (TS-115a).
  */
 export function projectMatches(
-	project: { name: string; client: { key: string } | null },
+	project: {
+		name: string;
+		code?: string | null;
+		client: { key: string; code?: string | null } | null;
+	},
 	query: string,
 	byClient: boolean,
 ): boolean {
 	const key = nameKey(query);
+	const has = (text: string | null | undefined) => text != null && nameKey(text).includes(key);
 	return (
-		nameKey(project.name).includes(key) ||
-		(byClient && (project.client?.key.includes(key) ?? false))
+		has(project.name) ||
+		has(project.code) ||
+		(byClient && ((project.client?.key.includes(key) ?? false) || has(project.client?.code)))
 	);
 }
 

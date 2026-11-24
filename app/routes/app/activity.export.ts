@@ -9,6 +9,7 @@ import {
 	parseLogQuery,
 } from "~/activity/log.server";
 import { organisationScope } from "~/db";
+import { bodyOf } from "~/lib/background.server";
 import { exportFilename } from "~/organisations/export-filename";
 import { membershipContext } from "~/organisations/membership.server";
 import { BYTE_ORDER_MARK, csvLine, isoInstant } from "~/reports/csv";
@@ -73,18 +74,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const query = parseLogQuery(new URL(request.url).searchParams);
 	const log = query === null ? null : await logRequest(membership, query, Date.now(), scope);
 	if (!log) return new Response("Those filters are not ones the log knows.", { status: 400 });
-	const chunks = csvChunks(log);
-	const encoder = new TextEncoder();
-	const body = new ReadableStream<Uint8Array>({
-		async pull(controller) {
-			const next = await chunks.next();
-			if (next.done) controller.close();
-			else controller.enqueue(encoder.encode(next.value));
-		},
-		async cancel() {
-			await chunks.return(undefined);
-		},
-	});
+	const body = bodyOf(csvChunks(log)).pipeThrough(new TextEncoderStream());
 	const filename = exportFilename(
 		organisation.name,
 		`activity-${log.first}-to-${log.last}`,

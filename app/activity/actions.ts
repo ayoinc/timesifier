@@ -31,6 +31,8 @@ export const ActivityAction = z.enum([
 	"client.archived",
 	"client.restored",
 	"client.updated",
+	"client.manager_added",
+	"client.manager_removed",
 	"membership.role_changed",
 	"membership.contractor_changed",
 	"membership.removed",

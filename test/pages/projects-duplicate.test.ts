@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { type OrganisationScope, organisationScope } from "~/db";
+import { PROJECT_CODE_REQUIRED } from "~/lib/codes";
 import { NOT_ALLOWED } from "~/organisations/problems";
 import { copyName } from "~/projects/projects";
+import { PROJECT_CODE_TAKEN } from "~/projects/projects.server";
 import { destinationPath } from "~/shell/destinations";
 import { captureEmail } from "../auth/harness";
 import { freshDatabase } from "../db/database";
@@ -12,9 +14,11 @@ import { type Kind, seedRoles } from "./roles-seed";
 
 // Duplicate a project (TS-122, S2-06): a copy of its client, settings,
 // budget and lines, tasks, tags and rates, under a new name, with none of
-// its time, expenses or dates; owners and admins make one, as no other role
-// sees all that is copied (decision 65), and the log says what it was
-// duplicated from.
+// its time, expenses or dates, and the log says what it was duplicated from.
+// Whoever may create a project for its client duplicates it (decisions 42 and
+// 65; each role, the account manager among them, in project-creators.test.ts).
+// Its code is never the source's: it is typed, or given by the rule of a
+// project like it (TS-115a).
 
 const ACME = "acme";
 const PROJECTS = destinationPath(ACME, "projects");
@@ -262,5 +266,88 @@ describe("the name a copy is offered", () => {
 		await duplicate(people.owner, { projectId: site, name: "Site (copy)" });
 		const page = await pageBody(await open(`${PROJECTS}/${site}`, people.owner));
 		expect(page).toContain("Site (copy 2)");
+	});
+});
+
+describe("the copy's code (TS-115a)", () => {
+	const setRules = (sql: string) =>
+		env.DB.prepare(`update organisations set ${sql} where id = ?`).bind(acme.id).run();
+	const codeOfCopy = () =>
+		value<string | null>(
+			"select code from projects where organisation_id = ? and name = 'Site (copy)'",
+			acme.id,
+		);
+
+	it("is never the source's: with no rule the copy has none", async () => {
+		await env.DB.prepare(
+			"update projects set code = 'ACME-001', code_key = 'acme-001' where id = ?",
+		)
+			.bind(site)
+			.run();
+		expect((await duplicate(people.owner, { projectId: site, name: "Site (copy)" })).status).toBe(
+			200,
+		);
+		expect(await codeOfCopy()).toBeNull();
+	});
+
+	it("is numbered by the pattern, which moves on", async () => {
+		await setRules("project_code_pattern = 'PRJ-0001', project_code_next = 7");
+		expect((await duplicate(people.owner, { projectId: site, name: "Site (copy)" })).status).toBe(
+			200,
+		);
+		expect(await codeOfCopy()).toBe("PRJ-0007");
+		expect(await value("select project_code_next from organisations where id = ?", acme.id)).toBe(
+			8,
+		);
+	});
+
+	it("is the one typed, which no other project may have", async () => {
+		await env.DB.prepare("update projects set code = 'WAY-1', code_key = 'way-1' where id = ?")
+			.bind(site)
+			.run();
+		const taken = await duplicate(people.owner, {
+			projectId: site,
+			name: "Site (copy)",
+			code: "way-1",
+		});
+		expect(taken.status).toBe(400);
+		expect(taken.said).toContain(PROJECT_CODE_TAKEN);
+		expect(await copyId()).toBeNull();
+		expect(
+			(await duplicate(people.owner, { projectId: site, name: "Site (copy)", code: "WAY-2" }))
+				.status,
+		).toBe(200);
+		expect(await codeOfCopy()).toBe("WAY-2");
+	});
+
+	it("is required where every project has one and no pattern numbers it: none typed, none made", async () => {
+		await setRules("project_code_required = 1");
+		const refused = await duplicate(people.owner, { projectId: site, name: "Site (copy)" });
+		expect(refused.status).toBe(400);
+		expect(refused.said).toContain(PROJECT_CODE_REQUIRED);
+		expect(await copyId()).toBeNull();
+	});
+
+	it("of a work code under Both follows the work codes' rule, which no pattern numbers", async () => {
+		await setRules(
+			"work_model = 'both', project_code_pattern = 'PRJ-0001', project_code_next = 1, work_code_required = 1",
+		);
+		await env.DB.prepare(
+			"update projects set client_id = null, billing_type = 'non_billable' where id = ?",
+		)
+			.bind(site)
+			.run();
+		const refused = await duplicate(people.owner, { projectId: site, name: "Site (copy)" });
+		expect(refused.status).toBe(400);
+		expect(refused.said).toContain("Enter a code: every work code here has one.");
+		expect(
+			(await duplicate(people.owner, { projectId: site, name: "Site (copy)", code: "OPS-01" }))
+				.status,
+		).toBe(200);
+		expect(await codeOfCopy()).toBe("OPS-01");
+		// The pattern gave no number away.
+		expect(await value("select project_code_next from organisations where id = ?", acme.id)).toBe(
+			1,
+		);
 	});
 });

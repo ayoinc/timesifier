@@ -236,8 +236,29 @@
 		{
 			"idx": 33,
 			"version": "6",
-			"when": 1795486171909,
-			"tag": "0036_people_import",
+			"when": 1795489262684,
+			"tag": "0034_codes_and_work_model",
+			"breakpoints": true
+		},
+		{
+			"idx": 34,
+			"version": "6",
+			"when": 1795489262685,
+			"tag": "0035_notifications",
+			"breakpoints": true
+		},
+		{
+			"idx": 35,
+			"version": "6",
+			"when": 1795489262686,
+			"tag": "0036_reminder_pass",
+			"breakpoints": true
+		},
+		{
+			"idx": 36,
+			"version": "6",
+			"when": 1795489262687,
+			"tag": "0037_people_import",
 			"breakpoints": true
 		}
 	]

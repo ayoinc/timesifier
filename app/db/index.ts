@@ -8,6 +8,10 @@
 
 // A list of any length as one bound parameter (decision 40); rows to insert likewise (TS-108).
 export { among, jsonTable, latestAmong, notAmong } from "./among";
+// Whether Invoices and Estimates are there, read with the organisation (TS-115a).
+export { keepsBillingColumn } from "./billing";
+// A share of an invocation's queries, counted as D1 counts them (decision 69).
+export { countedDatabase, isQueriesSpent, QueriesSpent, QueryBudget } from "./budget";
 // Every table of an organisation, a page at a time, for the export of everything (TS-126).
 export {
 	EXPORTED_TABLES,
@@ -24,6 +28,18 @@ export {
 	organisationIdsOf,
 	organisationsWithWebhooks,
 } from "./lookups";
+// Notifications across organisations: emails waiting, old ones deleted, a person's choices (TS-049).
+export {
+	deleteNotificationsBefore,
+	leaveReminderPass,
+	markNotificationEmails,
+	notificationChoicesOf,
+	type ReminderPass,
+	remindableOrganisations,
+	setNotificationChoice,
+	takeReminderPass,
+	waitingNotificationEmails,
+} from "./notifications";
 // The platform console's reads and writes across organisations: metadata only (TS-099).
 export * as platformData from "./platform";
 export {

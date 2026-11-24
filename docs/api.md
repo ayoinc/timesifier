@@ -78,11 +78,13 @@ Query: `per_page`, `cursor`. By `id`. `id`, `name`, `role`, `is_contractor`; `em
 
 ### `GET /clients` — `projects:read`
 
-`id`, `name`, `archived`, `currency`. For those shown Clients.
+`id`, `name`, `code` (`ACME`, or null), `archived`, `currency`. For those shown Clients.
 
 ### `GET /projects` — `projects:read`
 
-`id`, `name`, `client` (`{ id, name }` or null), `archived`; for those who see money also `billing_type`, `rate_mode`, `fee_minor`, `currency`, `budget`.
+`id`, `name`, `code` (`ACME-001`, or null), `client` (`{ id, name, code }` or null), `archived`; for those who see money also `billing_type`, `rate_mode`, `fee_minor`, `currency`, `budget`.
+
+A client's or project's `code` is how the organisation refers to it, and is unique in the organisation whatever its letters' case. Wherever an answer names a client or project, it gives `{ id, name, code }`.
 
 ### `GET /tasks` — `projects:read`
 
@@ -96,8 +98,8 @@ Query: `from`, `to` (days, at most 366 apart, both included, matched against eac
 {
 	"id": "0193…",
 	"user": { "id": "…", "name": "Ada Lovelace" },
-	"project": { "id": "…", "name": "Apollo" },
-	"client": { "id": "…", "name": "Initech" },
+	"project": { "id": "…", "name": "Apollo", "code": "INI-001" },
+	"client": { "id": "…", "name": "Initech", "code": "INI" },
 	"task": { "id": "…", "name": "Design" },
 	"spent_date": "2026-11-03",
 	"started_at": "2026-11-03T09:00:00.000Z",
@@ -206,4 +208,4 @@ Each person makes a feed on **My account › Calendar feeds**: their approved ti
 
 ## Import and export
 
-**Integrations › Import time** reads a CSV in Harvest's columns (`Date, Client, Project, Task, Notes, Hours, First name, Last name`, or an `Email`), and Harvest's own export of all time as it is. **Export all time** writes the same columns with `Email`, so it imports again. **Export all invoices as PDFs** downloads one ZIP with every invoice, drafts and void ones included, each the PDF its own page downloads, named by number (`invoice-42.pdf`).
+**Integrations › Import time** reads a CSV in Harvest's columns (`Date, Client, Project, Task, Notes, Hours, First name, Last name`, or an `Email`), and Harvest's own export of all time as it is. A row goes to the project whose code is in its `Project code` column, or else whose code or name is in its `Project` column; a project it adds takes the `Project code`. **Import projects** reads `Client`, `Project` and `Project code`. **Export all time** writes the same columns with `Email` and the codes, so it imports again. **Export all invoices as PDFs** downloads one ZIP with every invoice, drafts and void ones included, each the PDF its own page downloads, named by number (`invoice-42.pdf`).

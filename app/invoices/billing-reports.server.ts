@@ -44,6 +44,8 @@ export interface BillingReportRow {
 	invoiceId: string;
 	number: string;
 	client: string;
+	/** The client's code (TS-115a); empty for none. */
+	clientCode: string;
 	/** The day the report reads the row by: issued, paid or due. */
 	day: Day;
 	currency: string;
@@ -67,7 +69,11 @@ export async function billingReportOf(
 	today: Day,
 ): Promise<BillingReport> {
 	const clients = await scope.clients.select();
-	const clientName = new Map(clients.map((c) => [c.id, c.name]));
+	const clientOf = new Map(clients.map((c) => [c.id, c]));
+	const named = (clientId: string) => ({
+		client: clientOf.get(clientId)?.name ?? "",
+		clientCode: clientOf.get(clientId)?.code ?? "",
+	});
 	let rows: BillingReportRow[];
 	let aged: BillingReport["aged"] = [];
 	if (report === "invoiced") {
@@ -75,7 +81,7 @@ export async function billingReportOf(
 			key: invoice.id,
 			invoiceId: invoice.id,
 			number: invoice.number,
-			client: clientName.get(invoice.clientId) ?? "",
+			...named(invoice.clientId),
 			day: invoice.issuedOn,
 			currency: invoice.currency,
 			amountMinor: invoice.totalMinor,
@@ -94,7 +100,7 @@ export async function billingReportOf(
 					key: payment.id,
 					invoiceId: invoice.id,
 					number: invoice.number,
-					client: clientName.get(invoice.clientId) ?? "",
+					...named(invoice.clientId),
 					day: payment.paidOn,
 					currency: invoice.currency,
 					amountMinor: payment.amountMinor,
@@ -109,7 +115,7 @@ export async function billingReportOf(
 			key: invoice.id,
 			invoiceId: invoice.id,
 			number: invoice.number,
-			client: clientName.get(invoice.clientId) ?? "",
+			...named(invoice.clientId),
 			day: invoice.dueOn,
 			currency: invoice.currency,
 			amountMinor: invoice.balanceMinor,
@@ -119,17 +125,18 @@ export async function billingReportOf(
 	return { report, rows, totals: totalsByCurrency(rows), aged };
 }
 
-/** The CSV's headings for each report. */
+/** The CSV's headings for each report; the client's code is just before its name (TS-115a). */
 export const BILLING_CSV_COLUMNS: Record<BillingReportName, readonly string[]> = {
-	invoiced: ["invoice_number", "client", "issued_on", "currency", "total"],
-	payments: ["invoice_number", "client", "paid_on", "currency", "amount"],
-	receivables: ["invoice_number", "client", "due_on", "age", "currency", "balance"],
+	invoiced: ["invoice_number", "client_code", "client", "issued_on", "currency", "total"],
+	payments: ["invoice_number", "client_code", "client", "paid_on", "currency", "amount"],
+	receivables: ["invoice_number", "client_code", "client", "due_on", "age", "currency", "balance"],
 };
 
 /** One row's cells, in the order of the report's headings; amounts as plain decimals. */
 export function billingCsvCells(report: BillingReportName, row: BillingReportRow): string[] {
 	const amount = moneyText(row.amountMinor, row.currency);
+	const { number, clientCode, client, day, currency } = row;
 	return report === "receivables"
-		? [row.number, row.client, row.day, AGE_LABELS[row.age ?? "current"], row.currency, amount]
-		: [row.number, row.client, row.day, row.currency, amount];
+		? [number, clientCode, client, day, AGE_LABELS[row.age ?? "current"], currency, amount]
+		: [number, clientCode, client, day, currency, amount];
 }

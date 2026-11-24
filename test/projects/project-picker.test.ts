@@ -6,6 +6,7 @@ import {
 	projectSections,
 	RECENT_TITLE,
 } from "~/projects/ProjectPicker";
+import { CLIENT_PROJECT_TERMS } from "~/workspace/work-model";
 
 // The list the project picker shows for what is typed (Harvest's picker,
 // research/harvest-taste.md item 5): recent projects first, at most five,
@@ -74,9 +75,10 @@ describe("projectSections", () => {
 
 	it("puts every pinned project first, A to Z, above Recent, and lists each project once (S2-09)", () => {
 		const pinnedShape = (query: string) =>
-			projectSections(PROJECTS, ["copy", "web", "admin"], query, ["web", "audit"]).map(
-				(section) => [section.title, section.projects.map((project) => project.id)],
-			);
+			projectSections(PROJECTS, ["copy", "web", "admin"], query, CLIENT_PROJECT_TERMS, [
+				"web",
+				"audit",
+			]).map((section) => [section.title, section.projects.map((project) => project.id)]);
 		expect(pinnedShape("")).toEqual([
 			[PINNED_TITLE, ["audit", "web"]],
 			[RECENT_TITLE, ["copy", "admin"]],

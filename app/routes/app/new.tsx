@@ -1,7 +1,9 @@
+import { env } from "cloudflare:workers";
 import { Form, Link, redirect, useNavigation } from "react-router";
 import * as z from "zod";
 
 import { Button } from "~/components/Button";
+import { Radio, RadioGroup } from "~/components/Radio";
 import { TextField } from "~/components/TextField";
 import { DPA_PATH, TERMS_PATH } from "~/landing/Site";
 import { DPA_VERSION } from "~/landing/trust";
@@ -13,12 +15,19 @@ import { APP_PATH, organisationPath, WELCOME_PARAM } from "~/shell/destinations"
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { useSubmitting } from "~/shell/submitting";
+import { startWorkModel } from "~/workspace/general.server";
+import {
+	WORK_MODEL_HINTS,
+	WORK_MODEL_LABELS,
+	WORK_MODELS,
+	WorkModel,
+} from "~/workspace/work-model";
 
 import type { Route } from "./+types/new";
 
-// `/app/new`: creating an organisation. One field, its name, and one action,
-// which accepts the terms and the data processing agreement for it (TS-105).
-// The server chooses the address from the name.
+// `/app/new`: creating an organisation. Its name and how it works (TS-115a),
+// and one action, which accepts the terms and the data processing agreement
+// for it (TS-105). The server chooses the address from the name.
 
 /** A person's first organisation is "yours"; any after it is one more. */
 function titleFor(first: boolean) {
@@ -46,18 +55,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 	};
 }
 
-const form = z.object({ name: Name, dpaVersion: z.string().max(20) });
+const form = z.object({ name: Name, dpaVersion: z.string().max(20), workModel: WorkModel });
 
 /**
  * Creates the organisation, with the person as its owner, and goes to its
  * Today. The first one a person creates arrives with a welcome.
  */
 export async function action({ request }: Route.ActionArgs) {
-	const { name, dpaVersion } = await parseRequest(request, form);
+	const { name, dpaVersion, workModel } = await parseRequest(request, form);
 
 	const before = await listOrganisations(request);
 	const created = await createOrganisation(request, name, dpaVersion);
 	if (!created.ok) return refused(created);
+	await startWorkModel(env.DB, created.data.slug, workModel);
 
 	const first = before.ok && before.data.length === 0;
 	const path = organisationPath(created.data.slug);
@@ -93,6 +103,13 @@ export default function NewOrganisation({ loaderData, actionData }: Route.Compon
 					validate={nameProblem}
 					description="Your company, team or household. You can change it later."
 				/>
+				<RadioGroup label="How you work" name="workModel" defaultValue="client_projects" isRequired>
+					{WORK_MODELS.map((model) => (
+						<Radio key={model} value={model} hint={WORK_MODEL_HINTS[model]}>
+							{WORK_MODEL_LABELS[model]}
+						</Radio>
+					))}
+				</RadioGroup>
 				<p role="alert" className="text-body-medium text-error empty:hidden">
 					{actionData && !actionData.ok && !busy ? actionData.problem : null}
 				</p>

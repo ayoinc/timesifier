@@ -22,6 +22,7 @@ import {
 	WORKERS_LOGS_DAYS,
 } from "~/landing/trust";
 import { WhoSeesWhat } from "~/landing/WhoSees";
+import { NOTIFICATION_RETENTION_DAYS } from "~/notifications/kinds";
 import { SIGN_IN_DAYS, SUPPORT_HOURS } from "~/platform/limits";
 
 import type { Route } from "./+types/security";
@@ -131,6 +132,9 @@ export default function Security({
 						Each record is deleted {activityDays} days after it was made.
 					</Row>
 					<Row term="Sign-ins">Each is deleted {SIGN_IN_DAYS} days after it was made.</Row>
+					<Row term="Notifications">
+						Each is deleted {NOTIFICATION_RETENTION_DAYS} days after it was made, read or not.
+					</Row>
 					<Row term="Cloudflare's logs and traces">At most {WORKERS_LOGS_DAYS} days.</Row>
 					<Row term="Exports of everything">
 						Each is deleted {EXPORT_KEEP_DAYS} days after it is made, by a job that runs every hour.

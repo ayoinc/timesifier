@@ -84,13 +84,22 @@ const LIST = [
 		heading: "Organize",
 		audience: "administrators",
 	},
-	{ id: "invoices", label: "Invoices", segment: "invoices", heading: "Bill", audience: "finance" },
+	{
+		id: "invoices",
+		label: "Invoices",
+		segment: "invoices",
+		heading: "Bill",
+		audience: "finance",
+		// Hidden under Internal work while there is none (TS-115a).
+		needsBilling: true,
+	},
 	{
 		id: "estimates",
 		label: "Estimates",
 		segment: "estimates",
 		heading: "Bill",
 		audience: "finance",
+		needsBilling: true,
 	},
 	{
 		id: "approvals",
@@ -144,8 +153,14 @@ export interface Destination {
 	/** The heading its link sits under in the navigation, or null for none. */
 	heading: Heading | null;
 	audience: Audience;
-	/** Whether it is shown only while the organisation has Clients turned on. */
+	/** Whether it is shown only while the organisation has clients: hidden under Internal work (TS-115a). */
 	needsClients?: boolean;
+	/**
+	 * Whether it is shown only while the organisation bills: it has clients, or,
+	 * under Internal work, still holds an invoice or an estimate, which stays
+	 * reachable (TS-115a, decision 67).
+	 */
+	needsBilling?: boolean;
 	/** The shorter words its link shows in the bar under 600px; its label is still what is read out. */
 	barLabel?: string;
 }
@@ -160,19 +175,27 @@ export function destination(id: DestinationId): Destination {
 	return found;
 }
 
+/** The destination's label in the organisation's words: Projects is its term under Internal work (TS-115a, `termsOf`). */
+export function destinationLabel(each: Destination, terms: { Projects: string }): string {
+	return each.id === "projects" ? terms.Projects : each.label;
+}
+
 /** What decides which destinations a person is shown in one organisation. */
 export interface Viewer {
 	role: "owner" | "admin" | "finance" | "member";
 	/** Whether they manage at least one of the organisation's teams. */
 	managesTeams: boolean;
-	/** Whether the organisation has Clients turned on. */
+	/** Whether the organisation has clients: it does not work internally (`hasClients`). */
 	clientsEnabled: boolean;
+	/** Whether it has clients or holds any invoice or estimate: Invoices and Estimates are there (`keepsBilling`). */
+	keepsBilling: boolean;
 }
 
 /** Whether `viewer` is shown the destination `id`, and so may open it and every page below it. */
 export function canSee(viewer: Viewer, id: DestinationId): boolean {
-	const { audience, needsClients } = destination(id);
+	const { audience, needsClients, needsBilling } = destination(id);
 	if (needsClients && !viewer.clientsEnabled) return false;
+	if (needsBilling && !viewer.keepsBilling) return false;
 	const administrator = viewer.role === "owner" || viewer.role === "admin";
 	const finance = administrator || viewer.role === "finance";
 	switch (audience) {
