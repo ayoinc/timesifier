@@ -100,7 +100,7 @@ export function NotificationBell({ slug }: { slug: string }) {
 				offset={4}
 				className={cx(
 					POPOVER_MOTION,
-					"flex max-h-[min(32rem,calc(var(--visual-viewport-height)-6rem))] w-[min(22.5rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-large bg-surface-container-low shadow-level2 outline-none",
+					"flex popover-width flex-col overflow-hidden rounded-large bg-surface-container-low shadow-level2 outline-none",
 				)}
 			>
 				<Dialog className="flex min-h-0 flex-col outline-none">
@@ -116,7 +116,8 @@ export function NotificationBell({ slug }: { slug: string }) {
 							Email settings
 						</Link>
 					</div>
-					<div className="min-h-0 overflow-y-auto">
+					{/* React Aria caps the whole list at the room below the bell; this caps it at 28rem where there is more. */}
+					<div className="max-h-112 min-h-0 overflow-y-auto">
 						{/* Until the first answer comes, the list's shape. A failed answer is the page's error, as any fetcher's. */}
 						{items === undefined ? (
 							<Waiting />

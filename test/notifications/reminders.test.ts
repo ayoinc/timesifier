@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { uuidv7 } from "~/db";
+import { remindableOrganisations, uuidv7 } from "~/db";
 import { deadlineReminderAt, runReminders } from "~/notifications/reminders.server";
 
 import { captureEmail, type Mailbox } from "../auth/harness";
@@ -225,5 +225,46 @@ describe("the reminder of a running timer", () => {
 		await seedEntry(acme.id, ada.user.id, site, "2026-11-23T08:00:00Z", null);
 		await runHourly("2026-11-23T16:00:00Z", "2026-11-23T20:00:00Z");
 		expect(await reminders("timer-reminder")).toEqual([]);
+	});
+});
+
+describe("the hourly run's reads (decision 69)", () => {
+	it("finds organisations with work through the partial indexes, and reads nothing more of an idle one", async () => {
+		const sam = await person(mailbox, "sam@example.com");
+		const globex = await createOrganisation(sam.cookie, "Globex");
+		expect(await remindableOrganisations(env.DB)).toEqual({
+			timing: new Set(),
+			waiting: new Set(),
+		});
+
+		await seedEntry(acme.id, ada.user.id, site, "2026-11-23T08:00:00Z", null);
+		await seedPeriod(globex.id, sam.user.id, WEEK, "submitted");
+		expect(await remindableOrganisations(env.DB)).toEqual({
+			timing: new Set([acme.id]),
+			waiting: new Set([globex.id]),
+		});
+		// Each is read from its partial index, which holds only the rows it returns.
+		for (const [sql, index] of [
+			[
+				"select distinct organisation_id from time_entries where ended_at is null",
+				"time_entries_one_running_per_person",
+			],
+			[
+				"select distinct organisation_id from periods where status = 'submitted'",
+				"periods_submitted_idx",
+			],
+		]) {
+			const { results } = await env.DB.prepare(`explain query plan ${sql}`).all<{
+				detail: string;
+			}>();
+			expect(results.map(({ detail }) => detail).join(" "), sql).toContain(index);
+		}
+
+		// With no timer, no week waiting and no deadline due, a run is three reads, however many organisations there are.
+		await env.DB.prepare("delete from time_entries").run();
+		await env.DB.prepare("delete from periods").run();
+		const prepare = vi.spyOn(env.DB, "prepare");
+		await runReminders(Date.parse("2026-11-25T16:00:00Z"));
+		expect(prepare).toHaveBeenCalledTimes(3);
 	});
 });

@@ -467,6 +467,12 @@ html {
 	transition-property: translate, width;
 }
 
+/* A popover that holds a list, the bell's (TS-049): 90 spacing units wide, and in a
+   narrow window as wide as the window less 4 units on each side. */
+@utility popover-width {
+	width: min(calc(var(--spacing) * 90), calc(100vw - var(--spacing) * 8));
+}
+
 /*
  * The shell's view transitions (TS-006). React's <ViewTransition> starts each one
  * and puts these classes on its parts: app/shell/transitions.ts names them, and

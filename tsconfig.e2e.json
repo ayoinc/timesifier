@@ -15,7 +15,9 @@
 		"app/shell/color-scheme.server.ts",
 		"app/shell/menu.ts",
 		"app/platform/paths.ts",
-		"app/browser-errors/report.ts"
+		"app/browser-errors/report.ts",
+		"app/notifications/kinds.ts",
+		"app/notifications/paths.ts"
 	],
 	"compilerOptions": {
 		"composite": true,
