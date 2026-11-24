@@ -17,14 +17,13 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  checks:
-    name: checks
+  # Everything of `checks` but the Workers tests: typecheck, lint, the Node tests
+  # (the `node` project of vitest.config.ts), the build and the audit. 1m40s on
+  # the runner on 2026-11-24.
+  static-checks:
+    name: static checks
     runs-on: ubuntu-24.04
-    # Typecheck, lint, about 3,800 unit tests, the build and the audit: 12 to
-    # 15 minutes on the runner on 2026-11-14 (the tests alone took 14m07s in
-    # main's run 43597375543, which the old limit of 15 cancelled during the
-    # build), so 25 leaves room without hiding a hang.
-    timeout-minutes: 25
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,10 +36,61 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
+      - run: pnpm test --project node
       - run: pnpm build
       - name: Dependency audit
         run: pnpm audit --audit-level=moderate
+
+  # The tests in the Workers runtime (the `workers` project), 4,881 in 195 files,
+  # took 23 minutes in one job on 2026-11-24 (main's run 45357831172), against a
+  # limit of 25. So they run in four shards side by side, each with its own
+  # install and Miniflare. Vitest splits the files between them by count
+  # (`--shard`), in the order of a hash of each file's path, so every file runs
+  # in exactly one shard. Each shard took 4 to 5½ minutes on 2026-11-24.
+  unit-shards:
+    name: unit shard ${{ matrix.shard }}/4
+    runs-on: ubuntu-24.04
+    # About three times the slowest shard measured, so a slow day and a growing
+    # suite pass and a hang does not.
+    timeout-minutes: 15
+    strategy:
+      # Every shard runs to its end, so the log holds every failure at once.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test --project workers --shard="$SHARD/4"
+        env:
+          SHARD: ${{ matrix.shard }}
+
+  # The one result branch protection asks for, and what `preview` and `deploy`
+  # wait on: it fails unless the static checks and every unit shard passed, and
+  # it runs when one failed or was cancelled, because a required check that is
+  # skipped counts as passed.
+  checks:
+    name: checks
+    if: ${{ always() }}
+    needs: [static-checks, unit-shards]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: The static checks and every unit shard passed
+        env:
+          STATIC: ${{ needs.static-checks.result }}
+          SHARDS: ${{ needs.unit-shards.result }}
+        run: |
+          [ "$STATIC" = success ] || { echo "The static checks ended: $STATIC."; exit 1; }
+          [ "$SHARDS" = success ] || { echo "The unit shards ended: $SHARDS."; exit 1; }
+          echo "The static checks and every unit shard passed."
 
   # Jobs of their own, so that they run beside `checks` and a slow or flaky
   # browser run is told apart from a failed check at a glance. About 700 tests in
