@@ -144,12 +144,15 @@ export async function loader({ context }: Route.LoaderArgs) {
 		counts.set(resolved.schedule.id, (counts.get(resolved.schedule.id) ?? 0) + 1);
 		const view = scheduleView(book, place, today);
 		const own = targetState(book, "person", person.id, today);
+		const fromContract =
+			view.level === "person" &&
+			assignmentOn(book.assignments, "person", person.id, today)?.sourceKind === "contract";
 		return {
 			id: person.id,
 			name: person.name,
 			schedule: view.name,
 			weekLabel: view.weekLabel,
-			reason: view.reason,
+			reason: fromContract ? "From their contract" : view.reason,
 			next: view.next && { from: formatDayWithYear(view.next.from), name: view.next.name },
 			ownScheduleId: own.scheduleId,
 		};
@@ -218,6 +221,8 @@ const REFUSALS: Record<Exclude<ScheduleChange, "done">, string> = {
 		"This schedule is given to someone today or from a later day. Give them another before archiving it.",
 	past: "Choose today or a later day. Days already gone keep the schedule they had.",
 	"no-days": "Choose at least one day worked, each with a start before its finish.",
+	contract:
+		"Their hours come from their contract on that day. Change the contract instead, from Team.",
 };
 
 export async function action({ request, context }: Route.ActionArgs) {

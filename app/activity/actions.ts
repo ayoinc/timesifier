@@ -138,6 +138,12 @@ export const ActivityAction = z.enum([
 	"organisation_export.failed",
 	"organisation_export.downloaded",
 	"organisation_export.deleted",
+	// TS-098a: a person's contract given, changed from a day, and ended, with
+	// only what a manager may read; its pay is the organisation's own record.
+	"contract.created",
+	"contract.changed",
+	"contract.ended",
+	"contract_pay.changed",
 ]);
 export type ActivityAction = z.infer<typeof ActivityAction>;
 
@@ -174,6 +180,7 @@ export const SubjectType = z.enum([
 	"work_request",
 	"user",
 	"organisation_export",
+	"contract",
 ]);
 export type SubjectType = z.infer<typeof SubjectType>;
 

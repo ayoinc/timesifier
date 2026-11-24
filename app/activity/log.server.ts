@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { and, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
-
+import { END_REASON_LABELS, KIND_LABELS, OVERTIME_PAY_LABELS } from "~/contracts/contracts";
 import {
 	type ActivitySummary,
 	type ActivityValue,
@@ -234,6 +234,7 @@ const STEPS: Record<string, string> = {
 	failed: "Could not make",
 	closed: "Closed",
 	downloaded: "Downloaded",
+	ended: "Ended",
 };
 
 /** What each kind of thing an action names is called in a sentence. */
@@ -352,6 +353,16 @@ const FIELD_LABELS: Record<string, string> = {
 	internalTerm: "Name for internal work",
 	projectCodeRequired: "Every project has a code",
 	projectCodePattern: "Project codes numbered from",
+	contractKind: "Kind of contract",
+	jobTitle: "Job title",
+	overtimePay: "Overtime",
+	leaveDays: "Annual leave (days a year)",
+	endReason: "Why it ended",
+	changedAlone: "Changed by the person themselves, as nobody else here could",
+	pay: "Pay",
+	overtimeMultiplier: "Overtime multiplier",
+	restDayMultiplier: "On days off and public holidays",
+	worksNumber: "Works number",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */
@@ -362,6 +373,9 @@ const RULE_VALUES: Record<string, Record<string, string>> = {
 	kind: WORK_KIND_LABELS,
 	signInPolicy: SIGN_IN_POLICY_LABELS,
 	workModel: WORK_MODEL_LABELS,
+	contractKind: KIND_LABELS,
+	overtimePay: OVERTIME_PAY_LABELS,
+	endReason: END_REASON_LABELS,
 };
 
 /** The names a page shows for the ids its records hold. */
@@ -564,6 +578,14 @@ function whatOf(r: RecordRow, names: Names): string {
 	}
 	if ((prefix === "membership" || prefix === "user") && r.ownerId) {
 		return `${verb} ${names.people.get(r.ownerId) ?? "a former member"}`;
+	}
+	if (prefix === "contract" && r.ownerId) {
+		return `${verb} the contract of ${names.people.get(r.ownerId) ?? "a former member"}`;
+	}
+	if (prefix === "contract_pay") {
+		const person = r.summary.after?.userId ?? r.summary.before?.userId;
+		const name = typeof person === "string" ? names.people.get(person) : undefined;
+		return `Changed the pay in the contract of ${name ?? "a former member"}`;
 	}
 	return named && !noun.startsWith("a") ? `${verb} ${noun} ${named}` : `${verb} ${noun}`;
 }

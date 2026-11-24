@@ -1,11 +1,12 @@
 import { and, asc, eq } from "drizzle-orm";
 
 import { changes, recordStatement } from "~/activity/activity.server";
+import { contractOwnsHours, spansOf } from "~/contracts/contracts";
+import { contractsOf } from "~/contracts/read.server";
 import { among, type OrganisationScope, uuidv7 } from "~/db";
 import { nameKey } from "~/lib/names";
 import { Role } from "~/organisations/roles";
 import type { Day } from "~/time/calendar";
-
 import {
 	type Assignment,
 	assignmentOn,
@@ -101,10 +102,11 @@ export async function placesOf(
 	only?: readonly string[],
 ): Promise<Map<string, PersonPlace>> {
 	if (only?.length === 0) return new Map();
-	const [members, places, teams] = await Promise.all([
+	const [members, places, teams, contracts] = await Promise.all([
 		scope.memberships.select((m) => (only ? among(m.userId, only) : undefined)),
 		scope.teamMembers.select((t) => (only ? among(t.userId, only) : undefined)),
 		scope.teams.select(),
+		contractsOf(scope, only),
 	]);
 	const teamName = new Map(teams.map((t) => [t.id, t.name]));
 	const result = new Map<string, PersonPlace>();
@@ -114,6 +116,7 @@ export async function placesOf(
 			userId: m.userId,
 			role: Role.catch("member").parse(m.role),
 			contractor: m.isContractor,
+			contracts: spansOf(contracts.get(m.userId) ?? []),
 			manager: theirs.some((p) => p.isManager),
 			teams: theirs.map((p) => ({ id: p.teamId, name: teamName.get(p.teamId) ?? "" })),
 		});
@@ -168,6 +171,7 @@ export interface ScheduleInput {
  * the schedule, or what it is given to, is not there. `archived`: an archived
  * schedule cannot be given. `in-use`: an assigned schedule cannot be archived.
  * `past`: the day is before today. `no-days`: a schedule works at least one day.
+ * `contract`: a contract gives the person's hours on that day (TS-098a).
  */
 export type ScheduleChange =
 	| "done"
@@ -176,7 +180,8 @@ export type ScheduleChange =
 	| "archived"
 	| "in-use"
 	| "past"
-	| "no-days";
+	| "no-days"
+	| "contract";
 
 /** The week of a version as the activity log records it: "Mon 09:00–17:30 (60), Tue …". */
 function weekSummary(week: ScheduleWeek): string {
@@ -465,6 +470,11 @@ export async function assignSchedule(
 	if (from < today) return "past";
 	if (scheduleId === null && target.kind === "organisation") return "missing";
 	if (!(await targetExists(scope, target))) return "missing";
+	// A contract that gives the person's hours on that day owns them (TS-098a).
+	if (target.kind === "person") {
+		const theirs = (await contractsOf(scope, [target.id])).get(target.id) ?? [];
+		if (contractOwnsHours(theirs, from)) return "contract";
+	}
 	const book = await scheduleBookOf(scope);
 	if (scheduleId !== null) {
 		const schedule = book.schedules.get(scheduleId);
