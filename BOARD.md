@@ -59,6 +59,20 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-098a · Contracts and their changes
+
+Builder: an AI session on branch `ts-098a-contracts`, pull request #111. Decision 74; `research/contracts-model.md` section 9. Migration `0039_contracts`, kept at 0039 for the merge train to renumber.
+
+- [x] An owner or admin gives a person a contract with all its terms; an overlap is refused by the server and by the trigger. Tests: `test/contracts/contracts.test.ts` (overlap as a property over random pairs of spans); `test/pages/contracts.test.ts`, "gives a contract", "refuses an overlap", the trigger hit directly.
+- [x] A change is a version from a day; days before keep their terms; ending, a new contract after it, and a change of kind work. Tests: `test/contracts/contracts.test.ts`, "a version from a later day changes no day before it"; `test/pages/contracts.test.ts`, "changes from a day", "ends and starts again".
+- [x] A contract's schedule is a person assignment with `source_kind = 'contract'`; ending it falls back; a manual person assignment over those days is refused. Tests: `test/pages/contracts.test.ts`, "the contract gives the hours", "a manual assignment is refused while a contract owns it"; `test/schedules/schedules.test.ts` unchanged.
+- [x] A contract's kind decides whether the person is a contractor that day; "Mark as contractor" is not offered. Test: `test/pages/contractors.test.ts`, "a contractor contract makes a contractor".
+- [x] Who sees what follows section 6's table; a manager gets no pay field; a member gets 404 at a colleague's contract; a person reads their own on My account. Tests: `test/pages/contracts.test.ts`, "by role"; `test/pages/finance.test.ts` rows.
+- [x] Nobody changes their own contract while another owner or admin exists; a sole owner can, and the page says so. Test: `test/pages/contracts.test.ts`, "not one's own".
+- [x] `contract.*` and `contract_pay.changed` are in the Activity log, pay records hidden from managers. Test: `test/pages/activity.test.ts`, "contract records by role".
+- [x] Contracts stay after the person leaves; the privacy notice and `docs/security.md` say what is stored, who sees it and how long. Tests: `test/pages/contracts.test.ts`, "a leaver's contract is kept"; `test/documents.test.ts`, "the privacy notice names contracts and pay".
+- [x] `e2e/contracts.spec.ts`: "an owner gives a part-timer a contract and her week shows its hours", axe on Contract and its sheets; screenshots in `cmux-assets/browser/timesifier/TS-098a/`.
+
 ### TS-049 · Notifications and reminders
 
 Builder: an AI session on branch `ts-049-notifications`, pull request #102. Decisions 68 and 69. Migrations `0035_notifications` (renumbered from 0034 at merge; its snapshot follows `0034_codes_and_work_model` from TS-115a) and `0036_reminder_pass` (renumbered from 0037), additive, next to each other and in order; the SQL of neither changed. The bell is in the band beside the profile menu; My account › Notifications holds an email switch per kind. The reminders make at most 300 of an invocation's 1,000 D1 queries a run, every minute, from where the last stopped (decision 69); one Queue message per organisation is TS-049b's.
