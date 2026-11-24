@@ -236,8 +236,21 @@ test("creating an organisation: the field, the action and the way out, with the 
 
 	// The field has the focus when the page arrives, so typing can begin at once.
 	await expect(page.getByLabel("Organisation name")).toBeFocused();
-	// What creating it accepts, each a link, then the action (TS-105).
+	// Then How you work, one stop for the group, at the answer chosen; the arrows choose another (TS-115a).
 	const main = page.getByRole("main");
+	const model = (name: string) =>
+		main
+			.getByRole("radiogroup", { name: "How you work" })
+			.getByRole("radio", { name: new RegExp(`^${name}`) });
+	await page.keyboard.press("Tab");
+	await expectRadioFocused(model("Client projects"));
+	await expect(model("Client projects")).toBeChecked();
+	await page.keyboard.press("ArrowDown");
+	await expectRadioFocused(model("Internal work"));
+	await expect(model("Internal work")).toBeChecked();
+	await page.keyboard.press("ArrowUp");
+	await expect(model("Client projects")).toBeChecked();
+	// What creating it accepts, each a link, then the action (TS-105).
 	await tabTo(page, main.getByRole("link", { name: "terms", exact: true }));
 	await tabTo(page, main.getByRole("link", { name: "data processing agreement", exact: true }));
 	await tabTo(page, page.getByRole("button", { name: "Create organisation" }));

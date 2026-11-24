@@ -47,6 +47,11 @@ export function WhoSeesWhat({ leaving }: WhoSeesWhatProps) {
 					addresses; and that a colleague is on leave, but not which kind. A member can share a
 					report they saved with other members, who see in it only what their own role lets them.
 				</Row>
+				<Row term="Account managers">
+					Any member an owner or admin names as a client's account manager creates that client's
+					projects, and sees what their role lets them, nothing more. Owners, admins and Finance see
+					who each client's account managers are.
+				</Row>
 				<Row term="Contractors">
 					A member an owner or admin marks as a contractor sees what their role lets them, the same
 					as anyone else with it. Owners, admins and Finance see contractors' hours in the

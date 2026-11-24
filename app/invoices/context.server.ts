@@ -6,6 +6,7 @@ import { type Membership, membershipContext } from "~/organisations/membership.s
 import { organisationMoney } from "~/projects/money.server";
 import { negotiateLocale } from "~/shell/locale";
 import { type Day, dayOf } from "~/time/calendar";
+import { hasClients } from "~/workspace/work-model";
 
 /**
  * What every page of Invoices and Estimates reads first: the membership the
@@ -17,6 +18,8 @@ export interface Billing {
 	membership: Membership;
 	scope: OrganisationScope;
 	organisation: { name: string; slug: string; timeZone: string; currency: string };
+	/** Whether new invoices and estimates are made: never under Internal work (TS-115a, `makesBilling`). */
+	makes: boolean;
 	now: number;
 	today: Day;
 	locale: string;
@@ -32,6 +35,7 @@ export async function billingOf(
 	const now = Date.now();
 	return {
 		membership,
+		makes: hasClients(organisation.workModel),
 		scope: organisationScope(env.DB, organisation.id),
 		organisation: {
 			name: organisation.name,

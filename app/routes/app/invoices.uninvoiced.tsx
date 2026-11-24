@@ -28,7 +28,7 @@ export function meta() {
 const Range = z.object({ from: Day, to: Day });
 
 export async function loader({ request, context }: Route.LoaderArgs) {
-	const { scope, organisation, now, locale } = await billingOf(context, request);
+	const { makes, scope, organisation, now, locale } = await billingOf(context, request);
 	const search = new URL(request.url).searchParams;
 	const range = Range.safeParse({ from: search.get("from"), to: search.get("to") });
 	const days =
@@ -73,6 +73,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	});
 	return {
 		slug: organisation.slug,
+		makes,
 		from: days?.first ?? "",
 		to: days?.last ?? "",
 		range: days ? formatRange(days.first, days.last) : "Everything until today",
@@ -84,7 +85,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 export default function Uninvoiced({ loaderData }: Route.ComponentProps) {
-	const { slug, clients, totals } = loaderData;
+	const { slug, clients, totals, makes } = loaderData;
 	return (
 		<>
 			<PageHeading>Uninvoiced</PageHeading>
@@ -134,9 +135,12 @@ export default function Uninvoiced({ loaderData }: Route.ComponentProps) {
 							key={client.id}
 							heading={<span className="wrap-anywhere">{client.name}</span>}
 							note={
-								<Link to={client.invoice} className={ACTION_LINK}>
-									Invoice {client.name}
-								</Link>
+								// Under Internal work nothing new is invoiced (TS-115a).
+								makes && (
+									<Link to={client.invoice} className={ACTION_LINK}>
+										Invoice {client.name}
+									</Link>
+								)
 							}
 						>
 							<LedgerRows label={`${client.name}'s projects`}>

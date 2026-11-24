@@ -1,4 +1,5 @@
 import { cx } from "~/components/cx";
+import { useTerms } from "~/routes/app/useOrganisation";
 
 const DAY_COLUMN = "px-3 py-3 text-end max-medium:hidden";
 const TIME = "text-title-large tabular-nums";
@@ -22,6 +23,8 @@ export interface TimetableProps {
 export function WeekTimetable({ caption, days, rows, dayTotals, total }: TimetableProps) {
 	const today = (index: number) => days[index]?.isToday === true;
 	const amber = "bg-sheet text-on-sheet";
+	// The row heading in the organisation's own word for a project (TS-115a).
+	const { Project } = useTerms();
 	return (
 		<table className="w-full border-collapse text-body-large">
 			<caption className="pb-4 text-start text-label-large text-on-surface-variant">
@@ -30,7 +33,7 @@ export function WeekTimetable({ caption, days, rows, dayTotals, total }: Timetab
 			<thead>
 				<tr className="border-y-2 border-on-surface text-label-large">
 					<th scope="col" className="py-3 pe-3 text-start">
-						Project
+						{Project}
 					</th>
 					{days.map((day, index) => (
 						<th

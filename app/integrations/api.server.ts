@@ -20,6 +20,7 @@ import { clockTime } from "~/schedules/schedules";
 import { canSee } from "~/shell/destinations";
 import { Day, dayOf, daysFrom } from "~/time/calendar";
 import { addHours, deleteEntry, editEntry, REFUSAL_SENTENCES } from "~/time/manual.server";
+import { hasClients } from "~/workspace/work-model";
 
 import { authenticate, type TokenCaller } from "./api-tokens.server";
 import { viewerOfCaller, zoneOfCaller } from "./caller.server";
@@ -247,6 +248,13 @@ async function namesOfPeople(ids: Iterable<string>): Promise<Map<string, string>
 const ref = (id: string | null, names: Map<string, string>) =>
 	id === null ? null : { id, name: names.get(id) ?? null };
 
+/**
+ * A client or project as another row names it: its id, name and code, null
+ * when it has none (TS-115a). An id no longer found names nothing.
+ */
+const codedRef = (id: string | null, rows: Map<string, { name: string; code: string | null }>) =>
+	id === null ? null : { id, name: rows.get(id)?.name ?? null, code: rows.get(id)?.code ?? null };
+
 const iso = (date: Date | null) => (date === null ? null : date.toISOString());
 
 // ── Me, people, clients, projects, tasks ────────────────────────────────────
@@ -318,6 +326,7 @@ async function listClients({ caller }: Call) {
 		data: clients.map((client) => ({
 			id: client.id,
 			name: client.name,
+			code: client.code,
 			archived: client.archivedAt !== null,
 			currency: client.currency,
 		})),
@@ -329,13 +338,16 @@ async function listProjects({ caller }: Call) {
 		caller.scope.projects.select(undefined, { orderBy: (p) => [p.nameKey] }),
 		caller.scope.clients.select(),
 	]);
-	const clientNames = new Map(clients.map((client) => [client.id, client.name]));
+	const clientById = new Map(clients.map((client) => [client.id, client]));
 	const money = maySeeRates(caller.role);
 	return json({
 		data: projects.map((project) => ({
 			id: project.id,
 			name: project.name,
-			client: caller.organisation.clientsEnabled ? ref(project.clientId, clientNames) : null,
+			code: project.code,
+			client: hasClients(caller.organisation.workModel)
+				? codedRef(project.clientId, clientById)
+				: null,
 			archived: project.archivedAt !== null,
 			// Money is for those the pages show it to (docs/security.md, "Rates and money").
 			...(money
@@ -403,7 +415,7 @@ async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number)
 		caller.scope.tasks.select(),
 	]);
 	const projectById = new Map(projects.map((p) => [p.id, p]));
-	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const clientById = new Map(clients.map((c) => [c.id, c]));
 	const taskNames = new Map(tasks.map((t) => [t.id, t.name]));
 	const describe = caller.scopes.has("descriptions:read");
 	return entries.map((entry) => {
@@ -412,12 +424,10 @@ async function entriesOut(caller: TokenCaller, entries: EntryRow[], now: number)
 		return {
 			id: entry.id,
 			user: ref(entry.userId, people),
-			project: project
-				? { id: project.id, name: project.name }
-				: { id: entry.projectId, name: null },
+			project: codedRef(entry.projectId, projectById),
 			client:
-				caller.organisation.clientsEnabled && project?.clientId
-					? ref(project.clientId, clientNames)
+				hasClients(caller.organisation.workModel) && project?.clientId
+					? codedRef(project.clientId, clientById)
 					: null,
 			task: ref(entry.taskId, taskNames),
 			spent_date: entry.spentOn,
@@ -809,7 +819,7 @@ async function listExpenses({ caller, url }: Call) {
 		caller.scope.projects.select(),
 		caller.scope.expenseCategories.select(),
 	]);
-	const projectNames = new Map(projects.map((p) => [p.id, p.name]));
+	const projectById = new Map(projects.map((p) => [p.id, p]));
 	const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
 	const describe = caller.scopes.has("descriptions:read");
 	const rows = expenses
@@ -817,7 +827,7 @@ async function listExpenses({ caller, url }: Call) {
 		.map((x) => ({
 			id: x.id,
 			user: ref(x.userId, names),
-			project: ref(x.projectId, projectNames),
+			project: codedRef(x.projectId, projectById),
 			category: ref(x.categoryId, categoryNames),
 			spent_on: x.spentOn,
 			amount_minor: x.amountMinor,
@@ -844,11 +854,11 @@ async function listInvoices({ caller, url }: Call) {
 		}),
 		caller.scope.clients.select(),
 	]);
-	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const clientById = new Map(clients.map((c) => [c.id, c]));
 	const rows = invoices.map((invoice) => ({
 		id: invoice.id,
 		number: invoice.number,
-		client: ref(invoice.clientId, clientNames),
+		client: codedRef(invoice.clientId, clientById),
 		status: invoice.status,
 		currency: invoice.currency,
 		issued_on: invoice.issuedOn,

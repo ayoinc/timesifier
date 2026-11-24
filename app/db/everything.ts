@@ -1,5 +1,6 @@
-import { asc, getTableColumns, getTableName, gt } from "drizzle-orm";
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { asc, getTableColumns, getTableName, gt, type SQL, sql } from "drizzle-orm";
+import { type AnySQLiteColumn, getTableConfig } from "drizzle-orm/sqlite-core";
+import * as z from "zod";
 
 import {
 	type OrganisationScope,
@@ -12,9 +13,10 @@ import {
  * Every table of an organisation, a page at a time, for the export of
  * everything (TS-126, docs/decisions.md entry 71). Each page is read through
  * `organisationScope`, so it holds the organisation's rows and nobody else's,
- * and starts after the last id of the one before (keyset paging, decision 58):
- * every tenant table has an `id` and an index on `(organisation_id, id)` or a
- * handful of rows. The columns are the table's own, by their SQL names, less
+ * and starts after the last key of the one before (keyset paging, decision 58):
+ * a tenant table's key is its `id`, with an index on `(organisation_id, id)` or
+ * a handful of rows, or, for the one with no `id` (`client_managers`, TS-115a),
+ * its primary key. The columns are the table's own, by their SQL names, less
  * the few that are secrets.
  */
 
@@ -63,18 +65,47 @@ export function exportedTable(name: ExportedTable): {
 	};
 }
 
-/** The `id` column of a tenant table, which every one has; checked, since the type cannot say so. */
-function idColumn(table: TenantTable): AnySQLiteColumn {
+/**
+ * The columns a tenant table's pages are ordered and started by, each with its
+ * property: its `id`, or its primary key where it has no `id`; checked, since
+ * the type cannot say so.
+ */
+function keyColumns(table: TenantTable): { key: string; column: AnySQLiteColumn }[] {
 	const columns: Record<string, AnySQLiteColumn> = getTableColumns(table);
-	const id = columns.id;
-	if (!id) throw new Error(`${getTableName(table)} has no id column.`);
-	return id;
+	if (columns.id) return [{ key: "id", column: columns.id }];
+	const primary = getTableConfig(table).primaryKeys[0]?.columns ?? [];
+	const keyed = primary.map((column) => ({
+		key: Object.keys(columns).find((key) => columns[key] === column) ?? "",
+		column,
+	}));
+	if (keyed.length === 0 || keyed.some(({ key }) => key === "")) {
+		throw new Error(`${getTableName(table)} has no id column and no primary key.`);
+	}
+	return keyed;
 }
 
 /**
- * Up to `limit` rows of `name` after the row whose id is `after`, oldest id
- * first, each as its values in the order of `exportedTable(name).columns`;
- * and the id of the last row, to start the next page from.
+ * Rows after `after`: after the id, or, for a primary key of several columns,
+ * after the key's values as a JSON array, compared as one row value.
+ */
+function afterKey(table: TenantTable, after: string): SQL | undefined {
+	const keyed = keyColumns(table);
+	if (keyed.length === 1) return gt(keyed[0].column, after);
+	const values = z.array(z.string()).length(keyed.length).parse(JSON.parse(after));
+	return sql`(${sql.join(
+		keyed.map(({ column }) => column),
+		sql`, `,
+	)}) > (${sql.join(
+		values.map((value) => sql`${value}`),
+		sql`, `,
+	)})`;
+}
+
+/**
+ * Up to `limit` rows of `name` after the row whose key is `after`, in the
+ * order of their keys, each as its values in the order of
+ * `exportedTable(name).columns`; and the key of the last row, to start the
+ * next page from: its id, or its primary key's values as a JSON array.
  */
 export async function exportedPage(
 	scope: OrganisationScope,
@@ -85,11 +116,14 @@ export async function exportedPage(
 	// Every accessor has the same shape; the union of their row types is too wide for a call.
 	const accessor: ScopedAccessor<TenantTable> = scope[name];
 	const found: Record<string, unknown>[] = await accessor.select(
-		(t) => (after === null ? undefined : gt(idColumn(t), after)),
-		{ orderBy: (t) => [asc(idColumn(t))], limit },
+		(t) => (after === null ? undefined : afterKey(t, after)),
+		{ orderBy: (t) => keyColumns(t).map(({ column }) => asc(column)), limit },
 	);
 	const { columns } = exportedTable(name);
-	const last = found.at(-1)?.id;
+	const keyed = keyColumns(tenantTables[name]);
+	const lastRow = found.at(-1);
+	const lastKey = lastRow ? keyed.map(({ key }) => lastRow[key]) : [];
+	const last = keyed.length === 1 ? lastKey[0] : lastRow ? JSON.stringify(lastKey) : null;
 	return {
 		rows: found.map((row) => columns.map(({ key }) => row[key])),
 		last: typeof last === "string" ? last : null,

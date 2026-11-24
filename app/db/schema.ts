@@ -90,8 +90,36 @@ export const organisations = sqliteTable("organisations", {
 	timeZone: text("time_zone").notNull().default("UTC"),
 	/** The day a timesheet period starts on, as ISO counts it: 1 is Monday, 7 is Sunday. */
 	weekStartsOn: integer("week_starts_on").notNull().default(1),
-	/** Whether the Clients destination and the client field are shown. Turning it off deletes nothing. */
+	/**
+	 * Superseded by `workModel` (TS-115a, decision 67): no longer read. It is
+	 * written beside `workModel` (on unless the organisation works internally),
+	 * so a rollback reads the same answer; a later migration, which ships
+	 * alone, takes it away.
+	 */
 	clientsEnabled: integer("clients_enabled", { mode: "boolean" }).notNull().default(true),
+	/**
+	 * How the organisation works (TS-115a, decision 67): `client_projects`,
+	 * `internal` (no clients, invoices or estimates; projects are called
+	 * `internalTerm`) or `both` (client projects, and work codes beside them).
+	 * `app/workspace/work-model.ts` reads it.
+	 */
+	workModel: text("work_model").notNull().default("client_projects"),
+	/** What projects are called under `internal`, and work codes under `both`, in the plural: "Work codes" unless an owner or admin names it. */
+	internalTerm: text("internal_term").notNull().default("Work codes"),
+	/** Whether a project must have a code (TS-115a); under `both`, a client project, as work codes have their own. */
+	projectCodeRequired: integer("project_code_required", { mode: "boolean" })
+		.notNull()
+		.default(false),
+	/** Under `both`, whether a work code must have a code (TS-115a). The pattern never numbers one: its code is typed. */
+	workCodeRequired: integer("work_code_required", { mode: "boolean" }).notNull().default(false),
+	/**
+	 * The pattern a new project without a code is numbered by, as typed, for
+	 * example `PRJ-0001`: everything before its last digits, then the next
+	 * number in as many digits. Null for no pattern.
+	 */
+	projectCodePattern: text("project_code_pattern"),
+	/** The number the pattern gives next; null while there is no pattern. Taken by one `UPDATE … RETURNING`, so two projects made at once never share one. */
+	projectCodeNext: integer("project_code_next"),
 	/** The currency of money nobody has given another one: ISO 4217, three upper-case letters (B5, B10). */
 	currency: text("currency").notNull().default("GBP"),
 	/** The lock date (B22): a local date on and before which no entry, expense or leave changes. Null when there is none. */
@@ -373,12 +401,48 @@ export const clients = sqliteTable(
 		archivedAt: integer("archived_at", { mode: "timestamp_ms" }),
 		/** The client's currency, ISO 4217 (B10). Null means the organisation's. */
 		currency: text("currency"),
+		/** Its code (TS-115a), for example `ACME`; null for none. Unique in the organisation by `code_key`, as a name is. */
+		code: text("code"),
+		codeKey: text("code_key"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
 	(table) => [
 		uniqueIndex("clients_organisation_id_id_unique").on(table.organisationId, table.id),
 		uniqueIndex("clients_organisation_id_name_key_unique").on(table.organisationId, table.nameKey),
+		uniqueIndex("clients_organisation_id_code_key_unique").on(table.organisationId, table.codeKey),
+	],
+);
+
+/**
+ * A client's account managers (TS-115a, decision 42): members who create
+ * projects for that client. Owners and admins name them on Clients › a client.
+ * The client and the member are of the row's own organisation, which the pairs
+ * of columns make the database hold; a member who leaves stops being one.
+ */
+export const clientManagers = sqliteTable(
+	"client_managers",
+	{
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		clientId: text("client_id").notNull(),
+		userId: text("user_id").notNull(),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.clientId, table.userId] }),
+		index("client_managers_organisation_id_user_id_idx").on(table.organisationId, table.userId),
+		foreignKey({
+			name: "client_managers_client_fk",
+			columns: [table.organisationId, table.clientId],
+			foreignColumns: [clients.organisationId, clients.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "client_managers_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
 	],
 );
 
@@ -445,11 +509,15 @@ export const projects = sqliteTable(
 		 * multiplier, in thousandths. 1000 (×1, the rate itself) to 10000 (×10).
 		 */
 		overtimeRateMilli: integer("overtime_rate_milli").notNull().default(1000),
+		/** Its code (TS-115a), for example `ACME-001`; null for none. Unique in the organisation by `code_key`, as a name is. */
+		code: text("code"),
+		codeKey: text("code_key"),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
 	},
 	(table) => [
 		uniqueIndex("projects_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("projects_organisation_id_code_key_unique").on(table.organisationId, table.codeKey),
 		uniqueIndex("projects_organisation_id_name_key_unique").on(table.organisationId, table.nameKey),
 		index("projects_organisation_id_client_id_idx").on(table.organisationId, table.clientId),
 		foreignKey({

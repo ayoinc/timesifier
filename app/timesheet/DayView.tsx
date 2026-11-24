@@ -15,9 +15,11 @@ import { TextField } from "~/components/TextField";
 import { StartArrowhead } from "~/components/TimerMark";
 import { Tooltip } from "~/components/Tooltip";
 import { type DayRule, overLabel } from "~/leave/rules";
+import { codedName } from "~/lib/codes";
 import { LOCK_LABELS, lockSentence } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
+import { useCreatesProjects, useTerms } from "~/routes/app/useOrganisation";
 import { destinationPath } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { TRANSITION, useTravel } from "~/shell/transitions";
@@ -26,6 +28,7 @@ import { TrackChoicesContext } from "~/tasks/track";
 import type { Day } from "~/time/calendar";
 import { ENTRY_DESCRIPTION_MAX_LENGTH } from "~/time/entries";
 import { nearWord } from "~/time/format";
+import { inTerms, withArticle } from "~/workspace/work-model";
 
 import { type Aim, stepsAround } from "./aim";
 import { DayPicker } from "./DayPicker";
@@ -81,7 +84,10 @@ export function DayView({ data, slug, aim }: { data: DayData; slug: string; aim:
 	const formatShort = useDayFormat("short");
 	const formatPeriod = usePeriodFormat();
 	const clock = useClockFormat(zone);
-	const projectName = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
+	const projectName = (id: string) => {
+		const project = projects.find((p) => p.id === id);
+		return project ? codedName(project.code, project.name) : "";
+	};
 	const travel = useTravel(dayNumber(day));
 	// A press answered before the server (TS-114): the day it asks for is the
 	// one the stepper and the chips show at once, and what it replaces dims.
@@ -530,6 +536,8 @@ function Timer({
 		: pending.stopping
 			? null
 			: data.running;
+	const terms = useTerms();
+	const createsProjects = useCreatesProjects();
 	const whyId = useId();
 	const why =
 		blocked ??
@@ -549,13 +557,17 @@ function Timer({
 			) : (
 				<div>
 					<h2 id="timer-heading" className="text-title-large">
-						No project to track yet
+						{`No ${terms.project} to track yet`}
 					</h2>
 					<p className="mt-2 text-body-large text-on-surface-variant">
-						Time is tracked against a project.{" "}
-						<Link to={destinationPath(slug, "projects")} className={TEXT_LINK}>
-							Create a project
-						</Link>
+						{inTerms("Time is tracked against a project.", terms)}{" "}
+						{createsProjects ? (
+							<Link to={destinationPath(slug, "projects")} className={TEXT_LINK}>
+								{`Create ${withArticle(terms.project)}`}
+							</Link>
+						) : (
+							"An owner or an admin creates them."
+						)}
 					</p>
 				</div>
 			)}

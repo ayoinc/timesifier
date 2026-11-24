@@ -6,8 +6,10 @@ import { cx } from "~/components/cx";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { type DayRule, leftMessage, overLabel, wholeMinutes } from "~/leave/rules";
+import { codedName } from "~/lib/codes";
 import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
+import { useTerms } from "~/routes/app/useOrganisation";
 import { TRANSITION, useTravel } from "~/shell/transitions";
 import { addDays, type Day } from "~/time/calendar";
 import { nearWord } from "~/time/format";
@@ -75,9 +77,10 @@ export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; ai
 			...all,
 			[period.startsOn]: [...added, ...ids.filter((id) => !added.includes(id))],
 		}));
+		const one = projects.find((p) => p.id === ids[0]);
 		setSaid(
-			ids.length === 1
-				? `${projects.find((p) => p.id === ids[0])?.name} added.`
+			ids.length === 1 && one
+				? `${codedName(one.code, one.name)} added.`
 				: `${ids.length} rows added.`,
 		);
 		requestAnimationFrame(() =>
@@ -191,9 +194,12 @@ function Grid({
 	const { days, lockedDays, projects, sheet, away, rules } = data;
 	const formatDay = useDayFormat("short");
 	const formatLong = useDayFormat();
+	const terms = useTerms();
 	const nameOf = (id: string) => {
 		const project = projects.find((p) => p.id === id);
-		return project ? `${project.name}${project.archived ? " (archived)" : ""}` : "";
+		return project
+			? `${codedName(project.code, project.name)}${project.archived ? " (archived)" : ""}`
+			: "";
 	};
 	const ruleOf = (day: string) => rules.find((rule) => rule.day === day);
 	// The time of one kind on a day, across every row: what a cell's change is checked against.
@@ -213,11 +219,11 @@ function Grid({
 			    scroller and clipped by it, not out past the window's edge (audit W02). */}
 			<div className="relative mt-6 overflow-x-auto rounded-large border-2 border-on-surface">
 				<table className="w-full min-w-180 border-collapse text-body-large">
-					<caption className="sr-only">Hours by project and day</caption>
+					<caption className="sr-only">{`Hours by ${terms.project} and day`}</caption>
 					<thead>
 						<tr className="border-b border-outline-variant text-label-large">
 							<th scope="col" className="px-4 py-3 text-start">
-								Project
+								{terms.Project}
 							</th>
 							{days.map((day, index) => {
 								const marked = away.days[index];
@@ -598,14 +604,15 @@ function AddRows({
 	onCopyWeek: () => void;
 }) {
 	const whyId = useId();
+	const terms = useTerms();
 	return (
 		<div className="mt-4 flex flex-wrap items-end gap-4">
 			{addable.length > 0 && (
 				<>
 					<div className="w-72 max-w-full">
 						<Select
-							label="Project to add"
-							options={addable.map((p) => ({ id: p.id, label: p.name }))}
+							label={`${terms.Project} to add`}
+							options={addable.map((p) => ({ id: p.id, label: codedName(p.code, p.name) }))}
 							value={pick}
 							onChange={(id) => id && onPick(id)}
 						/>

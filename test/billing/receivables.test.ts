@@ -176,6 +176,7 @@ describe("receivables by age", () => {
 		const row = report.rows.find((r) => r.invoiceId === yesterday);
 		expect(row && billingCsvCells("receivables", row)).toEqual([
 			"2",
+			"",
 			"Initech",
 			"2026-11-01",
 			"1–30 days overdue",

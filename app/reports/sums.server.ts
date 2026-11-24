@@ -115,7 +115,7 @@ export async function sumsOf(
 		scope.clients.select(),
 	]);
 	const projectsById = new Map(projects.map((p) => [p.id, p]));
-	const clientNames = new Map(clients.map((c) => [c.id, c.name]));
+	const clientsById = new Map(clients.map((c) => [c.id, c]));
 
 	const sums: Sum[] = [];
 	const byDays: Sum[] = [];
@@ -124,13 +124,16 @@ export async function sumsOf(
 		const projectId = text(line.project);
 		const project = projectsById.get(projectId);
 		const clientId = project?.clientId ?? null;
+		const client = clientId === null ? undefined : clientsById.get(clientId);
 		const sum: Sum = {
 			entry: {
 				userId: text(line.user),
 				projectId,
 				project: project?.name ?? "",
+				projectCode: project?.code ?? null,
 				clientId,
-				client: clientId === null ? null : (clientNames.get(clientId) ?? null),
+				client: client?.name ?? null,
+				clientCode: client?.code ?? null,
 				taskId: line.task === null ? null : text(line.task),
 				billable: line.billable === 1,
 				overtime: line.overtime === 1,

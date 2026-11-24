@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { Link, type ShouldRevalidateFunctionArgs, useSearchParams } from "react-router";
@@ -12,7 +13,13 @@ import {
 	setClientArchived,
 	setClientCurrency,
 } from "~/clients/clients.server";
+import {
+	MANAGER_NOT_A_MEMBER,
+	managersByClient,
+	setClientManager,
+} from "~/clients/managers.server";
 import { Button } from "~/components/Button";
+import { Checkbox } from "~/components/Checkbox";
 import { cx } from "~/components/cx";
 import { FilterBar, FilterField } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";
@@ -20,6 +27,7 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { organisationScope } from "~/db";
 import { importPath } from "~/integrations/paths";
+import { CODE_MAX_LENGTH, codedName, codeProblem } from "~/lib/codes";
 import { RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import { isCurrencyCode } from "~/money/money";
@@ -33,20 +41,22 @@ import { keptTab, onlyTabChanged, SEARCH_PARAM, searchIn } from "~/projects/proj
 import { destination } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
+import { peopleOf } from "~/teams/people.server";
 
 import type { Route } from "./+types/clients";
 import { FormSheet } from "./FormSheet";
 import { useOrganisation } from "./useOrganisation";
 
 // Clients: whom the organisation's projects are for (TS-011b). Its owners,
-// admins and Finance are shown it while the organisation has Clients turned
-// on, and nobody else is: the layout answers them 404, actions included
+// admins and Finance are shown it while the organisation has clients, and
+// nobody else is: the layout answers them 404, actions included
 // (docs/navigation.md). Owners and admins create, rename, archive and restore
-// clients; Finance reads them, to invoice them, and the action answers its
-// forms 403 (TS-075). Everyone shown it sees each client's projects; a client
-// is never deleted. An archived client is offered to no project, and the
-// projects that have it keep it. The list is filtered by a client's name, in
-// the address (TS-057).
+// clients, and name each one's account managers, who create its projects
+// (decision 42); Finance reads them, to invoice them, and the action answers
+// its forms 403 (TS-075). Everyone shown it sees each client's code, projects
+// and account managers; a client is never deleted. An archived client is
+// offered to no project, and the projects that have it keep it. The list is
+// filtered by a client's name or code, in the address (TS-057, TS-115a).
 
 const { label } = destination("clients");
 
@@ -54,15 +64,37 @@ export function meta() {
 	return [{ title: `${label} · Timesifier` }];
 }
 
-/** Every client, active and archived, or those whose name has the words in the address, each with its projects. */
+/**
+ * Every client, active and archived, or those whose name or code has the words
+ * in the address, each with its projects and its account managers; and, for
+ * those who name account managers, every member.
+ */
 export async function loader({ request, context }: Route.LoaderArgs) {
 	const membership = context.get(membershipContext);
 	const query = searchIn(new URL(request.url).searchParams);
 	const scope = organisationScope(env.DB, membership.organisation.id);
+	const canManage = mayManageClients(membership.role);
+	const [clients, managers, people] = await Promise.all([
+		listClients(scope, query),
+		managersByClient(scope),
+		peopleOf(scope, membership.organisation),
+	]);
+	const nameOf = new Map(people.map((person) => [person.id, person.name]));
 	return {
-		clients: await listClients(scope, query),
+		clients: clients.map((client) => {
+			const ids = managers.get(client.id) ?? [];
+			return {
+				...client,
+				managers: ids
+					.filter((id) => nameOf.has(id))
+					.map((id) => ({ id, name: nameOf.get(id) ?? "" }))
+					.sort((a, b) => a.name.localeCompare(b.name, "en")),
+			};
+		}),
 		query,
-		canManage: mayManageClients(membership.role),
+		canManage,
+		/** Every member, for the account managers' sheet: only for those who name them. */
+		members: canManage ? people.map(({ id, name }) => ({ id, name })) : [],
 	};
 }
 
@@ -80,14 +112,22 @@ export function shouldRevalidate({
 const Id = z.string().min(1).max(64);
 // Its length is the page's rule, said in the page's words; a body is at most 64 KB.
 const Name = z.string();
+// Checked by `typedCode`, in the server's words.
+const Code = z.string().max(256).optional();
+const Ids = z
+	.union([Id, z.array(Id).max(5000)])
+	.optional()
+	.transform((value) => (value === undefined ? [] : Array.isArray(value) ? value : [value]));
 
-/** The four things this page can ask for. A form says which with its `intent`. */
+/** The things this page can ask for. A form says which with its `intent`. */
 const form = z.discriminatedUnion("intent", [
-	z.object({ intent: z.literal("create"), name: Name }),
-	z.object({ intent: z.literal("rename"), clientId: Id, name: Name }),
+	z.object({ intent: z.literal("create"), name: Name, code: Code }),
+	z.object({ intent: z.literal("rename"), clientId: Id, name: Name, code: Code }),
 	z.object({ intent: z.literal("archive"), clientId: Id }),
 	z.object({ intent: z.literal("restore"), clientId: Id }),
 	z.object({ intent: z.literal("currency"), clientId: Id, currency: z.string().max(8) }),
+	// The account managers the client is to have: those ticked (decision 42).
+	z.object({ intent: z.literal("managers"), clientId: Id, managerIds: Ids }),
 ]);
 
 /**
@@ -103,13 +143,13 @@ export async function action({ request, context }: Route.ActionArgs) {
 	switch (input.intent) {
 		case "create":
 			return answer(
-				await createClient(scope, user.id, input.name),
+				await createClient(scope, user.id, input.name, input.code),
 				(name) => `Client created: ${name}.`,
 			);
 		case "rename":
 			return answer(
-				await renameClient(scope, user.id, input.clientId, input.name),
-				(name) => `Client renamed: ${name}.`,
+				await renameClient(scope, user.id, input.clientId, input.name, input.code),
+				(name) => `Client saved: ${name}.`,
 			);
 		case "archive":
 			return answer(
@@ -129,6 +169,23 @@ export async function action({ request, context }: Route.ActionArgs) {
 				(name) => `${name} is billed in ${own ?? "the organisation's currency"}.`,
 			);
 		}
+		case "managers": {
+			const [found] = await scope.clients.select((c) => eq(c.id, input.clientId), { limit: 1 });
+			if (!found) throw notFound();
+			const now = new Set((await managersByClient(scope)).get(found.id) ?? []);
+			const wanted = new Set(input.managerIds);
+			for (const userId of new Set([...now, ...wanted])) {
+				if (now.has(userId) === wanted.has(userId)) continue;
+				if (!(await setClientManager(scope, user.id, found.id, userId, wanted.has(userId)))) {
+					return declined(MANAGER_NOT_A_MEMBER);
+				}
+			}
+			return done(
+				wanted.size === 0
+					? `${found.name} has no account managers.`
+					: `${found.name} has ${wanted.size === 1 ? "1 account manager" : `${wanted.size} account managers`}.`,
+			);
+		}
 	}
 }
 
@@ -141,7 +198,7 @@ function answer(result: ClientResult, said: (name: string) => string) {
 type Client = Route.ComponentProps["loaderData"]["clients"][number];
 
 /** The sheets of this page. One is open at a time. */
-type Task = "create" | "rename" | "archive" | "restore" | "currency";
+type Task = "create" | "rename" | "archive" | "restore" | "currency" | "managers";
 
 export default function Clients({ loaderData }: Route.ComponentProps) {
 	const { clients, query, canManage } = loaderData;
@@ -163,7 +220,7 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 		shown.length === 0 ? (
 			<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
 				{query !== ""
-					? `No ${archived ? "archived" : "active"} client has “${query}” in its name.`
+					? `No ${archived ? "archived" : "active"} client has “${query}” in its name or code.`
 					: archived
 						? canManage
 							? "No archived clients. A client you archive is kept here, with its projects, and can be restored."
@@ -192,10 +249,10 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 										setTask("rename");
 									}}
 								>
-									{each.name}
+									{codedName(each.code, each.name)}
 								</AriaButton>
 							) : (
-								<span className="wrap-anywhere">{each.name}</span>
+								<span className="wrap-anywhere">{codedName(each.code, each.name)}</span>
 							)
 						}
 						detail={
@@ -203,10 +260,17 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 								{each.projects.length === 0
 									? "No projects"
 									: each.projects
-											.map((project) =>
-												project.archived ? `${project.name} (archived)` : project.name,
-											)
+											.map((project) => {
+												const named = codedName(project.code, project.name);
+												return project.archived ? `${named} (archived)` : named;
+											})
 											.join(", ")}
+								{each.managers.length > 0 && (
+									<span className="block">
+										Account {each.managers.length === 1 ? "manager" : "managers"}:{" "}
+										{each.managers.map((manager) => manager.name).join(", ")}
+									</span>
+								)}
 							</span>
 						}
 					/>
@@ -288,6 +352,14 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
 				/>
+				<TextField
+					label="Code"
+					name="code"
+					autoComplete="off"
+					maxLength={CODE_MAX_LENGTH}
+					validate={codeProblem}
+					description="Optional, for example ACME. Shown first wherever the client appears."
+				/>
 			</FormSheet>
 
 			<FormSheet
@@ -332,6 +404,27 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 					maxLength={RECORD_NAME_MAX_LENGTH}
 					validate={recordNameProblem}
 				/>
+				<TextField
+					key={`code-${client?.id}`}
+					label="Code"
+					name="code"
+					defaultValue={client?.code ?? ""}
+					autoComplete="off"
+					maxLength={CODE_MAX_LENGTH}
+					validate={codeProblem}
+					description="Optional, for example ACME. Shown first wherever the client appears."
+				/>
+				{/* Its account managers create its projects (decision 42): a sheet of their own. */}
+				<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
+					<p className="text-body-medium text-on-surface-variant">
+						{client?.managers.length
+							? `Account ${client.managers.length === 1 ? "manager" : "managers"}: ${client.managers.map((m) => m.name).join(", ")}. They create its projects.`
+							: "No account managers. An account manager creates the client's projects."}
+					</p>
+					<Button variant="outlined" onPress={() => setTask("managers")}>
+						Change account managers
+					</Button>
+				</div>
 				{/* The currency it bills in has its own sheet, as archiving does (TS-067). */}
 				<div className="flex flex-col items-start gap-2 border-t border-outline-variant pt-4">
 					<p className="text-body-medium text-on-surface-variant">
@@ -384,6 +477,34 @@ export default function Clients({ loaderData }: Route.ComponentProps) {
 			>
 				<input type="hidden" name="clientId" value={client?.id ?? ""} />
 				<p>It moves back to Active and projects can be given it again.</p>
+			</FormSheet>
+
+			<FormSheet
+				title={`Account managers of ${client?.name ?? "this client"}`}
+				intent="managers"
+				submitLabel="Save"
+				isOpen={task === "managers"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="clientId" value={client?.id ?? ""} />
+				<p>
+					An account manager creates the client's projects, and only the client's. Owners and admins
+					create any project.
+				</p>
+				<fieldset className="flex flex-col" key={`managers-${client?.id}`}>
+					<legend className="pb-1 text-title-medium">Account managers</legend>
+					{loaderData.members.map((member) => (
+						<Checkbox
+							key={member.id}
+							name="managerIds"
+							value={member.id}
+							defaultSelected={client?.managers.some((m) => m.id === member.id) ?? false}
+						>
+							{member.name}
+						</Checkbox>
+					))}
+				</fieldset>
 			</FormSheet>
 		</>
 	);

@@ -20,6 +20,7 @@ import {
 } from "~/import/import.server";
 import { FIELD_LABELS, FIELDS, type ImportKind } from "~/import/mapping";
 import { importPath } from "~/integrations/paths";
+import { codedName } from "~/lib/codes";
 import { parseRequest } from "~/lib/validate";
 import { membershipContext, notFound } from "~/organisations/membership.server";
 import { declined, done } from "~/organisations/outcome.server";
@@ -29,16 +30,19 @@ import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { useSubmitting } from "~/shell/submitting";
 import { formatDayAndTime, formatDayWithYear, formatDuration } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
+import { hasClients, inTerms, termsOf } from "~/workspace/work-model";
 
 import type { Route } from "./+types/integrations.import";
 import { FormSheet } from "./FormSheet";
 import { useOrganisation } from "./useOrganisation";
 
 // Importing from a CSV (TS-076): time, clients or projects, below Integrations,
-// so only owners and admins reach it. A file is uploaded and previewed with
-// the columns the Harvest preset chose; the columns can be chosen again; then
-// it is imported, and a time import can be reverted. Nothing is written before
-// "Import".
+// so only owners and admins reach it, and so only they add projects through it
+// (decision 42). A file is uploaded and previewed with the columns the Harvest
+// preset chose; the columns can be chosen again; then it is imported, and a
+// time import can be reverted. Nothing is written before "Import". Rows find
+// their projects by code first (TS-115a); under Internal work the page says the
+// organisation's term, and has no clients.
 
 const KINDS = ["time", "clients", "projects"] as const;
 const Kind = z.enum(KINDS);
@@ -50,18 +54,26 @@ const TITLES: Record<ImportKind, string> = {
 };
 
 const LEADS: Record<ImportKind, string> = {
-	time: "A CSV with Harvest's columns: Date, Client, Project, Task, Notes, Hours, First name and Last name, or an Email. Harvest's own export of all time is read as it is. Each row is matched to a member; missing clients, projects and tasks are added; nobody is.",
+	time: "A CSV with Harvest's columns: Date, Client, Project, Task, Notes, Hours, First name and Last name, or an Email. Harvest's own export of all time is read as it is. Each row is matched to a member, and to a project by its code, in a Project code column or the Project column, else by name; missing clients, projects and tasks are added; nobody is.",
 	clients:
-		"A CSV with a Client column, and a Currency if you like. Clients already here are skipped.",
+		"A CSV with a Client column, and a Client code and a Currency if you like. Clients already here are skipped.",
 	projects:
-		"A CSV with Harvest's Client and Project columns. Projects already here are skipped; missing clients are added.",
+		"A CSV with Harvest's Client and Project columns, and a Project code if you like. Projects already here, by code or name, are skipped; missing clients are added.",
+};
+
+/** Under Internal work, the lead with no clients in it, in the organisation's term. */
+const INTERNAL_LEADS: Record<ImportKind, string> = {
+	time: "A CSV with Harvest's columns: Date, Project, Task, Notes, Hours, First name and Last name, or an Email. Harvest's own export of all time is read as it is. Each row is matched to a member, and to a project by its code, in a Project code column or the Project column, else by name; missing projects and tasks are added; nobody is.",
+	clients: LEADS.clients,
+	projects:
+		"A CSV with a Project column, and a Project code if you like. Projects already here, by code or name, are skipped.",
 };
 
 /** The most rows of each list the preview shows; the counts say how many there are. */
 const SHOWN_ROWS = 100;
 
 export function meta({ loaderData }: Route.MetaArgs) {
-	return [{ title: `${TITLES[loaderData?.kind ?? "time"]} · Timesifier` }];
+	return [{ title: `${loaderData?.title ?? TITLES.time} · Timesifier` }];
 }
 
 export async function loader({ request, context }: Route.LoaderArgs) {
@@ -70,6 +82,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const search = new URL(request.url).searchParams;
 	const kind = Kind.safeParse(search.get("kind") ?? "time");
 	if (!kind.success) throw notFound();
+	// Under Internal work there are no clients to import (TS-115a).
+	const { workModel, internalTerm } = membership.organisation;
+	if (kind.data === "clients" && !hasClients(workModel)) throw notFound();
+	const terms = termsOf(workModel, internalTerm);
 	const zone = await zoneOfMember(membership);
 	const id = search.get("import");
 	const job = id ? await findImport(scope, id) : null;
@@ -78,6 +94,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const imports = await listImports(scope, kind.data);
 	return {
 		kind: kind.data,
+		title: inTerms(TITLES[kind.data], terms),
 		job: job
 			? {
 					id: job.id,
@@ -124,6 +141,7 @@ export async function action({ request, context }: Route.ActionArgs) {
 		case "upload": {
 			if (input.file.size === 0) return declined("Choose a CSV file.");
 			if (input.file.size > IMPORT_MAX_BYTES) return declined("A file is at most 1 MB. Split it.");
+			if (input.kind === "clients" && !hasClients(organisation.workModel)) throw notFound();
 			const started = await startImport(
 				scope,
 				user.id,
@@ -188,8 +206,12 @@ function Problem({ said }: { said: string | undefined }) {
 }
 
 export default function Import({ loaderData, actionData }: Route.ComponentProps) {
-	const { kind, job, preview, imports } = loaderData;
+	const { kind, title, job, preview, imports } = loaderData;
 	const organisation = useOrganisation();
+	const { terms } = organisation;
+	const clients = hasClients(terms.model);
+	/** A sentence in the organisation's terms (TS-115a). */
+	const say = (text: string) => inTerms(text, terms);
 	const submitting = useSubmitting();
 	const [said, setSaid] = useState<string | null>(null);
 	const [reverting, setReverting] = useState<(typeof imports)[number] | null>(null);
@@ -204,8 +226,8 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 					Integrations
 				</Link>
 			</p>
-			<PageHeading>{TITLES[kind]}</PageHeading>
-			<PageLead>{LEADS[kind]}</PageLead>
+			<PageHeading>{title}</PageHeading>
+			<PageLead>{say(clients ? LEADS[kind] : INTERNAL_LEADS[kind])}</PageLead>
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said ?? told}
 			</p>
@@ -219,21 +241,23 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 					<Form method="post" className="flex max-w-200 flex-col gap-4">
 						<input type="hidden" name="importId" value={job.id} />
 						<div className="grid gap-4 @sm:grid-cols-2">
-							{FIELDS[kind].map((field) => (
-								<Select
-									key={`${field}-${preview.mapping[field] ?? ""}`}
-									label={FIELD_LABELS[field] ?? field}
-									name={`column-${field}`}
-									defaultValue={String(preview.mapping[field] ?? "none")}
-									options={[
-										{ id: "none", label: "Not in this file" },
-										...preview.headers.map((header, index) => ({
-											id: String(index),
-											label: header || `Column ${index + 1}`,
-										})),
-									]}
-								/>
-							))}
+							{FIELDS[kind]
+								.filter((field) => clients || (field !== "client" && field !== "client_code"))
+								.map((field) => (
+									<Select
+										key={`${field}-${preview.mapping[field] ?? ""}`}
+										label={say(FIELD_LABELS[field] ?? field)}
+										name={`column-${field}`}
+										defaultValue={String(preview.mapping[field] ?? "none")}
+										options={[
+											{ id: "none", label: "Not in this file" },
+											...preview.headers.map((header, index) => ({
+												id: String(index),
+												label: header || `Column ${index + 1}`,
+											})),
+										]}
+									/>
+								))}
 						</div>
 						<div className="flex flex-wrap gap-2">
 							<Button
@@ -250,7 +274,7 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 
 					{preview.missing.length > 0 ? (
 						<p className="mt-6 max-w-160 text-body-large">
-							Choose a column for {preview.missing.join(", ")} before anything can be imported.
+							Choose a column for {say(preview.missing.join(", "))} before anything can be imported.
 						</p>
 					) : (
 						<>
@@ -267,7 +291,7 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 										preview.creates.clients.length > 0 &&
 											`clients ${preview.creates.clients.join(", ")}`,
 										preview.creates.projects.length > 0 &&
-											`projects ${preview.creates.projects.join(", ")}`,
+											say(`projects ${preview.creates.projects.join(", ")}`),
 										preview.creates.tasks.length > 0 && `tasks ${preview.creates.tasks.join(", ")}`,
 									]
 										.filter(Boolean)
@@ -300,7 +324,9 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 									isPending={submitting("intent", "import").isPending}
 									isDisabled={submitting("intent", "import").isDisabled || preview.toImport === 0}
 								>
-									{`Import ${preview.toImport} ${kind === "time" ? (preview.toImport === 1 ? "entry" : "entries") : kind === "clients" ? (preview.toImport === 1 ? "client" : "clients") : preview.toImport === 1 ? "project" : "projects"}`}
+									{say(
+										`Import ${preview.toImport} ${kind === "time" ? (preview.toImport === 1 ? "entry" : "entries") : kind === "clients" ? (preview.toImport === 1 ? "client" : "clients") : preview.toImport === 1 ? "project" : "projects"}`,
+									)}
 								</Button>
 								<Button
 									type="submit"
@@ -324,14 +350,14 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 													aside={`Line ${row.line}`}
 													title={
 														<span className="wrap-anywhere">
-															{row.person} · {row.project}
+															{row.person} · {codedName(row.projectCode, row.project)}
 															{row.task ? ` · ${row.task}` : ""}
 														</span>
 													}
 													detail={
 														<span className="wrap-anywhere">
 															{formatDayWithYear(row.day)}
-															{row.client ? ` · ${row.client}` : ""}
+															{row.client ? ` · ${codedName(row.clientCode, row.client)}` : ""}
 															{row.notes ? ` · ${row.notes}` : ""}
 														</span>
 													}
@@ -345,8 +371,10 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 												<LedgerRow
 													key={row.line}
 													aside={`Line ${row.line}`}
-													title={<span className="wrap-anywhere">{row.name}</span>}
-													detail={row.client ?? undefined}
+													title={
+														<span className="wrap-anywhere">{codedName(row.code, row.name)}</span>
+													}
+													detail={row.client ? codedName(row.clientCode, row.client) : undefined}
 												/>
 											))}
 										</LedgerRows>
@@ -358,7 +386,11 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 									<Ledger heading="To skip" note={preview.skippedCount}>
 										<LedgerRows label="Rows to skip">
 											{preview.skipped.map((row) => (
-												<LedgerRow key={row.line} aside={`Line ${row.line}`} title={row.reason} />
+												<LedgerRow
+													key={row.line}
+													aside={`Line ${row.line}`}
+													title={say(row.reason)}
+												/>
 											))}
 										</LedgerRows>
 									</Ledger>
@@ -382,7 +414,7 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 							<Ledger heading="Skipped" note={job.skippedCount}>
 								<LedgerRows label="Skipped rows">
 									{job.skipped.map((row) => (
-										<LedgerRow key={row.line} aside={`Line ${row.line}`} title={row.reason} />
+										<LedgerRow key={row.line} aside={`Line ${row.line}`} title={say(row.reason)} />
 									))}
 								</LedgerRows>
 							</Ledger>
@@ -421,7 +453,7 @@ export default function Import({ loaderData, actionData }: Route.ComponentProps)
 
 			<Section id="imports" heading="Earlier imports">
 				<div className="max-w-200">
-					<Ledger heading={TITLES[kind]} note={imports.length}>
+					<Ledger heading={title} note={imports.length}>
 						{imports.length === 0 ? (
 							<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
 								Nothing imported yet.

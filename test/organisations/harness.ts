@@ -48,6 +48,9 @@ const Created = z.object({ id: z.string(), name: z.string(), slug: z.string() })
 /** What creating an organisation sends beside its name: the version of the data processing agreement accepted for it (TS-105). */
 export const ACCEPTED = { dpaVersion: DPA_VERSION.date };
 
+/** What `/app/new` posts beside its name: the agreement accepted, and how the organisation works (TS-115a). */
+export const NEW_ORGANISATION = { ...ACCEPTED, workModel: "client_projects" };
+
 /**
  * Creates an organisation the way a page will: a name, and the agreement
  * accepted. It then gets seats for everyone the test invites: these tests are

@@ -8,6 +8,8 @@
 
 // A list of any length as one bound parameter (decision 40).
 export { among, latestAmong, notAmong } from "./among";
+// Whether Invoices and Estimates are there, read with the organisation (TS-115a).
+export { keepsBillingColumn } from "./billing";
 // Every table of an organisation, a page at a time, for the export of everything (TS-126).
 export {
 	EXPORTED_TABLES,

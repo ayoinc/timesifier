@@ -104,7 +104,9 @@ async function exported(who: Person, query: string) {
 	expect(header).toEqual([
 		"entry_id",
 		"person",
+		"project_code",
 		"project",
+		"client_code",
 		"client",
 		"description",
 		"started_at",
@@ -386,12 +388,12 @@ describe("a report", () => {
 		expect(seconds).toBeLessThan(92 * 60);
 	});
 
-	it("shows Clients only while the organisation has them, and groups by project instead", async () => {
-		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
+	it("shows Clients only while the organisation has them, and groups by its term for projects instead", async () => {
+		await env.DB.prepare("update organisations set work_model = 'internal' where id = ?")
 			.bind(acme.id)
 			.run();
 		const html = await pageBody(await open(`${REPORTS}?${WEEK}&group=client`, ada));
-		expect(textOf(html)).toMatch(/By project .* Billing 5:00 People Site 3:00 People Total 8:00/);
+		expect(textOf(html)).toMatch(/By work code .* Billing 5:00 People Site 3:00 People Total 8:00/);
 		expect(textOf(html)).not.toContain("Initech");
 		const { rows } = await exported(ada, `${WEEK}&group=client`);
 		expect(rows.map((row) => row.client)).toEqual(rows.map(() => ""));

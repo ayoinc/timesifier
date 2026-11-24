@@ -157,8 +157,13 @@ for (const viewport of [
 				await expect(sheet.getByRole("textbox", { name: "Project name" })).toHaveValue(
 					"Atlas (copy)",
 				);
-				// The sheet lies over the page: its own text is measured apart.
-				await check(page, `S2-06-duplicate-sheet-${at}`, [UNDER_AN_OVERLAY, OVER_SEVERAL_ELEMENTS]);
+				// The sheet lies over the page: its own text is measured apart. Its Code
+				// field (TS-115a) opens empty, so axe cannot measure what it would hold.
+				await check(page, `S2-06-duplicate-sheet-${at}`, [
+					UNDER_AN_OVERLAY,
+					OVER_SEVERAL_ELEMENTS,
+					EMPTY_INPUT,
+				]);
 				expect(await contrast(sheet.getByText("The copy has the client"))).toBeGreaterThanOrEqual(
 					4.5,
 				);

@@ -7,14 +7,18 @@ import type { Row } from "./report";
  * in ISO 8601 with `Z`, to the second. The duration is the entry's whole
  * minutes, in seconds, as the page counts it, so the durations add up to the
  * page's total. `overtime` is `yes` for an entry of overtime, `no` for regular
- * time (TS-095), so a spreadsheet adds up each apart.
+ * time (TS-095), so a spreadsheet adds up each apart. Each name has its code
+ * in the column before it, empty when it has none (TS-115a). The headers are
+ * names for a machine, the same whatever the organisation calls projects.
  */
 
 /** The columns, in their order. */
 export const CSV_COLUMNS = [
 	"entry_id",
 	"person",
+	"project_code",
 	"project",
+	"client_code",
 	"client",
 	"description",
 	"started_at",
@@ -58,15 +62,19 @@ export function isoInstant(instant: number): string {
 
 /**
  * The cells of one row, in the order of `CSV_COLUMNS`. A running entry has no
- * end. The client is left empty while the organisation has Clients turned off.
+ * end. The client and its code are left empty while the organisation has no
+ * clients.
  */
 export function rowCells(row: Row, showClients: boolean): string[] {
 	const { entry } = row;
+	const client = showClients && entry.client !== null;
 	return [
 		entry.id,
 		entry.person,
+		entry.projectCode ?? "",
 		entry.project,
-		(showClients && entry.client) || "",
+		(client && entry.clientCode) || "",
+		(client && entry.client) || "",
 		entry.description ?? "",
 		isoInstant(row.start),
 		row.running ? "" : isoInstant(row.end),

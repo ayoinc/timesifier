@@ -1,3 +1,4 @@
+import { codedName } from "~/lib/codes";
 import type { Day } from "~/time/calendar";
 
 import type { Grouping } from "./choices";
@@ -25,8 +26,12 @@ export interface ReportEntry {
 	person: string;
 	projectId: string;
 	project: string;
+	/** The project's code (TS-115a); null for none. */
+	projectCode: string | null;
 	clientId: string | null;
 	client: string | null;
+	/** The client's code (TS-115a); null for none, or no client. */
+	clientCode: string | null;
 	description: string | null;
 	/** The day it belongs to, stored with it when it was tracked (decision 39). */
 	day: Day;
@@ -44,7 +49,16 @@ export interface ReportEntry {
 /** What a report counts an entry by: whose it is, where it went, and how it bills. */
 export type PieceEntry = Pick<
 	ReportEntry,
-	"userId" | "projectId" | "project" | "clientId" | "client" | "taskId" | "billable" | "overtime"
+	| "userId"
+	| "projectId"
+	| "project"
+	| "projectCode"
+	| "clientId"
+	| "client"
+	| "clientCode"
+	| "taskId"
+	| "billable"
+	| "overtime"
 >;
 
 /**
@@ -111,7 +125,7 @@ export function byStart(a: Row, b: Row): number {
 export interface GroupTotal {
 	/** A project's or a client's id, the empty string for no client, or a day. */
 	key: string;
-	/** The project's or client's name, or the day; null for no client. */
+	/** The project's or client's code and name (`codedName`), or the day; null for no client. */
 	label: string | null;
 	minutes: number;
 	/** Of `minutes`, those of overtime (TS-095). */
@@ -127,9 +141,10 @@ export interface Totals {
 
 /**
  * The rows' time by `grouping`, and in all, in whole minutes, with the part of
- * it that is overtime beside it (TS-095). Projects and
- * clients are in the order of their names, the time with no client last; days
- * in their order. A group is listed only when it has a row.
+ * it that is overtime beside it (TS-095). A project or a client is labelled
+ * by its code and name, code first (TS-115a), and listed in the order of that
+ * label, the time with no client last; days in their order. A group is listed
+ * only when it has a row.
  */
 export function totalsOf(rows: readonly Piece[], grouping: Grouping): Totals {
 	const groups = new Map<string, GroupTotal>();
@@ -139,9 +154,12 @@ export function totalsOf(rows: readonly Piece[], grouping: Grouping): Totals {
 		const { entry } = row;
 		const [key, label] =
 			grouping === "project"
-				? [entry.projectId, entry.project]
+				? [entry.projectId, codedName(entry.projectCode, entry.project)]
 				: grouping === "client"
-					? [entry.clientId ?? "", entry.client]
+					? [
+							entry.clientId ?? "",
+							entry.client === null ? null : codedName(entry.clientCode, entry.client),
+						]
 					: [row.day, row.day];
 		const group = groups.get(key) ?? { key, label, minutes: 0, overtimeMinutes: 0 };
 		group.minutes += row.minutes;

@@ -37,6 +37,7 @@ import { invoicePdfPath, invoicesPath } from "~/invoices/paths";
 import { drawFromRetainer, retainersFor } from "~/invoices/retainers.server";
 import { STATE_LABELS } from "~/invoices/status";
 import { historyOf, invoiceView } from "~/invoices/view.server";
+import { codedName } from "~/lib/codes";
 import { parseRequest } from "~/lib/validate";
 import { formatMoney } from "~/money/money";
 import { moneyText, parseMoney, parsePercent } from "~/money/typed";
@@ -105,7 +106,7 @@ export async function loader({ request, context, params }: Route.LoaderArgs) {
 			status: invoice.status,
 			state: view.state,
 			stateLabel: STATE_LABELS[view.state],
-			client: view.clientName,
+			client: codedName(view.clientCode, view.clientName),
 			currency: invoice.currency,
 			issuedOn: invoice.issuedOn,
 			dueOn: invoice.dueOn,

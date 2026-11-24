@@ -5,6 +5,7 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { data } from "react-router";
 
 import { among, users } from "~/db";
+import { codedName } from "~/lib/codes";
 import { type Money, totalsByCurrency } from "~/money/money";
 import type { Membership } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
@@ -83,7 +84,11 @@ export interface ReportedExpense {
 	person: string;
 	projectId: string;
 	project: string;
+	/** The project's code (TS-115a); null for none. */
+	projectCode: string | null;
 	client: string | null;
+	/** The client's code (TS-115a); null for none, or no client. */
+	clientCode: string | null;
 	categoryId: string;
 	category: string;
 	unitName: string | null;
@@ -137,11 +142,12 @@ export async function reportedExpenses(
 		clientIds.length === 0 ? [] : await scope.clients.select((c) => among(c.id, clientIds));
 	const tagName = new Map(tags.map((t) => [t.id, t.name]));
 	const projectOf = new Map(projects.map((p) => [p.id, p]));
-	const clientName = new Map(clients.map((c) => [c.id, c.name]));
+	const clientOf = new Map(clients.map((c) => [c.id, c]));
 	const personName = new Map(persons.map((p) => [p.id, nameOrEmail(p)]));
 
 	return rows.map((row) => {
 		const project = projectOf.get(row.projectId);
+		const client = project?.clientId ? clientOf.get(project.clientId) : undefined;
 		const category = categories.get(row.categoryId);
 		return {
 			id: row.id,
@@ -150,7 +156,9 @@ export async function reportedExpenses(
 			person: personName.get(row.userId) ?? "A former member",
 			projectId: row.projectId,
 			project: project?.name ?? "",
-			client: project?.clientId ? (clientName.get(project.clientId) ?? null) : null,
+			projectCode: project?.code ?? null,
+			client: client?.name ?? null,
+			clientCode: client?.code ?? null,
 			categoryId: row.categoryId,
 			category: category?.name ?? "",
 			unitName: row.quantityMilli === null ? null : (category?.unitName ?? null),
@@ -193,7 +201,7 @@ export function expenseTotals(expenses: readonly ReportedExpense[]) {
 	};
 }
 
-/** The expenses grouped as asked, the groups by name. */
+/** The expenses grouped as asked, the groups by name; a project by its code and name (TS-115a). */
 export function groupExpenses(
 	expenses: readonly ReportedExpense[],
 	grouping: ExpenseGrouping,
@@ -203,7 +211,7 @@ export function groupExpenses(
 			case "category":
 				return [e.categoryId, e.category];
 			case "project":
-				return [e.projectId, e.project];
+				return [e.projectId, codedName(e.projectCode, e.project)];
 			case "person":
 				return [e.personId, e.person];
 		}
@@ -220,12 +228,18 @@ export function groupExpenses(
 		.sort((a, b) => a.label.localeCompare(b.label, "en") || (a.key < b.key ? -1 : 1));
 }
 
-/** The export's columns, in order. */
+/**
+ * The export's columns, in order. The client and the project each have their
+ * code just before their name (TS-115a). The headings stay the same whatever
+ * the organisation calls projects, so a spreadsheet built on them keeps working.
+ */
 export const EXPENSE_CSV_COLUMNS = [
 	"Expense ID",
 	"Date",
 	"Person",
+	"Project code",
 	"Project",
+	"Client code",
 	"Client",
 	"Category",
 	"Notes",
@@ -247,7 +261,9 @@ export function expenseCells(expense: ReportedExpense, showClients: boolean): st
 		expense.id,
 		expense.spentOn,
 		expense.person,
+		expense.projectCode ?? "",
 		expense.project,
+		(showClients && expense.clientCode) || "",
 		(showClients && expense.client) || "",
 		expense.category,
 		expense.notes ?? "",

@@ -18,9 +18,11 @@ import {
 import { open, type Person, pageBody, person, submit, textOf } from "./harness";
 
 // Projects, /app/<slug>/projects (TS-011a, and a project's client, TS-011b):
-// every role sees, creates, renames, archives and restores the organisation's
-// projects, and nobody deletes one. Every form is posted the way the page
-// posts it, by script to the page's data address.
+// every role sees, renames, archives and restores the organisation's projects,
+// and nobody deletes one. Only owners, admins and account managers create one
+// (decision 42, TS-115a; `test/pages/project-creators.test.ts` holds each
+// role). Every form is posted the way the page posts it, by script to the
+// page's data address.
 
 const PROJECTS = "/app/acme/projects";
 const NAME_PROBLEM = "Enter a name of up to 120 characters.";
@@ -78,6 +80,12 @@ async function insertClient(organisationId: string, name: string, archived = fal
 
 /** The text inside the page's `<main>`. */
 const mainOf = (html: string) => html.match(/<main[\s\S]*<\/main>/)?.[0] ?? "";
+
+/** Acme works by Internal work (decision 67): no clients, and projects are called "Work codes". */
+const internalWork = () =>
+	env.DB.prepare("update organisations set work_model = 'internal' where id = ?")
+		.bind(acme.id)
+		.run();
 
 describe("a new organisation", () => {
 	it("has no projects, and the page says so with one button", async () => {
@@ -237,7 +245,7 @@ describe("what the action takes", () => {
 	});
 });
 
-describe("who may (every role manages projects)", () => {
+describe("who may (every role sees projects; owners and admins create, rename, archive and restore them, decision 42)", () => {
 	const roles: Role[] = ["owner", "admin", "member"];
 
 	it.each(roles)("a %s sees the projects, active and archived", async (role) => {
@@ -253,16 +261,47 @@ describe("who may (every role manages projects)", () => {
 		expect(textOf(mainOf(await pageBody(archived)))).toContain("Design");
 	});
 
-	it.each(roles)("a %s creates, renames, archives and restores a project", async (role) => {
-		const who = role === "owner" ? ada : await memberOfAcme(role, `${role}@example.com`);
-		const id = await create("Design", who);
+	it.each(["owner", "admin"] as const)(
+		"a %s renames, archives and restores a project",
+		async (role) => {
+			const who = role === "owner" ? ada : await memberOfAcme(role, `${role}@example.com`);
+			const id = await create("Design");
 
-		expect((await send({ intent: "rename", projectId: id, name: "Build" }, who)).status).toBe(200);
-		expect(await value("select name from projects where id = ?", id)).toBe("Build");
-		expect((await send({ intent: "archive", projectId: id }, who)).status).toBe(200);
-		expect(await value("select archived_at from projects where id = ?", id)).not.toBeNull();
-		expect((await send({ intent: "restore", projectId: id }, who)).status).toBe(200);
+			expect((await send({ intent: "rename", projectId: id, name: "Build" }, who)).status).toBe(
+				200,
+			);
+			expect(await value("select name from projects where id = ?", id)).toBe("Build");
+			expect((await send({ intent: "archive", projectId: id }, who)).status).toBe(200);
+			expect(await value("select archived_at from projects where id = ?", id)).not.toBeNull();
+			expect((await send({ intent: "restore", projectId: id }, who)).status).toBe(200);
+			expect(await value("select archived_at from projects where id = ?", id)).toBeNull();
+		},
+	);
+
+	it("a member renames, archives and restores none, and nothing changes", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+		const id = await create("Design");
+
+		expect((await send({ intent: "rename", projectId: id, name: "Build" }, linus)).status).toBe(
+			403,
+		);
+		expect((await send({ intent: "archive", projectId: id }, linus)).status).toBe(403);
+		expect(await value("select name from projects where id = ?", id)).toBe("Design");
 		expect(await value("select archived_at from projects where id = ?", id)).toBeNull();
+		await send({ intent: "archive", projectId: id });
+		expect((await send({ intent: "restore", projectId: id }, linus)).status).toBe(403);
+		expect(await value("select archived_at from projects where id = ?", id)).not.toBeNull();
+	});
+
+	it.each(["owner", "admin"] as const)("a %s creates a project", async (role) => {
+		const who = role === "owner" ? ada : await memberOfAcme(role, `${role}@example.com`);
+		expect(await create("Design", who)).toBeTruthy();
+	});
+
+	it("a member creates none, and nothing is stored", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
+		expect((await send({ intent: "create", name: "Design" }, linus)).status).toBe(403);
+		expect(await projectCount()).toBe(0);
 	});
 
 	it.each(roles)("a %s deletes no project", async (role) => {
@@ -273,11 +312,13 @@ describe("who may (every role manages projects)", () => {
 		expect(await projectCount()).toBe(1);
 	});
 
-	it("a manager of a team manages projects too", async () => {
+	it("a manager of a team keeps no project and creates none", async () => {
 		const linus = await memberOfAcme("member", "linus@example.com");
 		await seedTeam(acme.id, "Design team", { managers: [linus.user.id] });
-		const id = await create("Design", linus);
-		expect((await send({ intent: "archive", projectId: id }, linus)).status).toBe(200);
+		expect((await send({ intent: "create", name: "Build" }, linus)).status).toBe(403);
+		const id = await create("Design");
+		expect((await send({ intent: "archive", projectId: id }, linus)).status).toBe(403);
+		expect(await value("select archived_at from projects where id = ?", id)).toBeNull();
 	});
 });
 
@@ -313,8 +354,8 @@ describe("a project's client", () => {
 				.status,
 		).toBe(403);
 		expect(await value("select client_id from projects where id = ?", design)).toBe(globex);
-		// Renaming without the field keeps the client.
-		await send({ intent: "rename", projectId: design, name: "Designs" }, linus);
+		// Renaming without the field, by one who may rename it, keeps the client.
+		expect((await send({ intent: "rename", projectId: design, name: "Designs" })).status).toBe(200);
 		expect(await value("select client_id from projects where id = ?", design)).toBe(globex);
 	});
 
@@ -352,12 +393,10 @@ describe("a project's client", () => {
 		expect(await projectCount()).toBe(0);
 	});
 
-	it("while Clients is off, nobody is shown a project's client or may give one, and nothing is deleted", async () => {
+	it("under Internal work, nobody is shown a project's client or may give one, and nothing is deleted", async () => {
 		const globex = await insertClient(acme.id, "Globex");
 		await send({ intent: "create", name: "Design", clientId: globex });
-		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
-			.bind(acme.id)
-			.run();
+		await internalWork();
 
 		const main = mainOf(await pageBody(await open(PROJECTS, ada)));
 		expect(textOf(main)).not.toContain("Globex");
@@ -442,13 +481,13 @@ describe("search (TS-057)", () => {
 	it("takes % and _ as letters, not wildcards", async () => {
 		const text = await search("%");
 		expect(text).not.toContain("Website");
-		expect(text).toContain("No active project has “%” in its name or its client’s.");
+		expect(text).toContain("No active project has “%” in its name or code, or its client’s.");
 		expect(await search("_")).not.toContain("Payroll");
 	});
 
 	it("says when nothing matches, and keeps the field and the button to create one", async () => {
 		const text = await search("zzz");
-		expect(text).toContain("No active project has “zzz” in its name or its client’s.");
+		expect(text).toContain("No active project has “zzz” in its name or code, or its client’s.");
 		expect(text).not.toContain("No projects yet");
 		expect(text).toContain("Create project");
 	});
@@ -469,15 +508,13 @@ describe("search (TS-057)", () => {
 		expect(text).not.toContain("Website");
 	});
 
-	it("while Clients is off, a client's name finds nothing and the field says project name", async () => {
-		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
-			.bind(acme.id)
-			.run();
+	it("under Internal work, a client's name finds nothing and the field says the organisation's term", async () => {
+		await internalWork();
 		const text = await search("globex");
 		expect(text).not.toContain("Website");
-		expect(text).toContain("No active project has “globex” in its name.");
-		expect(text).toContain("Search projects");
-		expect(text).not.toContain("Search projects or clients");
+		expect(text).toContain("No active work code has “globex” in its name or code.");
+		expect(text).toContain("Search work codes");
+		expect(text).not.toContain("or clients");
 	});
 
 	it("never finds a project of another organisation", async () => {
@@ -517,17 +554,15 @@ describe("groups (TS-057)", () => {
 		]);
 	});
 
-	it("has no groups while Clients is off", async () => {
+	it("has no groups under Internal work", async () => {
 		const globex = await insertClient(acme.id, "Globex");
 		await send({ intent: "create", name: "Design", clientId: globex });
 		await send({ intent: "create", name: "Own" });
-		await env.DB.prepare("update organisations set clients_enabled = 0 where id = ?")
-			.bind(acme.id)
-			.run();
+		await internalWork();
 		const main = mainOf(await pageBody(await open(PROJECTS, ada)));
 		expect(groupsIn(main)).toEqual([]);
 		expect(textOf(main)).not.toContain("No client");
-		expect(main).toContain('aria-label="Active projects"');
+		expect(main).toContain('aria-label="Active work codes"');
 	});
 
 	it("groupedByClient keeps one group per client, ordered by key, the clientless last", () => {

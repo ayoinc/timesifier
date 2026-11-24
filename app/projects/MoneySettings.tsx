@@ -8,8 +8,14 @@ import { Switch } from "~/components/Switch";
 import type { Outcome } from "~/organisations/problems";
 import { FormSheet } from "~/routes/app/FormSheet";
 import { Section } from "~/shell/PageHeading";
+import { type Terms, withArticle } from "~/workspace/work-model";
 
 import { CURRENCIES } from "./billing";
+
+/** What may have a currency of its own: "a client or a project", or under Internal work "a cost centre" (TS-115a). */
+export function ownCurrencyHolders(terms: Terms): string {
+	return terms.clients ? "a client or a project" : withArticle(terms.project);
+}
 
 /**
  * Workspace settings' Money (TS-067, TS-069): the organisation's currency,
@@ -19,11 +25,14 @@ import { CURRENCIES } from "./billing";
 export function MoneySettings({
 	currency,
 	budgetCountsNonBillable,
+	terms,
 	canChange,
 	onDone,
 }: {
 	currency: string;
 	budgetCountsNonBillable: boolean;
+	/** The organisation's words for what time goes to. */
+	terms: Terms;
 	canChange: boolean;
 	onDone: (said: string) => void;
 }) {
@@ -45,7 +54,7 @@ export function MoneySettings({
 		<Section
 			id="money"
 			heading="Money"
-			lead="The currency amounts are in unless a client or a project has its own, and what hour budgets count."
+			lead={`The currency amounts are in unless ${ownCurrencyHolders(terms)} has its own, and what hour budgets count.`}
 			className="max-w-200"
 		>
 			<Ledger heading="Money">

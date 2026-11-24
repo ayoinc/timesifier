@@ -215,11 +215,12 @@ test("on Reports Finance narrows to the owner, returns to Everyone, and download
 	const bytes = readFileSync(await download.path());
 	const lines = bytes.subarray(3).toString("utf8").split("\r\n");
 	expect(lines[0]).toBe(
-		"entry_id,person,project,client,description,started_at,ended_at,duration_seconds,overtime",
+		"entry_id,person,project_code,project,client_code,client,description,started_at,ended_at,duration_seconds,overtime",
 	);
 	const rows = lines.slice(1, -1);
 	expect(rows).toHaveLength(1);
-	expect(rows[0]).toContain(`,${owner.name},Website,,Design review,`);
+	// Website has no code and no client: its code, the client's code and the client are empty.
+	expect(rows[0]).toContain(`,${owner.name},,Website,,,Design review,`);
 	expect(rows[0]?.endsWith(",5400,no")).toBe(true);
 });
 

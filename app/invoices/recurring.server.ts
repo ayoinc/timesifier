@@ -14,6 +14,7 @@ import { defaultTaxIds } from "./documents.server";
 import { createDraft, type LineInput, type Result } from "./invoices.server";
 import type { DraftLine } from "./lines";
 import { contactsOf } from "./mail.server";
+import { makesBilling, NOTHING_BILLED_INTERNALLY } from "./makes.server";
 import { type Frequency, nextIssueAfter } from "./recurring";
 import { sourcesFor } from "./sources.server";
 
@@ -69,6 +70,7 @@ export async function createRecurring(
 	actor: string,
 	input: RecurringInput,
 ): Promise<Result> {
+	if (!(await makesBilling(scope))) return { ok: false, problem: NOTHING_BILLED_INTERNALLY };
 	const [client] = await scope.clients.select(
 		(c) => and(eq(c.id, input.clientId), isNull(c.archivedAt)),
 		{ limit: 1 },

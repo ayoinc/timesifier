@@ -47,6 +47,7 @@ import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead, Section } from "~/shell/PageHeading";
 import { formatDayAndTime } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
+import { hasClients, inTerms, type Terms } from "~/workspace/work-model";
 
 import type { Route } from "./+types/integrations";
 import { FormSheet } from "./FormSheet";
@@ -58,6 +59,14 @@ import { useOrganisation } from "./useOrganisation";
 // and admins are shown it; the layout answers anyone else 404, actions included.
 
 const { label } = destination("integrations");
+
+/** What a token's scope lets it do, in the organisation's terms; under Internal work, no clients (TS-115a). */
+function scopeLabel(scope: ApiScope, terms: Terms): string {
+	if (scope === "projects:read" && !hasClients(terms.model)) {
+		return inTerms("Read projects and tasks", terms);
+	}
+	return inTerms(SCOPE_LABELS[scope], terms);
+}
 
 export function meta() {
 	return [{ title: `${label} · Timesifier` }];
@@ -190,6 +199,7 @@ const DELIVERY_WORDS = { pending: "Waiting to retry", delivered: "Delivered", fa
 export default function Integrations({ loaderData }: Route.ComponentProps) {
 	const { tokens, webhooks } = loaderData;
 	const organisation = useOrganisation();
+	const { terms } = organisation;
 	const [task, setTask] = useState<Task | null>(null);
 	const [token, setToken] = useState<Token | null>(null);
 	const [hook, setHook] = useState<Webhook | null>(null);
@@ -243,7 +253,14 @@ export default function Integrations({ loaderData }: Route.ComponentProps) {
 												<span className="wrap-anywhere">
 													{each.revoked
 														? `Revoked ${each.revoked}`
-														: `${each.scopes.map((scope) => SCOPE_LABELS[scope as ApiScope] ?? scope).join("; ")}. Made by ${each.madeBy} on ${each.created}. ${each.lastUsed ? `Last used ${each.lastUsed}.` : "Never used."}`}
+														: `${each.scopes
+																.map((scope) => {
+																	const known = ApiScope.safeParse(scope);
+																	return known.success ? scopeLabel(known.data, terms) : scope;
+																})
+																.join(
+																	"; ",
+																)}. Made by ${each.madeBy} on ${each.created}. ${each.lastUsed ? `Last used ${each.lastUsed}.` : "Never used."}`}
 												</span>
 											}
 											action={
@@ -355,14 +372,16 @@ export default function Integrations({ loaderData }: Route.ComponentProps) {
 							Harvest's export is read as it is. Preview it, then import; revert it if it was wrong.
 						</span>
 					</li>
-					<li>
-						<Link className={ACTION_LINK} to={importPath(organisation.slug, "clients")}>
-							Import clients
-						</Link>
-					</li>
+					{hasClients(terms.model) && (
+						<li>
+							<Link className={ACTION_LINK} to={importPath(organisation.slug, "clients")}>
+								Import clients
+							</Link>
+						</li>
+					)}
 					<li>
 						<Link className={ACTION_LINK} to={importPath(organisation.slug, "projects")}>
-							Import projects
+							{inTerms("Import projects", terms)}
 						</Link>
 					</li>
 					<li>
@@ -417,7 +436,7 @@ export default function Integrations({ loaderData }: Route.ComponentProps) {
 							value={scope}
 							defaultSelected={scope === "time:read"}
 						>
-							{SCOPE_LABELS[scope]}
+							{scopeLabel(scope, terms)}
 						</Checkbox>
 					))}
 				</fieldset>

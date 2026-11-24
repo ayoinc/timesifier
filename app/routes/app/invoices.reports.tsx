@@ -13,6 +13,7 @@ import {
 import { billingOf } from "~/invoices/context.server";
 import { billingReportExportPath, invoicePath, invoicesPath } from "~/invoices/paths";
 import { AGE_LABELS, AGES } from "~/invoices/status";
+import { codedName } from "~/lib/codes";
 import { formatMoney } from "~/money/money";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
@@ -82,7 +83,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		rows: result.rows.map((row) => ({
 			key: row.key,
 			to: invoicePath(slug, row.invoiceId),
-			title: `${row.number} · ${row.client}`,
+			title: `${row.number} · ${codedName(row.clientCode, row.client)}`,
 			detail:
 				report === "invoiced"
 					? `Issued ${formatDay(row.day, "short")}`

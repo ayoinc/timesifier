@@ -39,6 +39,34 @@ components:
       properties:
         id: { type: string }
         name: { type: [string, "null"] }
+    CodedRef:
+      type: [object, "null"]
+      description: A client or project with its code, null when it has none (TS-115a).
+      properties:
+        id: { type: string }
+        name: { type: [string, "null"] }
+        code: { type: [string, "null"] }
+    Client:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        code: { type: [string, "null"], description: "The client's code, for example ACME." }
+        archived: { type: boolean }
+        currency: { type: string }
+    Project:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        code: { type: [string, "null"], description: "The project's code, for example ACME-001." }
+        client: { $ref: "#/components/schemas/CodedRef" }
+        archived: { type: boolean }
+        billing_type: { type: string, description: Only for those who see money. }
+        rate_mode: { type: string, description: Only for those who see money. }
+        fee_minor: { type: [integer, "null"], description: Only for those who see money. }
+        currency: { type: [string, "null"], description: Only for those who see money. }
+        budget: { type: object, description: Only for those who see money. }
     Error:
       type: object
       required: [error]
@@ -55,8 +83,8 @@ components:
       properties:
         id: { type: string }
         user: { $ref: "#/components/schemas/Ref" }
-        project: { $ref: "#/components/schemas/Ref" }
-        client: { $ref: "#/components/schemas/Ref" }
+        project: { $ref: "#/components/schemas/CodedRef" }
+        client: { $ref: "#/components/schemas/CodedRef" }
         task: { $ref: "#/components/schemas/Ref" }
         spent_date: { type: string, format: date }
         started_at: { type: string, format: date-time }
@@ -132,14 +160,28 @@ paths:
       summary: Clients
       description: Scope projects:read; for owners, admins and Finance while Clients is on.
       responses:
-        "200": { description: "`{ data }`" }
+        "200":
+          description: "`{ data }`"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Client" } }
         default: { $ref: "#/components/responses/Error" }
   /projects:
     get:
       summary: Projects
       description: Scope projects:read. Money fields only for those who see money.
       responses:
-        "200": { description: "`{ data }`" }
+        "200":
+          description: "`{ data }`"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Project" } }
         default: { $ref: "#/components/responses/Error" }
   /tasks:
     get:

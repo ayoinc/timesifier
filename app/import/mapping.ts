@@ -14,7 +14,9 @@ export type ImportKind = "time" | "clients" | "projects";
 
 export const TIME_FIELDS = [
 	"date",
+	"client_code",
 	"client",
+	"project_code",
 	"project",
 	"task",
 	"notes",
@@ -26,8 +28,8 @@ export const TIME_FIELDS = [
 ] as const;
 export type TimeField = (typeof TIME_FIELDS)[number];
 
-export const CLIENT_FIELDS = ["client", "currency"] as const;
-export const PROJECT_FIELDS = ["client", "project"] as const;
+export const CLIENT_FIELDS = ["client_code", "client", "currency"] as const;
+export const PROJECT_FIELDS = ["client_code", "client", "project_code", "project"] as const;
 
 /** The fields each kind of import reads, in the order the page asks for them. */
 export const FIELDS: Record<ImportKind, readonly string[]> = {
@@ -46,7 +48,9 @@ export const REQUIRED: Record<ImportKind, readonly string[]> = {
 /** Each field as the page names it. */
 export const FIELD_LABELS: Record<string, string> = {
 	date: "Date",
+	client_code: "Client code",
 	client: "Client",
+	project_code: "Project code",
 	project: "Project",
 	task: "Task",
 	notes: "Notes",
@@ -61,7 +65,10 @@ export const FIELD_LABELS: Record<string, string> = {
 /** Harvest's headings for each field, as `headerKey` evens them out; a few common others too. */
 const HARVEST_HEADERS: Record<string, readonly string[]> = {
 	date: ["date", "spent date", "day"],
+	// Codes (TS-115a): Harvest's exports of time and of projects have `Project Code`; ours both.
+	client_code: ["client code"],
 	client: ["client", "client name"],
+	project_code: ["project code"],
 	project: ["project", "project name"],
 	task: ["task", "task name"],
 	notes: ["notes", "note", "description"],

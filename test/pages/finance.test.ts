@@ -1234,9 +1234,9 @@ describe("Finance on Clients", () => {
 		).toBe(403);
 		expect(await count("select count(*) from projects where name = 'Billing'")).toBe(0);
 
-		// A project with no client is every role's to create.
-		expect(await post(PROJECTS, { intent: "create", name: "Billing" }, katherine)).toBe(200);
-		expect(await value("select client_id from projects where name = 'Billing'")).toBeNull();
+		// Nor one with no client: Finance creates no project (decision 42).
+		expect(await post(PROJECTS, { intent: "create", name: "Billing" }, katherine)).toBe(403);
+		expect(await count("select count(*) from projects where name = 'Billing'")).toBe(0);
 
 		// An owner still manages them.
 		expect(await post(CLIENTS, { intent: "create", name: "Globex" }, ada)).toBe(200);
