@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dc7902f3-284b-4158-bf32-9624305cf03a",
-  "prevId": "9943f65d-45f4-4e57-b616-c3a10b745f20",
+  "id": "b2a72d3e-bea9-4a86-b944-9337aadd7db1",
+  "prevId": "4ee9401c-d5cb-4d8e-bc63-7036dd517324",
   "tables": {
     "accounts": {
       "name": "accounts",
@@ -5148,6 +5148,157 @@
         "periods_ends_on_or_after_start": {
           "name": "periods_ends_on_or_after_start",
           "value": "\"periods\".\"ends_on\" >= \"periods\".\"starts_on\""
+        }
+      }
+    },
+    "pins": {
+      "name": "pins",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "pins_organisation_id_user_id_project_id_unique": {
+          "name": "pins_organisation_id_user_id_project_id_unique",
+          "columns": [
+            "organisation_id",
+            "user_id",
+            "project_id"
+          ],
+          "isUnique": true
+        },
+        "pins_organisation_id_user_id_person_id_unique": {
+          "name": "pins_organisation_id_user_id_person_id_unique",
+          "columns": [
+            "organisation_id",
+            "user_id",
+            "person_id"
+          ],
+          "isUnique": true
+        },
+        "pins_organisation_id_project_id_idx": {
+          "name": "pins_organisation_id_project_id_idx",
+          "columns": [
+            "organisation_id",
+            "project_id"
+          ],
+          "isUnique": false
+        },
+        "pins_organisation_id_person_id_idx": {
+          "name": "pins_organisation_id_person_id_idx",
+          "columns": [
+            "organisation_id",
+            "person_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "pins_organisation_id_organisations_id_fk": {
+          "name": "pins_organisation_id_organisations_id_fk",
+          "tableFrom": "pins",
+          "tableTo": "organisations",
+          "columnsFrom": [
+            "organisation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "pins_membership_fk": {
+          "name": "pins_membership_fk",
+          "tableFrom": "pins",
+          "tableTo": "memberships",
+          "columnsFrom": [
+            "organisation_id",
+            "user_id"
+          ],
+          "columnsTo": [
+            "organisation_id",
+            "user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "pins_project_fk": {
+          "name": "pins_project_fk",
+          "tableFrom": "pins",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "organisation_id",
+            "project_id"
+          ],
+          "columnsTo": [
+            "organisation_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "pins_person_fk": {
+          "name": "pins_person_fk",
+          "tableFrom": "pins",
+          "tableTo": "memberships",
+          "columnsFrom": [
+            "organisation_id",
+            "person_id"
+          ],
+          "columnsTo": [
+            "organisation_id",
+            "user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "pins_one_of": {
+          "name": "pins_one_of",
+          "value": "(\"pins\".\"project_id\" IS NULL) <> (\"pins\".\"person_id\" IS NULL)"
         }
       }
     },
