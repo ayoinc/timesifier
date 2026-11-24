@@ -1004,7 +1004,6 @@ Decided by the owner on 2026-11-23 for TS-122 (research/harvest-sweep-2.md, S2-0
 
 **What it costs.** One more table, read once per page by Projects, Team and the Timesheet. A person who may no longer see someone on Team keeps the pin, unused, until either of them leaves. A member who used to be able to duplicate a project no longer can.
 
-<<<<<<< HEAD
 ### 66. The sweep's feel details: where today is, why an action waits, and a menu that tucks away
 
 Decided for TS-123, from the harvest sweep 2 (S2-14, S2-13, S2-10, `research/harvest-sweep-2.md`), with the owner's direction of 2026-11-23 that hiding the menu is remembered per browser, with a cookie like the colour scheme's, and not per account.
@@ -1026,7 +1025,7 @@ Decided for TS-123, from the harvest sweep 2 (S2-14, S2-13, S2-10, `research/har
 | `[` for the menu, as the sweep proposed                     | Already the Timesheet's key for the period before (taste HT-D).                                                                                                                                                 |
 
 **What it costs.** One more cookie, which identifies nobody and grants nothing. Pages are drawn at two widths of column from 600px, so a page is checked at both. A disabled button in the focus order is one more Tab stop on the Week and Day views while there is nothing to copy.
-=======
+
 ### 68. Notifications: who is told, nobody of their own, a manager away skipped, and one store the bell reads
 
 TS-049, 2026-11-24. Builds on entries 47 (D5) and 48 (D6); the reminders, the emails and the keeping are entry 69.
@@ -1075,4 +1074,3 @@ None goes to a person on leave all of today. Each goes once in its period, by it
 **The hourly run reads only organisations with work.** `remindableOrganisations` reads the organisations with a timer running, from the partial index of running entries, and with a week waiting, from a new partial index of submitted weeks (`periods_submitted_idx`, migration `0034`). An organisation with a deadline is read as one row, and only one whose deadline is due within 25 hours reads its members. An organisation with none of these costs the run nothing.
 
 **The scale limit that remains.** The hourly run is one Worker invocation for every organisation, after auto-lock, the lock date's reach and billing in the same invocation. Cloudflare's D1 limits page gives, for "Queries per Worker invocation", "1000 (Workers Paid) / 50 (Free)", and says a `db.batch()` call counts as a single query against it (<https://developers.cloudflare.com/d1/platform/limits/>, modified 2026-11-20, read 2026-11-24). Measured on this branch on 2026-11-24, by counting the statements `runReminders` prepares in the Workers test runtime (a throwaway test, not kept): 3 queries for a run with nothing to remind; 9 for an organisation of 11 people whose deadline reminder is due; about 15 for each running timer, which is checked against its day's rules on its own; 154 for one organisation with 10 timers running and 10 weeks waiting. About 65 timers running at once across every organisation, fewer with the other hourly steps, would pass the limit; the run would then fail with "Too many API requests by single Worker invocation", and the organisations after that point would go unreminded that hour. TS-049b moves each organisation's reminders onto a Queue, so each has an invocation, and its 1,000 queries, of its own.
->>>>>>> 8061119 (TS-049 Step 9: decisions 68 and 69, with D1's query limit per invocation measured; /security and docs/security.md say how notifications and their emails are kept)
