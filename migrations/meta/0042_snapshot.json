@@ -2,7 +2,7 @@
 	"version": "6",
 	"dialect": "sqlite",
 	"id": "ef352dd8-0b31-406a-b973-dd4e15179fde",
-	"prevId": "c61be8f8-f170-4093-a2c6-2815c49a20ce",
+	"prevId": "6f6e1a7f-3509-4b36-bb37-18e1b134579b",
 	"tables": {
 		"accounts": {
 			"name": "accounts",
@@ -1099,6 +1099,21 @@
 					"notNull": false,
 					"autoincrement": false
 				},
+				"carry_over_days": {
+					"name": "carry_over_days",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": 0
+				},
+				"carry_over_expires_after_days": {
+					"name": "carry_over_expires_after_days",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
 				"created_by": {
 					"name": "created_by",
 					"type": "text",
@@ -1270,6 +1285,14 @@
 					"primaryKey": false,
 					"notNull": false,
 					"autoincrement": false
+				},
+				"prior_days_at_allowance": {
+					"name": "prior_days_at_allowance",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": false
 				},
 				"created_by": {
 					"name": "created_by",
@@ -3615,6 +3638,147 @@
 				}
 			}
 		},
+		"leave_adjustments": {
+			"name": "leave_adjustments",
+			"columns": {
+				"id": {
+					"name": "id",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"organisation_id": {
+					"name": "organisation_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"user_id": {
+					"name": "user_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"kind_id": {
+					"name": "kind_id",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"leave_year": {
+					"name": "leave_year",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"minutes": {
+					"name": "minutes",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"reason": {
+					"name": "reason",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"created_by": {
+					"name": "created_by",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false,
+					"autoincrement": false
+				},
+				"created_at": {
+					"name": "created_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				},
+				"updated_at": {
+					"name": "updated_at",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false
+				}
+			},
+			"indexes": {
+				"leave_adjustments_organisation_id_id_unique": {
+					"name": "leave_adjustments_organisation_id_id_unique",
+					"columns": ["organisation_id", "id"],
+					"isUnique": true
+				},
+				"leave_adjustments_organisation_id_user_id_leave_year_index": {
+					"name": "leave_adjustments_organisation_id_user_id_leave_year_index",
+					"columns": ["organisation_id", "user_id", "leave_year"],
+					"isUnique": false
+				}
+			},
+			"foreignKeys": {
+				"leave_adjustments_organisation_id_organisations_id_fk": {
+					"name": "leave_adjustments_organisation_id_organisations_id_fk",
+					"tableFrom": "leave_adjustments",
+					"tableTo": "organisations",
+					"columnsFrom": ["organisation_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"leave_adjustments_user_id_users_id_fk": {
+					"name": "leave_adjustments_user_id_users_id_fk",
+					"tableFrom": "leave_adjustments",
+					"tableTo": "users",
+					"columnsFrom": ["user_id"],
+					"columnsTo": ["id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				},
+				"leave_adjustments_created_by_users_id_fk": {
+					"name": "leave_adjustments_created_by_users_id_fk",
+					"tableFrom": "leave_adjustments",
+					"tableTo": "users",
+					"columnsFrom": ["created_by"],
+					"columnsTo": ["id"],
+					"onDelete": "set null",
+					"onUpdate": "no action"
+				},
+				"leave_adjustments_kind_fk": {
+					"name": "leave_adjustments_kind_fk",
+					"tableFrom": "leave_adjustments",
+					"tableTo": "leave_kinds",
+					"columnsFrom": ["organisation_id", "kind_id"],
+					"columnsTo": ["organisation_id", "id"],
+					"onDelete": "cascade",
+					"onUpdate": "no action"
+				}
+			},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {},
+			"checkConstraints": {
+				"leave_adjustments_year_in_range": {
+					"name": "leave_adjustments_year_in_range",
+					"value": "\"leave_adjustments\".\"leave_year\" BETWEEN 2000 AND 2200"
+				},
+				"leave_adjustments_minutes_in_range": {
+					"name": "leave_adjustments_minutes_in_range",
+					"value": "\"leave_adjustments\".\"minutes\" <> 0 AND \"leave_adjustments\".\"minutes\" BETWEEN -527040 AND 527040"
+				},
+				"leave_adjustments_reason_length": {
+					"name": "leave_adjustments_reason_length",
+					"value": "length(trim(\"leave_adjustments\".\"reason\")) BETWEEN 1 AND 200"
+				}
+			}
+		},
 		"leave_kinds": {
 			"name": "leave_kinds",
 			"columns": {
@@ -5061,6 +5225,30 @@
 					"primaryKey": false,
 					"notNull": true,
 					"autoincrement": false
+				},
+				"leave_year_starts": {
+					"name": "leave_year_starts",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'01-01'"
+				},
+				"starter_month": {
+					"name": "starter_month",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": "'days'"
+				},
+				"holidays_from_allowance": {
+					"name": "holidays_from_allowance",
+					"type": "integer",
+					"primaryKey": false,
+					"notNull": true,
+					"autoincrement": false,
+					"default": false
 				}
 			},
 			"indexes": {
