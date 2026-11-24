@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as z from "zod";
 
 import {
 	changeContract,
@@ -9,6 +10,7 @@ import {
 } from "~/contracts/contracts.server";
 import { contractsOf } from "~/contracts/read.server";
 import { organisationScope } from "~/db";
+import { annualLeaveOf, annualLeftWords } from "~/leave/leave.server";
 import { versionOn, weekOfMinutes } from "~/schedules/schedules";
 import { assignSchedule } from "~/schedules/schedules.server";
 import { contractPath } from "~/shell/destinations";
@@ -16,6 +18,7 @@ import { captureEmail, type Mailbox } from "../auth/harness";
 import { freshDatabase } from "../db/database";
 import { value } from "../organisations/harness";
 import { open, openData, type Person, pageBody, submit, textOf } from "./harness";
+import { seedLeave } from "./leave-seed";
 import { KINDS, type Roles, seedRoles } from "./roles-seed";
 import { seedSchedule } from "./schedule-seed";
 
@@ -514,5 +517,126 @@ describe("what a contract changes elsewhere", () => {
 		expect(await text(`/app/${acme.slug}/account`, roles.people.manager)).toContain(
 			"You have no contract here.",
 		);
+	});
+});
+
+// The days of the leave year before a person's first contract (TS-098b,
+// decision 76): the Give sheet asks how they count of someone who joined
+// before it starts, suggests the usual allowance from 28 days after joining,
+// shows the balance it makes before saving, and records the answer.
+/** What a `contract.*` record holds, as far as these tests read it. */
+const Recorded = z.object({ after: z.record(z.string(), z.unknown()).optional() });
+
+const seedLeaveFor = (who: Person, startsOn: string, endsOn: string) =>
+	seedLeave(acme.id, who.user.id, "annual", startsOn, endsOn);
+
+describe("the days before a first contract", () => {
+	/** Sets the day `who` joined Acme: noon, UTC, which is that day in London too. */
+	const joined = (who: Person, day: string) =>
+		env.DB.prepare(
+			"update memberships set created_at = ? where organisation_id = ? and user_id = ?",
+		)
+			.bind(Date.parse(`${day}T12:00:00Z`), acme.id, who.user.id)
+			.run();
+	const giveFrom = (startsOn: string, of: Person, more: Record<string, string> = {}) =>
+		ask(roles.people.owner, { intent: "give", startsOn, leaveDays: "25", ...terms(more) }, of);
+	const preview = (startsOn: string, of: Person, more: Record<string, string> = {}) =>
+		ask(roles.people.owner, { intent: "preview", startsOn, leaveDays: "25", ...terms(more) }, of);
+	/** What `contract.created` recorded of how the days before count; undefined where it was not asked. */
+	const answered = async (who: Person) => {
+		const summary = await value<string>(
+			"select summary from activity_records where organisation_id = ? and action = 'contract.created' and owner_id = ?",
+			acme.id,
+			who.user.id,
+		);
+		return Recorded.parse(JSON.parse(summary ?? "{}")).after?.priorDaysAtAllowance;
+	};
+	const stored = async (who: Person) => (await theirs(who))[0]?.priorDaysAtAllowance;
+	/** This leave year's balance on the Contract page, and in the words the preview uses. */
+	async function balanceOf(who: Person) {
+		const annual = await annualLeaveOf(scope(), who.user.id);
+		if (!annual) throw new Error("No annual leave.");
+		return annualLeftWords(annual, 2026);
+	}
+
+	it("the first answer keeps this leave year's balance; the second counts nothing before the contract", async () => {
+		const hedy = roles.people.manager;
+		await joined(linus, "2026-03-02");
+		await joined(hedy, "2026-03-02");
+		// Before: today's 25 days of the kind's allowance, on Time off.
+		expect(await balanceOf(linus)).toBe("25 days");
+
+		expect((await preview("2026-11-16", linus, { priorDays: "allowance" })).said).toContain(
+			"This year: 25 days → 25 days",
+		);
+		expect((await giveFrom("2026-11-16", linus, { priorDays: "allowance" })).status).toBe(200);
+		expect(await stored(linus)).toBe(true);
+		expect(await answered(linus)).toBe(true);
+		const shown = await text(page(linus), roles.people.owner);
+		expect(shown).toContain("From the contract: 25 days this leave year.");
+		expect(shown).toContain("25 days left");
+
+		// 16 November to 31 December is 46 days of 365: 25 × 46 ÷ 365 = 3.15, rounded up to 3.5.
+		expect((await preview("2026-11-16", hedy, { priorDays: "nothing" })).said).toContain(
+			"This year: 25 days → 3.5 days",
+		);
+		expect((await giveFrom("2026-11-16", hedy, { priorDays: "nothing" })).status).toBe(200);
+		expect(await stored(hedy)).toBe(false);
+		expect(await answered(hedy)).toBe(false);
+		expect(await text(page(hedy), roles.people.owner)).toContain("3.5 days left");
+		// The activity log says it in words.
+		expect(
+			await text(`/app/${acme.slug}/activity?from=2026-01-01&to=2026-12-31`, roles.people.owner),
+		).toContain("Earlier this leave year counts at the usual allowance");
+	});
+
+	it("suggests the usual allowance when they joined 28 days or more before it starts, and nothing when fewer", async () => {
+		const hedy = roles.people.manager;
+		// Unanswered, the server takes the answer the sheet suggests.
+		await joined(linus, "2026-11-02");
+		expect((await giveFrom("2026-11-30", linus)).status).toBe(200);
+		expect(await stored(linus)).toBe(true);
+		await joined(hedy, "2026-11-03");
+		expect((await giveFrom("2026-11-30", hedy)).status).toBe(200);
+		expect(await stored(hedy)).toBe(false);
+		// The page sends the sheet the day they joined, and whether they have a contract.
+		const sent = await (await openData(page(roles.people.finance), roles.people.owner)).text();
+		expect(sent).toContain("joinedOn");
+	});
+
+	it("is not asked of a second contract, nor of someone who joins on or after its first day", async () => {
+		const hedy = roles.people.manager;
+		await joined(linus, "2026-01-05");
+		await giveFrom("2026-01-05", linus, { endsOn: "2026-06-30", priorDays: "allowance" });
+		expect(await stored(linus)).toBe(false);
+		expect(await answered(linus)).toBeUndefined();
+		await giveFrom("2026-07-01", linus, { priorDays: "allowance" });
+		expect((await theirs(linus)).map((c) => c.priorDaysAtAllowance)).toEqual([false, false]);
+		await joined(hedy, "2026-11-20");
+		await giveFrom("2026-11-16", hedy, { priorDays: "allowance" });
+		expect(await stored(hedy)).toBe(false);
+	});
+
+	it("previews the balance the contract has once saved, whatever its day, hours, days and answer", async () => {
+		const people = [linus, roles.people.manager, roles.people.finance, roles.people.admin];
+		const cases: ({ startsOn: string } & Record<string, string>)[] = [
+			{ startsOn: "2026-11-16", priorDays: "allowance", scheduleId: threeDays },
+			{ startsOn: "2026-06-01", priorDays: "nothing", scheduleId: "" },
+			{ startsOn: "2026-12-01", priorDays: "allowance", leaveDays: "30" },
+			{ startsOn: "2026-02-02", priorDays: "nothing", scheduleId: threeDays },
+		];
+		for (const [index, { startsOn, ...more }] of cases.entries()) {
+			const who = people[index];
+			if (!who) throw new Error("Nobody.");
+			await joined(who, "2026-01-05");
+			await seedLeaveFor(who, "2026-03-09", "2026-03-11");
+			const said = (await preview(startsOn, who, more)).said;
+			const shown = /This year: (.+?) → (.+?)(?:"|\\|$)/.exec(said);
+			expect(shown?.[1], said).toBe("22 days");
+			expect((await giveFrom(startsOn, who, more)).status).toBe(200);
+			const after = await balanceOf(who);
+			expect(shown?.[2], JSON.stringify(cases[index])).toBe(after);
+			expect(await text(page(who), roles.people.owner)).toContain(`${after} left`);
+		}
 	});
 });
