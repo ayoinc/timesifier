@@ -100,7 +100,10 @@ describe("a page as a manager of 120 of 150 people", () => {
 		const counts = await statementsOf(`/app/acme/team?week=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 36,
+			// 36 before TS-125: each page's entries were read row by row, and the
+			// total past one page summed apart. Now one sum serves the rows, the
+			// order and the total.
+			total: 35,
 			memberships: 5,
 			teamMembers: 3,
 			ownMembership: 1,

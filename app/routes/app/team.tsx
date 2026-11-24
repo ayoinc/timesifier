@@ -5,7 +5,7 @@ import * as z from "zod";
 
 import { Button } from "~/components/Button";
 import { Checkbox } from "~/components/Checkbox";
-import { FilterBar, FilterField } from "~/components/FilterBar";
+import { FilterBar, FilterField, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
 import { Menu, MenuItem, MenuTrigger } from "~/components/Menu";
 import { Pager } from "~/components/Pager";
@@ -39,6 +39,16 @@ import { formerPlace, placesOf, scheduleBookOf } from "~/schedules/schedules.ser
 import { destination, destinationPath } from "~/shell/destinations";
 import { ACTION_LINK, TEXT_LINK } from "~/shell/links";
 import { EmptySheet, PageHeading, PageLead } from "~/shell/PageHeading";
+import { CapacityMeter } from "~/teams/CapacityMeter";
+import {
+	CAPACITY_SORTS,
+	type CapacitySort,
+	capacityLine,
+	capacitySortIn,
+	SORT_LABELS,
+	SORT_PARAM,
+	sortByCapacity,
+} from "~/teams/capacity";
 import { peopleOf, teamPeopleOf } from "~/teams/people.server";
 import { TeamTabs } from "~/teams/TeamTabs";
 import {
@@ -53,7 +63,7 @@ import {
 	teamsWithMembers,
 } from "~/teams/teams.server";
 import { viewedPeriod } from "~/teams/viewed-period.server";
-import { personWeek, teamWeek, weekTotal } from "~/teams/week.server";
+import { loggedByPerson, personWeek, runningOf, teamWeek } from "~/teams/week.server";
 import {
 	dayLabel,
 	hours,
@@ -74,11 +84,12 @@ import { useOrganisation } from "./useOrganisation";
 // manage; a member is not shown it and gets 404 here (app/shell/destinations.ts).
 //
 // Its own address shows This week: each person's time in one period, with
-// arrows to earlier ones, the period's total above them and a filter by name in
+// arrows to earlier ones, the period's total under them and a filter by name in
 // `?q=` (TS-058), and `?person=` opens one person's week to read. Overtime is
 // shown apart from regular time, "7:30 + 1:00 overtime", and each entry of it
 // is marked Overtime (TS-095). It lists 50 people a page, `?page=` past the
-// first (TS-113).
+// first (TS-113). Each row measures the week against what was expected, with a
+// bar and in words, and `?sort=` orders the people by those figures (TS-125).
 // `?show=teams` shows the teams, which owners and admins create, rename and
 // delete, fill and give managers. Members and Invitations are pages of their own.
 
@@ -178,47 +189,66 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		};
 	}
 
-	// The filter narrows the people, and the page takes 50 of them, before
-	// anybody's time is read (TS-113): only theirs is, and past one page the
-	// total of all of them is one sum.
+	// The filter narrows the people (TS-113). Each of them is measured before
+	// the page is taken, so an order by their figures runs through every page
+	// (TS-125): what they logged is one sum, and what was expected of them one
+	// reading of the schedules and the leave, however many they are. Only the
+	// page's 50 are sent to the browser.
 	const filter = filterOf(url.searchParams);
-	// The people the viewer pinned head This week (TS-122, S2-09), each part in
-	// the list's order by name, so the pins are on page 1 (TS-113).
+	const sort = capacitySortIn(url.searchParams);
 	const byName = matchingPeople(people, filter);
-	const matching = [
-		...byName.filter((p) => isPinned.has(p.id)),
-		...byName.filter((p) => !isPinned.has(p.id)),
-	];
-	const page = pageOf(matching, pageNumberOf(url.searchParams));
-	const shown = page.items;
-	const [listed, schedules, sum] = await Promise.all([
-		teamWeek(scope, shown, viewed.period, now),
-		schedulesOfPeople(scope, shown, viewed.period.startsOn, now),
-		page.pages === 1 ? null : weekTotal(scope, matching, viewed.period, now),
+	const [logged, running] = await Promise.all([
+		loggedByPerson(scope, byName, viewed.period, now),
+		runningOf(scope, byName),
 	]);
 	const leave = await leaveOfPeople(
 		scope,
 		access,
-		shown,
+		byName,
 		viewed.period.startsOn,
 		viewed.period.endsOn,
 		now,
-		new Set(listed.filter((p) => p.running).map((p) => p.id)),
+		running,
 	);
-	const total = sum ?? {
-		seconds: listed.reduce((all, p) => all + p.seconds, 0),
-		overtimeSeconds: listed.reduce((all, p) => all + p.overtimeSeconds, 0),
-	};
+	const measured = byName.map((p) => ({
+		person: p,
+		seconds: logged.get(p.id)?.seconds ?? 0,
+		expectedSeconds: (leave.get(p.id)?.expectedMinutes ?? 0) * 60,
+	}));
+	// The people the viewer pinned head This week (TS-122, S2-09), each part in
+	// the order asked for, so the pins are on page 1 (TS-113).
+	const ordered = sortByCapacity(measured, sort);
+	const matching = [
+		...ordered.filter((m) => isPinned.has(m.person.id)),
+		...ordered.filter((m) => !isPinned.has(m.person.id)),
+	].map((m) => m.person);
+	const page = pageOf(matching, pageNumberOf(url.searchParams));
+	const shown = page.items;
+	const [listed, schedules] = await Promise.all([
+		teamWeek(scope, shown, viewed.period, logged, running),
+		schedulesOfPeople(scope, shown, viewed.period.startsOn, now),
+	]);
+	// The week's total, of everyone the filter keeps: the sum of their rows, on every page.
+	const total = measured.reduce(
+		(all, m) => ({
+			seconds: all.seconds + m.seconds,
+			overtimeSeconds: all.overtimeSeconds + (logged.get(m.person.id)?.overtimeSeconds ?? 0),
+			expectedSeconds: all.expectedSeconds + m.expectedSeconds,
+		}),
+		{ seconds: 0, overtimeSeconds: 0, expectedSeconds: 0 },
+	);
 	const isCurrent = viewed.period.startsOn === viewed.current.startsOn;
 	const addresses = new Map(shown.map((p) => [p.id, p.address]));
 	return {
 		view: "week" as const,
 		week,
 		filter,
+		sort,
 		everyone: people.length,
 		page: { number: page.number, pages: page.pages, total: page.total, first: page.first },
 		total: {
 			seconds: total.seconds,
+			expectedSeconds: total.expectedSeconds,
 			split: regularAndOvertime(total.seconds, total.overtimeSeconds),
 		},
 		people: listed.map((p) => {
@@ -233,8 +263,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 				address,
 				// Where they stand now, shown on the current week alone.
 				now: isCurrent && theirs ? personStatusLabel(theirs.now) : null,
-				expected: formatDuration((theirs?.expectedMinutes ?? 0) * 60),
-				leave: theirs && theirs.leaveMinutes > 0 ? formatDuration(theirs.leaveMinutes * 60) : null,
+				expectedSeconds: (theirs?.expectedMinutes ?? 0) * 60,
+				leaveSeconds: (theirs?.leaveMinutes ?? 0) * 60,
 				schedule: schedules.get(p.id) ?? null,
 				leaveDays:
 					theirs?.days
@@ -401,13 +431,15 @@ function WeekStepper({ week, extra = "" }: { week: WeekData["week"]; extra?: str
 
 function ThisWeek({ data }: { data: WeekData }) {
 	const organisation = useOrganisation();
-	const { week, people, filter, everyone, page, total } = data;
+	const { week, people, filter, sort, everyone, page, total } = data;
 	const thisWeek = `?${WEEK_PARAM}=${week.period.startsOn}`;
-	/** The address of page `number` of this week, the filter kept. */
+	const sorted = sort === "name" ? null : sort;
+	/** The address of page `number` of this week, the filter and the order kept. */
 	const pageAt = (number: number) =>
 		queryOf({
 			[WEEK_PARAM]: week.period.startsOn,
 			[FILTER_PARAM]: filter,
+			[SORT_PARAM]: sorted,
 			[PAGE_PARAM]: number > 1 ? number : null,
 		});
 	const totalLabel = filter === "" ? "Week's total" : `Total for “${filter}”`;
@@ -435,8 +467,8 @@ function ThisWeek({ data }: { data: WeekData }) {
 			<WeekStepper
 				week={week}
 				extra={`${filter === "" ? "" : `&${FILTER_PARAM}=${encodeURIComponent(filter)}`}${
-					page.number > 1 ? `&${PAGE_PARAM}=${page.number}` : ""
-				}`}
+					sorted ? `&${SORT_PARAM}=${sorted}` : ""
+				}${page.number > 1 ? `&${PAGE_PARAM}=${page.number}` : ""}`}
 			/>
 			{everyone === 0 ? (
 				<EmptySheet heading={week.label}>
@@ -448,6 +480,7 @@ function ThisWeek({ data }: { data: WeekData }) {
 					<div className="mt-6 max-w-200">
 						<FilterBar name="Filter people" keep={{ [WEEK_PARAM]: week.period.startsOn }}>
 							<FilterField label="Search people" param={FILTER_PARAM} />
+							<SortField sort={sort} />
 						</FilterBar>
 					</div>
 					{people.length === 0 ? (
@@ -501,14 +534,9 @@ function ThisWeek({ data }: { data: WeekData }) {
 														</span>
 													)}
 													<span className="block text-body-medium text-on-surface-variant">
-														{p.expected} expected
-														{p.leave && ` · ${p.leave} leave`}
+														{hours(p.expectedSeconds)} expected
+														{p.leaveSeconds > 0 && ` · ${hours(p.leaveSeconds)} leave`}
 													</span>
-													{p.schedule && (
-														<span className="block text-body-medium text-on-surface-variant">
-															{p.schedule.name}, {p.schedule.weekLabel}. {p.schedule.reason}.
-														</span>
-													)}
 												</>
 											}
 											action={
@@ -538,7 +566,22 @@ function ThisWeek({ data }: { data: WeekData }) {
 													</Menu>
 												</MenuTrigger>
 											}
-										/>
+										>
+											<CapacityMeter
+												id={p.id}
+												label={`${p.name}'s week`}
+												capacity={p}
+												leaveSeconds={p.leaveSeconds}
+											/>
+											<span className="mt-1 block text-body-medium text-on-surface-variant">
+												{capacityLine(p)}
+											</span>
+											{p.schedule && (
+												<span className="block text-body-medium text-on-surface-variant">
+													{p.schedule.name}, {p.schedule.weekLabel}. {p.schedule.reason}.
+												</span>
+											)}
+										</LedgerRow>
 									))}
 								</LedgerRows>
 								{/* The week's total, of everyone the filter keeps: past one page, more than are listed. */}
@@ -552,6 +595,12 @@ function ThisWeek({ data }: { data: WeekData }) {
 													{total.split}
 												</span>
 											)}
+											<span className="block text-body-medium text-on-surface-variant">
+												{hours(total.expectedSeconds)} expected
+											</span>
+											<span className="block text-body-medium text-on-surface-variant">
+												{capacityLine(total)}
+											</span>
 										</>
 									}
 								/>
@@ -574,6 +623,34 @@ function ThisWeek({ data }: { data: WeekData }) {
 				</>
 			)}
 		</>
+	);
+}
+
+/**
+ * The order This week is read in (TS-125): applied as soon as it is chosen,
+ * into `?sort=`, which by name leaves out, so it lives in the address with
+ * the search and moves with the week's arrows and the pages.
+ */
+function SortField({ sort }: { sort: CapacitySort }) {
+	const apply = useApplyFilters();
+	const [chosen, setChosen] = useState<CapacitySort>(sort);
+	// The address changed (applied, Back, a link): show what it holds.
+	useEffect(() => setChosen(sort), [sort]);
+	return (
+		<div className="min-w-0 grow basis-44">
+			<Select
+				label="Sort"
+				options={CAPACITY_SORTS.map((id) => ({ id, label: SORT_LABELS[id] }))}
+				value={chosen}
+				onChange={(id) => {
+					setChosen(CAPACITY_SORTS.find((known) => known === id) ?? "name");
+					// The hidden field holds the new value once React has drawn it.
+					setTimeout(apply, 0);
+				}}
+			/>
+			{/* Empty for by name, which the bar leaves out of the address. */}
+			<input type="hidden" name={SORT_PARAM} value={chosen === "name" ? "" : chosen} />
+		</div>
 	);
 }
 
