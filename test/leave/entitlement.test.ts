@@ -9,6 +9,7 @@ import {
 	entitlementOf,
 	type LeaveYearSettings,
 	leaveAmount,
+	leavesGap,
 	minutesFrom,
 	shownInDays,
 	USUAL_SETTINGS,
@@ -481,14 +482,55 @@ describe("continuity", () => {
 		expect(minutes - exact).toBeLessThan(DAY / 2);
 	});
 
-	it("counts the days between two contracts at the allowance, and nothing after the last ends", () => {
+	it("counts nothing between two contracts, nor after the last ends", () => {
 		const first = contract("2026-01-01", "2026-03-31");
 		const second = contract("2026-07-01", "2026-09-30", [version("2026-07-01")]);
 		const gap = entitlementOf(leaveOf([first, second]), 2026);
-		// January to September: 273 days of 25, gap included; October on, nothing.
-		expect(gap.minutes).toBe((Math.ceil((50 * 273) / 365) * DAY) / 2);
-		// Public holidays come out of annual leave only on days a contract gives.
+		// January to March, 90 days, and July to September, 92, of 25: the gap and October on give nothing.
+		expect(gap.minutes).toBe((Math.ceil((50 * 182) / 365) * DAY) / 2);
 		expect(gap.counts("2026-05-04")).toBe(false);
 		expect(gap.counts("2026-08-31")).toBe(true);
+		expect(gap.counts("2026-10-01")).toBe(false);
+	});
+
+	it("counts the gap nothing though the first contract counts the days before it, over random gaps: a property", () => {
+		const next = random(98_207);
+		for (let run = 0; run < 300; run += 1) {
+			const firstEnds = addDays("2026-01-01", Math.floor(next() * 360));
+			const secondStarts = addDays(firstEnds, 1 + Math.floor(next() * 120));
+			const before = contract("2025-06-01", firstEnds, [version("2025-06-01")], {
+				priorDaysAtAllowance: true,
+			});
+			const after = contract(secondStarts, null);
+			// The days of 2026 each contract covers; none between them.
+			const counted =
+				daysFrom("2026-01-01", firstEnds).length +
+				(secondStarts <= "2026-12-31" ? daysFrom(secondStarts, "2026-12-31").length : 0);
+			const { minutes } = entitlementOf(leaveOf([before, after]), 2026);
+			expect(minutes, `${firstEnds} ${secondStarts}`).toBe(
+				(Math.ceil((ALLOWANCE * counted) / 365) * DAY) / 2,
+			);
+			expect(leavesGap([before, after], leaveYear("01-01", 2026))).toBe(
+				secondStarts > addDays(firstEnds, 1),
+			);
+		}
+	});
+
+	it("finds a gap only where two contracts leave days of the year between them", () => {
+		const year = leaveYear("01-01", 2026);
+		const ended = contract("2025-01-01", "2026-03-31");
+		expect(leavesGap([ended, contract("2026-04-01", null)], year)).toBe(false);
+		expect(leavesGap([ended, contract("2026-04-02", null)], year)).toBe(true);
+		expect(
+			leavesGap([contract("2025-01-01", "2025-06-30"), contract("2025-08-01", null)], year),
+		).toBe(false);
+		expect(
+			leavesGap([contract("2026-11-01", "2026-12-31"), contract("2027-02-01", null)], year),
+		).toBe(false);
+		expect(
+			leavesGap([contract("2026-11-01", "2026-12-30"), contract("2027-02-01", null)], year),
+		).toBe(true);
+		// Days after the last contract ends are no gap: nothing comes after them.
+		expect(leavesGap([contract("2026-01-01", "2026-06-30")], year)).toBe(false);
 	});
 });

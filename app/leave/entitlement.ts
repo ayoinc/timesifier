@@ -25,16 +25,16 @@ import { type LeaveYear, leaveYear, leaveYearOf } from "./years";
  * half day. A starter or a leaver gets the days they are covered for; a change
  * mid-year counts each part. A contractor's contract gives none.
  *
- * A day of the year no contract covers counts at the rule from before
- * contracts, the kind's allowance in the person's own working days,
- * `allowance ÷ 2 × the week's minutes ÷ its working days ÷ the year's days`:
- * - before their first contract, where whoever gave it said they worked here
- *   before it (`prior_days_at_allowance`); otherwise those days count nothing,
- *   as for a starter;
- * - between two contracts, as a member still.
- * After their last contract ends, nothing counts. So a contract given part way
- * through a year to someone who worked here before changes nothing before its
- * first day (decision 76).
+ * A day of the year no contract covers counts nothing, as UK holiday accrues
+ * only while employed, but for the days before their first contract: those
+ * count at the rule from before contracts, the kind's allowance in the
+ * person's own working days, `allowance ÷ 2 × the week's minutes ÷ its
+ * working days ÷ the year's days`, where whoever gave it said they worked here
+ * before it (`prior_days_at_allowance`); otherwise nothing, as for a starter.
+ * So a contract given part way through a year to someone who worked here
+ * before changes nothing before its first day, and a stretch between two
+ * contracts, or after the last ends, has no terms and gives nothing
+ * (decision 76).
  *
  * Whoever has no contract whose annual leave is its own keeps the balance
  * they had before: the kind's allowance in half days, `balance` in ./days.
@@ -81,19 +81,18 @@ export interface ContractLeave {
 
 /**
  * Where a day's share of annual leave comes from: the version of a contract,
- * counted in the week of `weekOf`; or the kind's allowance, on a day no
- * contract covers (decision 76).
+ * counted in the week of `weekOf`; or the kind's allowance, on a day before
+ * the first contract (decision 76).
  */
 type DayShare = { from: "contract"; version: ContractVersion; weekOf: Day } | { from: "allowance" };
 
 /**
  * What gives `day` its share of annual leave (decision 76):
  * - the version of the contract that covers it, not a contractor's;
- * - between two contracts, the kind's allowance;
  * - before the first, the kind's allowance where that contract says so; else,
  *   where the organisation counts a starter's month whole, a day of the month
  *   it starts in, with its first terms;
- * - after the last has ended, nothing.
+ * - between two contracts, or after the last has ended, nothing.
  */
 function shareOn(
 	contracts: readonly Contract[],
@@ -107,9 +106,7 @@ function shareOn(
 			: { from: "contract", version: versionOn(covering, day), weekOf: day };
 	}
 	const first = contracts[0];
-	const lastEnds = contracts.at(-1)?.endsOn ?? null;
-	if (!first || (lastEnds !== null && day > lastEnds)) return null;
-	if (day > first.startsOn) return { from: "allowance" };
+	if (!first || day > first.startsOn) return null;
 	if (first.priorDaysAtAllowance) return { from: "allowance" };
 	const terms = first.versions[0];
 	if (
@@ -121,6 +118,20 @@ function shareOn(
 		return { from: "contract", version: terms, weekOf: first.startsOn };
 	}
 	return null;
+}
+
+/**
+ * Whether `contracts`, in the order they start, leave a day of `year` between
+ * two of them that none covers: a gap, which gives no leave (decision 76).
+ */
+export function leavesGap(contracts: readonly Contract[], year: LeaveYear): boolean {
+	return contracts.some((after, i) => {
+		const before = contracts[i - 1];
+		if (!before?.endsOn) return false;
+		const first = addDays(before.endsOn, 1);
+		const last = addDays(after.startsOn, -1);
+		return first <= last && first <= year.last && last >= year.first;
+	});
 }
 
 /** The days a week works, and its minutes. */

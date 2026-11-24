@@ -36,6 +36,8 @@ import {
 	endContract,
 	giveContract,
 	otherAdministrators,
+	type Previewed,
+	previewedChange,
 	previewedContracts,
 } from "~/contracts/contracts.server";
 import { ContractFields } from "~/contracts/forms";
@@ -50,11 +52,11 @@ import {
 	contractBalanceWords,
 	holidayMinutesOn,
 	LONGEST_ADJUSTMENT_MINUTES,
-	leaveAmount,
+	leavesGap,
 	minutesFrom,
 	USUAL_SETTINGS,
 } from "~/leave/entitlement";
-import { addAdjustment, adjustmentsOf } from "~/leave/entitlement.server";
+import { addAdjustment, adjustmentLines, adjustmentsOf } from "~/leave/entitlement.server";
 import { annualLeaveOf, annualLeftWords } from "~/leave/leave.server";
 import { leaveYear, leaveYearLabel, leaveYearOf } from "~/leave/years";
 import { parseRequest } from "~/lib/validate";
@@ -94,7 +96,7 @@ const ADJUST_NEEDS_CONTRACT =
 
 const TITLE = "Contract";
 
-/** The Give sheet's preview reads; it changes nothing the page shows. */
+/** The Give and Change sheets' preview reads; it changes nothing the page shows. */
 export function shouldRevalidate({
 	formData,
 	defaultShouldRevalidate,
@@ -216,19 +218,7 @@ export async function loader({ params, context }: Route.LoaderArgs) {
 			? {
 					heading: `Annual leave, ${leaveYearLabel(settings.leaveYearStarts, year)}`,
 					...contractBalanceWords(counted, today),
-					adjustments: adjustments
-						.filter((a) => a.leaveYear === year)
-						.map((a) => {
-							const size = Math.abs(a.minutes);
-							const inDays =
-								counted.dayLength !== null && Number.isInteger((size * 2) / counted.dayLength);
-							return {
-								id: a.id,
-								title: `${a.minutes > 0 ? "Added" : "Taken away"}: ${leaveAmount(size, inDays ? counted.dayLength : null)}`,
-								reason: a.reason,
-								by: `${a.by ?? "A former member"}, ${formatDayWithYear(dayOf(a.createdAt, zone))}`,
-							};
-						}),
+					adjustments: adjustmentLines(adjustments, year, counted, zone),
 				}
 			: null,
 		/** What the adjustment sheet offers: the leave year before, this one and the next. Only for those who change contracts. */
@@ -261,9 +251,16 @@ const GivePreview = ContractFields.extend({
 	pay: z.unknown().transform(() => "0"),
 });
 
+/** What the Change sheet's preview reads of its fields: the contract and the day it changes from. */
+const ChangePreview = ContractFields.extend({
+	contractId: Id,
+	from: Day,
+	pay: z.unknown().transform(() => "0"),
+});
+
 const form = z.discriminatedUnion("intent", [
 	ContractFields.extend({ intent: z.literal("give"), startsOn: Day, priorDays: PriorDaysField }),
-	// The Give sheet's fields as they stand, half filled in maybe: read in the action, never refused.
+	// The Give or Change sheet's fields as they stand, half filled in maybe: read in the action, never refused.
 	z.looseObject({ intent: z.literal("preview") }),
 	ContractFields.extend({ intent: z.literal("change"), contractId: Id, from: Day }),
 	z.object({
@@ -347,25 +344,37 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			return answer(change, `The contract is given, from ${formatDayWithYear(input.startsOn)}.`);
 		}
 		case "preview": {
-			// What the Give sheet's fields would make of this leave year's balance, saving nothing.
-			const fields = GivePreview.safeParse(input);
-			if (!fields.success) return done("");
-			const { startsOn, priorDays } = fields.data;
-			const planned = await previewedContracts(
-				scope,
-				personId,
-				startsOn,
-				fields.data,
-				today,
-				priorDays,
-			);
-			if (planned.change !== "planned") return done("");
+			// What the sheet's fields would make of this leave year's balance, saving nothing.
+			const changing = ChangePreview.safeParse(input);
+			const giving = GivePreview.safeParse(input);
+			let planned: Previewed | null = null;
+			if (changing.success) {
+				// A contract named by the form is this person's, or the preview says nothing.
+				const theirs = (await contractsOf(scope, [personId])).get(personId) ?? [];
+				if (!theirs.some((c) => c.id === changing.data.contractId)) return done("");
+				const { contractId, from } = changing.data;
+				planned = await previewedChange(scope, contractId, from, changing.data, today);
+			} else if (giving.success) {
+				const { startsOn, priorDays } = giving.data;
+				planned = await previewedContracts(
+					scope,
+					personId,
+					startsOn,
+					giving.data,
+					today,
+					priorDays,
+				);
+			}
+			if (planned?.change !== "planned") return done("");
 			const [now, then] = await Promise.all([
 				annualLeaveOf(scope, personId),
 				annualLeaveOf(scope, personId, planned),
 			]);
 			if (!now || !then) return done("");
 			const year = leaveYearOf(now.settings.leaveYearStarts, today);
+			// A change says it only where it leaves a gap this leave year, which gives nothing (decision 76).
+			const thisYear = leaveYear(now.settings.leaveYearStarts, year);
+			if (changing.success && !leavesGap(planned.contracts, thisYear)) return done("");
 			const before = annualLeftWords(now, year);
 			const after = annualLeftWords(then, year);
 			return done(before && after ? `This year: ${before} → ${after}` : "");
@@ -903,11 +912,13 @@ function TermsSheet({
 					))}
 				</RadioGroup>
 			)}
-			{giving && (
-				<BalancePreview
-					kept={{ startsOn, kind, scheduleId, leaveDays, priorDays: priorDays ?? "" }}
-				/>
-			)}
+			<BalancePreview
+				kept={
+					giving
+						? { startsOn, kind, scheduleId, leaveDays, priorDays: priorDays ?? "" }
+						: { kind, scheduleId, leaveDays }
+				}
+			/>
 			<TextField
 				label="Works number"
 				name="worksNumber"
@@ -919,20 +930,23 @@ function TermsSheet({
 	);
 }
 
-/** The fields of the Give sheet it keeps itself, which its form may not have caught up with. */
+/** The fields of the Give or Change sheet it keeps itself, which its form may not have caught up with. */
 interface KeptFields {
-	startsOn: string;
+	/** The Give sheet's first day and its answer for the days before; the Change sheet's day is its form's. */
+	startsOn?: string;
+	priorDays?: string;
 	kind: string;
 	scheduleId: string;
 	leaveDays: string;
-	priorDays: string;
 }
 
 /**
- * What the Give sheet's fields would make of this leave year's balance, "This
+ * What the sheet's fields would make of this leave year's balance, "This
  * year: 25 days → 25 days", asked of the server as they change (decision 76):
- * the same sum as the contract once saved. The fields the sheet keeps are
- * sent as it holds them; the others are heard as they are typed.
+ * the same sum as the contract once saved. The Give sheet always says it; the
+ * Change sheet where the change leaves a gap between contracts this leave
+ * year, which gives nothing. The fields the sheet keeps are sent as it holds
+ * them; the others are heard as they are typed.
  */
 function BalancePreview({ kept }: { kept: KeptFields }) {
 	const fetcher = useFetcher<Outcome>();
@@ -955,7 +969,7 @@ function BalancePreview({ kept }: { kept: KeptFields }) {
 					leaveDays,
 					priorDays,
 				})) {
-					fields.set(name, value);
+					if (value !== undefined) fields.set(name, value);
 				}
 				void submit(fields, { method: "post" });
 			}, 300);

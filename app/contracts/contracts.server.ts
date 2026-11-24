@@ -434,28 +434,24 @@ export async function giveContract(
 	);
 }
 
-/**
- * What giving `userId` that contract would make of their contracts and their
- * schedule, day by day, without writing anything: what the Give sheet counts
- * this leave year's balance from before it is saved. Refused as giving it
- * would be.
- */
-export async function previewedContracts(
+/** What a sheet's preview counts this leave year's balance from: the person's contracts as they would be, and the schedule those give them. */
+export interface PlannedContracts {
+	change: "planned";
+	contracts: Contract[];
+	timetable: Timetable;
+}
+
+/** What a sheet's preview came to: the contracts it would make, or why the sheet would be refused. */
+export type Previewed = Exclude<ContractChange, { change: "done" }> | PlannedContracts;
+
+/** `userId`'s contracts as a sheet would leave them, and the schedule they would give, day by day. */
+async function plannedTimetable(
 	scope: OrganisationScope,
 	userId: string,
-	startsOn: Day,
-	fields: ContractFields,
+	planned: readonly Contract[],
 	today: Day,
-	priorDays: PriorDays | undefined,
-): Promise<
-	| Exclude<ContractChange, { change: "done" }>
-	| { change: "planned"; contracts: Contract[]; timetable: Timetable }
-> {
-	const planned = await plannedContract(scope, userId, startsOn, fields, today, priorDays);
-	if (planned.change !== "planned") return planned;
-	const contracts = [...planned.theirs, planned.contract].sort((a, b) =>
-		a.startsOn.localeCompare(b.startsOn),
-	);
+): Promise<PlannedContracts> {
+	const contracts = [...planned].sort((a, b) => a.startsOn.localeCompare(b.startsOn));
 	const [book, places] = await Promise.all([scheduleBookOf(scope), placesOf(scope, [userId])]);
 	const { gone, wanted } = plannedAssignments(book, userId, contracts, today);
 	const assignments: Assignment[] = [
@@ -483,6 +479,112 @@ export async function previewedContracts(
 }
 
 /**
+ * What giving `userId` that contract would make of their contracts and their
+ * schedule, day by day, without writing anything: what the Give sheet counts
+ * this leave year's balance from before it is saved. Refused as giving it
+ * would be.
+ */
+export async function previewedContracts(
+	scope: OrganisationScope,
+	userId: string,
+	startsOn: Day,
+	fields: ContractFields,
+	today: Day,
+	priorDays: PriorDays | undefined,
+): Promise<Previewed> {
+	const planned = await plannedContract(scope, userId, startsOn, fields, today, priorDays);
+	if (planned.change !== "planned") return planned;
+	return plannedTimetable(scope, userId, [...planned.theirs, planned.contract], today);
+}
+
+/**
+ * What changing `contractId` from `from` with `fields` would make of the
+ * person's contracts, or why it is refused. A new kind ends it the day before
+ * and starts the next (`replaced`); otherwise its terms change from that day,
+ * and its last day may move (`changed`).
+ */
+async function plannedChange(
+	scope: OrganisationScope,
+	contractId: string,
+	from: Day,
+	fields: ContractFields,
+	today: Day,
+) {
+	const found = await contractById(scope, contractId);
+	if (!found) return { change: "missing" } as const;
+	const { contract, theirs } = found;
+	if (from < contract.startsOn || (contract.endsOn !== null && from > contract.endsOn)) {
+		return { change: "outside" } as const;
+	}
+	const terms = await termsOf(scope, fields);
+	if (typeof terms === "string") return { change: terms };
+	const was = versionOn(contract, from);
+	if (from < today && terms.scheduleId !== was.scheduleId) return { change: "past-hours" } as const;
+	// An ended contract keeps its end: it is changed by ending it again, never by a change of terms.
+	const endsOn = contract.endReason !== null ? contract.endsOn : (fields.endsOn ?? null);
+	if (fields.kind === "fixed_term" && !endsOn) return { change: "fixed-term-end" } as const;
+	const others = theirs.filter((c) => c.id !== contract.id);
+	if (fields.kind !== contract.kind) {
+		// A new kind is a new contract: this one ends the day before, replaced.
+		if (from === contract.startsOn) return { change: "kind-on-first-day" } as const;
+		const later = contract.versions.find((v) => v.effectiveFrom > from);
+		if (later) return { change: "ends-before-a-change" } as const;
+		if (endsOn && endsOn < from) return { change: "ends-before-start" } as const;
+		const next: Contract = {
+			id: uuidv7(),
+			userId: contract.userId,
+			kind: fields.kind,
+			startsOn: from,
+			endsOn,
+			endReason: null,
+			worksNumber: fields.worksNumber ?? null,
+			// Only a person's first contract counts the days before it (decision 76).
+			priorDaysAtAllowance: false,
+			versions: [{ id: uuidv7(), effectiveFrom: from, ...terms }],
+		};
+		const ended = { ...contract, endsOn: addDays(from, -1), endReason: "replaced" as const };
+		const clash = overlapOf(others, next);
+		if (clash) return { change: "overlap", with: clash } as const;
+		const contracts = [...others, ended, next];
+		return { change: "replaced", contract, terms, ended, next, contracts } as const;
+	}
+
+	if (endsOn && endsOn < from) return { change: "ends-before-start" } as const;
+	const lastVersion = contract.versions.at(-1);
+	if (endsOn && lastVersion && endsOn < lastVersion.effectiveFrom) {
+		return { change: "ends-before-a-change" } as const;
+	}
+	const clash = overlapOf(theirs, { startsOn: contract.startsOn, endsOn }, contract.id);
+	if (clash) return { change: "overlap", with: clash } as const;
+	const worksNumber = fields.worksNumber ?? null;
+	const version = { id: uuidv7(), effectiveFrom: from, ...terms };
+	const versions = [...contract.versions.filter((v) => v.effectiveFrom !== from), version].sort(
+		(a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1),
+	);
+	const changed: Contract = { ...contract, endsOn, worksNumber, versions };
+	const contracts = [...others, changed];
+	return { change: "changed", contract, terms, was, version, changed, contracts } as const;
+}
+
+/**
+ * What changing `contractId` that way would make of the person's contracts
+ * and their schedule, without writing anything: what the Change sheet counts
+ * this leave year's balance from before it is saved. Refused as changing it
+ * would be.
+ */
+export async function previewedChange(
+	scope: OrganisationScope,
+	contractId: string,
+	from: Day,
+	fields: ContractFields,
+	today: Day,
+): Promise<Previewed> {
+	const planned = await plannedChange(scope, contractId, from, fields, today);
+	if (planned.change !== "replaced" && planned.change !== "changed") return planned;
+	return plannedTimetable(scope, planned.contract.userId, planned.contracts, today);
+}
+
+/**
  * Changes `contractId` from `from` with `fields`: a version from that day,
  * replacing one from the same day, so that days before keep their terms. A
  * new last day (a fixed term extended) is the contract's own. A change of
@@ -496,51 +598,17 @@ export async function changeContract(
 	fields: ContractFields,
 	today: Day,
 ): Promise<ContractChange> {
-	const found = await contractById(scope, contractId);
-	if (!found) return { change: "missing" };
-	const { contract, theirs } = found;
-	if (from < contract.startsOn || (contract.endsOn !== null && from > contract.endsOn)) {
-		return { change: "outside" };
-	}
-	const terms = await termsOf(scope, fields);
-	if (typeof terms === "string") return { change: terms };
-	const was = versionOn(contract, from);
-	if (from < today && terms.scheduleId !== was.scheduleId) return { change: "past-hours" };
-	// An ended contract keeps its end: it is changed by ending it again, never by a change of terms.
-	const endsOn = contract.endReason !== null ? contract.endsOn : (fields.endsOn ?? null);
-	if (fields.kind === "fixed_term" && !endsOn) return { change: "fixed-term-end" };
-	const alone = { changedAlone: actor === contract.userId || null };
-
-	if (fields.kind !== contract.kind) {
-		// A new kind is a new contract: this one ends the day before, replaced.
-		if (from === contract.startsOn) return { change: "kind-on-first-day" };
-		const later = contract.versions.find((v) => v.effectiveFrom > from);
-		if (later) return { change: "ends-before-a-change" };
-		const lastDay = addDays(from, -1);
-		if (endsOn && endsOn < from) return { change: "ends-before-start" };
-		const next: Contract = {
-			id: uuidv7(),
-			userId: contract.userId,
-			kind: fields.kind,
-			startsOn: from,
-			endsOn,
-			endReason: null,
-			worksNumber: fields.worksNumber ?? null,
-			// Only a person's first contract counts the days before it (decision 76).
-			priorDaysAtAllowance: false,
-			versions: [{ id: uuidv7(), effectiveFrom: from, ...terms }],
-		};
-		const ended = { ...contract, endsOn: lastDay, endReason: "replaced" as const };
-		const others = theirs.filter((c) => c.id !== contract.id);
-		const clash = overlapOf(others, next);
-		if (clash) return { change: "overlap", with: clash };
+	const planned = await plannedChange(scope, contractId, from, fields, today);
+	if (planned.change === "replaced") {
+		const { contract, terms, ended, next, contracts } = planned;
+		const alone = { changedAlone: actor === contract.userId || null };
 		const firstVersion = next.versions[0];
 		if (!firstVersion) throw new Error("A contract has at least one version.");
 		return written(
 			scope,
 			[
 				scope.contracts.statements.update(
-					{ endsOn: lastDay, endReason: "replaced", updatedAt: new Date() },
+					{ endsOn: ended.endsOn, endReason: "replaced", updatedAt: new Date() },
 					(c) => eq(c.id, contract.id),
 				),
 				recordStatement(
@@ -550,7 +618,7 @@ export async function changeContract(
 					{ type: "contract", id: contract.id, ownerId: contract.userId },
 					changes(
 						{ endsOn: contract.endsOn, endReason: null },
-						{ endsOn: lastDay, endReason: "replaced", ...alone },
+						{ endsOn: ended.endsOn, endReason: "replaced", ...alone },
 						["endsOn", "endReason", "changedAlone"],
 					),
 				),
@@ -564,7 +632,7 @@ export async function changeContract(
 					createdBy: actor,
 				}),
 				...versionStatements(scope, actor, next.id, from, terms, firstVersion.id),
-				...(await assignmentStatements(scope, contract.userId, [...others, ended, next], today)),
+				...(await assignmentStatements(scope, contract.userId, contracts, today)),
 				...termRecords(
 					scope,
 					actor,
@@ -574,7 +642,7 @@ export async function changeContract(
 					{
 						contractKind: next.kind,
 						startsOn: from,
-						endsOn,
+						endsOn: next.endsOn,
 						effectiveFrom: from,
 						...openTerms(terms),
 						...alone,
@@ -588,21 +656,10 @@ export async function changeContract(
 			next,
 		);
 	}
-
-	if (endsOn && endsOn < from) return { change: "ends-before-start" };
-	const lastVersion = contract.versions.at(-1);
-	if (endsOn && lastVersion && endsOn < lastVersion.effectiveFrom) {
-		return { change: "ends-before-a-change" };
-	}
-	const clash = overlapOf(theirs, { startsOn: contract.startsOn, endsOn }, contract.id);
-	if (clash) return { change: "overlap", with: clash };
-	const versionId = uuidv7();
-	const worksNumber = fields.worksNumber ?? null;
-	const versions = [
-		...contract.versions.filter((v) => v.effectiveFrom !== from),
-		{ id: versionId, effectiveFrom: from, ...terms },
-	].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1));
-	const changed: Contract = { ...contract, endsOn, worksNumber, versions };
+	if (planned.change !== "changed") return planned;
+	const { contract, terms, was, version, changed, contracts } = planned;
+	const { endsOn, worksNumber } = changed;
+	const alone = { changedAlone: actor === contract.userId || null };
 	return written(
 		scope,
 		[
@@ -613,13 +670,8 @@ export async function changeContract(
 						),
 					]
 				: []),
-			...versionStatements(scope, actor, contract.id, from, terms, versionId),
-			...(await assignmentStatements(
-				scope,
-				contract.userId,
-				[...theirs.filter((c) => c.id !== contract.id), changed],
-				today,
-			)),
+			...versionStatements(scope, actor, contract.id, from, terms, version.id),
+			...(await assignmentStatements(scope, contract.userId, contracts, today)),
 			...termRecords(
 				scope,
 				actor,

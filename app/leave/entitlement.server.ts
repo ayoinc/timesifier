@@ -7,6 +7,8 @@ import type { Contract } from "~/contracts/contracts";
 import { contractsOf } from "~/contracts/read.server";
 import { among, type OrganisationScope, organisations, users, uuidv7 } from "~/db";
 import { nameOrEmail } from "~/organisations/people";
+import { dayOf } from "~/time/calendar";
+import { formatDayWithYear } from "~/time/format";
 
 import type { LeaveCalendar, LeaveSpan } from "./days";
 import {
@@ -14,6 +16,7 @@ import {
 	type ContractLeave,
 	contractBalance,
 	type LeaveYearSettings,
+	leaveAmount,
 	STARTER_MONTHS,
 	type StarterMonth,
 	USUAL_SETTINGS,
@@ -117,6 +120,31 @@ export async function adjustmentsOf(
 		by: r.createdBy ? (names.get(r.createdBy) ?? null) : null,
 		createdAt: r.createdAt.getTime(),
 	}));
+}
+
+/**
+ * The adjustments of `year` as the Contract page and Time off list them:
+ * "Added: 2 days", why, and who made it on which day, in `zone`. An amount
+ * that is not whole or half days of `balance` reads in hours.
+ */
+export function adjustmentLines(
+	adjustments: readonly Adjustment[],
+	year: number,
+	balance: ContractBalance,
+	zone: string,
+): { id: string; title: string; reason: string; by: string }[] {
+	return adjustments
+		.filter((a) => a.leaveYear === year)
+		.map((a) => {
+			const size = Math.abs(a.minutes);
+			const inDays = balance.dayLength !== null && Number.isInteger((size * 2) / balance.dayLength);
+			return {
+				id: a.id,
+				title: `${a.minutes > 0 ? "Added" : "Taken away"}: ${leaveAmount(size, inDays ? balance.dayLength : null)}`,
+				reason: a.reason,
+				by: `${a.by ?? "A former member"}, ${formatDayWithYear(dayOf(a.createdAt, zone))}`,
+			};
+		});
 }
 
 /** What a person's annual leave is counted from, read for `userId`. */

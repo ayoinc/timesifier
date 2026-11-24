@@ -640,3 +640,64 @@ describe("the days before a first contract", () => {
 		}
 	});
 });
+
+// A stretch between two contracts has no terms, and UK holiday accrues only
+// while employed: it counts nothing (decision 76). A Give or Change that
+// leaves one this leave year previews its effect on the balance.
+describe("a gap between contracts", () => {
+	const said = async (fields: Record<string, string>) =>
+		(await ask(roles.people.owner, { intent: "preview", leaveDays: "25", ...terms(fields) })).said;
+	const thisYear = async () => {
+		const annual = await annualLeaveOf(scope(), linus.user.id);
+		if (!annual) throw new Error("No annual leave.");
+		return annualLeftWords(annual, 2026);
+	};
+
+	it("counts nothing, and the Give and Change sheets preview it before it is saved", async () => {
+		const first = { kind: "fixed_term", endsOn: "2026-06-30", leaveDays: "25" };
+		expect((await give(roles.people.owner, first)).status).toBe(200);
+		// 5 January to 30 June, 177 days of 365: 25 × 177 ÷ 365 = 12.1, rounded up to 12.5.
+		expect(await thisYear()).toBe("12.5 days");
+
+		// From 3 August, 151 days more; July and 1 and 2 August give nothing.
+		expect(await said({ startsOn: "2026-08-03" })).toContain("This year: 12.5 days → 22.5 days");
+		const second = await ask(roles.people.owner, {
+			intent: "give",
+			startsOn: "2026-08-03",
+			leaveDays: "25",
+			...terms(),
+		});
+		expect(second.status, second.said).toBe(200);
+		expect(await thisYear()).toBe("22.5 days");
+		expect(await text(page(), roles.people.owner)).toContain("22.5 days left");
+
+		const [before] = await theirs();
+		if (!before) throw new Error("No contract.");
+		const change = (endsOn: string) =>
+			said({ contractId: before.id, from: "2026-01-05", ...first, endsOn });
+		// Ending the first a month sooner widens the gap: 147 days and 151, 20.5 days.
+		expect(await change("2026-05-31")).toContain("This year: 22.5 days → 20.5 days");
+		// Closing it leaves none, and the sheet says nothing.
+		expect(await change("2026-08-02")).not.toContain("This year");
+		// A contract that is not theirs previews nothing.
+		expect(
+			await said({
+				contractId: "not-a-contract",
+				from: "2026-01-05",
+				...first,
+				endsOn: "2026-05-31",
+			}),
+		).not.toContain("This year");
+		// Nothing was saved.
+		expect(await thisYear()).toBe("22.5 days");
+	});
+
+	it("previews nothing for a change that leaves no gap", async () => {
+		expect((await give(roles.people.owner, { leaveDays: "25" })).status).toBe(200);
+		const [only] = await theirs();
+		if (!only) throw new Error("No contract.");
+		expect(await said({ contractId: only.id, from: "2026-11-09", leaveDays: "30" })).not.toContain(
+			"This year",
+		);
+	});
+});
