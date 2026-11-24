@@ -525,7 +525,7 @@ for (const viewport of [
 					await expectNoProblems(page, "on /app/new");
 					// Each ring is centred on its label's first line, not on the label and its meaning together.
 					for (const model of ["Client projects", "Internal work", "Both"] as const) {
-						const choice = question.locator("label").filter({ has: modelRadio(question, model) });
+						const choice = question.locator("label").filter({ has: modelRadio(page, model) });
 						const ring = await choice.locator(":scope > span").first().boundingBox();
 						const line = await choice
 							.locator(":scope > span")

@@ -245,7 +245,7 @@ describe("what the action takes", () => {
 	});
 });
 
-describe("who may (every role manages projects; owners and admins create them, decision 42)", () => {
+describe("who may (every role sees projects; owners and admins create, rename, archive and restore them, decision 42)", () => {
 	const roles: Role[] = ["owner", "admin", "member"];
 
 	it.each(roles)("a %s sees the projects, active and archived", async (role) => {
@@ -261,16 +261,36 @@ describe("who may (every role manages projects; owners and admins create them, d
 		expect(textOf(mainOf(await pageBody(archived)))).toContain("Design");
 	});
 
-	it.each(roles)("a %s renames, archives and restores a project", async (role) => {
-		const who = role === "owner" ? ada : await memberOfAcme(role, `${role}@example.com`);
+	it.each(["owner", "admin"] as const)(
+		"a %s renames, archives and restores a project",
+		async (role) => {
+			const who = role === "owner" ? ada : await memberOfAcme(role, `${role}@example.com`);
+			const id = await create("Design");
+
+			expect((await send({ intent: "rename", projectId: id, name: "Build" }, who)).status).toBe(
+				200,
+			);
+			expect(await value("select name from projects where id = ?", id)).toBe("Build");
+			expect((await send({ intent: "archive", projectId: id }, who)).status).toBe(200);
+			expect(await value("select archived_at from projects where id = ?", id)).not.toBeNull();
+			expect((await send({ intent: "restore", projectId: id }, who)).status).toBe(200);
+			expect(await value("select archived_at from projects where id = ?", id)).toBeNull();
+		},
+	);
+
+	it("a member renames, archives and restores none, and nothing changes", async () => {
+		const linus = await memberOfAcme("member", "linus@example.com");
 		const id = await create("Design");
 
-		expect((await send({ intent: "rename", projectId: id, name: "Build" }, who)).status).toBe(200);
-		expect(await value("select name from projects where id = ?", id)).toBe("Build");
-		expect((await send({ intent: "archive", projectId: id }, who)).status).toBe(200);
-		expect(await value("select archived_at from projects where id = ?", id)).not.toBeNull();
-		expect((await send({ intent: "restore", projectId: id }, who)).status).toBe(200);
+		expect((await send({ intent: "rename", projectId: id, name: "Build" }, linus)).status).toBe(
+			403,
+		);
+		expect((await send({ intent: "archive", projectId: id }, linus)).status).toBe(403);
+		expect(await value("select name from projects where id = ?", id)).toBe("Design");
 		expect(await value("select archived_at from projects where id = ?", id)).toBeNull();
+		await send({ intent: "archive", projectId: id });
+		expect((await send({ intent: "restore", projectId: id }, linus)).status).toBe(403);
+		expect(await value("select archived_at from projects where id = ?", id)).not.toBeNull();
 	});
 
 	it.each(["owner", "admin"] as const)("a %s creates a project", async (role) => {
@@ -292,12 +312,13 @@ describe("who may (every role manages projects; owners and admins create them, d
 		expect(await projectCount()).toBe(1);
 	});
 
-	it("a manager of a team manages projects too, but creates none", async () => {
+	it("a manager of a team keeps no project and creates none", async () => {
 		const linus = await memberOfAcme("member", "linus@example.com");
 		await seedTeam(acme.id, "Design team", { managers: [linus.user.id] });
 		expect((await send({ intent: "create", name: "Build" }, linus)).status).toBe(403);
 		const id = await create("Design");
-		expect((await send({ intent: "archive", projectId: id }, linus)).status).toBe(200);
+		expect((await send({ intent: "archive", projectId: id }, linus)).status).toBe(403);
+		expect(await value("select archived_at from projects where id = ?", id)).toBeNull();
 	});
 });
 
@@ -333,8 +354,8 @@ describe("a project's client", () => {
 				.status,
 		).toBe(403);
 		expect(await value("select client_id from projects where id = ?", design)).toBe(globex);
-		// Renaming without the field keeps the client.
-		await send({ intent: "rename", projectId: design, name: "Designs" }, linus);
+		// Renaming without the field, by one who may rename it, keeps the client.
+		expect((await send({ intent: "rename", projectId: design, name: "Designs" })).status).toBe(200);
 		expect(await value("select client_id from projects where id = ?", design)).toBe(globex);
 	});
 
