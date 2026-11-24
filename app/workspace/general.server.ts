@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { changes, recordStatement } from "~/activity/activity.server";
 import { organisationScope, organisations } from "~/db";
 import { parsePattern } from "~/lib/codes";
+import type { ProjectTracking } from "~/projects/teams";
 
 import { hasClients, type WorkModel } from "./work-model";
 
@@ -25,11 +26,14 @@ export interface GeneralSettings {
 	currency?: string;
 	/** Whether non-billable time counts against hour budgets (TS-069). */
 	budgetCountsNonBillable?: boolean;
+	/** Who may track time to a project (TS-115c, decision 75). */
+	projectTracking?: ProjectTracking;
 }
 
 /**
  * The settings whose change is recorded: those that move people's days (TR-11),
- * and How you work and the project codes' rules (TS-115a).
+ * How you work and the project codes' rules (TS-115a), and who tracks time to
+ * a project (TS-115c).
  */
 const RECORDED = [
 	"timeZone",
@@ -39,6 +43,7 @@ const RECORDED = [
 	"projectCodeRequired",
 	"workCodeRequired",
 	"projectCodePattern",
+	"projectTracking",
 ] as const;
 
 /**
@@ -65,6 +70,7 @@ export async function changeGeneral(
 			projectCodeRequired: organisations.projectCodeRequired,
 			workCodeRequired: organisations.workCodeRequired,
 			projectCodePattern: organisations.projectCodePattern,
+			projectTracking: organisations.projectTracking,
 		})
 		.from(organisations)
 		.where(eq(organisations.id, organisationId))
@@ -106,14 +112,20 @@ export async function changeGeneral(
 }
 
 /**
- * Gives a new organisation, at `slug`, the answer its creator gave to How you
- * work (TS-115a), as part of creating it: nothing is recorded, as nothing
- * else of its creation is by a person.
+ * Gives a new organisation, at `slug`, the answers its creator gave to How you
+ * work (TS-115a) and to who tracks time to a project (TS-115c), as part of
+ * creating it: nothing is recorded, as nothing else of its creation is by a
+ * person.
  */
-export async function startWorkModel(db: D1Database, slug: string, workModel: WorkModel) {
+export async function startWorkModel(
+	db: D1Database,
+	slug: string,
+	workModel: WorkModel,
+	projectTracking: ProjectTracking,
+) {
 	await drizzle(db)
 		.update(organisations)
-		.set({ workModel, clientsEnabled: hasClients(workModel) })
+		.set({ workModel, clientsEnabled: hasClients(workModel), projectTracking })
 		.where(eq(organisations.slug, slug));
 }
 

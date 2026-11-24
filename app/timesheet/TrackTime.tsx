@@ -270,7 +270,12 @@ function TrackTimeSheet({
 				</p>
 			) : (
 				<TrackChoicesContext value={shown.track}>
-					<EntryChoices projects={active} defaultProjectId={firstChoice} autoFocusProject />
+					<EntryChoices
+						projects={active}
+						defaultProjectId={firstChoice}
+						autoFocusProject
+						day={asked ?? current?.day}
+					/>
 					<TextField
 						label="Description"
 						name="description"

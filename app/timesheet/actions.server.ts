@@ -11,6 +11,8 @@ import { declined, done } from "~/organisations/outcome.server";
 import type { Outcome } from "~/organisations/problems";
 import { periodContaining } from "~/periods/periods";
 import { type NotMoved, submitPeriod, withdrawPeriod } from "~/periods/submission.server";
+import { JOIN_INTENT, NOT_JOINABLE, TEAM_PROBLEMS, TEAM_REFUSAL } from "~/projects/teams";
+import { joinTeam } from "~/projects/teams.server";
 import { WORK_PACKAGE_REFUSALS } from "~/projects/work-packages";
 import { TagIds } from "~/tags/tags";
 import { addDays, Day, dayOf, exactInstantAt } from "~/time/calendar";
@@ -120,6 +122,8 @@ export const TimesheetForm = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("submit"), startsOn: Day }),
 	z.object({ intent: z.literal("withdraw"), startsOn: Day }),
 	z.object({ intent: z.literal("put-away") }),
+	/** Puts the person on a project's team from a day, in one step from the picker (TS-115c). */
+	z.object({ intent: z.literal(JOIN_INTENT), projectId: Id, day: Day }),
 ]);
 
 /** What each refusal says to the person, and the status it is answered with. A day's limit says its own. */
@@ -138,6 +142,7 @@ const REFUSALS: Record<Exclude<NotWritten, "limit" | "invoiced">, [string, numbe
 	"no-task": ["Choose an active task of this project.", 400],
 	"no-work-package": [WORK_PACKAGE_REFUSALS["no-work-package"], 400],
 	"work-package-closed": [WORK_PACKAGE_REFUSALS["work-package-closed"], 409],
+	"not-assigned": [TEAM_REFUSAL, 403],
 	"no-tag": ["Choose active tags only.", 400],
 };
 
@@ -181,6 +186,18 @@ export async function timesheetAction(request: Request, membership: Membership) 
 	const now = Date.now();
 
 	switch (input.intent) {
+		case JOIN_INTENT: {
+			const joined = await joinTeam(
+				scope,
+				{ userId: user.id, role: membership.role },
+				input.projectId,
+				input.day,
+			);
+			if (joined === null) return declined(inTerms(REFUSALS["no-project"][0], terms), 400);
+			if (joined === false) return declined(inTerms(NOT_JOINABLE, terms), 403);
+			if (!joined.ok) return declined(inTerms(TEAM_PROBLEMS[joined.problem], terms));
+			return done(inTerms(`You are on the project's team from ${formatDay(input.day)}.`, terms));
+		}
 		// With no hours the timer starts now, which is today: on another day hours
 		// are asked for. With hours, one entry of them is placed on the day shown
 		// at the time chosen on the calendar, or else as hours typed into the

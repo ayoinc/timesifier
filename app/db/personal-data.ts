@@ -65,6 +65,7 @@ export const STORED = [
 				tables: [
 					"projects",
 					"work_packages",
+					"project_members",
 					"project_tasks",
 					"project_tags",
 					"tasks",
@@ -112,7 +113,7 @@ export const STORED = [
 		rows: [
 			{ term: "API tokens", tables: ["api_tokens"] },
 			{ term: "Webhooks", tables: ["webhooks", "webhook_deliveries"] },
-			{ term: "Imports", tables: ["import_jobs", "people_imports"] },
+			{ term: "Imports", tables: ["import_jobs", "people_imports", "setup_imports"] },
 			{ term: "Calendar feeds", tables: ["calendar_feeds"] },
 		],
 	},

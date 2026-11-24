@@ -1,7 +1,9 @@
 import { createContext } from "react";
 
+import type { TeamChoices } from "~/projects/teams";
 import type { WorkPackageChoice } from "~/projects/work-packages";
 import type { TagChoice } from "~/tags/tags";
+import type { Day } from "~/time/calendar";
 
 /**
  * What the Timesheet gives Track time and an entry's sheet beside the
@@ -41,6 +43,14 @@ export interface TrackChoices {
 	 * archived one still says which.
 	 */
 	workPackages: Record<string, WorkPackageChoice[]>;
+	/**
+	 * The person's place on each project's team, and whether the organisation
+	 * tracks by assignment (TS-115c): their projects head the picker, and under
+	 * assignment it offers only the projects they are on the team of on the
+	 * entry's day, and those they may add themselves to. `today` is the day an
+	 * entry with no day of its own is on.
+	 */
+	team: TeamChoices & { today: Day };
 }
 
 /**

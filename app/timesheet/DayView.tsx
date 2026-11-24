@@ -454,7 +454,12 @@ export function EntryFields({
 	const endsNextDay = start !== "" && end !== "" && end <= start;
 	return (
 		<>
-			<EntryChoices projects={offered} defaultProjectId={entry.projectId} entryId={entry.id} />
+			<EntryChoices
+				projects={offered}
+				defaultProjectId={entry.projectId}
+				entryId={entry.id}
+				day={entry.day}
+			/>
 			<TextField label="Date" name="date" type="date" defaultValue={entry.day} isRequired />
 			<div className="grid grid-cols-2 gap-4">
 				<TextField

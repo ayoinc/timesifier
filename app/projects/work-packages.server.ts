@@ -55,14 +55,14 @@ export function takesTime(wp: Pick<WorkPackageRow, "state" | "archivedAt">): boo
  * Who manages a project's work packages: creates, edits, closes, reopens,
  * archives and restores them. Decision 42's rule for the project's client:
  * owners and admins for any project, an account manager for their own
- * clients' projects, nobody else. TS-115c adds the project's delivery
- * managers: `deliveryManager` is that seam, false until it is built.
+ * clients' projects, nobody else; and the project's own delivery managers
+ * (TS-115c, decision 75), whether `deliveryManager` is one (`oversightOf`).
  */
 export function mayManageWorkPackages(
 	role: Role,
 	managed: readonly string[],
 	clientId: string | null,
-	deliveryManager = false,
+	deliveryManager: boolean,
 ): boolean {
 	return deliveryManager || mayCreateProject(role, managed, clientId);
 }
@@ -516,12 +516,20 @@ export interface WorkPackagesTab {
  * The project's work packages as its Work packages tab lists them: every one,
  * open first then closed, archived last, each by code. Progress is shown as a
  * project's budget is (`budgetShownTo`): an hours budget to those who see
- * rates or manage a team, a fees budget to those who see rates, nothing to
+ * rates, manage a team or oversee the project, a fees budget to those who see rates, nothing to
  * anyone else, who see each work package's code, name, days and state.
  */
 export async function workPackagesTab(
 	scope: OrganisationScope,
-	membership: { role: Role; managesTeams: boolean; userId: string },
+	membership: {
+		role: Role;
+		managesTeams: boolean;
+		userId: string;
+		/** Whether they lead the project as a delivery manager (TS-115c). */
+		leads: boolean;
+		/** Whether they oversee the project (`oversightOf`), and so see its hours. */
+		oversees: boolean;
+	},
 	project: { id: string; clientId: string | null },
 	{
 		now,
@@ -537,7 +545,7 @@ export async function workPackagesTab(
 ): Promise<WorkPackagesTab> {
 	const packages = (await workPackagesOf(scope, [project.id])).get(project.id) ?? [];
 	const seesRates = maySeeRates(membership.role);
-	const seesHours = seesRates || membership.managesTeams;
+	const seesHours = seesRates || membership.managesTeams || membership.oversees;
 	const progress =
 		seesHours && packages.length > 0
 			? await workPackageProgress(scope, project.id, packages, { now, money, pricing })
@@ -548,7 +556,7 @@ export async function workPackagesTab(
 			: [];
 	const rank = (wp: WorkPackageRow) => (wp.archivedAt !== null ? 2 : wp.state === "closed" ? 1 : 0);
 	return {
-		manages: mayManageWorkPackages(membership.role, managed, project.clientId),
+		manages: mayManageWorkPackages(membership.role, managed, project.clientId, membership.leads),
 		packages: [...packages]
 			.sort((a, b) => rank(a) - rank(b))
 			.map((wp): ListedWorkPackage => {

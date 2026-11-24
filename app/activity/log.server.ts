@@ -24,6 +24,7 @@ import { accessOf } from "~/organisations/access.server";
 import type { Membership } from "~/organisations/membership.server";
 import { nameOrEmail } from "~/organisations/people";
 import { SIGN_IN_POLICY_LABELS } from "~/organisations/sign-in-policy";
+import { PROJECT_TRACKING_LABELS, TEAM_ROLE_LABELS } from "~/projects/teams";
 import { addDays, bounds, Day, dayOf, daysFrom } from "~/time/calendar";
 import { formatDayWithYear, formatDuration, formatRange, formatTime } from "~/time/format";
 import { zoneOfMember } from "~/time/zones.server";
@@ -208,6 +209,7 @@ const STEPS: Record<string, string> = {
 	cancelled: "Cancelled",
 	member_added: "Added a member to",
 	member_removed: "Removed a member from",
+	member_changed: "Changed a member of",
 	manager_changed: "Changed a manager of",
 	manager_added: "Added an account manager to",
 	manager_removed: "Removed an account manager from",
@@ -353,6 +355,7 @@ const FIELD_LABELS: Record<string, string> = {
 	internalTerm: "Name for internal work",
 	projectCodeRequired: "Every project has a code",
 	projectCodePattern: "Project codes numbered from",
+	projectTracking: "Who tracks time",
 	contractKind: "Kind of contract",
 	jobTitle: "Job title",
 	overtimePay: "Overtime",
@@ -373,6 +376,9 @@ const RULE_VALUES: Record<string, Record<string, string>> = {
 	kind: WORK_KIND_LABELS,
 	signInPolicy: SIGN_IN_POLICY_LABELS,
 	workModel: WORK_MODEL_LABELS,
+	projectTracking: PROJECT_TRACKING_LABELS,
+	// A project team's roles (TS-115c); an organisation's roles are their own words.
+	role: TEAM_ROLE_LABELS,
 	contractKind: KIND_LABELS,
 	overtimePay: OVERTIME_PAY_LABELS,
 	endReason: END_REASON_LABELS,

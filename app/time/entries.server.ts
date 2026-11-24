@@ -6,6 +6,7 @@ import { type OrganisationScope, type ScopedStatement, uuidv7 } from "~/db";
 import { stopSplitOf, timerStartOf } from "~/leave/rules.server";
 import { lockedDays } from "~/periods/locks.server";
 import { findActiveProject } from "~/projects/projects.server";
+import { entryTeamOf } from "~/projects/teams.server";
 import { entryPackageOf } from "~/projects/work-packages.server";
 import { entryTagStatements, tagsAllowed, tagsOfEntries } from "~/tags/tags.server";
 import { entryTaskOf } from "~/tasks/tasks.server";
@@ -89,7 +90,8 @@ export interface StartTimer {
  * left of its regular time and no overtime to be had (`timerStartOf`), and
  * when the task is not on the project's list or a tag is not active, and
  * when the project has an open work package and none open of it is named
- * (TS-115b). The new entry is overtime when today has no regular time left.
+ * (TS-115b), and, where tracking is by assignment, when the person is not
+ * on the project's team today (TS-115c). The new entry is overtime when today has no regular time left.
  */
 export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	const { userId, projectId, description, zone, now } = start;
@@ -109,6 +111,9 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	if (!task.ok) return { ok: false as const, reason: "no-task" as const };
 	const wp = await entryPackageOf(scope, projectId, start.workPackageId ?? null);
 	if (!wp.ok) return { ok: false as const, reason: wp.reason };
+	// Where tracking is by assignment, only a person on the project's team today (TS-115c).
+	const team = await entryTeamOf(scope, userId, projectId, dayOf(now, zone));
+	if (!team.ok) return { ok: false as const, reason: team.reason };
 	const billable = task.billable && wp.billable;
 	if (start.tagIds && !(await tagsAllowed(scope, [], start.tagIds))) {
 		return { ok: false as const, reason: "no-tag" as const };

@@ -8,6 +8,7 @@ import { Select } from "~/components/Select";
 import { type DayRule, leftMessage, overLabel, wholeMinutes } from "~/leave/rules";
 import { lockDateNotice } from "~/locks/locks";
 import type { Outcome } from "~/organisations/problems";
+import { overlaps } from "~/projects/teams";
 import { lineKey, lineOf } from "~/projects/work-packages";
 import { useTerms } from "~/routes/app/useOrganisation";
 import { TRANSITION, useTravel } from "~/shell/transitions";
@@ -71,7 +72,7 @@ export function WeekView({ data, slug, aim }: { data: WeekData; slug: string; ai
 	const choices = use(TrackChoicesContext);
 	const lineName = useLineName(projects);
 	const inGrid = new Set(rows.map(lineOfRow));
-	const addable = addableLines(projects, choices).filter((line) => !inGrid.has(line));
+	const addable = addableLines(projects, choices, period).filter((line) => !inGrid.has(line));
 	const editable = lockedDays.length < days.length;
 	const shownEnd = addDays(shownStart, 6);
 	const thisWeek = shownStart <= today && today <= shownEnd;
@@ -606,11 +607,21 @@ function withOvertimeRows(
 
 /**
  * The lines a row can be added for (TS-115b): each active project's open
- * work packages, or the project alone where it has none open.
+ * work packages, or the project alone where it has none open. Where only a
+ * project's team tracks to it (TS-115c), the projects whose team the person
+ * is on some day of the week: a day they are not is refused, and says why.
  */
-function addableLines(projects: WeekData["projects"], choices: TrackChoices | null): string[] {
+function addableLines(
+	projects: WeekData["projects"],
+	choices: TrackChoices | null,
+	week: { startsOn: Day; endsOn: Day },
+): string[] {
+	const team = choices?.team;
+	const onTeamInWeek = (projectId: string) =>
+		team?.tracking !== "assigned" ||
+		(team.mine[projectId] ?? []).some((stretch) => overlaps(stretch, week));
 	return projects
-		.filter((p) => !p.archived)
+		.filter((p) => !p.archived && onTeamInWeek(p.id))
 		.flatMap((p) => {
 			const open = (choices?.workPackages[p.id] ?? []).filter((wp) => wp.open);
 			return open.length === 0 ? [p.id] : open.map((wp) => lineKey(p.id, wp.id));

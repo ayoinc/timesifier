@@ -210,8 +210,9 @@ export default function Privacy({
 			<>
 				The organisation's projects, tasks and tags, how each project bills, and its budgets,
 				including a budget for one person on a project. Each project's work packages: their codes,
-				names, days, whether they are open, billable or archived, and their budgets. A record of
-				each budget alert sent.
+				names, days, whether they are open, billable or archived, and their budgets. Each project's
+				team: who is on it, as a member or its delivery manager, from which day to which, and who
+				put them there, by hand or by an import. A record of each budget alert sent.
 			</>
 		),
 		"Clients and their contacts": (
@@ -263,9 +264,10 @@ export default function Privacy({
 		),
 		Imports: (
 			<>
-				Each CSV import, of time or of people: its file's name, what it imported, who made it, and
-				how many rows it took or skipped, with why. The file's text, which for an import of people
-				holds their names and email addresses, is kept while the import waits to be confirmed, and
+				Each CSV import, of time, of people, or of projects, work packages and project teams: its
+				file's name, what it imported, who made it, and how many rows it took or skipped, with why.
+				The file's text, which for an import of people holds their names and email addresses and for
+				a set-up import their email addresses, is kept while the import waits to be confirmed, and
 				emptied once it is imported or deleted if it is discarded.
 			</>
 		),

@@ -71,11 +71,13 @@ import {
 	projectHours,
 	setProjectArchived,
 } from "~/projects/projects.server";
+import { oversightOf } from "~/projects/teams.server";
 import { hoursAndMinutes } from "~/reports/format";
 import { destination, destinationLabel } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { onlyQueryMoved } from "~/shell/revalidation";
+import { dayOf } from "~/time/calendar";
 import {
 	hasClients,
 	hasWorkCodes,
@@ -130,9 +132,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const access = await accessOf(membership);
 	const whose = timeScopeOf(access);
 	const now = Date.now();
+	// Delivery and account managers see their projects' hours and budgets in hours (TS-115c).
+	const { overseen } = await oversightOf(scope, user.id, dayOf(now, organisation.timeZone));
 	const [projects, hours, clients, pinned, managed, codes] = await Promise.all([
 		listProjects(scope, { query, byClient: showsClients }),
-		projectHours(scope, whose, now),
+		projectHours(scope, whose, now, overseen),
 		showsClients ? activeClients(scope) : [],
 		pinnedProjectIds(scope, user.id),
 		managedClientIds(scope, user.id),
@@ -144,8 +148,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		membership,
 		projects.filter((p) => !p.archived).map((p) => p.id),
 		now,
+		overseen,
 	);
-	const seesBudgets = maySeeRates(membership.role) || membership.managesTeams;
+	const seesBudgets = maySeeRates(membership.role) || membership.managesTeams || overseen.size > 0;
 	const sort = seesBudgets ? sortIn(search) : BY_NAME;
 	const rows = projects.map((project) => {
 		// Who may edit and duplicate it follows who may create one for its client (decisions 42 and 65).

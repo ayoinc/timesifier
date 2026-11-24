@@ -110,6 +110,14 @@ export const organisations = sqliteTable("organisations", {
 	projectCodeRequired: integer("project_code_required", { mode: "boolean" })
 		.notNull()
 		.default(false),
+	/**
+	 * Who may track time to a project (TS-115c, decision 75): `anyone` in the
+	 * organisation, or only people `assigned` to its team on the entry's day
+	 * (`project_members`). Existing organisations stay at `anyone`; a new one
+	 * that works on client projects starts at `assigned`.
+	 * `app/projects/teams.server.ts` reads it.
+	 */
+	projectTracking: text("project_tracking").notNull().default("anyone"),
 	/** Under `both`, whether a work code must have a code (TS-115a). The pattern never numbers one: its code is typed. */
 	workCodeRequired: integer("work_code_required", { mode: "boolean" }).notNull().default(false),
 	/**
@@ -692,6 +700,66 @@ export const workPackages = sqliteTable(
 		check(
 			"work_packages_ends_after_start",
 			sql`${table.startsOn} IS NULL OR ${table.endsOn} IS NULL OR ${table.endsOn} >= ${table.startsOn}`,
+		),
+	],
+);
+
+/**
+ * One person on a project's team from `starts_on` to `ends_on` (TS-115c,
+ * decision 75), null while it runs on: a member, or a delivery manager, who
+ * assigns people to the project and manages its work packages. A change is a
+ * new row from its day, the row before ending the day before, so the history
+ * is kept; no two rows of one person on one project share a day. Where the
+ * organisation's `project_tracking` is `assigned`, time on a day goes to a
+ * project only from a person with a row covering that day. `source_kind` says
+ * what made it: `manual`, a person on a page or the API; `import`, the set-up
+ * import named by `source_id`; or later a contract.
+ */
+export const projectMembers = sqliteTable(
+	"project_members",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		projectId: text("project_id").notNull(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		/** `member` or `delivery_manager`. */
+		role: text("role").notNull().default("member"),
+		startsOn: text("starts_on").notNull(),
+		endsOn: text("ends_on"),
+		/** `manual`, `import` or `contract`. */
+		sourceKind: text("source_kind").notNull().default("manual"),
+		sourceId: text("source_id"),
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("project_members_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("project_members_project_user_starts_on_index").on(
+			table.organisationId,
+			table.projectId,
+			table.userId,
+			table.startsOn,
+		),
+		index("project_members_user_index").on(table.organisationId, table.userId),
+		foreignKey({
+			name: "project_members_project_fk",
+			columns: [table.organisationId, table.projectId],
+			foreignColumns: [projects.organisationId, projects.id],
+		}).onDelete("cascade"),
+		check("project_members_role_known", sql`${table.role} IN ('member', 'delivery_manager')`),
+		check("project_members_starts_on_is_a_day", sql`date(${table.startsOn}) IS ${table.startsOn}`),
+		check(
+			"project_members_ends_on_is_a_day",
+			sql`${table.endsOn} IS NULL OR (date(${table.endsOn}) IS ${table.endsOn} AND ${table.endsOn} >= ${table.startsOn})`,
+		),
+		check(
+			"project_members_source_kind_known",
+			sql`${table.sourceKind} IN ('manual', 'import', 'contract')`,
 		),
 	],
 );
@@ -2922,6 +2990,59 @@ export const peopleImports = sqliteTable(
 		),
 		check(
 			"people_imports_counts_not_negative",
+			sql`${table.rowCount} >= 0 AND ${table.importedCount} >= 0 AND ${table.skippedCount} >= 0`,
+		),
+	],
+);
+
+/**
+ * One CSV set-up import (TS-115c, decision 75): projects, work packages and
+ * people's assignments to project teams, matched by code. A dry run first,
+ * then imported, and perhaps reverted, which takes away the assignments it
+ * made (`project_members.source_id`) and the work packages and projects it
+ * made, unless time has been tracked to them since. A table of its own, as
+ * `people_imports` is, for `import_jobs`' kind check.
+ */
+export const setupImports = sqliteTable(
+	"setup_imports",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		/** `previewed`, `imported` or `reverted`. */
+		status: text("status").notNull().default("previewed"),
+		fileName: text("file_name").notNull(),
+		rowCount: integer("row_count").notNull().default(0),
+		importedCount: integer("imported_count").notNull().default(0),
+		skippedCount: integer("skipped_count").notNull().default(0),
+		/** The uploaded file's text while it is a dry run; emptied once it is imported. */
+		source: text("source"),
+		/** Which column of the file holds each field, by the field's name. */
+		mapping: text("mapping", { mode: "json" }).$type<Record<string, string>>(),
+		/** The rows that were not imported, by line, with why. */
+		skipped: text("skipped", { mode: "json" }).$type<{ line: number; reason: string }[]>(),
+		/** The ids of the projects and work packages it made, which a revert takes away. */
+		created: text("created", { mode: "json" }).$type<{
+			projects: string[];
+			workPackages: string[];
+		}>(),
+		createdBy: text("created_by")
+			.notNull()
+			.references(() => users.id),
+		importedAt: integer("imported_at", { mode: "timestamp_ms" }),
+		revertedAt: integer("reverted_at", { mode: "timestamp_ms" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("setup_imports_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("setup_imports_organisation_id_created_at_idx").on(table.organisationId, table.createdAt),
+		check(
+			"setup_imports_status_known",
+			sql`${table.status} IN ('previewed', 'imported', 'reverted')`,
+		),
+		check(
+			"setup_imports_counts_not_negative",
 			sql`${table.rowCount} >= 0 AND ${table.importedCount} >= 0 AND ${table.skippedCount} >= 0`,
 		),
 	],

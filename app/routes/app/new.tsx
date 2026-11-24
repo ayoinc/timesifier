@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { useState } from "react";
 import { Form, Link, redirect, useNavigation } from "react-router";
 import * as z from "zod";
 
@@ -11,12 +12,19 @@ import { parseRequest } from "~/lib/validate";
 import { createOrganisation, listOrganisations } from "~/organisations/api.server";
 import { NAME_MAX_LENGTH, Name, nameProblem } from "~/organisations/name";
 import { refused, unavailable } from "~/organisations/outcome.server";
+import {
+	PROJECT_TRACKING_HINTS,
+	PROJECT_TRACKING_LABELS,
+	PROJECT_TRACKINGS,
+	ProjectTracking,
+} from "~/projects/teams";
 import { APP_PATH, organisationPath, WELCOME_PARAM } from "~/shell/destinations";
 import { TEXT_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
 import { useSubmitting } from "~/shell/submitting";
 import { startWorkModel } from "~/workspace/general.server";
 import {
+	hasClients,
 	WORK_MODEL_HINTS,
 	WORK_MODEL_LABELS,
 	WORK_MODELS,
@@ -26,8 +34,10 @@ import {
 import type { Route } from "./+types/new";
 
 // `/app/new`: creating an organisation. Its name and how it works (TS-115a),
-// and one action, which accepts the terms and the data processing agreement
-// for it (TS-105). The server chooses the address from the name.
+// who tracks time to a project where it has clients (TS-115c: assigned
+// people only, unless the creator says anyone), and one action, which accepts
+// the terms and the data processing agreement for it (TS-105). The server
+// chooses the address from the name.
 
 /** A person's first organisation is "yours"; any after it is one more. */
 function titleFor(first: boolean) {
@@ -55,19 +65,30 @@ export async function loader({ request }: Route.LoaderArgs) {
 	};
 }
 
-const form = z.object({ name: Name, dpaVersion: z.string().max(20), workModel: WorkModel });
+const form = z.object({
+	name: Name,
+	dpaVersion: z.string().max(20),
+	workModel: WorkModel,
+	projectTracking: ProjectTracking.optional(),
+});
 
 /**
  * Creates the organisation, with the person as its owner, and goes to its
  * Today. The first one a person creates arrives with a welcome.
  */
 export async function action({ request }: Route.ActionArgs) {
-	const { name, dpaVersion, workModel } = await parseRequest(request, form);
+	const { name, dpaVersion, workModel, projectTracking } = await parseRequest(request, form);
 
 	const before = await listOrganisations(request);
 	const created = await createOrganisation(request, name, dpaVersion);
 	if (!created.ok) return refused(created);
-	await startWorkModel(env.DB, created.data.slug, workModel);
+	// One with clients tracks by assignment unless its creator said otherwise (TS-115c, decision 75).
+	await startWorkModel(
+		env.DB,
+		created.data.slug,
+		workModel,
+		projectTracking ?? (hasClients(workModel) ? "assigned" : "anyone"),
+	);
 
 	const first = before.ok && before.data.length === 0;
 	const path = organisationPath(created.data.slug);
@@ -78,6 +99,7 @@ export default function NewOrganisation({ loaderData, actionData }: Route.Compon
 	const { first, back, dpaVersion } = loaderData;
 	const busy = useNavigation().state !== "idle";
 	const submitting = useSubmitting();
+	const [model, setModel] = useState<WorkModel>("client_projects");
 
 	return (
 		<>
@@ -103,13 +125,33 @@ export default function NewOrganisation({ loaderData, actionData }: Route.Compon
 					validate={nameProblem}
 					description="Your company, team or household. You can change it later."
 				/>
-				<RadioGroup label="How you work" name="workModel" defaultValue="client_projects" isRequired>
-					{WORK_MODELS.map((model) => (
-						<Radio key={model} value={model} hint={WORK_MODEL_HINTS[model]}>
-							{WORK_MODEL_LABELS[model]}
+				<RadioGroup
+					label="How you work"
+					name="workModel"
+					value={model}
+					onChange={(value) => setModel(WorkModel.parse(value))}
+					isRequired
+				>
+					{WORK_MODELS.map((each) => (
+						<Radio key={each} value={each} hint={WORK_MODEL_HINTS[each]}>
+							{WORK_MODEL_LABELS[each]}
 						</Radio>
 					))}
 				</RadioGroup>
+				{hasClients(model) && (
+					<RadioGroup
+						label="Who tracks time to a project"
+						name="projectTracking"
+						defaultValue="assigned"
+						isRequired
+					>
+						{[...PROJECT_TRACKINGS].reverse().map((tracking) => (
+							<Radio key={tracking} value={tracking} hint={PROJECT_TRACKING_HINTS[tracking]}>
+								{PROJECT_TRACKING_LABELS[tracking]}
+							</Radio>
+						))}
+					</RadioGroup>
+				)}
 				<p role="alert" className="text-body-medium text-error empty:hidden">
 					{actionData && !actionData.ok && !busy ? actionData.problem : null}
 				</p>

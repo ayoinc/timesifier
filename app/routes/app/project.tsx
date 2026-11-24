@@ -46,7 +46,7 @@ import {
 } from "~/projects/billing";
 import { DuplicateSheet } from "~/projects/DuplicateSheet";
 import { organisationMoney, pricingOf } from "~/projects/money.server";
-import { projectCurrencies, projectPage, projectProfit } from "~/projects/project.server";
+import { namesOf, projectCurrencies, projectPage, projectProfit } from "~/projects/project.server";
 import {
 	defaultRatesPath,
 	PROJECT_PARAM,
@@ -57,6 +57,18 @@ import {
 } from "~/projects/projects";
 import { offeredCopyName, projectCodeRules } from "~/projects/projects.server";
 import { changeBilling, changeBudget, changeOvertimeRate } from "~/projects/settings.server";
+import { NAMES_LEADS_ONLY, TEAM_PROBLEMS, TeamRole } from "~/projects/teams";
+import {
+	assignToTeam,
+	changeStretch,
+	mayManageTeam,
+	mayNameDeliveryManagers,
+	oversightOf,
+	removeStretch,
+	stretchOf,
+	type TeamChange,
+	teamTab,
+} from "~/projects/teams.server";
 import { WorkPackagesTab } from "~/projects/WorkPackagesTab";
 import {
 	WORK_PACKAGE_NAME_MAX_LENGTH,
@@ -124,13 +136,18 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 	const scope = organisationScope(env.DB, membership.organisation.id);
 	const access = await accessOf(membership);
 	const now = Date.now();
+	const today = dayOf(now, membership.organisation.timeZone);
+	const projectId = params[PROJECT_PARAM];
+	// Its delivery managers and its client's account managers oversee it (TS-115c).
+	const { led, overseen } = await oversightOf(scope, membership.user.id, today);
 	const page = await projectPage(
 		scope,
 		membership,
-		params[PROJECT_PARAM],
+		projectId,
 		timeScopeOf(access),
 		now,
 		negotiateLocale(request.headers.get("Accept-Language")),
+		overseen.has(projectId),
 	);
 	if (!page) throw notFound();
 	const managesRates = mayManageRates(membership.role);
@@ -140,12 +157,11 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 	const asked = projectTabIn(url.searchParams);
 	const tab = tabs.includes(asked) ? asked : "overview";
 	const { organisation } = membership;
+	const managed = hasClients(organisation.workModel)
+		? await managedClientIds(scope, membership.user.id)
+		: [];
 	// Who may duplicate it follows who may create one for its client (decisions 42 and 65).
-	const duplicates = mayCreateProject(
-		membership.role,
-		hasClients(organisation.workModel) ? await managedClientIds(scope, membership.user.id) : [],
-		page.project.client?.id ?? null,
-	);
+	const duplicates = mayCreateProject(membership.role, managed, page.project.client?.id ?? null);
 	return {
 		page,
 		tab,
@@ -165,7 +181,35 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 				: null,
 		/** The Work packages tab (TS-115b), read only when it is shown. */
 		workPackages:
-			tab === "work-packages" ? await packagesTab(scope, membership, page.project.id, now) : null,
+			tab === "work-packages"
+				? await packagesTab(scope, membership, page.project.id, now, {
+						leads: led.has(projectId),
+						oversees: overseen.has(projectId),
+					})
+				: null,
+		/** The project's team (TS-115c), read only on the Team tab. */
+		team:
+			tab === "team"
+				? await teamTab(
+						scope,
+						{
+							userId: membership.user.id,
+							role: membership.role,
+							managesTeams: membership.managesTeams,
+							managed,
+							leads: led.has(projectId),
+							oversees: overseen.has(projectId),
+						},
+						{
+							id: projectId,
+							clientId: hasClients(organisation.workModel)
+								? (page.project.client?.id ?? null)
+								: null,
+						},
+						today,
+					)
+				: null,
+		today,
 	};
 }
 
@@ -175,6 +219,7 @@ async function packagesTab(
 	membership: Membership,
 	projectId: string,
 	now: number,
+	oversight: { leads: boolean; oversees: boolean },
 ) {
 	const found = await projectCurrencies(scope, projectId);
 	if (!found) throw notFound();
@@ -185,6 +230,7 @@ async function packagesTab(
 			role: membership.role,
 			managesTeams: membership.managesTeams,
 			userId: membership.user.id,
+			...oversight,
 		},
 		{ id: projectId, clientId: found.project.clientId },
 		{
@@ -259,6 +305,20 @@ const form = z.discriminatedUnion("intent", [
 		workPackageId: Id,
 		archived: z.enum(["true", "false"]),
 	}),
+	z.object({
+		intent: z.literal("team-assign"),
+		userId: Id,
+		role: TeamRole,
+		startsOn: Day,
+		endsOn: z.union([Day, z.literal("")]).default(""),
+	}),
+	z.object({
+		intent: z.literal("team-end"),
+		stretchId: Id,
+		endsOn: z.union([Day, z.literal("")]).default(""),
+	}),
+	z.object({ intent: z.literal("team-role"), stretchId: Id, role: TeamRole, from: Day }),
+	z.object({ intent: z.literal("team-remove"), stretchId: Id }),
 	z.object({
 		intent: z.literal("rate"),
 		level: z.enum(["project", "project-person", "project-task"]),
@@ -445,11 +505,14 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 		case "wp-save":
 		case "wp-state":
 		case "wp-archive": {
-			// Decision 42's rule for the project's client (TS-115b); TS-115c adds its delivery managers.
-			const showsClients = hasClients(organisation.workModel);
-			const managed = showsClients ? await managedClientIds(scope, user.id) : [];
-			const clientId = showsClients ? found.project.clientId : null;
-			if (!mayManageWorkPackages(role, managed, clientId)) return declined(NOT_ALLOWED, 403);
+			// Decision 42's rule for the project's client (TS-115b), and its delivery managers (TS-115c).
+			const { managed, clientId, leads } = await teamAuthority(
+				scope,
+				membership,
+				found.project,
+				today,
+			);
+			if (!mayManageWorkPackages(role, managed, clientId, leads)) return declined(NOT_ALLOWED, 403);
 			return workPackageAction(input, {
 				scope,
 				actor: user.id,
@@ -458,6 +521,18 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 				seesRates: maySeeRates(role),
 			});
 		}
+
+		case "team-assign":
+		case "team-end":
+		case "team-role":
+		case "team-remove":
+			return teamAction(input, {
+				scope,
+				actor: user.id,
+				projectId,
+				authority: await teamAuthority(scope, membership, found.project, today),
+				role,
+			});
 
 		case "rate": {
 			if (!mayManageRates(role)) return declined(NOT_ALLOWED, 403);
@@ -499,6 +574,109 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 			);
 			return set.ok ? done("Rate saved.") : declined(RATE_IN_FORCE, 409);
 		}
+	}
+}
+
+/**
+ * What `membership` may do with the project's work packages and team: the
+ * clients they are an account manager of, the project's client where the
+ * organisation shows clients, and whether they lead it (TS-115c).
+ */
+async function teamAuthority(
+	scope: OrganisationScope,
+	membership: Membership,
+	project: { id: string; clientId: string | null },
+	today: Day,
+) {
+	const showsClients = hasClients(membership.organisation.workModel);
+	const [managed, { led }] = await Promise.all([
+		showsClients ? managedClientIds(scope, membership.user.id) : [],
+		oversightOf(scope, membership.user.id, today),
+	]);
+	return {
+		managed,
+		clientId: showsClients ? project.clientId : null,
+		leads: led.has(project.id),
+	};
+}
+
+/**
+ * Assigns a person to the project's team, ends or changes a stretch, or takes
+ * one away (TS-115c). Its delivery managers, owners, admins and the client's
+ * account managers manage the team; only the last three name a delivery
+ * manager or change one's stretch.
+ */
+async function teamAction(
+	input: Extract<
+		z.infer<typeof form>,
+		{ intent: "team-assign" | "team-end" | "team-role" | "team-remove" }
+	>,
+	{
+		scope,
+		actor,
+		projectId,
+		authority: { managed, clientId, leads },
+		role,
+	}: {
+		scope: OrganisationScope;
+		actor: string;
+		projectId: string;
+		authority: Awaited<ReturnType<typeof teamAuthority>>;
+		role: Membership["role"];
+	},
+) {
+	if (!mayManageTeam(role, managed, clientId, leads)) return declined(NOT_ALLOWED, 403);
+	const namesLeads = mayNameDeliveryManagers(role, managed, clientId);
+	const stretch =
+		input.intent === "team-assign" ? null : await stretchOf(scope, projectId, input.stretchId);
+	if (input.intent !== "team-assign" && !stretch) throw notFound();
+	const touchesLead =
+		stretch?.role === "delivery_manager" ||
+		((input.intent === "team-assign" || input.intent === "team-role") &&
+			input.role === "delivery_manager");
+	if (touchesLead && !namesLeads) return declined(NAMES_LEADS_ONLY, 403);
+	const who = { userId: actor };
+	const said = (change: TeamChange, sentence: string) => {
+		if (change === null) throw notFound();
+		return change.ok ? done(sentence) : declined(TEAM_PROBLEMS[change.problem]);
+	};
+	switch (input.intent) {
+		case "team-assign": {
+			const change = await assignToTeam(scope, who, {
+				projectId,
+				userId: input.userId,
+				role: input.role,
+				startsOn: input.startsOn,
+				endsOn: input.endsOn || null,
+			});
+			const [name] = (await namesOf([input.userId])).values();
+			return said(
+				change,
+				`${name ?? "They"} ${input.role === "delivery_manager" ? "leads" : "is on"} the team from ${dayLabel(input.startsOn)}${input.endsOn ? ` to ${dayLabel(input.endsOn)}` : ""}.`,
+			);
+		}
+		case "team-end":
+			return said(
+				await changeStretch(scope, who, projectId, input.stretchId, {
+					endsOn: input.endsOn || null,
+				}),
+				input.endsOn
+					? `Their last day on the team is ${dayLabel(input.endsOn)}.`
+					: "Their stretch runs on.",
+			);
+		case "team-role":
+			return said(
+				await changeStretch(scope, who, projectId, input.stretchId, {
+					role: input.role,
+					from: input.from,
+				}),
+				`From ${dayLabel(input.from)}, they are ${input.role === "delivery_manager" ? "a delivery manager" : "a member"} of the team.`,
+			);
+		case "team-remove":
+			return said(
+				await removeStretch(scope, who, projectId, input.stretchId),
+				"Taken off the team.",
+			);
 	}
 }
 

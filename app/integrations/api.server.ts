@@ -16,6 +16,7 @@ import {
 	maySeeRates,
 	timeScopeOf,
 } from "~/organisations/access";
+import { TEAM_REFUSAL } from "~/projects/teams";
 import { WORK_PACKAGE_REFUSALS } from "~/projects/work-packages";
 import { clockTime } from "~/schedules/schedules";
 import { canSee } from "~/shell/destinations";
@@ -639,6 +640,8 @@ function refused(refusal: { reason: string; message?: string }): Response {
 			return problem(422, "work_package_required", WORK_PACKAGE_REFUSALS["no-work-package"]);
 		case "work-package-closed":
 			return problem(409, "work_package_closed", WORK_PACKAGE_REFUSALS["work-package-closed"]);
+		case "not-assigned":
+			return problem(403, "not_assigned", TEAM_REFUSAL);
 		default:
 			return problem(422, "invalid", message ?? `The entry was not written: ${reason}.`);
 	}
