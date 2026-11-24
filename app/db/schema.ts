@@ -3133,6 +3133,72 @@ export const invitationPlans = sqliteTable(
 );
 
 /**
+ * An assignment a set-up import (TS-115d, docs/decisions.md entry 77) made for
+ * a person who is invited and has not joined yet: they are to be on
+ * `projectId`'s team as `role` from `startsOn` to `endsOn` once they accept
+ * `invitationId`. A person with no account has no `users` row, so the
+ * assignment cannot be a `project_members` row yet. When the invitation is
+ * accepted each row becomes one (`source_kind` `import`, `source_id` the
+ * import) and is deleted; one that now overlaps or whose project is archived
+ * is skipped and recorded instead. It goes with its invitation, its project or
+ * its import; a revert deletes it.
+ */
+export const invitationAssignments = sqliteTable(
+	"invitation_assignments",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		invitationId: text("invitation_id")
+			.notNull()
+			.references(() => invitations.id, { onDelete: "cascade" }),
+		projectId: text("project_id").notNull(),
+		/** `member` or `delivery_manager`. */
+		role: text("role").notNull().default("member"),
+		startsOn: text("starts_on").notNull(),
+		endsOn: text("ends_on"),
+		setupImportId: text("setup_import_id").notNull(),
+		/** Who imported it: the person the assignment is recorded as made by when it is applied. */
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: createdAt(),
+	},
+	(table) => [
+		uniqueIndex("invitation_assignments_organisation_id_id_unique").on(
+			table.organisationId,
+			table.id,
+		),
+		index("invitation_assignments_invitation_id_idx").on(table.invitationId),
+		index("invitation_assignments_organisation_id_setup_import_id_idx").on(
+			table.organisationId,
+			table.setupImportId,
+		),
+		foreignKey({
+			name: "invitation_assignments_project_fk",
+			columns: [table.organisationId, table.projectId],
+			foreignColumns: [projects.organisationId, projects.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "invitation_assignments_setup_import_fk",
+			columns: [table.organisationId, table.setupImportId],
+			foreignColumns: [setupImports.organisationId, setupImports.id],
+		}).onDelete("cascade"),
+		check(
+			"invitation_assignments_role_known",
+			sql`${table.role} IN ('member', 'delivery_manager')`,
+		),
+		check(
+			"invitation_assignments_starts_on_is_a_day",
+			sql`date(${table.startsOn}) IS ${table.startsOn}`,
+		),
+		check(
+			"invitation_assignments_ends_on_is_a_day",
+			sql`${table.endsOn} IS NULL OR (date(${table.endsOn}) IS ${table.endsOn} AND ${table.endsOn} >= ${table.startsOn})`,
+		),
+	],
+);
+
+/**
  * A secret calendar (ICS) address listing approved leave (B3): a person's
  * own, or a team's for its manager. Only the token's hash is kept; revoking it
  * makes the address answer 404. It goes with the membership or the team.

@@ -27,6 +27,7 @@ import { codedName } from "~/lib/codes";
 import { nameKey, RECORD_NAME_MAX_LENGTH, recordNameProblem } from "~/lib/names";
 import { parseRequest } from "~/lib/validate";
 import {
+	isAdministrator,
 	mayManageClients,
 	mayManageIntegrations,
 	maySeeRates,
@@ -73,6 +74,7 @@ import {
 } from "~/projects/projects.server";
 import { oversightOf } from "~/projects/teams.server";
 import { hoursAndMinutes } from "~/reports/format";
+import { setupImportPath } from "~/setup-import/paths";
 import { destination, destinationLabel } from "~/shell/destinations";
 import { ACTION_LINK } from "~/shell/links";
 import { PageHeading, PageLead } from "~/shell/PageHeading";
@@ -620,6 +622,13 @@ export default function Projects({ loaderData }: Route.ComponentProps) {
 				<p className="mt-4 text-body-large">
 					<Link to={defaultRatesPath(organisation.slug)} className={ACTION_LINK}>
 						Default rates
+					</Link>
+				</p>
+			)}
+			{isAdministrator(organisation.role) && (
+				<p className="mt-4 text-body-large">
+					<Link to={setupImportPath(organisation.slug)} className={ACTION_LINK}>
+						{t("Set up projects, work packages and teams from a CSV")}
 					</Link>
 				</p>
 			)}

@@ -210,6 +210,7 @@ const STEPS: Record<string, string> = {
 	member_added: "Added a member to",
 	member_removed: "Removed a member from",
 	member_changed: "Changed a member of",
+	member_skipped: "Could not add a member to",
 	manager_changed: "Changed a manager of",
 	manager_added: "Added an account manager to",
 	manager_removed: "Removed an account manager from",
@@ -374,6 +375,12 @@ const FIELD_LABELS: Record<string, string> = {
 	starterMonth: "A starter's first month",
 	holidaysFromAllowance: "Public holidays come out of annual leave",
 	priorDaysAtAllowance: "Earlier this leave year counts at the usual allowance",
+	// A set-up import's counts (TS-115d).
+	projects: "Projects",
+	workPackages: "Work packages",
+	assignments: "Assignments",
+	waiting: "Waiting for invited people to join",
+	skipped: "Rows skipped",
 };
 
 /** The values of the timesheet rules, in words (TS-095). */

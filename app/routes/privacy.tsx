@@ -274,7 +274,10 @@ export default function Privacy({
 				file's name, what it imported, who made it, and how many rows it took or skipped, with why.
 				The file's text, which for an import of people holds their names and email addresses and for
 				a set-up import their email addresses, is kept while the import waits to be confirmed, and
-				emptied once it is imported or deleted if it is discarded.
+				emptied once it is imported or deleted if it is discarded. A set-up import's assignment of a
+				person who is invited and has not joined yet is kept with their invitation, as which project's
+				team, in which role and on which days, until they join, the invitation goes, or the import is
+				reverted.
 			</>
 		),
 		"Calendar feeds": (
