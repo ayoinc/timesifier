@@ -3,6 +3,13 @@ import { expect, type MockInstance, onTestFinished, vi } from "vitest";
 import * as z from "zod";
 import { SIGN_IN_CODE_LENGTH } from "~/auth/code";
 import type { Setting } from "~/lib/deployment";
+// The whole application, loaded as the test file is, before any test or hook
+// runs. A file's first request would otherwise load it, one module at a time,
+// inside whatever made that request: on a busy CI runner that took up to 9.5
+// seconds, and a `beforeEach` that signs a person in has 10. Loaded here, after
+// the test file's `vi.mock` calls, it is the application those mocks apply to,
+// and the one the Worker's fetch handler then uses.
+import "virtual:react-router/server-build";
 
 export const ORIGIN = "https://timesifier.example";
 
