@@ -48,7 +48,13 @@ export const STORED = [
 			},
 			{
 				term: "Leave",
-				tables: ["leave_requests", "leave_kinds", "public_holidays", "working_days"],
+				tables: [
+					"leave_requests",
+					"leave_adjustments",
+					"leave_kinds",
+					"public_holidays",
+					"working_days",
+				],
 			},
 			{
 				term: "Work schedules",

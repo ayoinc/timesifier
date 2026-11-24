@@ -281,6 +281,13 @@
 			"when": 1795510008985,
 			"tag": "0040_project_teams",
 			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "6",
+			"when": 1795510172618,
+			"tag": "0041_leave_from_contract",
+			"breakpoints": true
 		}
 	]
 }

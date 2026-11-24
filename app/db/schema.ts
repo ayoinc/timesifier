@@ -220,6 +220,27 @@ export const organisations = sqliteTable("organisations", {
 	signInTenant: text("sign_in_tenant"),
 	createdAt: createdAt(),
 	updatedAt: updatedAt(),
+	/**
+	 * The day its leave year starts (TS-098b, decision 76), `MM-DD`: 1 January
+	 * unless an owner or admin chooses another. Never 29 February. Balances on
+	 * Time off are counted from it. A CHECK on the column, written by hand in
+	 * 0041, keeps it a day of every year.
+	 */
+	leaveYearStarts: text("leave_year_starts").notNull().default("01-01"),
+	/**
+	 * How a contract that starts part way through a month counts that month
+	 * (TS-098b): `days`, from its first day; `whole`, from the month's first,
+	 * the one twelfth gov.uk allows "from their first day".
+	 */
+	starterMonth: text("starter_month").notNull().default("days"),
+	/**
+	 * Whether public holidays come out of annual leave from a contract (TS-098b,
+	 * the owner's answer 2): each one on a working day is taken from it. Every
+	 * organisation starts with them on top, as before.
+	 */
+	holidaysFromAllowance: integer("holidays_from_allowance", { mode: "boolean" })
+		.notNull()
+		.default(false),
 });
 
 /**
@@ -3612,6 +3633,8 @@ export const contracts = sqliteTable(
  * schedule from this day (a person assignment of `source_kind` `contract`);
  * none leaves their team's, role's or the organisation's. Pay is minor units
  * of `currency`; multipliers are basis points, 15000 for time and a half.
+ * The carry-over columns' bounds (TS-098b) are CHECKs on the columns
+ * themselves, written by hand in 0041, so the table is not rebuilt.
  */
 export const contractVersions = sqliteTable(
 	"contract_versions",
@@ -3635,6 +3658,14 @@ export const contractVersions = sqliteTable(
 		restDayMultiplierBp: integer("rest_day_multiplier_bp"),
 		/** Annual leave a year for a five-day week, before pro rata; null means the kind's allowance. */
 		leaveDays: integer("leave_days"),
+		/**
+		 * Days of annual leave left at the end of a leave year that carry into the
+		 * next (TS-098b), in the person's average day; 0 carries none, as before.
+		 * Read from the version in force on the year's last day it covers.
+		 */
+		carryOverDays: integer("carry_over_days").notNull().default(0),
+		/** Days into the next leave year that carried leave lasts; null lasts to that year's end. */
+		carryOverExpiresAfterDays: integer("carry_over_expires_after_days"),
 		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
 		createdAt: createdAt(),
 		updatedAt: updatedAt(),
@@ -3685,6 +3716,59 @@ export const contractVersions = sqliteTable(
 		check(
 			"contract_versions_leave_days_in_range",
 			sql`${table.leaveDays} IS NULL OR ${table.leaveDays} BETWEEN 0 AND 366`,
+		),
+	],
+);
+
+/**
+ * A change to a person's balance of a kind of leave in one leave year
+ * (TS-098b): an opening balance, carry-over the law gives after sickness or
+ * family leave, or a correction. Minutes, more or less; an owner or admin adds
+ * one with a reason, and none is changed afterwards: a correction is another.
+ * `leave_year` is the calendar year the leave year starts in. It goes with the
+ * membership, as the person's leave requests do.
+ */
+export const leaveAdjustments = sqliteTable(
+	"leave_adjustments",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		userId: text("user_id").notNull(),
+		kindId: text("kind_id").notNull(),
+		leaveYear: integer("leave_year").notNull(),
+		minutes: integer("minutes").notNull(),
+		reason: text("reason").notNull(),
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("leave_adjustments_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("leave_adjustments_organisation_id_user_id_leave_year_index").on(
+			table.organisationId,
+			table.userId,
+			table.leaveYear,
+		),
+		foreignKey({
+			name: "leave_adjustments_membership_fk",
+			columns: [table.organisationId, table.userId],
+			foreignColumns: [memberships.organisationId, memberships.userId],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "leave_adjustments_kind_fk",
+			columns: [table.organisationId, table.kindId],
+			foreignColumns: [leaveKinds.organisationId, leaveKinds.id],
+		}).onDelete("cascade"),
+		check("leave_adjustments_year_in_range", sql`${table.leaveYear} BETWEEN 2000 AND 2200`),
+		check(
+			"leave_adjustments_minutes_in_range",
+			sql`${table.minutes} <> 0 AND ${table.minutes} BETWEEN -527040 AND 527040`,
+		),
+		check(
+			"leave_adjustments_reason_length",
+			sql`length(trim(${table.reason})) BETWEEN 1 AND 200`,
 		),
 	],
 );
