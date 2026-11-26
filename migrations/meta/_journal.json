@@ -302,6 +302,13 @@
 			"when": 1795736908746,
 			"tag": "0043_allocations",
 			"breakpoints": true
+		},
+		{
+			"idx": 43,
+			"version": "6",
+			"when": 1795737068104,
+			"tag": "0044_approval_parts",
+			"breakpoints": true
 		}
 	]
 }

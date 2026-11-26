@@ -1045,6 +1045,13 @@ export const periodEvents = sqliteTable(
 		actorId: text("actor_id").references(() => users.id),
 		/** The comment given with a return or a reopening, at most 500 characters. */
 		comment: text("comment"),
+		/**
+		 * What the step was taken on (TS-117, decision 79): `week`, the period
+		 * as a whole; `line`, its line part; or `project`, the part of the
+		 * project `projectId`.
+		 */
+		part: text("part").notNull().default("week"),
+		projectId: text("project_id"),
 		createdAt: createdAt(),
 	},
 	(table) => [
@@ -1057,6 +1064,66 @@ export const periodEvents = sqliteTable(
 		check(
 			"period_events_action_known",
 			sql`${table.action} IN ('submitted', 'withdrawn', 'approved', 'returned', 'reopened')`,
+		),
+	],
+);
+
+/**
+ * The parts of a submitted week (TS-117, decision 79), each decided apart: a
+ * project part, the time on one client project that has a delivery manager
+ * in the week, decided by its delivery managers; and the line part,
+ * `projectId` null, everything else (internal time, work codes, leave,
+ * projects without a delivery manager, and expenses), decided by the
+ * person's line manager. A week with no project part has no rows here and is
+ * decided whole, as before. Its period's `status` follows its parts:
+ * approved once every part is, returned while any is, submitted otherwise.
+ */
+export const periodParts = sqliteTable(
+	"period_parts",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		periodId: text("period_id").notNull(),
+		/** The project of a project part; null for the line part. */
+		projectId: text("project_id"),
+		/** `submitted`, `approved` or `returned`. */
+		status: text("status").notNull(),
+		/** Who approved or returned it, and when; null until somebody has, and for one the system approved. */
+		decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+		decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+		/** The reason given with its last return, at most 500 characters. */
+		comment: text("comment"),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("period_parts_organisation_id_id_unique").on(table.organisationId, table.id),
+		uniqueIndex("period_parts_period_id_project_id_unique")
+			.on(table.periodId, table.projectId)
+			.where(sql`${table.projectId} IS NOT NULL`),
+		uniqueIndex("period_parts_period_id_line_unique")
+			.on(table.periodId)
+			.where(sql`${table.projectId} IS NULL`),
+		index("period_parts_organisation_id_period_id_idx").on(table.organisationId, table.periodId),
+		// The project parts waiting, read by Approvals and the number on its link.
+		index("period_parts_waiting_idx")
+			.on(table.organisationId, table.projectId)
+			.where(sql`${table.status} = 'submitted'`),
+		foreignKey({
+			name: "period_parts_period_fk",
+			columns: [table.organisationId, table.periodId],
+			foreignColumns: [periods.organisationId, periods.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "period_parts_project_fk",
+			columns: [table.organisationId, table.projectId],
+			foreignColumns: [projects.organisationId, projects.id],
+		}).onDelete("cascade"),
+		check(
+			"period_parts_status_known",
+			sql`${table.status} IN ('submitted', 'approved', 'returned')`,
 		),
 	],
 );

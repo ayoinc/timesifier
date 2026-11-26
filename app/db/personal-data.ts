@@ -42,6 +42,7 @@ export const STORED = [
 					"entry_tags",
 					"periods",
 					"period_events",
+					"period_parts",
 					"work_requests",
 					"timesheet_rule_versions",
 				],
