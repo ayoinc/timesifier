@@ -786,6 +786,71 @@ export const projectMembers = sqliteTable(
 );
 
 /**
+ * A person's time share of a project (TS-116, decision 78): from `starts_on`
+ * to `ends_on`, null while it runs on, so much of their week planned on the
+ * project, or on one of its work packages. `amount` is in hundredths of its
+ * `unit`: `days` and `hours` a week, or `percent` of the person's schedule;
+ * 250 is 2.5 days a week, 2250 is 22.5 hours a week, 5000 is 50 %. What it
+ * plans on a day is read from the person's schedule on that day (TS-097), less
+ * their leave and the public holidays, so nothing here goes stale when a
+ * schedule changes. No two shares of one person on one project, or on one of
+ * its work packages, share a day; a change from a day is a new row.
+ */
+export const allocations = sqliteTable(
+	"allocations",
+	{
+		id: id(),
+		organisationId: text("organisation_id")
+			.notNull()
+			.references(() => organisations.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		projectId: text("project_id").notNull(),
+		/** Null for the whole project. */
+		workPackageId: text("work_package_id"),
+		startsOn: text("starts_on").notNull(),
+		endsOn: text("ends_on"),
+		/** Hundredths of `unit`. */
+		amount: integer("amount").notNull(),
+		/** `days` or `hours` a week, or `percent` of the person's schedule. */
+		unit: text("unit").notNull(),
+		createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+		createdAt: createdAt(),
+		updatedAt: updatedAt(),
+	},
+	(table) => [
+		uniqueIndex("allocations_organisation_id_id_unique").on(table.organisationId, table.id),
+		index("allocations_user_starts_on_index").on(
+			table.organisationId,
+			table.userId,
+			table.startsOn,
+		),
+		index("allocations_project_index").on(table.organisationId, table.projectId),
+		foreignKey({
+			name: "allocations_project_fk",
+			columns: [table.organisationId, table.projectId],
+			foreignColumns: [projects.organisationId, projects.id],
+		}).onDelete("cascade"),
+		foreignKey({
+			name: "allocations_work_package_fk",
+			columns: [table.organisationId, table.workPackageId],
+			foreignColumns: [workPackages.organisationId, workPackages.id],
+		}).onDelete("cascade"),
+		check("allocations_unit_known", sql`${table.unit} IN ('days', 'hours', 'percent')`),
+		check(
+			"allocations_amount_in_range",
+			sql`${table.amount} > 0 AND ${table.amount} <= CASE ${table.unit} WHEN 'days' THEN 700 WHEN 'hours' THEN 16800 ELSE 10000 END`,
+		),
+		check("allocations_starts_on_is_a_day", sql`date(${table.startsOn}) IS ${table.startsOn}`),
+		check(
+			"allocations_ends_on_is_a_day",
+			sql`${table.endsOn} IS NULL OR (date(${table.endsOn}) IS ${table.endsOn} AND ${table.endsOn} >= ${table.startsOn})`,
+		),
+	],
+);
+
+/**
  * A stretch of one person's time on one project. `endedAt` is null while the
  * timer runs, and a person has at most one running entry in an organisation:
  * the partial unique index holds it (decision 25). `userId` does not cascade:

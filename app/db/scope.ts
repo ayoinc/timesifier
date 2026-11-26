@@ -22,6 +22,7 @@ import type { AnySQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { jsonTable } from "./among";
 import {
 	activityRecords,
+	allocations,
 	apiTokens,
 	budgetAlerts,
 	budgetLines,
@@ -414,6 +415,7 @@ export const tenantTables = {
 	projects,
 	workPackages,
 	projectMembers,
+	allocations,
 	timeEntries,
 	periods,
 	periodEvents,
