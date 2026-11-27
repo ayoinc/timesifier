@@ -12,6 +12,7 @@ import {
 	removeShare,
 	type ShareChange,
 	setShare,
+	shareSightOf,
 } from "~/allocations/allocations.server";
 import { BillingType } from "~/billing/billable";
 import { BudgetBar, budgetFigure } from "~/budgets/BudgetBar";

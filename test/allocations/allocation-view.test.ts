@@ -237,7 +237,8 @@ describe("setting a time share on the project's Team tab", () => {
 		expect(member).toContain("2.5 days a week");
 		const someone = await as("finance");
 		const finance = textOf(await pageBody(await open(tab(), someone)));
-		expect(finance).toContain("2.5 days a week");
+		// Finance sees the whole team (decision 75) but no one's time share (decision 78).
+		expect(finance).not.toContain("2.5 days a week");
 	});
 });
 
