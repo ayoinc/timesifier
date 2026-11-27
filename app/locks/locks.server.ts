@@ -102,6 +102,12 @@ export async function lockNoticeOf(organisationId: string): Promise<LockNotice |
 
 /** The statuses that lock a period's entries, for SQL. */
 const LOCKING = PeriodStatus.options.filter(locksEntries);
+/**
+ * The statuses of the periods a day's lock is read from: those that lock, and
+ * a returned week, which a week held in parts locks in its parts that are not
+ * back with its person (TS-117, `closedPartsOf`).
+ */
+const LOCKING_OR_RETURNED = [...LOCKING, "returned" as const];
 
 /**
  * The lock date of `organisationId` as it reaches `userId`'s days at `now`
@@ -161,7 +167,7 @@ export async function lockReasonsOn(
 		scope.periods.select((p) =>
 			and(
 				eq(p.userId, userId),
-				inArray(p.status, touching === null ? LOCKING : [...LOCKING, "returned"]),
+				inArray(p.status, LOCKING_OR_RETURNED),
 				lte(p.startsOn, last),
 				gte(p.endsOn, first),
 			),

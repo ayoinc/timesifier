@@ -140,7 +140,10 @@ export interface SubmissionPart {
 	comment: string | null;
 }
 
-/** The parts of the period `periodId`, the line part first; null for a week decided whole. */
+/**
+ * The parts of the period `periodId`, the line part first, then by project
+ * name, as Approvals lists them; null for a week decided whole.
+ */
 async function submissionParts(
 	scope: OrganisationScope,
 	periodId: string,
@@ -153,11 +156,15 @@ async function submissionParts(
 			? []
 			: (await scope.projects.select((p) => among(p.id, ids))).map((p) => [p.id, p.name]),
 	);
-	return parts.map((p) => ({
-		project: p.projectId === null ? null : (names.get(p.projectId) ?? ""),
-		status: p.status as PartStatus,
-		comment: p.status === "returned" ? p.comment : null,
-	}));
+	return parts
+		.map((p) => ({
+			project: p.projectId === null ? null : (names.get(p.projectId) ?? ""),
+			status: p.status as PartStatus,
+			comment: p.status === "returned" ? p.comment : null,
+		}))
+		.sort((a, b) =>
+			a.project === null ? -1 : b.project === null ? 1 : a.project.localeCompare(b.project, "en"),
+		);
 }
 
 /** What every view shows: the projects, and the person's running entry for the timer. */
