@@ -1,7 +1,15 @@
 import { EXPORT_KEEP_DAYS } from "~/exports/paths";
 
 import { Row, Rows } from "./Document";
-import { LINK, OUTSIDE_LINKS, type OutsideLink, PRIVACY_EMAIL, SECURITY_EMAIL } from "./Site";
+import {
+	HELLO_EMAIL,
+	LINK,
+	MAIL_DOMAIN,
+	OUTSIDE_LINKS,
+	type OutsideLink,
+	PRIVACY_EMAIL,
+	SECURITY_EMAIL,
+} from "./Site";
 
 // What the privacy notice, the security page and the data processing agreement
 // state about Timesifier's hosting, each fact once (TS-105). Every number here
@@ -15,7 +23,7 @@ import { LINK, OUTSIDE_LINKS, type OutsideLink, PRIVACY_EMAIL, SECURITY_EMAIL } 
  * in Settings. A new version is a new date here: every organisation is then
  * asked again (docs/decisions.md, entry 60).
  */
-export const DPA_VERSION = { date: "2026-11-23", inWords: "23 November 2026" } as const;
+export const DPA_VERSION = { date: "2026-11-27", inWords: "27 November 2026" } as const;
 
 /** How soon after becoming aware of a personal data breach the company tells an organisation's owners, at the latest (owner's answer 2, 23 November 2026). */
 export const BREACH_NOTICE_HOURS = 48;
@@ -56,6 +64,16 @@ export const R2_HOLDS = `receipts, organisations' logos and the exports of every
 /** The parts of wrangler.jsonc that send data to a provider. Each is one sub-processor's. */
 export type Binding = "d1_databases" | "r2_buckets" | "send_email" | "observability" | "ratelimits";
 
+/**
+ * The terms a sub-processor handles the data on. `processing`: its data
+ * processing agreement binds it. `none`: there is no processing agreement; it
+ * runs `service` under the terms it offers everyone, and the page says so
+ * beside them and its privacy policy.
+ */
+export type Agreement =
+	| { kind: "processing"; dpa: OutsideLink }
+	| { kind: "none"; service: string; terms: OutsideLink; privacy: OutsideLink };
+
 export interface SubProcessor {
 	/** The anchor of its row on /security. */
 	id: string;
@@ -67,8 +85,8 @@ export interface SubProcessor {
 	receives: readonly string[];
 	/** The parts of wrangler.jsonc whose data it handles. */
 	bindings: readonly Binding[];
-	/** Its data processing agreement. */
-	dpa: OutsideLink;
+	/** What binds it, if anything does. */
+	agreement: Agreement;
 	/** Its own list of sub-processors, where it publishes one. */
 	list?: OutsideLink;
 }
@@ -88,29 +106,38 @@ export const SUB_PROCESSORS: readonly SubProcessor[] = [
 			"the database, in Cloudflare D1, restricted to the EU",
 			`${R2_HOLDS}, in Cloudflare R2, restricted to the EU`,
 			"every email Timesifier sends, with its recipient, through Cloudflare's Email Service",
+			`mail sent to ${PRIVACY_EMAIL}, ${SECURITY_EMAIL}, ${HELLO_EMAIL} or any other address at ${MAIL_DOMAIN}, through Cloudflare Email Routing, which forwards it to the company's mailbox`,
 			"the check that a person is not a robot before a sign-in code is sent, through Cloudflare Turnstile",
 			"what Cloudflare Web Analytics measures of each page",
 			`a log line of every request, and a trace of one in ten, kept ${WORKERS_LOGS_DAYS} days`,
 		],
 		// ratelimits: Cloudflare counts browser error reports by client address (TS-107d).
+		// Email Routing is set on the zone, not in wrangler.jsonc: it is no binding.
 		bindings: ["d1_databases", "r2_buckets", "send_email", "observability", "ratelimits"],
-		dpa: OUTSIDE_LINKS.cloudflareDpa,
+		agreement: { kind: "processing", dpa: OUTSIDE_LINKS.cloudflareDpa },
 		list: OUTSIDE_LINKS.cloudflareSubprocessors,
 	},
 	{
-		id: "microsoft",
-		name: "Microsoft",
-		based: "Microsoft, which hosts the company's mailbox",
-		receives: [`mail sent to ${PRIVACY_EMAIL} or ${SECURITY_EMAIL}`],
+		// The owner's choice of 27 November 2026: a personal Gmail account, not a paid
+		// Google Workspace or Microsoft 365 one, so no processing agreement (decision 79).
+		id: "google",
+		name: "Google",
+		based: "Google LLC, in the United States, which hosts the company's mailbox in Gmail",
+		receives: ["the mail that Cloudflare forwards to it"],
 		bindings: [],
-		dpa: OUTSIDE_LINKS.microsoftDpa,
+		agreement: {
+			kind: "none",
+			service: "Gmail",
+			terms: OUTSIDE_LINKS.googleTerms,
+			privacy: OUTSIDE_LINKS.googlePrivacy,
+		},
 	},
 ];
 
 /**
- * The sub-processors, each with where it is, what it receives, and its own
- * agreement and list: the same rows on /security and /dpa. The anchor of each
- * row is its `id`.
+ * The sub-processors, each with where it is, what it receives, and what binds
+ * it, with its own list where it has one: the same rows on /security and /dpa.
+ * The anchor of each row is its `id`.
  */
 export function SubProcessorRows() {
 	return (
@@ -126,25 +153,58 @@ export function SubProcessorRows() {
 							</li>
 						))}
 					</ul>
-					<p className="mt-2">
-						<a href={each.dpa.href} className={LINK}>
-							{each.name}'s data processing agreement
-						</a>
-						{each.list && (
-							<>
-								{" "}
-								and{" "}
-								<a href={each.list.href} className={LINK}>
-									its own sub-processors
-								</a>
-							</>
-						)}
-						.
-					</p>
+					<Bound name={each.name} agreement={each.agreement} list={each.list} />
 				</Row>
 			))}
 		</Rows>
 	);
+}
+
+/** The line under a sub-processor's row: its agreement and list, or that it has no agreement. */
+function Bound({
+	name,
+	agreement,
+	list,
+}: {
+	name: string;
+	agreement: Agreement;
+	list: OutsideLink | undefined;
+}) {
+	switch (agreement.kind) {
+		case "processing":
+			return (
+				<p className="mt-2">
+					<a href={agreement.dpa.href} className={LINK}>
+						{name}'s data processing agreement
+					</a>
+					{list && (
+						<>
+							{" "}
+							and{" "}
+							<a href={list.href} className={LINK}>
+								its own sub-processors
+							</a>
+						</>
+					)}
+					.
+				</p>
+			);
+		case "none":
+			return (
+				<p className="mt-2">
+					There is no processing agreement with {name}: {name} runs {agreement.service} under its
+					consumer terms.{" "}
+					<a href={agreement.terms.href} className={LINK}>
+						{name}'s terms of service
+					</a>{" "}
+					and{" "}
+					<a href={agreement.privacy.href} className={LINK}>
+						its privacy policy
+					</a>
+					.
+				</p>
+			);
+	}
 }
 
 /** Where the database and the files are, and what is not restricted to the EU: the same words on /security and /dpa. */

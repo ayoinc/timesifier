@@ -51,6 +51,9 @@ export function loader() {
 	return { operator: deploymentOperator(env) };
 }
 
+/** When the agreement was first published (TS-105); `DPA_VERSION` is the version in force. */
+const FIRST = { date: "2026-11-23", inWords: "23 November 2026" };
+
 /** The data an organisation controls: the rows of "What is stored" under its headings. */
 const PROCESSED = STORED.filter(({ heading }) =>
 	(PROCESSED_FOR_ORGANISATIONS as readonly string[]).includes(heading),
@@ -61,7 +64,8 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 		<Document
 			path={DPA_PATH}
 			title="Data processing agreement"
-			first={DPA_VERSION}
+			version={DPA_VERSION}
+			first={FIRST}
 			lead="The terms on which Timesifier processes the personal data in an organisation for that organisation, as Article 28 of the UK GDPR requires: what is processed, why and for how long, what Timesifier undertakes, who else handles the data, and what happens at the end."
 			operator={operator}
 		>
@@ -181,9 +185,10 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 						The organisation authorises the sub-processors listed below. The company tells every
 						organisation's owners by email at least {SUB_PROCESSOR_NOTICE_DAYS} days before a new
 						one starts. An organisation that objects within that time may download its data and
-						delete the organisation before the new one starts. The company binds each sub-processor
-						by contract to the same obligations as this agreement, and answers to the organisation
-						for them. <Cites>Article 28(2), 28(3)(d) and 28(4)</Cites>
+						delete the organisation before the new one starts. The company binds Cloudflare by
+						contract to the same obligations as this agreement. Google hosts the company's mailbox
+						under its consumer terms, with no processing agreement. The company answers to the
+						organisation for both. <Cites>Article 28(2), 28(3)(d) and 28(4)</Cites>
 					</Row>
 					<Row term="People's rights">
 						The organisation's owners and admins can download its data and delete it in Timesifier,
@@ -237,17 +242,14 @@ export default function Dpa({ loaderData: { operator } }: Route.ComponentProps) 
 					needs no further safeguard. What leaves the UK and the EU is a request on its way to
 					Frankfurt, Cloudflare's logs, its record of each email, and what Turnstile and Web
 					Analytics collect, all handled by Cloudflare, Inc. in the United States; and mail to the
-					company's mailbox, which Microsoft hosts. Each is covered by the provider's own agreement:
-					Cloudflare's, by the{" "}
+					company's addresses, which Cloudflare forwards to the company's mailbox at Google LLC, in
+					the United States. What Cloudflare handles is covered by its own agreement, by the{" "}
 					<a href={OUTSIDE_LINKS.cloudflareDpa.href} className={LINK}>
 						ICO's International Data Transfer Addendum and the UK Extension to the Data Privacy
 						Framework
 					</a>
-					; Microsoft's, by{" "}
-					<a href={OUTSIDE_LINKS.microsoftDpa.href} className={LINK}>
-						its data protection addendum
-					</a>
-					.
+					. No agreement covers the mail's transfer to Google, which hosts the company's mailbox in
+					Gmail under its consumer terms.
 				</p>
 			</DocumentSection>
 

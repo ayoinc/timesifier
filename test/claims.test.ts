@@ -47,6 +47,7 @@ import {
 	FEATURES_PATH,
 	HELLO_EMAIL,
 	INTEGRATIONS_PATH,
+	MAIL_DOMAIN,
 	OUTSIDE_LINKS,
 	PRICING_PATH,
 	PRIMARY_ACTION,
@@ -61,6 +62,7 @@ import {
 import { homeStructuredData } from "~/landing/structured-data";
 import {
 	BREACH_NOTICE_HOURS,
+	DPA_VERSION,
 	R2_HOLDS,
 	SUB_PROCESSOR_NOTICE_DAYS,
 	SUB_PROCESSORS,
@@ -1198,14 +1200,21 @@ it("the sub-processors on /security and /dpa are the ones the notice names, and 
 	const covered = new Set(SUB_PROCESSORS.flatMap(({ bindings }) => bindings));
 	for (const binding of bindings) expect(covered, binding).toContain(binding);
 
-	// /security and /dpa list exactly them, from the one constant, each with its agreement.
+	// /security and /dpa list exactly them, from the one constant, each with what binds it.
 	for (const path of [SECURITY_PATH, DPA_PATH]) {
 		const html = await page(path);
 		const section = html.match(/<section id="sub-processors"[\s\S]*?<\/section>/)?.[0] ?? "";
 		const terms = [...section.matchAll(/<dt[^>]*>([^<]*)<\/dt>/g)].map(([, term]) => term);
 		expect(terms, path).toEqual(SUB_PROCESSORS.map(({ name }) => name));
 		for (const each of SUB_PROCESSORS) {
-			expect(section, `${path}: ${each.name}`).toContain(`href="${each.dpa.href}"`);
+			const { agreement } = each;
+			const links =
+				agreement.kind === "processing"
+					? [agreement.dpa.href]
+					: [agreement.terms.href, agreement.privacy.href];
+			for (const href of links) {
+				expect(section, `${path}: ${each.name}`).toContain(`href="${href}"`);
+			}
 			if (each.list) expect(section, `${path}: ${each.name}`).toContain(`href="${each.list.href}"`);
 			for (const what of each.receives) expect(words(section), `${path}: ${what}`).toContain(what);
 		}
@@ -1214,10 +1223,79 @@ it("the sub-processors on /security and /dpa are the ones the notice names, and 
 			`${count.charAt(0).toUpperCase()}${count.slice(1)} companies process personal data for Timesifier, and no others.`,
 		);
 	}
-	// And the notice names each, under "Who else handles it", and the mailbox's addresses.
+	// And the notice names each, under "Who else handles it".
 	const who = await part(PRIVACY_PATH, "who");
 	for (const { name } of SUB_PROCESSORS) expect(who, name).toContain(name);
-	expect(who).toContain(`${SECURITY_EMAIL} is received by Microsoft`);
+});
+
+it("the company's mail is received by Cloudflare and kept by Google in Gmail, with no processing agreement, on every page that says who handles it", async () => {
+	// Decision 79: Cloudflare Email Routing takes every address at the domain and
+	// forwards it to a personal Gmail account, which no processing agreement covers.
+	const cloudflare = SUB_PROCESSORS.find(({ id }) => id === "cloudflare");
+	const google = SUB_PROCESSORS.find(({ id }) => id === "google");
+	expect(cloudflare?.agreement.kind).toBe("processing");
+	expect(google?.agreement).toEqual({
+		kind: "none",
+		service: "Gmail",
+		terms: OUTSIDE_LINKS.googleTerms,
+		privacy: OUTSIDE_LINKS.googlePrivacy,
+	});
+	expect(OUTSIDE_LINKS.googleTerms.href).toBe("https://policies.google.com/terms");
+	expect(OUTSIDE_LINKS.googlePrivacy.href).toBe("https://policies.google.com/privacy");
+	const addresses = `${PRIVACY_EMAIL}, ${SECURITY_EMAIL}, ${HELLO_EMAIL} or any other address at ${MAIL_DOMAIN}`;
+
+	for (const path of [SECURITY_PATH, DPA_PATH]) {
+		const section = await part(path, "sub-processors");
+		expect(section, path).toContain(`mail sent to ${addresses}, through Cloudflare Email Routing`);
+		expect(section, path).toContain(
+			"Google LLC, in the United States, which hosts the company's mailbox in Gmail. It receives: the mail that Cloudflare forwards to it.",
+		);
+		expect(section, path).toContain(
+			"There is no processing agreement with Google: Google runs Gmail under its consumer terms. Google's terms of service and its privacy policy .",
+		);
+	}
+	// The rows themselves, by their links: Google's row links its terms and its policy, and no agreement.
+	for (const path of [SECURITY_PATH, DPA_PATH]) {
+		const html = await page(path);
+		const row = html.match(/<p id="google"[\s\S]*?<\/dd>/)?.[0] ?? "";
+		expect(row, path).toContain(`href="${OUTSIDE_LINKS.googleTerms.href}"`);
+		expect(row, path).toContain(`href="${OUTSIDE_LINKS.googlePrivacy.href}"`);
+		expect(words(row), path).not.toContain("data processing agreement");
+	}
+
+	expect(await part(PRIVACY_PATH, "who")).toContain(
+		`Mail sent to ${addresses} is received by Cloudflare, which forwards it to the company's mailbox at Google. Google hosts that mailbox in Gmail under its consumer terms, with no processing agreement. Google LLC is a company in the United States.`,
+	);
+	expect(await part(DPA_PATH, "transfers")).toContain(
+		"No agreement covers the mail's transfer to Google, which hosts the company's mailbox in Gmail under its consumer terms.",
+	);
+
+	// No public page says Microsoft hosts or receives the company's mail. Microsoft
+	// sign-in (TS-104) is offered in every deployment configured for it, so the
+	// pages are read with both providers on.
+	configureProviders("google", "microsoft");
+	for (const path of PUBLIC_PAGES) {
+		const text = words(await page(path));
+		expect(text, path).not.toMatch(/Microsoft(?:,)? (?:which )?hosts/i);
+		expect(text, path).not.toMatch(/received by Microsoft/i);
+		expect(text, path).not.toMatch(/mailbox[^.]*Microsoft|Microsoft[^.]*mailbox/i);
+	}
+});
+
+it("the data processing agreement binds by contract only the sub-processor it has a contract with, and is the version of 27 November 2026", async () => {
+	expect(DPA_VERSION).toEqual({ date: "2026-11-27", inWords: "27 November 2026" });
+	const processor = await part(DPA_PATH, "processor");
+	expect(processor).not.toContain("binds each sub-processor");
+	expect(processor).toContain(
+		"The company binds Cloudflare by contract to the same obligations as this agreement. Google hosts the company's mailbox under its consumer terms, with no processing agreement. The company answers to the organisation for both.",
+	);
+	// Every sub-processor the row says is bound has an agreement, and the one it says is not has none.
+	const bound = SUB_PROCESSORS.filter(({ agreement }) => agreement.kind === "processing");
+	expect(bound.map(({ name }) => name)).toEqual(["Cloudflare"]);
+	// The page shows the version in force, and the date it was first published.
+	const text = words(await page(DPA_PATH));
+	expect(text).toContain(`This version ${DPA_VERSION.inWords} ; first version 23 November 2026`);
+	expect(text).toContain(`This is the version of ${DPA_VERSION.inWords}.`);
 });
 
 it("the data processing agreement gives the owner's notice periods from their constants", async () => {

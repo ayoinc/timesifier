@@ -91,9 +91,14 @@ export const OUTSIDE_LINKS = {
 		reason:
 			"Cloudflare's certifications, which are Cloudflare's: /security links to them and claims none for Timesifier.",
 	},
-	microsoftDpa: {
-		href: "https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA",
-		reason: "The terms on which Microsoft hosts the mailbox that mail to the company goes to.",
+	googleTerms: {
+		href: "https://policies.google.com/terms",
+		reason:
+			"The consumer terms on which Google hosts the company's mailbox in Gmail, with no processing agreement.",
+	},
+	googlePrivacy: {
+		href: "https://policies.google.com/privacy",
+		reason: "What Google does with what it holds in Gmail, the company's mailbox among it.",
 	},
 	icoRegister: {
 		href: "https://ico.org.uk/ESDWebPages/Search",
@@ -102,14 +107,20 @@ export const OUTSIDE_LINKS = {
 	},
 } as const satisfies Record<string, OutsideLink>;
 
+/**
+ * The company's mail domain. Cloudflare Email Routing receives every address at
+ * it and forwards the mail to the company's mailbox in Gmail (decision 79).
+ */
+export const MAIL_DOMAIN = "timesifier.com";
+
 /** Where a person writes about their data until the controls are in the product. */
-export const PRIVACY_EMAIL = "privacy@timesifier.com";
+export const PRIVACY_EMAIL = `privacy@${MAIL_DOMAIN}`;
 
 /** Where security reports and accessibility requests go (owner's answer 1, 23 November 2026). */
-export const SECURITY_EMAIL = "security@timesifier.com";
+export const SECURITY_EMAIL = `security@${MAIL_DOMAIN}`;
 
 /** Where anyone writes to the company about anything else (owner's answer 10, 23 November 2026). */
-export const HELLO_EMAIL = "hello@timesifier.com";
+export const HELLO_EMAIL = `hello@${MAIL_DOMAIN}`;
 
 export const MAIN_ID = "main";
 
