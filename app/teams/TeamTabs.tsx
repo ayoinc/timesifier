@@ -44,6 +44,8 @@ export function TeamTabs({ slug, current }: { slug: string; current: TeamTab }) 
 				label="Team pages"
 				tabs={TABS.map(({ id, label }) => ({ id, to: teamTabPath(slug, id), label }))}
 				current={current}
+				// Five tabs since Allocation: below 840px they are wider than the page beside the rail.
+				wraps="medium"
 			/>
 		</div>
 	);

@@ -29,8 +29,8 @@ import { zoneIsTheBrowsers } from "./timesheet";
 //    from the report tabs by the keyboard.
 //
 // Every page is operated with the keyboard and scanned by axe, which finds
-// nothing. The seven report tabs are also measured between 600px and 840px,
-// where they wrap into rows of three as they do at 390px. The rules are tested
+// nothing. The seven report tabs and Team's five are also measured at 390px
+// and between 600px and 840px, where they wrap into rows of three. The rules are tested
 // through the Worker. With TS116_SHOTS set to a folder, each page is
 // photographed into it.
 
@@ -523,36 +523,60 @@ for (const viewport of [
 	}
 }
 
-// The seven report tabs, between the compact window and the expanded one: in
-// rows of three, as at 390px, every tab whole and in view.
+/**
+ * The tabs of `group` lie in rows of three, `rows` tabs to a row, each whole and
+ * inside the group and the window.
+ */
+async function expectRowsOfThree(page: Page, group: Locator, rows: number[]) {
+	const links = group.getByRole("link");
+	await expect(links).toHaveCount(rows.reduce((sum, row) => sum + row, 0));
+	const row = await group.boundingBox();
+	const width = page.viewportSize()?.width ?? 0;
+	if (!row) throw new Error("no row of tabs");
+	const tops: number[] = [];
+	for (const link of await links.all()) {
+		const box = await link.boundingBox();
+		if (!box) throw new Error("a tab has no box");
+		expect(box.x).toBeGreaterThanOrEqual(row.x - 0.5);
+		expect(box.x + box.width).toBeLessThanOrEqual(Math.min(row.x + row.width, width) + 0.5);
+		// The label is whole: nothing of it is cut off.
+		expect(await link.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+		tops.push(Math.round(box.y));
+	}
+	expect(await group.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+	const lines = [...new Set(tops)];
+	expect(lines.map((top) => tops.filter((t) => t === top).length)).toEqual(rows);
+}
+
+// Between the compact window and the expanded one, the seven report tabs and
+// Team's five (Allocation made them five) lie in rows of three, as at 390px:
+// every tab whole and in view.
 for (const width of [390, 600, 720, 839]) {
-	test(`the seven report tabs wrap into rows of three, ${width}px wide`, async ({ page }) => {
+	test(`the report tabs and Team's tabs wrap into rows of three, ${width}px wide`, async ({
+		page,
+	}) => {
 		await page.setViewportSize({ width, height: 900 });
 		await signIn(page, newPerson().email);
 		const { slug } = await createOrganisation(page);
 		await openShell(page, `${destinationPath(slug, "reports")}/planned${WEEK_RANGE}`);
-		const tabs = page.getByRole("main").getByRole("group", { name: "Report views" });
-		const links = tabs.getByRole("link");
-		await expect(links).toHaveCount(7);
-		const row = await tabs.boundingBox();
-		if (!row) throw new Error("no row of tabs");
-		const tops: number[] = [];
-		for (const link of await links.all()) {
-			const box = await link.boundingBox();
-			if (!box) throw new Error("a tab has no box");
-			expect(box.x).toBeGreaterThanOrEqual(row.x - 0.5);
-			expect(box.x + box.width).toBeLessThanOrEqual(row.x + row.width + 0.5);
-			// The label is whole: nothing of it is cut off.
-			expect(await link.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-			tops.push(Math.round(box.y));
-		}
-		expect(await tabs.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-		const rows = [...new Set(tops)];
-		expect(rows).toHaveLength(3);
-		expect(rows.map((top) => tops.filter((t) => t === top).length)).toEqual([3, 3, 1]);
+		await expectRowsOfThree(
+			page,
+			page.getByRole("main").getByRole("group", { name: "Report views" }),
+			[3, 3, 1],
+		);
 		if (SHOTS && width !== 390) {
 			mkdirSync(SHOTS, { recursive: true });
 			await page.screenshot({ path: join(SHOTS, `report-tabs-${width}.png`) });
+		}
+		await openShell(page, allocationPath(slug));
+		await expectRowsOfThree(
+			page,
+			page.getByRole("main").getByRole("group", { name: "Team pages" }),
+			[3, 2],
+		);
+		if (SHOTS) {
+			mkdirSync(SHOTS, { recursive: true });
+			await page.screenshot({ path: join(SHOTS, `team-tabs-${width}.png`) });
 		}
 	});
 }
