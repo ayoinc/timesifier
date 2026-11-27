@@ -49,16 +49,17 @@ export interface KindWords {
 export const KIND_WORDS: Record<NotificationKind, KindWords> = {
 	"week-waiting": {
 		label: "Timesheets to approve",
-		description: "A week someone submitted that waits for you.",
+		description:
+			"A week someone submitted, or their time on a project you lead, that waits for you.",
 		subject: "A timesheet is waiting for your approval",
 		heading: "A timesheet to approve",
 		reason:
-			"You got this email because you approve this person's timesheets: you manage a team they are in, or you are an owner or admin and nobody else is there to.",
+			"You got this email because you approve this person's timesheets or their time on a project: you manage a team they are in, you are a delivery manager of the project, or you are an owner or admin and nobody else is there to.",
 		audience: "deciders",
 	},
 	"week-decided": {
 		label: "Your timesheets approved or returned",
-		description: "Your week approved, or returned with the reason.",
+		description: "Your week, or your time on a project, approved or returned with the reason.",
 		subject: "Your timesheet has been decided",
 		heading: "Your timesheet",
 		reason: "You got this email because this timesheet is yours.",

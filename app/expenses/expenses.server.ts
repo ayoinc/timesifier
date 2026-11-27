@@ -83,7 +83,7 @@ async function lockOfWrite(
 	id: string | null,
 ): Promise<LockReason | null> {
 	const [reasons, invoiced] = await Promise.all([
-		lockReasonsOn(scope, userId, days),
+		lockReasonsOn(scope, userId, days, { touching: "line" }),
 		id === null ? Promise.resolve(new Set<string>()) : invoicedIds(scope, "expense", [id]),
 	]);
 	if (id !== null && invoiced.has(id)) return "invoiced";
@@ -408,7 +408,9 @@ export async function expensesOf(
 	const projectIds = [...new Set(rows.map((row) => row.projectId))];
 	const ids = rows.map((row) => row.id);
 	const [reasons, invoiced, tags, projects, categories] = await Promise.all([
-		lockReasonsOn(scope, userId, [...new Set(rows.map((row) => row.spentOn))]),
+		lockReasonsOn(scope, userId, [...new Set(rows.map((row) => row.spentOn))], {
+			touching: "line",
+		}),
 		invoicedIds(scope, "expense", ids),
 		tagsOfExpenses(scope, ids),
 		projectIds.length === 0

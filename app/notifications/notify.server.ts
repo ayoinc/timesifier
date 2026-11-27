@@ -3,6 +3,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { onLeaveToday } from "~/approvals/approvals.server";
+import { projectsApprovalsPath } from "~/approvals/parts";
+import type { WaitingPart } from "~/approvals/parts.server";
 import { among, type OrganisationScope, organisations, users } from "~/db";
 import {
 	type Access,
@@ -122,25 +124,97 @@ export async function decidersOf(
 }
 
 /**
+ * For each of `parts`, project parts of weeks (TS-117), the people told
+ * that it waits (decision 68): its delivery managers in the week but its
+ * person, and not one on leave all of today (D6, decision 48); where none is
+ * there, the organisation's owners and admins but its person (D5, decision
+ * 47). In the order given.
+ */
+export async function projectDecidersOf(
+	scope: OrganisationScope,
+	parts: readonly { personId: string; deliveryManagers: readonly string[] }[],
+	now: number,
+): Promise<string[][]> {
+	if (parts.length === 0) return [];
+	const leaders = [...new Set(parts.flatMap((p) => p.deliveryManagers))];
+	const [administrators, [organisation]] = await Promise.all([
+		scope.memberships.select((m) => inArray(m.role, ["owner", "admin"])),
+		drizzle(env.DB)
+			.select({ timeZone: organisations.timeZone })
+			.from(organisations)
+			.where(eq(organisations.id, scope.organisationId))
+			.limit(1),
+	]);
+	const away = await onLeaveToday(scope, leaders, organisation ?? { timeZone: "UTC" }, now);
+	return parts.map(({ personId, deliveryManagers }) => {
+		const present = deliveryManagers.filter((id) => id !== personId && !away.has(id));
+		const deciders =
+			present.length > 0
+				? present
+				: administrators.map((m) => m.userId).filter((id) => id !== personId);
+		return [...new Set(deciders)].sort();
+	});
+}
+
+/** A week submitted, for `weeksSubmitted`. */
+export interface WeekSubmitted extends WeekOf {
+	bySystem: boolean;
+	/** Whether the whole week was approved as it was submitted, as nobody else may decide it (D5). */
+	alone: boolean;
+	/** The parts of it that wait (TS-117); null for a week decided whole. */
+	parts?: readonly WaitingPart[] | null;
+}
+
+/**
  * The notifications of weeks submitted: to each week's deciders, that it
  * waits for them; and, for one the system submitted (TR-01), to its person,
  * that the system did so, and `why`. A week approved as it was submitted,
- * as nobody else may decide it (D5), waits for nobody.
+ * as nobody else may decide it (D5), waits for nobody. A week held in parts
+ * (TS-117) tells the deciders of each part that waits: its line manager of
+ * the rest of it, and each project's delivery managers of its time there.
  */
 export async function weeksSubmitted(
 	scope: OrganisationScope,
-	weeks: readonly (WeekOf & { bySystem: boolean; alone: boolean })[],
+	weeks: readonly WeekSubmitted[],
 	now: number,
 	why: string | null = null,
 ): Promise<NewNotification[]> {
 	if (weeks.length === 0) return [];
+	const lineWaits = (week: WeekSubmitted) =>
+		!week.alone && (!week.parts || week.parts.some((p) => p.projectId === null));
+	const projectParts = weeks.flatMap((week) =>
+		week.alone
+			? []
+			: (week.parts ?? []).flatMap((part) =>
+					part.projectId === null ? [] : [{ week, projectId: part.projectId, part }],
+				),
+	);
 	const waiting = weeks.filter((w) => !w.alone).map((w) => w.userId);
-	const [deciders, names] = await Promise.all([decidersOf(scope, waiting, now), namesOf(waiting)]);
+	const projectIds = [...new Set(projectParts.map((p) => p.projectId))];
+	const [deciders, names, partDeciders, projects] = await Promise.all([
+		decidersOf(
+			scope,
+			weeks.filter(lineWaits).map((w) => w.userId),
+			now,
+		),
+		namesOf(waiting),
+		projectDecidersOf(
+			scope,
+			projectParts.map(({ week, part }) => ({
+				personId: week.userId,
+				deliveryManagers: part.deliveryManagers,
+			})),
+			now,
+		),
+		projectIds.length === 0 ? [] : scope.projects.select((p) => among(p.id, projectIds)),
+	]);
+	const projectName = new Map(projects.map((p) => [p.id, p.name]));
 	const made: NewNotification[] = [];
+	const approvals = pathBelow((slug) => destinationPath(slug, "approvals"));
 	for (const week of weeks) {
 		const words = formatRange(week.startsOn, week.endsOn);
-		if (!week.alone) {
-			const name = names.get(week.userId) ?? "Someone";
+		const name = names.get(week.userId) ?? "Someone";
+		if (lineWaits(week)) {
 			for (const userId of deciders.get(week.userId) ?? []) {
 				made.push({
 					userId,
@@ -148,10 +222,24 @@ export async function weeksSubmitted(
 					title: week.bySystem
 						? `${name}'s timesheet for ${words} was submitted by the system and waits for your approval.`
 						: `${name} submitted their timesheet for ${words}.`,
-					path: pathBelow((slug) => destinationPath(slug, "approvals")),
+					path: approvals,
 				});
 			}
 		}
+		projectParts.forEach((each, index) => {
+			if (each.week !== week) return;
+			const project = projectName.get(each.projectId) ?? "a project";
+			for (const userId of partDeciders[index] ?? []) {
+				made.push({
+					userId,
+					kind: "week-waiting",
+					title: week.bySystem
+						? `${name}'s time on ${project} for ${words} was submitted by the system and waits for your approval.`
+						: `${name} submitted their time on ${project} for ${words}.`,
+					path: pathBelow((slug) => projectsApprovalsPath(slug, week.startsOn)),
+				});
+			}
+		});
 		if (week.bySystem) {
 			made.push({
 				userId: week.userId,

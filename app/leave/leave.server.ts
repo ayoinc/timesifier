@@ -764,7 +764,7 @@ async function leaveBlockedBy(
 ): Promise<string | null> {
 	const days = daysFrom(span.startsOn, span.endsOn);
 	const [locks, statuses] = await Promise.all([
-		lockReasonsOn(scope, userId, days),
+		lockReasonsOn(scope, userId, days, { touching: "line" }),
 		daysOf(scope, userId, span.startsOn, span.endsOn),
 	]);
 	const inWeek = firstInClosedWeek(
@@ -804,7 +804,7 @@ async function cancelBlockedBy(
 ): Promise<"locked" | Refused | null> {
 	if (await reachesLockDate(scope, row)) return "locked";
 	const [locks, statuses] = await Promise.all([
-		lockReasonsOn(scope, row.userId, daysFrom(row.startsOn, row.endsOn)),
+		lockReasonsOn(scope, row.userId, daysFrom(row.startsOn, row.endsOn), { touching: "line" }),
 		daysOf(scope, row.userId, row.startsOn, row.endsOn),
 	]);
 	const inWeek = firstInClosedWeek(

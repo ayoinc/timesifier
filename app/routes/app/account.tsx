@@ -109,9 +109,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		leaveYear.holidaysFromAllowance,
 	);
 	// The kinds that can reach this person here: those for deciders and budgets
-	// only for an owner, an admin or a manager of a team (TS-049); those of the
-	// export of everything only for an owner (TS-126b).
-	const decides = role === "owner" || role === "admin" || membership.managesTeams;
+	// only for an owner, an admin, a manager of a team (TS-049) or a delivery
+	// manager (TS-117); those of the export of everything only for an owner (TS-126b).
+	const decides =
+		role === "owner" || role === "admin" || membership.managesTeams || membership.leadsProjects;
 	const reaches: Record<KindAudience, boolean> = {
 		everyone: true,
 		deciders: decides,

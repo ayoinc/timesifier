@@ -189,7 +189,16 @@ async function copyOnto(
 	if ((await entriesOfDay(scope, userId, day)).length > 0) {
 		return { ok: false, problem: "That day already has time: nothing was copied onto it." };
 	}
-	if ((await lockedDays(scope, userId, [day])).size > 0) {
+	if (
+		(
+			await lockedDays(
+				scope,
+				userId,
+				[day],
+				given.map((s) => s.projectId),
+			)
+		).size > 0
+	) {
 		return { ok: false, problem: "That day is locked: nothing can be copied onto it." };
 	}
 	const projectIds = given.map((s) => s.projectId);

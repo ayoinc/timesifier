@@ -2,7 +2,15 @@ import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 
 import { type PersonPlan, plansOf, total } from "~/allocations/allocations.server";
-import { type Filter, type OrganisationScope, organisationScope, type ScopedAccessor } from "~/db";
+import type { PartStatus } from "~/approvals/parts";
+import { partsOf } from "~/approvals/parts.server";
+import {
+	among,
+	type Filter,
+	type OrganisationScope,
+	organisationScope,
+	type ScopedAccessor,
+} from "~/db";
 import { type DayKind, dayLabel } from "~/leave/days";
 import { daysOf } from "~/leave/leave.server";
 import type { DayRule } from "~/leave/rules";
@@ -116,7 +124,47 @@ export async function periodOf(scope: OrganisationScope, userId: string, startsO
 	);
 	const { row: period } = periodOfWeek(rows, week);
 	if (!period) return null;
-	return { ...period, status: PeriodStatus.parse(period.status) };
+	return {
+		...period,
+		status: PeriodStatus.parse(period.status),
+		parts: await submissionParts(scope, period.id),
+	};
+}
+
+/** One part of a week held in parts (TS-117), as its person sees it on their timesheet. */
+export interface SubmissionPart {
+	/** The project's name; null for the line part, the rest of the week. */
+	project: string | null;
+	status: PartStatus;
+	/** The reason given with its return, while it stands returned. */
+	comment: string | null;
+}
+
+/**
+ * The parts of the period `periodId`, the line part first, then by project
+ * name, as Approvals lists them; null for a week decided whole.
+ */
+async function submissionParts(
+	scope: OrganisationScope,
+	periodId: string,
+): Promise<SubmissionPart[] | null> {
+	const parts = (await partsOf(scope, [periodId])).get(periodId);
+	if (!parts) return null;
+	const ids = parts.flatMap((p) => (p.projectId === null ? [] : [p.projectId]));
+	const names = new Map(
+		ids.length === 0
+			? []
+			: (await scope.projects.select((p) => among(p.id, ids))).map((p) => [p.id, p.name]),
+	);
+	return parts
+		.map((p) => ({
+			project: p.projectId === null ? null : (names.get(p.projectId) ?? ""),
+			status: p.status as PartStatus,
+			comment: p.status === "returned" ? p.comment : null,
+		}))
+		.sort((a, b) =>
+			a.project === null ? -1 : b.project === null ? 1 : a.project.localeCompare(b.project, "en"),
+		);
 }
 
 /** What every view shows: the projects, and the person's running entry for the timer. */
@@ -162,6 +210,8 @@ export interface PeriodSubmission {
 	over: DayRule[];
 	/** Whether the lock date has reached a day of a returned week, which holds it until the date moves back (TR-07). */
 	heldByLock?: boolean;
+	/** Its parts, each decided apart (TS-117); null for a week decided whole. */
+	parts: SubmissionPart[] | null;
 }
 
 /** One day of the person's week as leave sees it (TS-061). */
@@ -428,7 +478,7 @@ async function periodWithEntries(
 	const [entries, row, locks] = await Promise.all([
 		entriesOn(scope, userId, period.startsOn, period.endsOn),
 		periodOf(scope, userId, period.startsOn),
-		lockReasonsOn(scope, userId, days, now),
+		lockReasonsOn(scope, userId, days, { now }),
 	]);
 	const rules = await dayRulesOf(scope, userId, days, entries, now);
 	const submission = submissionOf(period, row, entries, rules, zone, now);
@@ -440,7 +490,7 @@ async function periodWithEntries(
 /** Where `period` stands, given its row of `periods` (null before it is submitted), the entries read around it and its days' limits. */
 function submissionOf(
 	period: PeriodDays,
-	row: { status: PeriodStatus; comment: string | null } | null,
+	row: { status: PeriodStatus; comment: string | null; parts: SubmissionPart[] | null } | null,
 	entries: readonly SheetEntry[],
 	rules: readonly DayRule[],
 	zone: string,
@@ -453,6 +503,7 @@ function submissionOf(
 		state: periodState(status),
 		status,
 		comment: row?.status === "returned" ? row.comment : null,
+		parts: row?.parts ?? null,
 		runsInWeek: entries.some((entry) => entry.endedAt === null && inPeriod(entry.day)),
 		started: period.startsOn <= dayOf(now, zone),
 		over: rules.filter((rule) => rule.overMinutes > 0 && inPeriod(rule.day)),

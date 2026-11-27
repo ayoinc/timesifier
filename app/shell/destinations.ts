@@ -40,9 +40,16 @@ export type Heading = (typeof HEADINGS)[number];
  * `managers` adds, to owners and admins, a person who manages at least one
  * team (TS-038); `administrators` is owners and admins alone; `finance` is
  * owners, admins and Finance (TS-064); `oversight` is owners, admins, Finance
- * and a person who manages a team.
+ * and a person who manages a team; `approvers` adds, to `managers`, a
+ * delivery manager of a project, who approves its time (TS-117).
  */
-export type Audience = "everyone" | "managers" | "administrators" | "finance" | "oversight";
+export type Audience =
+	| "everyone"
+	| "managers"
+	| "approvers"
+	| "administrators"
+	| "finance"
+	| "oversight";
 
 const LIST = [
 	{ id: "timesheet", label: "Timesheet", segment: "", heading: "Track", audience: "everyone" },
@@ -106,7 +113,7 @@ const LIST = [
 		label: "Approvals",
 		segment: "approvals",
 		heading: "Review",
-		audience: "managers",
+		audience: "approvers",
 	},
 	{ id: "reports", label: "Reports", segment: "reports", heading: "Review", audience: "everyone" },
 	{
@@ -185,6 +192,8 @@ export interface Viewer {
 	role: "owner" | "admin" | "finance" | "member";
 	/** Whether they manage at least one of the organisation's teams. */
 	managesTeams: boolean;
+	/** Whether they are, or have been, a delivery manager of a project (TS-117). */
+	leadsProjects: boolean;
 	/** Whether the organisation has clients: it does not work internally (`hasClients`). */
 	clientsEnabled: boolean;
 	/** Whether it has clients or holds any invoice or estimate: Invoices and Estimates are there (`keepsBilling`). */
@@ -203,6 +212,8 @@ export function canSee(viewer: Viewer, id: DestinationId): boolean {
 			return true;
 		case "managers":
 			return administrator || viewer.managesTeams;
+		case "approvers":
+			return administrator || viewer.managesTeams || viewer.leadsProjects;
 		case "administrators":
 			return administrator;
 		case "finance":

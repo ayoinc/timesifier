@@ -3,20 +3,15 @@ import { and, eq, gte, inArray, isNotNull, isNull, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { changes, record, recordStatement } from "~/activity/activity.server";
-import {
-	among,
-	type OrganisationScope,
-	organisationScope,
-	organisations,
-	users,
-	uuidv7,
-} from "~/db";
+import { type PartStatus, partIsOpen, partOfProject } from "~/approvals/parts";
+import { partsOf, projectPartsOf, weekKey } from "~/approvals/parts.server";
+import { among, type OrganisationScope, organisationScope, organisations, users } from "~/db";
 import { dayStatus } from "~/leave/days";
-import { calendarOf, leaveContext, someoneElseDecides } from "~/leave/leave.server";
-import { notify, weeksSubmitted } from "~/notifications/notify.server";
-import { notificationStatements, timerStopped } from "~/notifications/words";
+import { calendarOf, leaveContext } from "~/leave/leave.server";
+import { notify } from "~/notifications/notify.server";
+import { timerStopped } from "~/notifications/words";
 import { locksEntries, PeriodStatus, periodContaining, periodOfDay } from "~/periods/periods";
-import { approvedAlone } from "~/periods/submission.server";
+import { submissionStatements } from "~/periods/submission.server";
 import { addDays, type Day, dayOf, daysFrom, startOfDay } from "~/time/calendar";
 import { stopBySystem } from "~/time/entries.server";
 import { formatDay } from "~/time/format";
@@ -107,6 +102,12 @@ export async function lockNoticeOf(organisationId: string): Promise<LockNotice |
 
 /** The statuses that lock a period's entries, for SQL. */
 const LOCKING = PeriodStatus.options.filter(locksEntries);
+/**
+ * The statuses of the periods a day's lock is read from: those that lock, and
+ * a returned week, which a week held in parts locks in its parts that are not
+ * back with its person (TS-117, `closedPartsOf`).
+ */
+const LOCKING_OR_RETURNED = [...LOCKING, "returned" as const];
 
 /**
  * The lock date of `organisationId` as it reaches `userId`'s days at `now`
@@ -132,18 +133,30 @@ export async function lockReachFor(
 }
 
 /**
+ * What a change touches, for the locks of a week held in parts (TS-117):
+ * entries on `projects` (the projects of the entries before and after the
+ * change), or `line`, the line part's own (leave and expenses).
+ */
+export type Touching = { projects: readonly string[] } | "line";
+
+/**
  * Why each of `days` is locked for `userId`'s entries and expenses, for the
  * days that are: on or before the organisation's lock date once the day has
  * ended in their zone (`lockReachFor`), or in a period of theirs that is
  * submitted or approved. A day that is not locked is not in the map. An
  * entry belongs to the day stored with it (decision 39), so a change is
  * refused when its day, before or after the change, is here.
+ *
+ * A week held in parts and returned (TS-117) is open only in its returned
+ * parts: with `touching`, a day of it is locked for a change that touches a
+ * part approved or still waiting. Without, as the grid reads its days, it is
+ * open; the grid shows each part's own state.
  */
 export async function lockReasonsOn(
 	scope: OrganisationScope,
 	userId: string,
 	days: readonly Day[],
-	now = Date.now(),
+	{ now = Date.now(), touching = null }: { now?: number; touching?: Touching | null } = {},
 ): Promise<Map<Day, LockReason>> {
 	if (days.length === 0) return new Map();
 	const sorted = [...days].sort();
@@ -154,24 +167,73 @@ export async function lockReasonsOn(
 		scope.periods.select((p) =>
 			and(
 				eq(p.userId, userId),
-				inArray(p.status, LOCKING),
+				inArray(p.status, LOCKING_OR_RETURNED),
 				lte(p.startsOn, last),
 				gte(p.endsOn, first),
 			),
 		),
 	]);
+	const returned = periods.filter((p) => p.status === "returned");
+	const closed = returned.length === 0 ? new Map() : await closedPartsOf(scope, returned, touching);
 	const reasons = new Map<Day, LockReason>();
 	for (const day of days) {
 		const period = periods.find(({ startsOn, endsOn }) => startsOn <= day && day <= endsOn);
-		const reason = lockOf({
-			day,
-			lockedThrough,
-			periodStatus: period ? PeriodStatus.parse(period.status) : null,
-			invoiced: false,
-		});
+		const reason =
+			lockOf({
+				day,
+				lockedThrough,
+				periodStatus: period ? PeriodStatus.parse(period.status) : null,
+				invoiced: false,
+			}) ?? (period ? (closed.get(period.id) ?? null) : null);
 		if (reason !== null) reasons.set(day, reason);
 	}
 	return reasons;
+}
+
+/**
+ * Of `returned` periods, those held in parts in which `touching` reaches a
+ * part that is not back with its person, with why: approved, or submitted
+ * and waiting. An entry's part is its project's when the project is one of
+ * the week's project parts (`projectPartsOf`), else the line part.
+ */
+async function closedPartsOf(
+	scope: OrganisationScope,
+	returned: readonly { id: string; userId: string; startsOn: string; endsOn: string }[],
+	touching: Touching | null,
+): Promise<Map<string, LockReason>> {
+	const found = new Map<string, LockReason>();
+	if (touching === null) return found;
+	const parts = await partsOf(
+		scope,
+		returned.map((p) => p.id),
+	);
+	const held = returned.filter((p) => parts.has(p.id));
+	if (held.length === 0) return found;
+	const weeks = held.map((p) => ({
+		userId: p.userId,
+		startsOn: p.startsOn as Day,
+		endsOn: p.endsOn as Day,
+	}));
+	const projectParts = touching === "line" ? new Map() : await projectPartsOf(scope, weeks);
+	for (const period of held) {
+		const ofWeek: ReadonlyMap<string, unknown> =
+			projectParts.get(
+				weekKey({
+					userId: period.userId,
+					startsOn: period.startsOn as Day,
+					endsOn: period.endsOn as Day,
+				}),
+			) ?? new Map();
+		const keys =
+			touching === "line" ? [null] : touching.projects.map((id) => partOfProject(id, ofWeek));
+		for (const key of new Set(keys)) {
+			const part = parts.get(period.id)?.find((p) => p.projectId === key);
+			if (!part || partIsOpen(part.status as PartStatus)) continue;
+			found.set(period.id, part.status === "approved" ? "approved" : "submitted");
+			if (part.status === "approved") break;
+		}
+	}
+	return found;
 }
 
 /**
@@ -479,7 +541,6 @@ export async function submitUnsubmitted(
 		),
 		leaveContext(scope, people, earliest, lastDay),
 	]);
-	const at = new Date(now);
 	let submitted = 0;
 	for (const userId of people) {
 		const reach = lockReachOf(through, zones.get(userId) ?? organisation.timeZone, now);
@@ -503,55 +564,16 @@ export async function submitUnsubmitted(
 				(e) => e.endedAt === null && e.spentOn > reach && e.spentOn <= period.endsOn,
 			);
 			if (running) continue;
-			const id = row?.id ?? uuidv7();
-			const write = row
-				? scope.periods.statements.update(
-						{
-							status: "submitted",
-							submittedAt: at,
-							decidedBy: null,
-							decidedAt: null,
-							comment: null,
-						},
-						(p) => and(eq(p.id, id), eq(p.status, row.status)),
-					)
-				: scope.periods.statements.insert({
-						id,
-						userId,
-						startsOn: period.startsOn,
-						endsOn: period.endsOn,
-						status: "submitted",
-						submittedAt: at,
-					});
-			const alone = !(await someoneElseDecides(scope, userId));
-			await scope.batch([
-				write,
-				scope.periodEvents.statements.insert({
-					periodId: id,
-					action: "submitted",
-					actorId: null,
-					comment: null,
-				}),
-				recordStatement(
-					scope,
-					null,
-					"period.submitted",
-					{ type: "period", id, ownerId: userId },
-					changes({ status }, { status: "submitted" }, ["status"]),
-					"system",
-				),
-				...(alone ? approvedAlone(scope, id, userId, at) : []),
-				// Its person is told the system submitted it, and why; its deciders that it waits (TS-049).
-				...notificationStatements(
-					scope,
-					await weeksSubmitted(
-						scope,
-						[{ userId, startsOn: period.startsOn, endsOn: period.endsOn, bySystem: true, alone }],
-						now,
-						`The lock date reached ${formatDay(through)}, and this organisation submits every week the lock date reaches.`,
-					),
-				),
-			]);
+			// The same writes as the person's own submission, the week's parts with them (TS-117).
+			const { id, statements } = await submissionStatements(scope, {
+				userId,
+				period,
+				row: row && status ? { id: row.id, status } : null,
+				actorId: null,
+				now,
+				why: `The lock date reached ${formatDay(through)}, and this organisation submits every week the lock date reaches.`,
+			});
+			await scope.batch(statements);
 			if (!row) periods.push({ ...period, id, status: "submitted" });
 			submitted++;
 		}

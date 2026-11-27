@@ -225,10 +225,10 @@ describe("locked days", () => {
 		]);
 
 		const days = ["2026-11-01", "2026-11-02", "2026-11-08", "2026-11-09", "2026-11-11"];
-		expect([...(await lockedDays(acme, ada, days))]).toEqual(["2026-11-02", "2026-11-08"]);
-		expect([...(await lockedDays(acme, bola, days))]).toEqual(["2026-11-09", "2026-11-11"]);
-		expect([...(await lockedDays(globex, ada, days))]).toEqual([]);
-		expect([...(await lockedDays(acme, ada, []))]).toEqual([]);
+		expect([...(await lockedDays(acme, ada, days, []))]).toEqual(["2026-11-02", "2026-11-08"]);
+		expect([...(await lockedDays(acme, bola, days, []))]).toEqual(["2026-11-09", "2026-11-11"]);
+		expect([...(await lockedDays(globex, ada, days, []))]).toEqual([]);
+		expect([...(await lockedDays(acme, ada, [], []))]).toEqual([]);
 	});
 });
 

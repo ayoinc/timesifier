@@ -101,11 +101,41 @@ const SHOWN: Record<string, string[]> = {
 };
 
 const VIEWERS: Record<string, Viewer> = {
-	owner: { role: "owner", managesTeams: false, clientsEnabled: true, keepsBilling: true },
-	admin: { role: "admin", managesTeams: false, clientsEnabled: true, keepsBilling: true },
-	finance: { role: "finance", managesTeams: false, clientsEnabled: true, keepsBilling: true },
-	manager: { role: "member", managesTeams: true, clientsEnabled: true, keepsBilling: true },
-	member: { role: "member", managesTeams: false, clientsEnabled: true, keepsBilling: true },
+	owner: {
+		role: "owner",
+		managesTeams: false,
+		leadsProjects: false,
+		clientsEnabled: true,
+		keepsBilling: true,
+	},
+	admin: {
+		role: "admin",
+		managesTeams: false,
+		leadsProjects: false,
+		clientsEnabled: true,
+		keepsBilling: true,
+	},
+	finance: {
+		role: "finance",
+		managesTeams: false,
+		leadsProjects: false,
+		clientsEnabled: true,
+		keepsBilling: true,
+	},
+	manager: {
+		role: "member",
+		managesTeams: true,
+		leadsProjects: false,
+		clientsEnabled: true,
+		keepsBilling: true,
+	},
+	member: {
+		role: "member",
+		managesTeams: false,
+		leadsProjects: false,
+		clientsEnabled: true,
+		keepsBilling: true,
+	},
 };
 
 /** What the bar under 600px holds for each kind of person, and what More holds under its headings. */

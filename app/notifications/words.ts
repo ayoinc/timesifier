@@ -80,6 +80,39 @@ export function weekDecided(
 }
 
 /**
+ * The words of a decision on a part of a week (TS-117) to its person: their
+ * time on `project`, or the rest of their timesheet when `project` is null,
+ * approved or returned, with the reason given for a return. `whole`: the
+ * decision approved the last part waiting, so the week is approved.
+ */
+export function partDecided(
+	week: WeekOf,
+	project: string | null,
+	decision: "approved" | "returned",
+	comment: string | null,
+	whole: boolean,
+): NewNotification {
+	const words = formatRange(week.startsOn, week.endsOn);
+	const what =
+		project === null
+			? `The rest of your timesheet for ${words}`
+			: `Your time on ${project} for ${words}`;
+	const title =
+		decision === "returned"
+			? `${what} was returned to you.`
+			: whole
+				? `${what} was approved, so your timesheet is approved.`
+				: `${what} was approved.`;
+	return {
+		userId: week.userId,
+		kind: "week-decided",
+		title,
+		body: comment ? `The reason given: ${comment}` : null,
+		path: pathBelow((slug) => weekPath(slug, week.startsOn)),
+	};
+}
+
+/**
  * To a person asked from Approvals › Not submitted to submit their week, by
  * `askedBy`, the name of whoever asked. Once a day for each week: a second
  * press on `today` adds nothing.

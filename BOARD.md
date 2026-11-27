@@ -69,6 +69,22 @@ Builder: an AI session on branch `ts-116-time-share`, pull request "TS-116 · Ti
 - **Tests:** `test/allocations/planned.test.ts`, `test/allocations/allocation-view.test.ts`, `test/timesheet/plan-line.test.ts`, `test/reports/planned.test.ts`, `test/integrations/allocations.test.ts`.
 - **Still to do before Done:** browser specs with keyboard and axe at 390 and 1280 px, light and dark, and their screenshots; the owner's look.
 
+### TS-117 · Approval by project
+
+Builder: an AI session on branch `ts-117-approval-by-project`, pull request #118. The owner's decision 7 of `research/projects-model.md`; decision 79. Migration `0044_approval_parts` only adds.
+
+- [x] A week's split into project parts and the line part; none without a delivery manager in the week. Test: `test/approvals/approval-by-project.test.ts` ("a week's parts", "planning parts").
+- [x] Each part's deciders for every role: owner, admin, Finance, account manager, delivery manager, line manager, member, contractor, stranger. Test: "who decides each part", "Approvals' tabs and the number on its link".
+- [x] D5 and D6: a delivery manager's own time to another delivery manager or owners and admins; one on leave skipped; a part nobody else may decide approved alone. Test: "nobody approves their own time (D5), and a manager on leave is skipped (D6)".
+- [x] Return and resubmit of one part; approved only when every part is; reopen returns every part. Test: "returning one part and submitting it again".
+- [x] Locks per part, withdraw refused once a part is approved, the lock date, auto-submit in parts. Test: "locks".
+- [x] Approve all on each tab. Test: "Approve all acts on parts".
+- [x] Unchanged without delivery managers. Test: "an organisation with no delivery managers".
+- [x] Notifications per part (TS-049 kinds `week-waiting`, `week-decided`), reminders and the number on Approvals' link count parts.
+- [x] The privacy notice, Who sees what and `docs/security.md`.
+- [x] Browser spec of both tabs with keyboard and axe at 390 and 1280 px, light and dark, port 5434, and screenshots in `cmux-assets/browser/timesifier/TS-117/`. Test: `e2e/approval-by-project.spec.ts`: the People tab's waiting parts, the rest of the week approved there, the Projects tab's people and hours per day, a part approved and another returned with a reason by the delivery manager, the person refused on the approved part and resubmitting the returned one, the week approved only once every part is, and Approvals unchanged in an organisation with no delivery managers.
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline. Run 45961828705 on 1e06bd5f.
+
 ### TS-115c · Project teams and assigned-only tracking
 
 Builder: an AI session on branch `ts-115c-project-teams`, pull request #112. Builds the owner's decisions 3 and 4 of `research/projects-model.md`. Decision 75 is this card's. Migration `0040_project_teams` only adds: `project_members` and its two overlap triggers, `setup_imports` (TS-115d's), and `organisations.project_tracking`, `anyone` by default. The CSV set-up import is TS-115d, stacked on this one.
