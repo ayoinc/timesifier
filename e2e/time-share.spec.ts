@@ -288,6 +288,7 @@ for (const viewport of [
 
 			test("time shares on the Team tab, Allocation, the Timesheet's plan and Reports › Planned, by keyboard", async ({
 				page,
+				refusals,
 			}) => {
 				const { email } = newPerson();
 				await signIn(page, email);
@@ -341,7 +342,10 @@ for (const viewport of [
 					`WP1 · Design · 2.5 days a week · ${daysOf(in7)}`,
 				);
 
-				// The same line again, from a later day: refused, and why.
+				// The same line again, from a later day: refused, and why. The project's
+				// action answers the refusal with 400, which the browser logs; the
+				// address is this organisation's own, so naming it here reaches no other test.
+				refusals[`${organisationPath(slug)}/projects/${website}.data`] = [400];
 				await tabTo(page, main.getByRole("button", { name: "Set a time share", exact: true }));
 				await page.keyboard.press("Enter");
 				await expect(set).toBeVisible();
@@ -417,7 +421,7 @@ for (const viewport of [
 				await expect(firstWeek(GRACE)).toContainText("Over-allocated by 3:45");
 				await expect(firstWeek(GRACE)).toContainText("Planned 41:15 · Tracked 7:30");
 				await expect(firstWeek(GRACE)).toContainText(
-					"ACME-001 · Website › WP2 Build: 22:30 planned, 7:30 tracked",
+					"ACME-001 · Website › WP2: 22:30 planned, 7:30 tracked",
 				);
 				await expect(firstWeek(MONA)).toContainText("Under-allocated: 30:00 free");
 				await expect(firstWeek(OWNER)).toContainText("Under-allocated: 11:15 free");
