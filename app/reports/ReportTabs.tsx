@@ -32,7 +32,7 @@ export function ReportTabs({
 			<LinkTabs
 				label="Report views"
 				current={current}
-				wraps
+				wraps="medium"
 				tabs={REPORT_VIEWS.filter(({ id }) => id !== "saved" && views.includes(id)).map(
 					({ id, label }) => ({
 						id,

@@ -4,9 +4,10 @@ import { and, gte, isNull, lte, or } from "drizzle-orm";
 import { among, type OrganisationScope, organisationScope } from "~/db";
 import { codedName } from "~/lib/codes";
 import { filterOf, matchingPeople, type Page, pageNumberOf, pageOf } from "~/lib/paging";
-import { isAdministrator } from "~/organisations/access";
+import { type Access, isAdministrator } from "~/organisations/access";
 import { accessOf } from "~/organisations/access.server";
 import type { Membership } from "~/organisations/membership.server";
+import { remembered } from "~/organisations/request-memo.server";
 import { periodAfter, periodContaining } from "~/periods/periods";
 import { sumsOf } from "~/reports/sums.server";
 import { peopleOf } from "~/teams/people.server";
@@ -15,8 +16,23 @@ import { dayParam, periodLabel, WEEK_PARAM } from "~/teams/words";
 import { addDays, type Day, dayOf } from "~/time/calendar";
 import { zoneOfMember } from "~/time/zones.server";
 
-import { type LoadKind, loadOf, type Share, shareLine } from "./allocations";
-import { allocatorOf, plansOf, shareSightOf, sharesOf, total } from "./allocations.server";
+import {
+	CLIENT_PARAM,
+	type LoadKind,
+	loadOf,
+	PROJECT_PARAM,
+	type Share,
+	shareLine,
+	TEAM_PARAM,
+} from "./allocations";
+import {
+	allocatorOf,
+	plansOf,
+	type ShareSight,
+	shareSightOf,
+	sharesOf,
+	total,
+} from "./allocations.server";
 
 // Team › Allocation (TS-116, decision 78): people by week, four weeks at a
 // time. Each week of a person shows their schedule, what they have available
@@ -32,11 +48,6 @@ import { allocatorOf, plansOf, shareSightOf, sharesOf, total } from "./allocatio
 
 /** How many weeks the view shows from the week asked for. */
 export const WEEKS_SHOWN = 4;
-
-/** The filters in the address. */
-export const TEAM_PARAM = "team";
-export const CLIENT_PARAM = "client";
-export const PROJECT_PARAM = "project";
 
 export interface AllocationLine {
 	/** The project and, where the line is one, its work package: "GLX-001 · Site › WP2". */
@@ -91,11 +102,39 @@ export interface AllocationView {
 	seesTeam: boolean;
 }
 
+/** What decides who `membership` sees on Team › Allocation, read once a request. */
+interface AllocationSight {
+	today: Day;
+	access: Access;
+	sight: ShareSight;
+}
+
 /**
- * The view as `membership` is shown it, or null for a viewer with nobody to
- * see: not an owner or admin, managing no team, leading and managing no
- * project.
+ * Who `membership` sees on Team › Allocation, or null for a viewer with
+ * nobody to see: not an owner or admin, managing no team, leading and
+ * managing no project. The organisation's layout asks it of whoever is not
+ * shown Team, so they get the 404 a stranger gets (`routes/app/organisation.tsx`),
+ * and the page asks it again; the request reads it once.
  */
+export function allocationSightOf(
+	membership: Membership,
+	now: number,
+): Promise<AllocationSight | null> {
+	const { organisation, user, role } = membership;
+	return remembered(organisation.id, `allocation sight of ${user.id}`, async () => {
+		const scope = organisationScope(env.DB, organisation.id);
+		const today = dayOf(now, await zoneOfMember(membership));
+		const access = await accessOf(membership);
+		const allocator = await allocatorOf(scope, { userId: user.id, role }, today);
+		const sight = await shareSightOf(scope, access, allocator);
+		if (!isAdministrator(role) && access.managed.size === 0 && sight.projects.size === 0) {
+			return null;
+		}
+		return { today, access, sight };
+	});
+}
+
+/** The view as `membership` is shown it, or null for a viewer with nobody to see (`allocationSightOf`). */
 export async function allocationView(
 	membership: Membership,
 	url: URL,
@@ -104,18 +143,10 @@ export async function allocationView(
 	const { organisation } = membership;
 	const scope = organisationScope(env.DB, organisation.id);
 	const params = url.searchParams;
-	const zone = await zoneOfMember(membership);
-	const today = dayOf(now, zone);
-	const access = await accessOf(membership);
-	const allocator = await allocatorOf(
-		scope,
-		{ userId: membership.user.id, role: membership.role },
-		today,
-	);
-	const sight = await shareSightOf(scope, access, allocator);
+	const viewer = await allocationSightOf(membership, now);
+	if (!viewer) return null;
+	const { today, access, sight } = viewer;
 	const administrator = isAdministrator(membership.role);
-	if (!administrator && access.managed.size === 0 && sight.projects.size === 0) return null;
-
 	const current = periodContaining(today, organisation.weekStartsOn);
 	const asked = dayParam(params.get(WEEK_PARAM));
 	const shown = asked ? periodContaining(asked, organisation.weekStartsOn) : current;

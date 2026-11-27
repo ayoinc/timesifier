@@ -12,7 +12,7 @@ import {
 } from "react-aria-components";
 import { Link } from "react-router";
 
-import { ALLOCATION_UNITS, UNIT_LABELS } from "~/allocations/allocations";
+import { ALLOCATION_UNITS, PROJECT_PARAM, UNIT_LABELS } from "~/allocations/allocations";
 import type { ListedShare } from "~/allocations/allocations.server";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
@@ -300,7 +300,7 @@ function Shares({
 				{team.manages && <Button onPress={() => setSetting(true)}>Set a time share</Button>}
 				{team.manages && (
 					<Link
-						to={`${teamTabPath(slug, "allocation")}?project=${encodeURIComponent(team.projectId)}`}
+						to={`${teamTabPath(slug, "allocation")}?${PROJECT_PARAM}=${encodeURIComponent(team.projectId)}`}
 						className={TEXT_LINK}
 					>
 						Allocation by week

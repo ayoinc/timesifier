@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 
-import { planLine } from "~/allocations/allocations";
-import { allocationView, CLIENT_PARAM, PROJECT_PARAM, TEAM_PARAM } from "~/allocations/view.server";
+import { CLIENT_PARAM, PROJECT_PARAM, planLine, TEAM_PARAM } from "~/allocations/allocations";
+import { allocationView } from "~/allocations/view.server";
 import { cx } from "~/components/cx";
 import { FilterBar, FilterField, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows } from "~/components/Ledger";

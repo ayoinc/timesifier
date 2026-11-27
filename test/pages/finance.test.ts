@@ -406,6 +406,9 @@ const ROLE_TABLE: Record<string, Row> = {
 			post: by<Post>("done", "done", 404, 403, 404),
 		},
 	},
+	// Team › Allocation (TS-116): whoever is shown Team, and delivery and account
+	// managers; Finance, who leads no project here, gets the stranger's 404.
+	"routes/app/allocation": { page: by(200, 200, 404, 200, 404) },
 	"routes/app/members": {
 		page: by(200, 200, 404, 200, 404),
 		form: {
@@ -641,6 +644,11 @@ const ROLE_TABLE: Record<string, Row> = {
 		address: () => `${REPORTS_AT}/utilisation${RANGE}`,
 		page: every(200),
 		form: savesItsReport("utilisation"),
+	},
+	// Planned (TS-116): every role's, each shown the shares they may see; it is not saved yet.
+	"routes/app/reports.planned": {
+		address: () => `${REPORTS_AT}/planned${RANGE}`,
+		page: every(200),
 	},
 	"routes/app/reports.leave": {
 		address: () => `${REPORTS_AT}/leave${RANGE}`,

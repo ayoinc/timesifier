@@ -40,6 +40,11 @@ export const UNIT_MAX: Record<AllocationUnit, number> = {
 export const OVER_SHARE = 1.05;
 export const UNDER_SHARE = 0.8;
 
+/** Team › Allocation's filters in the address. */
+export const TEAM_PARAM = "team";
+export const CLIENT_PARAM = "client";
+export const PROJECT_PARAM = "project";
+
 /** A time share as the rules read it. `amount` is in hundredths of `unit`. */
 export interface Share {
 	id: string;
@@ -234,10 +239,3 @@ export const SHARE_PROBLEMS: Record<ShareProblem, string> = {
 		"Give an amount: up to 7 days a week, 168 hours a week or 100% of their schedule, more than none.",
 	"work-package": "That work package is not one of this project's.",
 };
-
-/** The intent of the project's Team tab that sets a person's time share. */
-export const SHARE_INTENT = "set-share";
-/** The intent that changes a time share from a day, or ends it. */
-export const CHANGE_SHARE_INTENT = "change-share";
-/** The intent that removes a time share. */
-export const REMOVE_SHARE_INTENT = "remove-share";

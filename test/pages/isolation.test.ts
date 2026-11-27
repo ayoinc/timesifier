@@ -135,6 +135,8 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/integrations/invoices-export",
 				"/app/acme/team",
 				"/app/acme/team/members",
+				// Team › Allocation, which delivery and account managers open too (TS-116).
+				"/app/acme/team/allocation",
 				// A person's contract, beside their Week (TS-098a).
 				"/app/acme/team/people/x/contract",
 				"/app/acme/team/invitations",
@@ -152,6 +154,7 @@ describe("the list of an organisation's routes", () => {
 				"/app/acme/reports/contractors",
 				"/app/acme/reports/contractors/export",
 				"/app/acme/reports/utilisation",
+				"/app/acme/reports/planned",
 				"/app/acme/reports/profitability",
 				"/app/acme/reports/leave",
 				"/app/acme/reports/leave/export",
