@@ -327,6 +327,11 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		 */
 		notSubmitted:
 			notSubmitted?.map((p) => (p.address ? shownName({ email: p.address }) : p.name)) ?? null,
+		/**
+		 * Whether nobody's weeks come to the viewer at all, as for the only owner
+		 * of an organisation, whose own week is never theirs to decide (D5, 47).
+		 */
+		decidesOnNobody: people.length === 0,
 		/** The requests for leave waiting for this person's decision, whatever their days (TS-061). */
 		leaveWaiting: leaveRequests.pending.map((r) => ({
 			id: r.id,
@@ -619,6 +624,9 @@ export async function action({ request, context }: Route.ActionArgs) {
 type Loaded = Route.ComponentProps["loaderData"];
 type Target = { id: string; name: string; overLimit?: string | null };
 
+/** What Not submitted says when nobody's weeks come to the viewer at all. */
+const NOBODY = "Nobody's weeks come to you to approve.";
+
 /** What a status with nothing in it says, for the week shown. */
 const NOTHING: Record<(typeof STATUSES)[number], string> = {
 	pending: "Nothing is waiting for you this week.",
@@ -736,7 +744,9 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 						</Button>
 					</div>
 				)}
-				{rows === null ? (
+				{query.status === "not-submitted" && loaderData.decidesOnNobody ? (
+					<EmptySheet heading={status}>{NOBODY}</EmptySheet>
+				) : rows === null ? (
 					<EmptySheet heading={status}>
 						This week has not ended yet. Who has not submitted it is listed once it has.
 					</EmptySheet>

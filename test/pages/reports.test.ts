@@ -458,6 +458,14 @@ describe("a report", () => {
 		const html = await pageBody(await open(`${REPORTS}?${WEEK}`, ada));
 		expect(textOf(html)).not.toContain("Show report");
 	});
+
+	it("shows an Expenses report with no expenses as £0.00, as the other reports show nothing", async () => {
+		const text = textOf(await pageBody(await open(`${REPORTS}/expenses?${WEEK}`, ada)));
+		expect(text).toContain("No expenses in this range.");
+		expect(text).toMatch(/To pay back £0\.00/);
+		expect(text).toMatch(/Total £0\.00/);
+		expect(text).not.toContain("None");
+	});
 });
 
 describe("the export", () => {
