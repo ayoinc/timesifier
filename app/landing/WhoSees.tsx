@@ -68,9 +68,9 @@ export function WhoSeesWhat({ leaving }: WhoSeesWhatProps) {
 					in hours, assigns members to it, sets their time shares and manages its work packages, but
 					names no other delivery manager and sees no rate or money unless their role shows it. Like
 					an account manager, they see that project's people in Team › Allocation. Where a submitted
-					week has time on their project, they approve or return that time, each person's days on it,
-					never their own; the rest of the week stays with the person's manager. Everyone else on a
-					team sees their own days and time share on it.
+					week has time on their project, they approve or return that time, each person's days on
+					it, never their own; the rest of the week stays with the person's manager. Everyone else
+					on a team sees their own days and time share on it.
 				</Row>
 				<Row term="Contractors">
 					A person whose contract is a contractor's, or whom an owner or admin marks as a contractor
