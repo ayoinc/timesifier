@@ -1,6 +1,7 @@
 import { use, useEffect, useId, useRef, useState, ViewTransition } from "react";
 import { Link, useFetcher } from "react-router";
 
+import { planLine } from "~/allocations/allocations";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import { PeriodStepper } from "~/components/PeriodStepper";
@@ -25,7 +26,7 @@ import { dayNumber, useDayFormat, usePeriodFormat } from "./format";
 import { PeriodHeader } from "./Submission";
 import { type GridCell, type GridRow, isTypable, rowKey, weekSheet } from "./sheets";
 import { ShortcutsSheet, useTimesheetKeys } from "./shortcuts";
-import type { WeekData } from "./timesheet.server";
+import type { LinePlan, WeekData } from "./timesheet.server";
 import { dayPath, timerAction, weekPath } from "./views";
 
 /**
@@ -195,12 +196,19 @@ function Grid({
 	onSaved: (said: string) => void;
 	onProblem: (problem: string) => void;
 }) {
-	const { days, lockedDays, projects, sheet, away, rules } = data;
+	const { days, lockedDays, projects, sheet, away, rules, plans } = data;
 	const formatDay = useDayFormat("short");
 	const formatLong = useDayFormat();
 	const terms = useTerms();
 	const lineName = useLineName(projects);
+	const shortName = useShortLineName(projects);
 	const nameOf = (row: GridRow) => lineName(lineKey(row.projectId, row.workPackageId));
+	// Each share is said once (TS-116): under its line's row, or below the grid when the line has none.
+	const planOf = new Map(plans.map((plan) => [plan.line, plan]));
+	const inGrid = new Set(
+		rows.filter((row) => !row.overtime).map((row) => lineKey(row.projectId, row.workPackageId)),
+	);
+	const offGrid = plans.filter((plan) => !inGrid.has(plan.line));
 	const ruleOf = (day: string) => rules.find((rule) => rule.day === day);
 	// The time of one kind on a day, across every row: what a cell's change is checked against.
 	const kindTotal = (day: string, overtime: boolean) => {
@@ -291,7 +299,13 @@ function Grid({
 											<OvertimeTag />
 										</span>
 									) : (
-										<RowName name={nameOf(row)} />
+										<>
+											<RowName name={nameOf(row)} />
+											<RowPlan
+												plan={planOf.get(lineKey(row.projectId, row.workPackageId))}
+												name={shortName(row.projectId, row.workPackageId)}
+											/>
+										</>
 									)}
 								</th>
 								{row.cells.map((cell) => (
@@ -391,6 +405,7 @@ function Grid({
 				</table>
 			</div>
 			<ClosedDays rules={rules} />
+			<OffGridPlans plans={offGrid} name={lineName} />
 		</>
 	);
 }
@@ -409,6 +424,53 @@ function RowName({ name }: { name: string }) {
 				{name.slice(at)}
 			</span>
 		</>
+	);
+}
+
+/**
+ * What a row's time share plans for the week beside what is tracked on it
+ * (TS-116, decision 78): "WP2: 22:30 planned, 18:00 tracked". Words, so a line
+ * over its plan says so without colour; they wrap rather than cut short.
+ */
+function RowPlan({ plan, name }: { plan: LinePlan | undefined; name: string }) {
+	if (!plan) return null;
+	return (
+		<span className="mt-0.5 block text-body-small text-on-surface-variant">
+			{planLine(name, plan.plannedMinutes, plan.trackedSeconds)}
+		</span>
+	);
+}
+
+/**
+ * The shares whose line has no row in the grid (TS-116): a work package with
+ * no time yet, or a whole project whose rows are its work packages. Each is
+ * said in the same words as a row's, by the line's full name.
+ */
+function OffGridPlans({
+	plans,
+	name,
+}: {
+	plans: readonly LinePlan[];
+	name: (line: string) => string;
+}) {
+	const labelId = useId();
+	if (plans.length === 0) return null;
+	return (
+		<div className="mt-3">
+			<p id={labelId} className="text-label-large text-on-surface">
+				Planned this week
+			</p>
+			<ul
+				aria-labelledby={labelId}
+				className="mt-1 flex flex-col gap-1 text-body-medium text-on-surface-variant"
+			>
+				{plans.map((plan) => (
+					<li key={plan.line}>
+						{planLine(name(plan.line), plan.plannedMinutes, plan.trackedSeconds)}
+					</li>
+				))}
+			</ul>
+		</div>
 	);
 }
 
@@ -639,6 +701,23 @@ function useLineName(projects: WeekData["projects"]) {
 		const name = named(projectId, workPackageId);
 		if (project.archived) return `${name} (archived)`;
 		return closed(projectId, workPackageId) ? `${name} (closed)` : name;
+	};
+}
+
+/**
+ * How a row's plan line names its line (TS-116): the work package's code,
+ * "WP2", else the project's code, else its name. The row's own name above it
+ * says the rest.
+ */
+function useShortLineName(projects: WeekData["projects"]) {
+	const choices = use(TrackChoicesContext);
+	return (projectId: string, workPackageId: string | null): string => {
+		const project = projects.find((p) => p.id === projectId);
+		const wp =
+			workPackageId === null
+				? undefined
+				: choices?.workPackages[projectId]?.find((each) => each.id === workPackageId);
+		return wp?.code ?? project?.code ?? project?.name ?? "";
 	};
 }
 

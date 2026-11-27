@@ -69,6 +69,7 @@ export const STORED = [
 					"projects",
 					"work_packages",
 					"project_members",
+					"allocations",
 					"project_tasks",
 					"project_tags",
 					"tasks",

@@ -26,10 +26,10 @@ async function tabTo(page: Page, element: Locator) {
 	await expectFocusShown(element);
 }
 
-/** From a Team page's heading, Tab goes through its four tabs, which sit under it (TS-091, W20). */
+/** From a Team page's heading, Tab goes through its five tabs, which sit under it (TS-091, W20; Allocation, TS-116). */
 async function tabThroughTeamTabs(page: Page) {
 	const tabs = page.getByRole("group", { name: "Team pages" });
-	for (const tab of ["This week", "Teams", "Members", "Invitations"]) {
+	for (const tab of ["This week", "Allocation", "Teams", "Members", "Invitations"]) {
 		await tabTo(page, tabs.getByRole("link", { name: tab, exact: true }));
 	}
 }

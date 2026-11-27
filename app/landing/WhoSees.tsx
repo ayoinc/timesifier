@@ -43,28 +43,32 @@ export function WhoSeesWhat({ leaving }: WhoSeesWhatProps) {
 					timesheets, expenses with their receipts, leave with its kind, contracts without their pay
 					but with the adjustments to their leave, and records in the activity log of the people in
 					the teams they manage, and approves or returns their timesheets and leave, never their
-					own. A manager sees no rate, pay, invoice or estimate.
+					own. A manager sees no rate, pay, invoice or estimate. A manager also sees their people's
+					time shares of every project, week by week in Team › Allocation.
 				</Row>
 				<Row term="Members">
 					Their own time, timesheets, expenses, leave with its adjustments and contract with its
-					pay, and the history of their own entries; the organisation's projects; who belongs to the
-					organisation, with their names and email addresses; and that a colleague is on leave, but
-					not which kind. A member can share a report they saved with other members, who see in it
-					only what their own role lets them.
+					pay, their own time shares, and the history of their own entries; the organisation's
+					projects; who belongs to the organisation, with their names and email addresses; and that
+					a colleague is on leave, but not which kind. A member can share a report they saved with
+					other members, who see in it only what their own role lets them.
 				</Row>
 				<Row term="Account managers">
 					Any member an owner or admin names as a client's account manager creates that client's
-					projects, manages their work packages and their teams, names their delivery managers, and
-					sees each of those projects' team, the hours tracked to it and its budget in hours, but no
-					rate or money unless their role shows it. Owners, admins and Finance see who each client's
-					account managers are.
+					projects, manages their work packages, their teams and their people's time shares, names
+					their delivery managers, and sees each of those projects' team, the hours tracked to it
+					and its budget in hours, but no rate or money unless their role shows it. In Team ›
+					Allocation they see the people on those projects week by week, and of other projects only
+					how much is planned in all. Owners, admins and Finance see who each client's account
+					managers are.
 				</Row>
 				<Row term="Delivery managers">
 					A person an owner, admin or account manager puts on a project's team as its delivery
 					manager, while they are, sees that project's team, the hours tracked to it and its budget
-					in hours, assigns members to it and manages its work packages, but names no other delivery
-					manager and sees no rate or money unless their role shows it. Everyone else on a team sees
-					their own days on it.
+					in hours, assigns members to it, sets their time shares and manages its work packages, but
+					names no other delivery manager and sees no rate or money unless their role shows it. Like
+					an account manager, they see that project's people in Team › Allocation. Everyone else on
+					a team sees their own days and time share on it.
 				</Row>
 				<Row term="Contractors">
 					A person whose contract is a contractor's, or whom an owner or admin marks as a contractor

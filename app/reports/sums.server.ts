@@ -22,7 +22,8 @@ import { entriesIn, type ReportRequest } from "./reports.server";
  * pricing each of its entries and adding them up. How many lines there are is
  * bounded by people × projects × (tasks) × (rate changes in the range + 1),
  * whatever the number of entries. `byDay` adds the time of each day, alone,
- * by project for a week's timetable, or by person for a day's people.
+ * by project for a week's timetable, by person for a day's people, or by
+ * person and line (project and work package) for Allocation's weeks (TS-116).
  */
 
 export interface ReportSums {
@@ -41,7 +42,7 @@ export interface SumsOptions {
 	 * time of a project billed by task is kept apart by task.
 	 */
 	money?: { rates: readonly Pick<RateRow, "effectiveFrom">[]; byTask: readonly string[] };
-	byDay?: "day" | "day-and-project" | "day-and-person";
+	byDay?: "day" | "day-and-project" | "day-and-person" | "day-person-and-line";
 }
 
 /**
@@ -85,6 +86,9 @@ export async function sumsOf(
 	if (byDay === "day") groupings.push(["day", "overtime"]);
 	if (byDay === "day-and-project") groupings.push(["day", "project", "overtime"]);
 	if (byDay === "day-and-person") groupings.push(["day", "user", "overtime"]);
+	if (byDay === "day-person-and-line") {
+		groupings.push(["day", "user", "project", "workPackage", "overtime"]);
+	}
 
 	const [lines, projects, clients, packages] = await Promise.all([
 		scope.timeEntries.sums(

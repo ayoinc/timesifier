@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { Link, Outlet, useParams } from "react-router";
 
+import { allocationSightOf } from "~/allocations/view.server";
 import { pendingApprovalsOf } from "~/approvals/approvals.server";
 import { logoPath } from "~/brand/paths";
 import { organisationCountOf } from "~/db";
@@ -14,6 +15,7 @@ import {
 } from "~/organisations/membership.server";
 import { signedInContext } from "~/routes/auth/session.server";
 import {
+	ALLOCATION_SEGMENT,
 	CONTRACT_SEGMENT,
 	canSee,
 	destinationIndex,
@@ -74,7 +76,7 @@ const PATTERN_SLUG = `:${ORGANISATION_PARAM}`;
  * read, so an address below a hidden destination that holds no page gets the
  * stranger's 404 too, and not the one drawn in the person's own shell.
  */
-const requireDestination: Route.MiddlewareFunction = ({ pattern, params, context }) => {
+const requireDestination: Route.MiddlewareFunction = async ({ pattern, params, context }) => {
 	const matched = pattern.endsWith("/*") ? `${pattern.slice(0, -1)}${params["*"] ?? ""}` : pattern;
 	const path = matched.startsWith("/") ? matched : `/${matched}`;
 	const at = destinations[destinationIndex(PATTERN_SLUG, path)];
@@ -83,7 +85,13 @@ const requireDestination: Route.MiddlewareFunction = ({ pattern, params, context
 	const financeReads =
 		path === `${organisationPath(PATTERN_SLUG)}/${CONTRACT_SEGMENT}` &&
 		maySeeRates(membership.role);
-	if (at && !financeReads && !canSee(viewerOf(membership), at.id)) throw notFound();
+	// Team › Allocation (TS-116) is opened by a project's delivery managers and
+	// its client's account managers too, who are not shown Team; anyone else
+	// not shown Team gets the stranger's 404 there.
+	const allocation = path === `${organisationPath(PATTERN_SLUG)}/${ALLOCATION_SEGMENT}`;
+	if (at && !financeReads && !canSee(viewerOf(membership), at.id)) {
+		if (!allocation || !(await allocationSightOf(membership, Date.now()))) throw notFound();
+	}
 	// A page of a destination that shows money is refused the same way to anyone who does not see rates.
 	const rest = path.slice(organisationPath(PATTERN_SLUG).length);
 	if (RATES_ONLY.some((page) => rest.startsWith(page)) && !maySeeRates(membership.role)) {

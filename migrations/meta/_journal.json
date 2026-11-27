@@ -295,6 +295,13 @@
 			"when": 1795511340922,
 			"tag": "0042_waiting_assignments",
 			"breakpoints": true
+		},
+		{
+			"idx": 42,
+			"version": "6",
+			"when": 1795736908746,
+			"tag": "0043_allocations",
+			"breakpoints": true
 		}
 	]
 }

@@ -32,6 +32,10 @@ export const ActivityAction = z.enum([
 	"project.member_removed",
 	// TS-115d: an assignment a set-up import made for an invited person, not made when they joined.
 	"project.member_skipped",
+	// TS-116: a person's time share of a project set, changed from a day or ended, or removed.
+	"project.share_set",
+	"project.share_changed",
+	"project.share_removed",
 	"work_package.created",
 	"work_package.updated",
 	"work_package.closed",

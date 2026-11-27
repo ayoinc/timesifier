@@ -14,16 +14,16 @@ Authorization: Bearer tsf_…
 
 A token acts as the person who made it, with their role and teams as they are at each request. It never reaches more than that person could on the pages; the scopes chosen when it was made narrow it further:
 
-| Scope               | Lets the token                                                       |
-| ------------------- | -------------------------------------------------------------------- |
-| `time:read`         | Read time entries, and `GET /me`                                     |
-| `time:write`        | Add, change and delete the maker's own time entries                  |
-| `descriptions:read` | Read entry descriptions and expense notes                            |
-| `projects:read`     | Read projects, their teams, work packages, clients and tasks         |
-| `projects:write`    | Assign people to projects' teams, and change and end their stretches |
-| `people:read`       | Read people and their leave                                          |
-| `expenses:read`     | Read expenses                                                        |
-| `invoices:read`     | Read invoices                                                        |
+| Scope               | Lets the token                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| `time:read`         | Read time entries, and `GET /me`                                                            |
+| `time:write`        | Add, change and delete the maker's own time entries                                         |
+| `descriptions:read` | Read entry descriptions and expense notes                                                   |
+| `projects:read`     | Read projects, their teams and time shares, work packages, clients and tasks                |
+| `projects:write`    | Assign people to projects' teams, change and end their stretches, and set their time shares |
+| `people:read`       | Read people and their leave                                                                 |
+| `expenses:read`     | Read expenses                                                                               |
+| `invoices:read`     | Read invoices                                                                               |
 
 A token that is revoked, has expired, or whose maker has left the organisation is answered `401`.
 
@@ -37,23 +37,26 @@ Everything is JSON. A list is `{ "data": [ … ] }`; a list that pages adds `"ne
 
 An error is `{ "error": { "code", "message" } }`, and for `422` also `"fields"`, each field's problem:
 
-| Status | Code                     | When                                                                         |
-| ------ | ------------------------ | ---------------------------------------------------------------------------- |
-| 400    | `bad_json`               | The body is not JSON                                                         |
-| 401    | `unauthorized`           | No working token                                                             |
-| 403    | `insufficient_scope`     | The token lacks the scope                                                    |
-| 403    | `forbidden`              | The maker's role may not do it, or it is someone else's entry                |
-| 404    | `not_found`              | Nothing at that address, or nothing the maker may see there                  |
-| 405    | `method_not_allowed`     | `Allow` says which methods are                                               |
-| 409    | `locked`, `running`      | The day is locked (submitted, approved, lock date), or the entry is running  |
-| 409    | `invoiced`               | The entry is on an invoice; `message` names it and who can let it go         |
-| 409    | `overlaps`, `has_time`   | A person's stretches on a team would share a day, or one taken away has time |
-| 413    | `too_large`              | A body over 16 KB                                                            |
-| 415    | `unsupported_media_type` | A body that is not `application/json`                                        |
-| 422    | `invalid`                | Values that cannot be used                                                   |
-| 422    | `ends_before_start`      | A stretch on a team that ends before it starts                               |
-| 422    | `not_member`             | A person put on a team who is not a member of the organisation               |
-| 429    | `rate_limited`           | See above                                                                    |
+| Status | Code                     | When                                                                                    |
+| ------ | ------------------------ | --------------------------------------------------------------------------------------- |
+| 400    | `bad_json`               | The body is not JSON                                                                    |
+| 401    | `unauthorized`           | No working token                                                                        |
+| 403    | `insufficient_scope`     | The token lacks the scope                                                               |
+| 403    | `forbidden`              | The maker's role may not do it, or it is someone else's entry                           |
+| 404    | `not_found`              | Nothing at that address, or nothing the maker may see there                             |
+| 405    | `method_not_allowed`     | `Allow` says which methods are                                                          |
+| 409    | `locked`, `running`      | The day is locked (submitted, approved, lock date), or the entry is running             |
+| 409    | `invoiced`               | The entry is on an invoice; `message` names it and who can let it go                    |
+| 409    | `overlaps`               | Two stretches of a person on a team, or two time shares on one line, would share a day  |
+| 409    | `has_time`               | A stretch taken away from a team has time on the project                                |
+| 413    | `too_large`              | A body over 16 KB                                                                       |
+| 415    | `unsupported_media_type` | A body that is not `application/json`                                                   |
+| 422    | `invalid`                | Values that cannot be used                                                              |
+| 422    | `ends_before_start`      | A stretch on a team, or a time share, that ends before it starts                        |
+| 422    | `not_member`             | A person put on a team, or given a time share, who is not a member of the organisation  |
+| 422    | `amount`                 | A time share of none, or of more than 7 days or 168 hours a week, or 100% of a schedule |
+| 422    | `work_package`           | A time share of a work package that is not one of the project's                         |
+| 429    | `rate_limited`           | See above                                                                               |
 
 ## Who sees what
 
@@ -66,7 +69,7 @@ The pages' rules (`docs/security.md`, "Whose time", "Rates and money"):
 | Manager (manages a team) | Their own and their teams' members' | Themselves and teams | No      | No       | No            | Own and teams' |
 | Member, contractor       | Their own                           | Themselves           | No      | No       | No            | Their own      |
 
-Everyone sees approved leave of everyone, as the live "not working" status does; requests not yet approved only their own. Every role writes only its own entries. Who sees and changes a project's team is under `GET /project_members`.
+Everyone sees approved leave of everyone, as the live "not working" status does; requests not yet approved only their own. Every role writes only its own entries. Who sees and changes a project's team is under `GET /project_members`; who sees and sets time shares, under `GET /allocations`.
 
 ## Endpoints
 
@@ -143,6 +146,54 @@ Either `{ "ends_on": "2026-12-31" }` (null: it runs on) or `{ "role": "delivery_
 ### `DELETE /project_members/{id}` — `projects:write`
 
 `204`. Takes away a stretch put there in error. One in which its person has tracked time to the project answers `409` `has_time`: end it instead, so the time it let in stays explained.
+
+### `GET /allocations` — `projects:read`
+
+Query: `user_id`, `project_id`, `from`, `to` (days, both included: the shares that run on any day between them; left out, every share), `per_page`, `cursor`. By `id`. Each time share (TS-116): so many days or hours a week, or a percentage of the person's schedule, of a project or of one of its work packages, from a day to a day or on. What it plans on a day is read from the person's work schedule that day, less public holidays and approved leave.
+
+```json
+{
+	"id": "0193…",
+	"user_id": "…",
+	"project_id": "…",
+	"work_package_id": null,
+	"starts_on": "2026-11-02",
+	"ends_on": null,
+	"amount": 2.5,
+	"unit": "days",
+	"amount_text": "2.5 days a week"
+}
+```
+
+`work_package_id` is null for a share of the whole project. `amount` is in its `unit`: `days` a week (up to 7), `hours` a week (up to 168; `22.5` is 22:30) or `percent` of the person's schedule (up to 100), to two decimal places; `amount_text` says it in words (`22:30 a week`, `50% of their schedule`). `ends_on` is the share's last day, null while it runs on. No two shares of one person on one line, the project or one work package, share a day. Owners and admins see every share; anyone else sees their own, those of the people in teams they manage, and every share on the projects they lead as delivery manager or whose client they are account manager of. A `project_id` that is not the organisation's answers `404`.
+
+### `GET /allocations/{id}` — `projects:read`
+
+One share, or 404 where the maker may not see it.
+
+### `POST /allocations` — `projects:write`
+
+```json
+{
+	"user_id": "…",
+	"project_id": "…",
+	"work_package_id": "…",
+	"starts_on": "2026-11-02",
+	"ends_on": "2027-03-31",
+	"amount": 22.5,
+	"unit": "hours"
+}
+```
+
+`201` with the share. `work_package_id` left out or null, it is a share of the whole project; `ends_on` left out or null, it runs on. Owners, admins, the client's account managers and the project's delivery managers set its time shares; anyone else is answered `403` `forbidden`. A share that shares a day with another of the person's on the same line answers `409` `overlaps`; one that ends before it starts `422` `ends_before_start`; an amount of none or more than the unit holds `422` `amount`; a work package of another project `422` `work_package`; a person who is not a member of the organisation `422` `not_member`.
+
+### `PATCH /allocations/{id}` — `projects:write`
+
+Either `{ "ends_on": "2026-12-31" }` (null: it runs on) or `{ "amount": 50, "unit": "percent", "from": "2026-12-01" }` (`from` left out, the share's first day). An amount changed from the share's first day, or before, is the share's own; from a later day, the share ends the day before and a new one of the new amount runs on to where it ran, so the weeks before keep their plan, and the answer is that new share. The same people as for `POST` change a share.
+
+### `DELETE /allocations/{id}` — `projects:write`
+
+`204`. Removes a share, all of its days. To keep the weeks already planned, end it instead.
 
 ### `GET /time_entries` — `time:read`
 

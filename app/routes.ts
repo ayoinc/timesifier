@@ -37,6 +37,7 @@ import { LEAVE_EXPORT_SEGMENT, REPORT_VIEW_ROUTES } from "./reports/views";
 import { SETUP_IMPORT_SEGMENT } from "./setup-import/paths";
 import {
 	ACCOUNT_SEGMENT,
+	ALLOCATION_SEGMENT,
 	APP_PATH,
 	CONTRACT_SEGMENT,
 	destination,
@@ -76,6 +77,7 @@ const organisation = route(`:${ORGANISATION_PARAM}`, "routes/app/organisation.ts
 	}),
 	route(MEMBERS_SEGMENT, "routes/app/members.tsx"),
 	route(INVITATIONS_SEGMENT, "routes/app/invitations.tsx"),
+	route(ALLOCATION_SEGMENT, "routes/app/allocation.tsx"),
 	route(PEOPLE_IMPORT_SEGMENT, "routes/app/invitations.import.tsx"),
 	route(CONTRACT_SEGMENT, "routes/app/contract.tsx"),
 	route(SCHEDULES_SEGMENT, "routes/app/schedules.tsx"),

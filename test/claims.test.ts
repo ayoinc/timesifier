@@ -848,6 +848,8 @@ it("the features page counts and lists what the application holds", async () => 
 	for (const { id, label } of REPORT_VIEWS) {
 		if (id !== "saved") expect(text).toContain(label.toLowerCase());
 	}
+	// Planned is named for what it sets against what, so the list reads naturally (TS-116).
+	expect(text).toContain("Reports of time, utilisation, planned against tracked, profitability,");
 	// What locks an entry, as the locks name it.
 	expect(text).toContain(
 		"while it is submitted, approved and invoiced, or before the organisation's lock date",

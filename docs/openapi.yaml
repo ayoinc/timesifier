@@ -142,6 +142,74 @@ components:
                 On or before its first day, the stretch's own role changes;
                 later, it ends the day before and a new stretch of the new role
                 runs on.
+    Allocation:
+      type: object
+      description: >
+        A person's time share of a project, or of one of its work packages
+        (TS-116). No two shares of one person on one line share a day.
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        project_id: { type: string }
+        work_package_id:
+          type: [string, "null"]
+          description: Null for a share of the whole project.
+        starts_on: { type: string, format: date }
+        ends_on:
+          type: [string, "null"]
+          format: date
+          description: Its last day; null while it runs on.
+        amount:
+          type: number
+          description: In its unit, to two decimal places, for example 2.5 days or 22.5 hours.
+        unit:
+          type: string
+          enum: [days, hours, percent]
+          description: Days a week, hours a week, or a percentage of the person's schedule.
+        amount_text:
+          type: string
+          description: "The amount in words, for example 2.5 days a week, 22:30 a week, 50% of their schedule."
+    NewAllocation:
+      type: object
+      additionalProperties: false
+      required: [user_id, project_id, starts_on, amount, unit]
+      properties:
+        user_id: { type: string, description: A member of the organisation. }
+        project_id: { type: string }
+        work_package_id:
+          type: [string, "null"]
+          description: One of the project's; left out or null, a share of the whole project.
+        starts_on: { type: string, format: date }
+        ends_on:
+          type: [string, "null"]
+          format: date
+          description: Left out or null, it runs on.
+        amount:
+          type: number
+          exclusiveMinimum: 0
+          description: Up to 7 days, 168 hours or 100 percent, to two decimal places.
+        unit: { type: string, enum: [days, hours, percent] }
+    AllocationChange:
+      description: Its last day, or its amount from a day.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [ends_on]
+          properties:
+            ends_on: { type: [string, "null"], format: date, description: Null, it runs on. }
+        - type: object
+          additionalProperties: false
+          required: [amount, unit]
+          properties:
+            amount: { type: number, exclusiveMinimum: 0 }
+            unit: { type: string, enum: [days, hours, percent] }
+            from:
+              type: string
+              format: date
+              description: >
+                Left out, the share's first day. On or before its first day,
+                the share's own amount changes; later, it ends the day before
+                and a new share of the new amount runs on.
     Error:
       type: object
       required: [error]
@@ -370,6 +438,90 @@ paths:
       description: Scope projects:write. 409 has_time when its person tracked time to the project in it.
       responses:
         "204": { description: Taken away. }
+        default: { $ref: "#/components/responses/Error" }
+  /allocations:
+    get:
+      summary: Time shares, by id
+      description: >
+        Scope projects:read. Every share to owners and admins; anyone else
+        their own, those of the people in teams they manage, and every share on
+        the projects they lead as delivery manager or whose client they are
+        account manager of. from and to keep the shares that run on any day
+        between them. A project_id that is not the organisation's answers 404.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/PerPage"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of time shares.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Page"
+                  - properties:
+                      data: { type: array, items: { $ref: "#/components/schemas/Allocation" } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      summary: Gives a person a time share of a project or work package
+      description: >
+        Scope projects:write. Owners, admins, the client's account managers and
+        the project's delivery managers. 409 overlaps; 422 ends_before_start,
+        amount, work_package or not_member. Recorded in the activity log via
+        API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NewAllocation" }
+      responses:
+        "201":
+          description: The share.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Allocation" }
+        default: { $ref: "#/components/responses/Error" }
+  /allocations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      summary: One time share
+      description: Scope projects:read.
+      responses:
+        "200":
+          description: The share.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Allocation" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      summary: Ends a time share, or changes its amount from a day
+      description: >
+        Scope projects:write. The same people as for POST. Answers the share as
+        it is after, the new one when the amount changed from a later day.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AllocationChange" }
+      responses:
+        "200":
+          description: The share.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Allocation" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      summary: Removes a time share, all of its days
+      description: Scope projects:write. The same people as for POST.
+      responses:
+        "204": { description: Removed. }
         default: { $ref: "#/components/responses/Error" }
   /time_entries:
     get:
