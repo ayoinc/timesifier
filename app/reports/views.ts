@@ -1,12 +1,13 @@
 import { destination, destinationPath } from "../shell/destinations";
 
 // The views of Reports, each a page below it (TS-068, TS-070, TS-071, TS-079,
-// TS-080, TS-084): Time, the report of TS-014a, at Reports itself;
-// Utilisation, Profitability, Leave, Expenses and Contractors beside it; and
-// the reports people have saved. Each is a page of its own, so a view is a
-// link and its query travels in the address, and the tabs are the one way in
-// to each (TS-092). The route configuration (app/routes.ts) reads this file in
-// Node, so it imports by relative path, as that file does.
+// TS-080, TS-084, TS-116): Time, the report of TS-014a, at Reports itself;
+// Utilisation, Planned (time shares against tracked time, decision 78),
+// Profitability, Leave, Expenses and Contractors beside it; and the reports
+// people have saved. Each is a page of its own, so a view is a link and its
+// query travels in the address, and the tabs are the one way in to each
+// (TS-092). The route configuration (app/routes.ts) reads this file in Node,
+// so it imports by relative path, as that file does.
 
 export const REPORT_VIEWS = [
 	{ id: "time", label: "Time", segment: "", file: "" },
@@ -15,6 +16,12 @@ export const REPORT_VIEWS = [
 		label: "Utilisation",
 		segment: "utilisation",
 		file: "routes/app/reports.utilisation.tsx",
+	},
+	{
+		id: "planned",
+		label: "Planned",
+		segment: "planned",
+		file: "routes/app/reports.planned.tsx",
 	},
 	{
 		id: "profitability",

@@ -1,8 +1,26 @@
 import { env } from "cloudflare:workers";
-import { and, asc, desc, eq, gt, gte, lt, lte, or, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lt, lte, or, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as z from "zod";
 
+import {
+	AllocationUnit,
+	amountText,
+	SHARE_PROBLEMS,
+	type Share,
+	type ShareProblem,
+} from "~/allocations/allocations";
+import {
+	allocatorOf,
+	changeShare,
+	mayAllocate,
+	removeShare,
+	sees,
+	setShare,
+	shareById,
+	shareSightOf,
+	toShare,
+} from "~/allocations/allocations.server";
 import { managedClientIds } from "~/clients/managers.server";
 import { among, users } from "~/db";
 import { dayStatus } from "~/leave/days";
@@ -163,6 +181,11 @@ const ROUTES: Record<string, ApiRoute> = {
 		scope: { read: "projects:read", write: "projects:write" },
 		collection: { GET: listProjectMembers, POST: createProjectMember },
 		item: { GET: showProjectMember, PATCH: changeProjectMember, DELETE: removeProjectMember },
+	},
+	allocations: {
+		scope: { read: "projects:read", write: "projects:write" },
+		collection: { GET: listAllocations, POST: createAllocation },
+		item: { GET: showAllocation, PATCH: changeAllocation, DELETE: removeAllocation },
 	},
 	time_entries: {
 		scope: { read: "time:read", write: "time:write" },
@@ -696,6 +719,243 @@ async function removeProjectMember({ caller, id, now }: Call) {
 	);
 	if (change === null) return notFound();
 	if (!change.ok) return teamRefused(change.problem);
+	return json(null, 204);
+}
+
+// ── Time shares (TS-116) ─────────────────────────────────────────────────────
+
+/**
+ * Who sees and sets time shares through the API, as the project's Team tab
+ * and the Team page let them (TS-116, decision 78): owners and admins see
+ * every share; anyone else their own, those of the people in teams they
+ * manage, and every share on the projects they lead as delivery manager or
+ * whose client they are account manager of. Owners, admins, the client's
+ * account managers and the project's delivery managers set them.
+ */
+async function sharePowersOf(caller: TokenCaller, now: number) {
+	const allocator = await allocatorOf(
+		caller.scope,
+		{ userId: caller.user.id, role: caller.role },
+		dayOf(now, caller.organisation.timeZone),
+	);
+	return { allocator, sight: await shareSightOf(caller.scope, caller.access, allocator) };
+}
+
+/** A share as the API shows it: its amount in its unit, 2.5 days or 22.5 hours, and in words. */
+function shareOut(share: Share): Json {
+	return {
+		id: share.id,
+		user_id: share.userId,
+		project_id: share.projectId,
+		work_package_id: share.workPackageId,
+		starts_on: share.startsOn,
+		ends_on: share.endsOn,
+		amount: share.amount / 100,
+		unit: share.unit,
+		amount_text: amountText(share),
+	};
+}
+
+/** What a refused share answers, in the Team tab's words: one sharing a day with another is a conflict. */
+function shareRefused(refusal: ShareProblem): Response {
+	const status = refusal === "overlaps" ? 409 : 422;
+	return problem(status, refusal.replaceAll("-", "_"), SHARE_PROBLEMS[refusal]);
+}
+
+const NOT_ALLOCATOR =
+	"Owners, admins, the client's account managers and the project's delivery managers set its time shares.";
+
+/**
+ * An amount in its unit, 2.5 or 22.5, as the hundredths a share keeps. Whether
+ * it is more than none and within the unit is `setShare`'s and `changeShare`'s
+ * to say, so the answer is the Team tab's sentence.
+ */
+const ShareAmount = z
+	.number()
+	.finite()
+	.refine((amount) => Math.abs(Math.round(amount * 100) - amount * 100) < 1e-6, {
+		message: "Give the amount to two decimal places at most.",
+	})
+	.transform((amount) => Math.round(amount * 100));
+
+const AllocationsQuery = PageQuery.extend({
+	user_id: z.string().min(1).max(64).optional(),
+	project_id: z.string().min(1).max(64).optional(),
+	from: Day.optional(),
+	to: Day.optional(),
+}).refine(({ from, to }) => !from || !to || from <= to, "`to` is before `from`.");
+
+/**
+ * The time shares the caller sees, by id, of a person or a project where
+ * asked, and that run on a day from `from` to `to` where given. A project not
+ * of this organisation answers 404.
+ */
+async function listAllocations({ caller, url, now }: Call) {
+	const query = queryOf(url, AllocationsQuery);
+	if (!query.success) return invalid(query.error);
+	const { user_id, project_id, from, to, per_page: perPage, cursor } = query.data;
+	if (project_id !== undefined) {
+		const [project] = await caller.scope.projects.select((p) => eq(p.id, project_id), {
+			limit: 1,
+		});
+		if (!project) return notFound();
+	}
+	const { sight } = await sharePowersOf(caller, now);
+	const rows = await caller.scope.allocations.select(
+		(a) =>
+			and(
+				// Filtered here rather than after, so a page holds only shares the caller sees.
+				sight.everyone
+					? undefined
+					: or(among(a.userId, sight.people), among(a.projectId, sight.projects)),
+				user_id ? eq(a.userId, user_id) : undefined,
+				project_id ? eq(a.projectId, project_id) : undefined,
+				to ? lte(a.startsOn, to) : undefined,
+				from ? or(isNull(a.endsOn), gte(a.endsOn, from)) : undefined,
+				cursor ? gt(a.id, cursor) : undefined,
+			),
+		{ orderBy: (a) => [asc(a.id)], limit: perPage + 1 },
+	);
+	return json(page(rows.map(toShare).map(shareOut), perPage, (row) => String(row.id)));
+}
+
+async function showAllocation({ caller, id, now }: Call) {
+	const share = await shareById(caller.scope, id);
+	if (!share || !sees((await sharePowersOf(caller, now)).sight, share)) return notFound();
+	return json(shareOut(share));
+}
+
+/** The share `id` as the API shows it after a change, or 404 when it is gone. */
+async function shareAnswer(caller: TokenCaller, id: string, status = 200) {
+	const share = await shareById(caller.scope, id);
+	if (!share) return notFound();
+	return json(
+		shareOut(share),
+		status,
+		status === 201 ? { Location: `${API_PATH}/allocations/${id}` } : {},
+	);
+}
+
+const NewAllocation = z
+	.object({
+		user_id: z.string().min(1).max(64),
+		project_id: z.string().min(1).max(64),
+		work_package_id: z.string().min(1).max(64).nullable().optional(),
+		starts_on: Day,
+		ends_on: Day.nullable().optional(),
+		amount: ShareAmount,
+		unit: AllocationUnit,
+	})
+	.strict();
+
+const AllocationChange = z
+	.object({
+		ends_on: Day.nullable().optional(),
+		amount: ShareAmount.optional(),
+		unit: AllocationUnit.optional(),
+		from: Day.optional(),
+	})
+	.strict()
+	.refine((body) => (body.ends_on === undefined) !== (body.amount === undefined), {
+		message: "Send `ends_on`, or `amount` with `unit`.",
+	})
+	.refine((body) => (body.amount === undefined) === (body.unit === undefined), {
+		message: "Send `amount` with `unit`.",
+		path: ["unit"],
+	})
+	.refine((body) => body.from === undefined || body.amount !== undefined, {
+		message: "Send `from` with `amount`.",
+		path: ["from"],
+	});
+
+/** Gives a person a time share of a project, or of one of its work packages (TS-116). */
+async function createAllocation({ caller, request, now }: Call) {
+	const body = await bodyOf(request, NewAllocation);
+	if (!body.ok) return body.response;
+	const { user_id, project_id, work_package_id, starts_on, ends_on, amount, unit } = body.data;
+	const [project] = await caller.scope.projects.select((p) => eq(p.id, project_id), { limit: 1 });
+	if (!project) return notFound();
+	if (!mayAllocate((await sharePowersOf(caller, now)).allocator, project)) {
+		return forbidden(NOT_ALLOCATOR);
+	}
+	const change = await setShare(
+		caller.scope,
+		{ userId: caller.user.id, source: "api" },
+		{
+			projectId: project.id,
+			workPackageId: work_package_id ?? null,
+			userId: user_id,
+			startsOn: starts_on,
+			endsOn: ends_on ?? null,
+			amount,
+			unit,
+		},
+	);
+	if (change === null) return notFound();
+	if (!change.ok) return shareRefused(change.problem);
+	return shareAnswer(caller, change.id, 201);
+}
+
+/**
+ * The share `id`, for a change: 404 when it is not of this organisation or
+ * the caller does not see it, 403 when they see it but may not set the
+ * project's shares.
+ */
+async function shareToChange(
+	caller: TokenCaller,
+	id: string,
+	now: number,
+): Promise<{ ok: true; share: Share } | { ok: false; response: Response }> {
+	const share = await shareById(caller.scope, id);
+	const { allocator, sight } = await sharePowersOf(caller, now);
+	if (!share || !sees(sight, share)) return { ok: false, response: notFound() };
+	const [project] = await caller.scope.projects.select((p) => eq(p.id, share.projectId), {
+		limit: 1,
+	});
+	if (!project) return { ok: false, response: notFound() };
+	if (!mayAllocate(allocator, project)) return { ok: false, response: forbidden(NOT_ALLOCATOR) };
+	return { ok: true, share };
+}
+
+/**
+ * Ends a share, or changes its amount from a day (its first day unless
+ * given): from its first day or before, the share's own; from a later day,
+ * it ends the day before and a new share of the new amount runs on, which
+ * the answer is.
+ */
+async function changeAllocation({ caller, request, id, now }: Call) {
+	const body = await bodyOf(request, AllocationChange);
+	if (!body.ok) return body.response;
+	const found = await shareToChange(caller, id, now);
+	if (!found.ok) return found.response;
+	const { share } = found;
+	const { ends_on, amount, unit, from } = body.data;
+	const change = await changeShare(
+		caller.scope,
+		{ userId: caller.user.id, source: "api" },
+		id,
+		amount !== undefined && unit !== undefined
+			? { amount, unit, from: from ?? share.startsOn }
+			: { endsOn: ends_on ?? null },
+		share.projectId,
+	);
+	if (change === null) return notFound();
+	if (!change.ok) return shareRefused(change.problem);
+	return shareAnswer(caller, change.id);
+}
+
+/** Removes a share, all of its days. */
+async function removeAllocation({ caller, id, now }: Call) {
+	const found = await shareToChange(caller, id, now);
+	if (!found.ok) return found.response;
+	const change = await removeShare(
+		caller.scope,
+		{ userId: caller.user.id, source: "api" },
+		id,
+		found.share.projectId,
+	);
+	if (change === null) return notFound();
+	if (!change.ok) return shareRefused(change.problem);
 	return json(null, 204);
 }
 

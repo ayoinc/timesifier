@@ -28,7 +28,8 @@ export const SCOPE_LABELS: Record<ApiScope, string> = {
 	"time:write": "Add, change and delete the maker's own time entries",
 	"descriptions:read": "Read entry descriptions",
 	"projects:read": "Read projects, work packages, clients and tasks",
-	"projects:write": "Assign people to projects' teams, and change and end their stretches",
+	"projects:write":
+		"Assign people to projects' teams, change and end their stretches, and set their time shares",
 	"people:read": "Read people and their leave",
 	"expenses:read": "Read expenses",
 	"invoices:read": "Read invoices",

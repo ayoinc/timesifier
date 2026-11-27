@@ -10,8 +10,8 @@ import { REPORT_VIEWS, type ReportView, reportViewPath } from "./views";
 // tab keeps the range and the person of the view it is on, so moving between
 // views keeps the question being asked. The tabs are the one way in to each
 // view, Expenses and Contractors included (TS-092). Saved reports are a list,
-// not a view of time, so they are a link under the row. Six tabs do not fit a
-// 390px window, so there they wrap into rows of three, each tab whole and in
+// not a view of time, so they are a link under the row. Seven tabs do not fit
+// a 390px window, so there they wrap into rows of three, each tab whole and in
 // view (Profitability is "Profit" there); from medium up they share one row.
 
 export function ReportTabs({
