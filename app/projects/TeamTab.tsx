@@ -12,13 +12,7 @@ import {
 } from "react-aria-components";
 import { Link } from "react-router";
 
-import {
-	ALLOCATION_UNITS,
-	CHANGE_SHARE_INTENT,
-	REMOVE_SHARE_INTENT,
-	SHARE_INTENT,
-	UNIT_LABELS,
-} from "~/allocations/allocations";
+import { ALLOCATION_UNITS, UNIT_LABELS } from "~/allocations/allocations";
 import type { ListedShare } from "~/allocations/allocations.server";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
@@ -377,7 +371,7 @@ function Shares({
 
 			<FormSheet
 				title="Set a time share"
-				intent={SHARE_INTENT}
+				intent="share-set"
 				submitLabel="Set time share"
 				isOpen={setting}
 				onClose={() => setSetting(false)}
@@ -416,7 +410,7 @@ function Shares({
 
 			<FormSheet
 				title={`Change ${changing?.name ?? "their"}'s time share`}
-				intent={CHANGE_SHARE_INTENT}
+				intent="share-change"
 				submitLabel="Change time share"
 				isOpen={changing !== null}
 				onClose={() => setChanging(null)}
@@ -474,7 +468,7 @@ function Shares({
 
 			<FormSheet
 				title={`Remove ${removing?.name ?? "this"}'s time share?`}
-				intent={REMOVE_SHARE_INTENT}
+				intent="share-remove"
 				submitLabel="Remove"
 				submitVariant="danger"
 				isOpen={removing !== null}
