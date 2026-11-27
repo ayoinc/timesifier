@@ -83,7 +83,7 @@ Builder: an AI session on branch `ts-117-approval-by-project`, pull request #118
 - [x] Notifications per part (TS-049 kinds `week-waiting`, `week-decided`), reminders and the number on Approvals' link count parts.
 - [x] The privacy notice, Who sees what and `docs/security.md`.
 - [x] Browser spec of both tabs with keyboard and axe at 390 and 1280 px, light and dark, port 5434, and screenshots in `cmux-assets/browser/timesifier/TS-117/`. Test: `e2e/approval-by-project.spec.ts`: the People tab's waiting parts, the rest of the week approved there, the Projects tab's people and hours per day, a part approved and another returned with a reason by the delivery manager, the person refused on the approved part and resubmitting the returned one, the week approved only once every part is, and Approvals unchanged in an organisation with no delivery managers.
-- [ ] typecheck, lint, tests and the browser tests pass in the pipeline.
+- [x] typecheck, lint, tests and the browser tests pass in the pipeline. Run 45961828705 on 1e06bd5f.
 
 ### TS-115c · Project teams and assigned-only tracking
 
