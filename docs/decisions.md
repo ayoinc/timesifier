@@ -1396,3 +1396,28 @@ Decided on 2026-11-26 for TS-116 (`research/projects-model.md`, the owner's deci
 | Over above 100 %, under below 100 %                     | Nearly everyone flagged, every week, so the flag would be ignored.                                |
 
 **What it costs.** One table and two triggers that a migration rebuilding `allocations` must make again; the leave context and one read of shares on the Timesheet's week, Allocation and Planned; a day-by-person-and-line grouping in `sumsOf`.
+
+### 79. Approval by project: a week held in parts, one row a part, the period's status following them
+
+Decided on 2026-11-27 for TS-117 (research/projects-model.md, the owner's decision 7, "Approval by project").
+
+A submitted week with time on a client project that has a delivery manager whose stretch overlaps the week is held in parts (`app/approvals/parts.ts`, `parts.server.ts`): a project part for each such project, decided by its delivery managers or an owner or admin (`mayDecidePartOf`), and the line part, everything else (internal time, work codes, leave, client projects without a delivery manager, expenses, and the week's hours as a whole), decided by those who decide the person's weeks today (`mayDecidePeriodOf`). A week with no project part has no parts and is decided whole, exactly as before, so an organisation with no delivery manager sees no change (`test/approvals/approval-by-project.test.ts`, "an organisation with no delivery managers").
+
+**Data.** Migration `0044_approval_parts` only adds: the table `period_parts` (period, project or null for the line part, status `submitted`, `approved` or `returned`, who decided, when, the reason), unique per period and project and one line part a period, and `period_events.part` (`week`, `line` or `project`, `week` by default) with `project_id`, so the history says which part each step was taken on. `periods.status` stays and follows the parts: returned while any part is, approved once every part is, submitted otherwise. Every existing reader of a period's status (locks, the timesheet, reports, invoices from approved time, webhooks) keeps working unchanged; the parts are read only where a part matters.
+
+**Submission and return.** Submitting writes the parts in the same batch as the period (`submissionStatements`, used by the person's Submit and by the system at the lock date). Submitted again after a return, an approved part stays approved, a returned one waits again, a project new to the week gets a part, and one whose time has gone is removed. While a week is returned only its returned parts are open: every writer of entries passes the projects it touches to `lockedDays`, and leave and expenses are the line part's. A week with an approved part cannot be withdrawn. Reopening an approved week (owners and admins) returns every part.
+
+**D5 and D6.** Nobody decides a part of their own week; a part nobody else may decide (the person its only delivery manager, and no other owner or admin; or the line part as today) is approved by the system as it is submitted. A delivery manager on leave all day is not told; with none left, owners and admins are, and the Projects tab says why.
+
+**Concurrency.** A part's decision and the period's new status are one batch, the status computed in SQL from the parts as the batch runs (`weekStatusSql`), so two approvers deciding two parts at once leave the week where both put it.
+
+**Over its limit.** Confirming a day over its limit is the line part's, as the line manager decides the week's hours; a project part is not held by it. A timer running in the week holds every part.
+
+| Option                                                      | Evidence                                                                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| A row per part, the period's status following them (chosen) | Additive; every reader of `periods.status` unchanged; each part has its own decider, reason and time; one partial index counts what waits. |
+| A period per project                                        | Splits one submission into several weeks; locks, deadlines, Not submitted and the timesheet all assume one period a week.                  |
+| Status per entry                                            | Thousands of writes a week, and a decision is not about one entry.                                                                         |
+| A JSON column of parts on `periods`                         | No index for "waiting on me", no foreign key to the project, races between two approvers.                                                  |
+
+**What it costs.** One table and two columns; one more query in the organisation loader (whether the person leads a project, for Approvals' link) and in the API caller; the number on Approvals' link counts parts in the same one statement. Approvals gains a Projects tab for delivery managers, owners and admins; the People tab shows each week's project parts as decided or waiting.

@@ -175,7 +175,9 @@ export default function Privacy({
 				Each time entry: whose it is, its project, work package and task, its start and its end, its
 				description and tags, whether it is billable or overtime, and the import that brought it, if
 				one did. Each timesheet period once it is submitted, with every step it took (submitted,
-				withdrawn, approved, returned or reopened), who took it, when, and the comment given. Each
+				withdrawn, approved, returned or reopened), who took it, when, and the comment given; where
+				it has time on a project with a delivery manager, its parts, each project's time and the
+				rest of the week, each with where it stands, who decided it, when and the reason given. Each
 				request to work overtime or on a day off: its days, the hours asked for, the reason, and who
 				decided it, when and what they said.
 			</>
