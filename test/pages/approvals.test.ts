@@ -640,3 +640,65 @@ describe("overtime (TS-095)", () => {
 		expect((await open(`${APPROVALS}?week=${WEEK}`, grace)).status).toBe(404);
 	});
 });
+
+describe("an empty Not submitted", () => {
+	const NOBODY = "Nobody's weeks come to you to approve.";
+	const EVERYONE = "Everyone has submitted this week.";
+	const OPEN = "This week has not ended yet.";
+	/** The Monday of the week the clock is in: it has not ended. */
+	const now = new Date();
+	const CURRENT = new Date(now.getTime() - ((now.getUTCDay() + 6) % 7) * 86_400_000)
+		.toISOString()
+		.slice(0, 10);
+	const missing = async (who: Person, week: string) => {
+		const response = await open(`${APPROVALS}?week=${week}&status=not-submitted`, who);
+		expect(response.status).toBe(200);
+		return textOf(await pageBody(response));
+	};
+
+	it("tells an owner on their own that nobody's weeks come to them, closed week or open (D5, 47)", async () => {
+		for (const week of [WEEK, CURRENT]) {
+			const text = await missing(ada, week);
+			expect(text).toContain(NOBODY);
+			expect(text).not.toContain(EVERYONE);
+			expect(text).not.toContain(OPEN);
+		}
+	});
+
+	it("tells a manager whose team has nobody in it the same", async () => {
+		const mona = await memberOfAcme("member", "mona@example.com");
+		await seedTeam(acme.id, "Design", { managers: [mona.user.id] });
+		for (const week of [WEEK, CURRENT]) {
+			const text = await missing(mona, week);
+			expect(text).toContain(NOBODY);
+			expect(text).not.toContain(EVERYONE);
+		}
+	});
+
+	it.each([
+		["an owner", async () => ada],
+		["an admin", async () => memberOfAcme("admin", "hedy@example.com")],
+		[
+			"a manager",
+			async (grace: Person) => {
+				const mona = await memberOfAcme("member", "mona@example.com");
+				await seedTeam(acme.id, "Design", { members: [grace.user.id], managers: [mona.user.id] });
+				return mona;
+			},
+		],
+	])(
+		"tells %s who decides on people that everyone has submitted, or that the week is open",
+		async (_, as) => {
+			const grace = await memberOfAcme("member", "grace@example.com");
+			const viewer = await as(grace);
+			// Everyone the viewer decides submitted, Ada too, whom an admin decides.
+			for (const each of [grace, ada]) await seedPeriod(acme.id, each.user.id, WEEK, "submitted");
+			const closed = await missing(viewer, WEEK);
+			expect(closed).toContain(EVERYONE);
+			expect(closed).not.toContain(NOBODY);
+			const current = await missing(viewer, CURRENT);
+			expect(current).toContain(OPEN);
+			expect(current).not.toContain(NOBODY);
+		},
+	);
+});

@@ -12,6 +12,7 @@ import {
 } from "~/expenses/report.server";
 import { formatMoney, type Money } from "~/money/money";
 import { membershipContext } from "~/organisations/membership.server";
+import { organisationMoney } from "~/projects/money.server";
 import { Headline, RangeSteps } from "~/reports/RangeSteps";
 import { ReportChoice } from "~/reports/ReportChoice";
 import { ReportTabs } from "~/reports/ReportTabs";
@@ -40,9 +41,12 @@ export function meta() {
 	return [{ title: `Expenses · ${label} · Timesifier` }];
 }
 
-/** Totals in several currencies, side by side: "£12.00 + €5.00", or "None". */
-function moneyWords(totals: readonly Money[]): string {
-	if (totals.length === 0) return "None";
+/**
+ * Totals in several currencies, side by side: "£12.00 + €5.00". With none, a
+ * zero in the organisation's currency, "£0.00", as the other reports show it.
+ */
+function moneyWords(totals: readonly Money[], currency: string): string {
+	if (totals.length === 0) return formatMoney(0, currency, "en-GB");
 	return totals
 		.map(({ amountMinor, currency }) => formatMoney(amountMinor, currency, "en-GB"))
 		.join(" + ");
@@ -98,6 +102,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const expenses = await reportedExpenses(report);
 	const groups = groupExpenses(expenses, expenseGroup);
 	const totals = expenseTotals(expenses);
+	const { currency } = await organisationMoney(membership.organisation.id);
+	const money = (each: readonly Money[]) => moneyWords(each, currency);
 	// Under Internal work nothing is billable, so no line says what is (TS-115a).
 	const bills = hasClients(membership.organisation.workModel);
 	const exportSearch = withGroup(frame.tabSearch, expenseGroup, tag);
@@ -111,17 +117,17 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					label: group.label,
 					detail: [
 						`${group.count} ${group.count === 1 ? "expense" : "expenses"}`,
-						bills ? `Billable ${moneyWords(group.billable)}` : null,
-						`To pay back ${moneyWords(group.reimbursable)}`,
+						bills ? `Billable ${money(group.billable)}` : null,
+						`To pay back ${money(group.reimbursable)}`,
 					]
 						.filter(Boolean)
 						.join(" · "),
-					total: moneyWords(group.total),
+					total: money(group.total),
 				})),
 				count: totals.count,
-				total: moneyWords(totals.total),
-				billable: bills ? moneyWords(totals.billable) : null,
-				reimbursable: moneyWords(totals.reimbursable),
+				total: money(totals.total),
+				billable: bills ? money(totals.billable) : null,
+				reimbursable: money(totals.reimbursable),
 				exportPath: expenseReportExportPath(slug, exportSearch),
 			},
 		},
