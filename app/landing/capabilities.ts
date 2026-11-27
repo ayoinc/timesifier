@@ -35,6 +35,9 @@ export function inWords(items: readonly string[]): string {
 
 const lower = (text: string) => text.toLowerCase();
 
+/** A report view as the features page names it in a list: its label, unless that alone reads oddly there. */
+const REPORT_IN_WORDS: Readonly<Record<string, string>> = { planned: "planned against tracked" };
+
 export const CAPABILITIES: readonly Capability[] = [
 	{
 		id: "time",
@@ -111,7 +114,9 @@ export const CAPABILITIES: readonly Capability[] = [
 		places: ["reports", "dashboards"],
 		points: [
 			`Reports of ${inWords(
-				REPORT_VIEWS.filter(({ id }) => id !== "saved").map(({ label }) => lower(label)),
+				REPORT_VIEWS.filter(({ id }) => id !== "saved").map(
+					({ id, label }) => REPORT_IN_WORDS[id] ?? lower(label),
+				),
 			)}, by any range of days.`,
 			"A report can be saved, shared with named colleagues, and downloaded as a CSV.",
 			"A project's budget, in hours or in fees, tells its managers when it crosses its alert.",

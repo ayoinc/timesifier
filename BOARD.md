@@ -825,6 +825,12 @@ From TS-115a (decision 67). Waits until the release with migration 0034 has run 
 
 - [ ] A migration that ships alone drops `organisations.clients_enabled`, which nothing reads since 0034 (`hasClients(work_model)` decides), and `changeGeneral` and `startWorkModel` in `app/workspace/general.server.ts` stop writing it; `docs/architecture.md` and `docs/security.md` lose their lines about it, and `test/db/work-model-migration.test.ts` stops reading it.
 
+### Save Planned as a report (after TS-116)
+
+From TS-116 (decision 78). Reports › Planned cannot be saved yet: `SAVED_VIEWS` in `app/reports/saved.ts` holds Time, Utilisation, Profitability and Leave.
+
+- [ ] Reports › Planned offers "Save report" like Utilisation, and a saved Planned report reopens at Planned with its range and person (`test/pages/report-views.test.ts`, `e2e/report-views.spec.ts`).
+
 ### TS-113b · Fast at company size, the rest
 
 From TS-113 (`research/corporate/scale-test.md`, D8 and D9, and its "After TS-113" section). Waits for TS-111d and TS-111e, which change Approvals, Time off and Work schedules; the lines below are at `ts-113-scale` (a3d335a) and will move.

@@ -156,6 +156,17 @@ async function weekText(who: Person): Promise<string> {
 	return textOf(await response.text());
 }
 
+/** The statements D1 is asked to prepare while `run` runs. */
+async function statementsWhile(run: () => Promise<unknown>): Promise<string[]> {
+	const prepare = vi.spyOn(env.DB, "prepare");
+	try {
+		await run();
+		return prepare.mock.calls.map(([sql]) => String(sql));
+	} finally {
+		prepare.mockRestore();
+	}
+}
+
 /** Ada's shares and time: Build three days a week, half of Shop, 11:15 a week of all of Site, none of Launch's time. */
 async function seedAdasWeek() {
 	await seedShare(ada, site, build, 300, "days");
@@ -264,5 +275,25 @@ describe("the plan beside the time on the Timesheet's week", () => {
 		expect(text).toContain("SHOP-1 · Shop: 15:00 planned, 0:00 tracked");
 		expect(text).not.toContain("WP2:");
 		expect(text).not.toContain("13:08 planned");
+	});
+
+	it("reads the shares in one statement, and the same statements with four shares as with none", async () => {
+		// The week reads the shares once, with `plansOf`'s leave calendar, beside
+		// what it read before them; more shares add no statement.
+		await seedLeave(acme.id, ada.user.id, "annual", "2026-11-10", "2026-11-10", {
+			startsHalf: true,
+		});
+		await seedEntry(ada, site, build, "2026-11-09", 9, 3);
+		await seedEntry(ada, shop, null, "2026-11-12", 9, 4);
+		clockAtT0();
+		const none = await statementsWhile(() => weekText(ada));
+		await seedShare(ada, site, build, 300, "days");
+		await seedShare(ada, shop, null, 5000, "percent");
+		await seedShare(ada, site, null, 1125, "hours");
+		await seedShare(ada, site, launch, 100, "days");
+		const four = await statementsWhile(() => weekText(ada));
+		expect(four.filter((sql) => /from "allocations"/.test(sql))).toHaveLength(1);
+		expect(none.filter((sql) => /from "allocations"/.test(sql))).toHaveLength(1);
+		expect(four).toHaveLength(none.length);
 	});
 });
