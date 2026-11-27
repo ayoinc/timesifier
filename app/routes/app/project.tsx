@@ -220,13 +220,17 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 			},
 			today,
 		);
+		// The shares the viewer sees (TS-116): every one to owners and admins, of
+		// their people to a manager of a team, of the projects they lead or manage.
+		const allocator = {
+			userId: membership.user.id,
+			role: membership.role,
+			managedClients: managed,
+			led,
+		};
 		const [shares, packages] = await Promise.all([
-			projectShares(
-				scope,
-				projectId,
-				today,
-				organisation.weekStartsOn,
-				team.seesAll ? undefined : membership.user.id,
+			shareSightOf(scope, access, allocator).then((sight) =>
+				projectShares(scope, projectId, today, organisation.weekStartsOn, sight),
 			),
 			team.manages ? workPackagesOf(scope, [projectId]) : undefined,
 		]);

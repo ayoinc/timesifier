@@ -216,9 +216,11 @@ export default function Privacy({
 				including a budget for one person on a project. Each project's work packages: their codes,
 				names, days, whether they are open, billable or archived, and their budgets. Each project's
 				team: who is on it, as a member or its delivery manager, from which day to which, and who
-				put them there, by hand, by an import or by adding themselves. Whether anyone in the
-				organisation tracks time to any project, or only a project's team on their days on it. A
-				record of each budget alert sent.
+				put them there, by hand, by an import or by adding themselves. Each person's time share of a
+				project or of one of its work packages: so many days or hours a week, or a part of their
+				schedule, from which day to which, and who set it. Whether anyone in the organisation tracks
+				time to any project, or only a project's team on their days on it. A record of each budget
+				alert sent.
 			</>
 		),
 		"Clients and their contacts": (

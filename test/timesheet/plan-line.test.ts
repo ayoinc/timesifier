@@ -178,41 +178,48 @@ describe("the plan beside the time on the Timesheet's week", () => {
 		const week = await weekOf(ada);
 		// Available: Monday, Wednesday and Thursday 7:30 each, Tuesday half of it,
 		// Friday a public holiday, the weekend not worked.
-		expect(week.plans).toEqual([
-			// Half of each day: 225 + 113 (112.5, rounded) + 225 + 225.
-			{
-				line: shop,
-				projectId: shop,
-				workPackageId: null,
-				plannedMinutes: 788,
-				trackedSeconds: 5.5 * 3600,
-			},
-			// 11:15 of the 37:30 the schedule sets a week is 30 % of each day:
-			// 135 + 68 (67.5, rounded) + 135 + 135; all of Site's time is tracked on it.
-			{
-				line: site,
-				projectId: site,
-				workPackageId: null,
-				plannedMinutes: 473,
-				trackedSeconds: 5 * 3600,
-			},
-			// Three of the five days worked is 60 % of each day: 270 + 135 + 270 + 270.
-			{
-				line: `${site}/${build}`,
-				projectId: site,
-				workPackageId: build,
-				plannedMinutes: 945,
-				trackedSeconds: 5 * 3600,
-			},
-			// One of five days is 20 % of each day: 90 + 45 + 90 + 90, and no time.
-			{
-				line: `${site}/${launch}`,
-				projectId: site,
-				workPackageId: launch,
-				plannedMinutes: 315,
-				trackedSeconds: 0,
-			},
-		]);
+		// The lines come in the grid's order of projects; two lines of one project
+		// in the order of their keys, which hold ids made at random within a
+		// millisecond, so they are compared here in the order of their keys.
+		const byLine = (a: { line: string }, b: { line: string }) => a.line.localeCompare(b.line);
+		expect(week.plans.map((p) => p.projectId)).toEqual([shop, site, site, site]);
+		expect([...week.plans].sort(byLine)).toEqual(
+			[
+				// Half of each day: 225 + 113 (112.5, rounded) + 225 + 225.
+				{
+					line: shop,
+					projectId: shop,
+					workPackageId: null,
+					plannedMinutes: 788,
+					trackedSeconds: 5.5 * 3600,
+				},
+				// 11:15 of the 37:30 the schedule sets a week is 30 % of each day:
+				// 135 + 68 (67.5, rounded) + 135 + 135; all of Site's time is tracked on it.
+				{
+					line: site,
+					projectId: site,
+					workPackageId: null,
+					plannedMinutes: 473,
+					trackedSeconds: 5 * 3600,
+				},
+				// Three of the five days worked is 60 % of each day: 270 + 135 + 270 + 270.
+				{
+					line: `${site}/${build}`,
+					projectId: site,
+					workPackageId: build,
+					plannedMinutes: 945,
+					trackedSeconds: 5 * 3600,
+				},
+				// One of five days is 20 % of each day: 90 + 45 + 90 + 90, and no time.
+				{
+					line: `${site}/${launch}`,
+					projectId: site,
+					workPackageId: launch,
+					plannedMinutes: 315,
+					trackedSeconds: 0,
+				},
+			].sort(byLine),
+		);
 
 		// Under its row the line is named short; a line with no row in the grid
 		// (Site's whole project, whose rows are its work packages, and Launch,

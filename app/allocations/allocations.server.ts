@@ -437,25 +437,23 @@ export interface ListedShare {
 }
 
 /**
- * The time shares of `projectId`, of everyone or of `only` (a viewer who
- * does not see the whole team sees their own), with what each plans in the
- * week of `today`: those running or to come first, by name, then the ended.
+ * The time shares of `projectId` that `sight` sees, with what each plans in
+ * the week of `today`: those running or to come first, by name, then the
+ * ended.
  */
 export async function projectShares(
 	scope: OrganisationScope,
 	projectId: string,
 	today: Day,
 	weekStartsOn: number,
-	only?: string,
+	sight: ShareSight,
 ): Promise<ListedShare[]> {
 	const [rows, packages] = await Promise.all([
-		scope.allocations.select((a) =>
-			and(eq(a.projectId, projectId), only === undefined ? undefined : eq(a.userId, only)),
-		),
+		scope.allocations.select((a) => eq(a.projectId, projectId)),
 		scope.workPackages.select((w) => eq(w.projectId, projectId)),
 	]);
-	if (rows.length === 0) return [];
-	const shares = rows.map(toShare);
+	const shares = rows.map(toShare).filter((share) => sees(sight, share));
+	if (shares.length === 0) return [];
 	const userIds = [...new Set(shares.map((s) => s.userId))];
 	const week = periodContaining(today, weekStartsOn);
 	const [names, plans] = await Promise.all([

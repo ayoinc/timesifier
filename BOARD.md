@@ -59,6 +59,16 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-116 · Time share
+
+Builder: an AI session on branch `ts-116-time-share`, pull request "TS-116 · Time share". Builds the owner's decision 6 of `research/projects-model.md` and the allocations parts of Data and "Where it shows"; decision 78. Migration `0043_allocations` (additive; renumber at merge).
+
+- **Data:** `allocations` (person, project, work package or none, first and last day, amount in days or hours a week or a percentage of the schedule). The plan of a day is read from the person's schedule on that day, less public holidays and approved leave.
+- **Who:** owners, admins, the client's account managers and the project's delivery managers set shares (`mayManageTeam`).
+- **Where:** the project's Team tab; Team › Allocation (people by week, four weeks, 50 a page, filters by team, client, project and name, over and under said in words); the Timesheet's plan line; Reports › Planned; the API's `allocations`.
+- **Tests:** `test/allocations/planned.test.ts`, `test/allocations/allocation-view.test.ts`, `test/timesheet/plan-line.test.ts`, `test/reports/planned.test.ts`, `test/integrations/allocations.test.ts`.
+- **Still to do before Done:** browser specs with keyboard and axe at 390 and 1280 px, light and dark, and their screenshots; the owner's look.
+
 ### TS-115c · Project teams and assigned-only tracking
 
 Builder: an AI session on branch `ts-115c-project-teams`, pull request #112. Builds the owner's decisions 3 and 4 of `research/projects-model.md`. Decision 75 is this card's. Migration `0040_project_teams` only adds: `project_members` and its two overlap triggers, `setup_imports` (TS-115d's), and `organisations.project_tracking`, `anyone` by default. The CSV set-up import is TS-115d, stacked on this one.
