@@ -253,6 +253,10 @@ describe("the hourly run's reads (decision 69)", () => {
 				"select distinct organisation_id from periods where status = 'submitted'",
 				"periods_submitted_idx",
 			],
+			[
+				"select distinct organisation_id from period_parts where status = 'submitted'",
+				"period_parts_waiting_idx",
+			],
 		]) {
 			const { results } = await env.DB.prepare(`explain query plan ${sql}`).all<{
 				detail: string;
@@ -268,9 +272,11 @@ describe("the hourly run's reads (decision 69)", () => {
 		const prepare = vi.spyOn(env.DB, "prepare");
 		expect(await runReminders(Date.parse("2026-11-25T16:00:00Z"))).toEqual({
 			outcome: "finished",
-			queries: 5,
+			// One more since TS-117: the organisations with a part of a week waiting.
+			queries: 6,
 		});
-		expect(prepare).toHaveBeenCalledTimes(5);
+		// One more since TS-117: the parts of weeks waiting.
+		expect(prepare).toHaveBeenCalledTimes(6);
 		expect(await runReminders(Date.parse("2026-11-25T16:01:00Z"))).toEqual({
 			outcome: "idle",
 			queries: 1,

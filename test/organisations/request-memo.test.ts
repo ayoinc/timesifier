@@ -97,7 +97,8 @@ describe("a page as a manager of 120 of 150 people", () => {
 		const counts = await statementsOf(`/app/acme?day=${WEEK}`, crowd.manager);
 		expect(counts).toEqual({
 			status: 200,
-			total: 63,
+			// One more since TS-117: whether the person leads a project, for Approvals' link.
+			total: 64,
 			memberships: 4,
 			teamMembers: 3,
 			ownMembership: 1,
@@ -115,7 +116,8 @@ describe("a page as a manager of 120 of 150 people", () => {
 			// total past one page summed apart. Now one sum serves the rows, the
 			// order and the total. One more since TS-049, the bell's unread count,
 			// and two since TS-098a, the contracts with the people's places.
-			total: 38,
+			// One more since TS-117: whether the person leads a project, for Approvals' link.
+			total: 39,
 			memberships: 5,
 			teamMembers: 3,
 			ownMembership: 1,
@@ -174,13 +176,14 @@ describe("a request's memo", () => {
 		);
 		const theTeam = [hedy.userId, linus.userId].sort();
 		expect(asked).toEqual([true, theTeam, theTeam, [team], theTeam, 4, 4, theTeam, [bola.userId]]);
-		// The organisation, Hedy's membership, the places in her teams, and the
-		// members with their accounts: each once.
+		// The organisation, Hedy's membership, the places in her teams, whether
+		// she leads a project (TS-117), and the members with their accounts: each once.
 		expect(reads(sql, "organisations")).toBe(1);
 		expect(reads(sql, "memberships")).toBe(2);
 		expect(reads(sql, "team_members")).toBe(1);
 		expect(reads(sql, "users")).toBe(1);
-		expect(sql).toHaveLength(5);
+		expect(reads(sql, "project_members")).toBe(1);
+		expect(sql).toHaveLength(6);
 	});
 
 	it("in a POST, reads afresh, so what an action changes is read after it", async () => {
