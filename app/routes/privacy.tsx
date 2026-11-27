@@ -16,7 +16,9 @@ import { Document, DocumentSection, Row, Rows } from "~/landing/Document";
 import { deploymentOperator, icoReference, OperatorDetails } from "~/landing/operator";
 import {
 	DPA_PATH,
+	HELLO_EMAIL,
 	LINK,
+	MAIL_DOMAIN,
 	PRIVACY_EMAIL,
 	PRIVACY_PATH,
 	pageMeta,
@@ -80,7 +82,7 @@ export function loader({ request }: Route.LoaderArgs) {
 }
 
 /** This version of the notice. */
-const VERSION = { date: "2026-11-24", inWords: "24 November 2026" };
+const VERSION = { date: "2026-11-27", inWords: "27 November 2026" };
 
 const INVITATION_DAYS = INVITATION_LIFETIME_SECONDS / (24 * 60 * 60);
 
@@ -428,8 +430,10 @@ export default function Privacy({
 					Cloudflare’s. Cloudflare, Inc. is a company in the United States.
 				</p>
 				<p>
-					Mail you send to {PRIVACY_EMAIL} or {SECURITY_EMAIL} is received by Microsoft, which hosts
-					that mailbox.
+					Mail sent to {PRIVACY_EMAIL}, {SECURITY_EMAIL}, {HELLO_EMAIL} or any other address at{" "}
+					{MAIL_DOMAIN} is received by Cloudflare, which forwards it to the company's mailbox at
+					Google. Google hosts that mailbox in Gmail under its consumer terms, with no processing
+					agreement. Google LLC is a company in the United States.
 				</p>
 				<Rows>
 					<Row term="Hosting, the database and files">

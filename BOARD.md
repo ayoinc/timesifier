@@ -59,6 +59,21 @@ Left for the owner, not part of this card: whether the emails name the company (
 
 ## Review (limit 2; a card waiting only on the owner is not counted)
 
+### TS-127 · Company mail through Cloudflare Email Routing
+
+Builder: an AI session on branch `ts-127-company-mail`, pull request "TS-127 · Company mail through Cloudflare Email Routing". Since 08:32 UTC on 27 November 2026 Cloudflare Email Routing receives every address at `timesifier.com` and forwards it to the company's mailbox, a personal Gmail account; Microsoft 365 no longer receives the company's mail. The public pages say so, with no processing agreement for Google said openly. Decision 79, which amends 59 and 60. DNS and Email Routing were done before the card; Microsoft sign-in (TS-104) and DMARC (TS-109) are not part of it.
+
+- [x] Cloudflare's row on `/security` and `/dpa` says it receives mail sent to privacy@, security@, hello@ or any other address at timesifier.com through Email Routing, which forwards it to the company's mailbox; Google's row says Google LLC, in the United States, hosts the mailbox in Gmail, says there is no processing agreement and Google runs Gmail under its consumer terms, and links its terms and privacy policy (`test/claims.test.ts`, "the company's mail is received by Cloudflare and kept by Google in Gmail, with no processing agreement, on every page that says who handles it"; "the sub-processors on /security and /dpa are the ones the notice names, and every binding in wrangler.jsonc belongs to one of them").
+- [x] A sub-processor without a processing agreement is its own case of `SubProcessor.agreement` (`{ kind: "none" }`), not a missing `dpa`; `OUTSIDE_LINKS.microsoftDpa` is replaced by `googleTerms` and `googlePrivacy`, each linked from a public page (`test/claims.test.ts`, the same test, and "the sitemap lists exactly the public pages, which link to one another and nowhere else").
+- [x] No public page says Microsoft hosts or receives the company's mail, read with Microsoft sign-in on (`test/claims.test.ts`, "the company's mail is received by Cloudflare…").
+- [x] `/privacy`, "Who else handles it", says mail to the company's addresses is received by Cloudflare and forwarded to the company's mailbox at Google, in Gmail under its consumer terms with no processing agreement (`test/claims.test.ts`, the same test).
+- [x] The DPA's Sub-processors term binds Cloudflare by contract, says Google has no processing agreement, and the company answers for both; `#transfers` says no agreement covers the mail's transfer to Google; `DPA_VERSION` is 2026-11-27 and `/dpa` shows it beside its first version (`test/claims.test.ts`, "the data processing agreement binds by contract only the sub-processor it has a contract with, and is the version of 27 November 2026").
+- [x] `/privacy`, `/security` and `/dpa` show 27 November 2026 as their version.
+- [x] No organisation had accepted a DPA, so no 30-day notice was owed (decision 79).
+- [x] Screenshots of `/security` (sub-processors), `/dpa` (sub-processors, transfers and the version under its title) and `/privacy` ("Who else handles it") at 1280 light and 390 dark, and the Settings DPA prompt an owner of an organisation holding the version of 23 November sees, in `cmux-assets/browser/timesifier/TS-127/`; no page wider than the viewport there.
+- [ ] The owner's look at the screenshots.
+- [ ] typecheck, the claims tests and the browser tests pass in the pipeline.
+
 ### TS-116 · Time share
 
 Builder: an AI session on branch `ts-116-time-share`, pull request "TS-116 · Time share". Builds the owner's decision 6 of `research/projects-model.md` and the allocations parts of Data and "Where it shows"; decision 78. Migration `0043_allocations` (additive; renumber at merge).

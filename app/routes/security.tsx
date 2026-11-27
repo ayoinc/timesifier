@@ -56,6 +56,9 @@ export function loader() {
 /** The first version of the page. */
 const FIRST = { date: "2026-11-23", inWords: "23 November 2026" };
 
+/** This version of the page: the company's mail through Cloudflare Email Routing to Gmail (TS-127). */
+const VERSION = { date: "2026-11-27", inWords: "27 November 2026" };
+
 export default function Security({
 	loaderData: { operator, ico, activityDays },
 }: Route.ComponentProps) {
@@ -63,6 +66,7 @@ export default function Security({
 		<Document
 			path={SECURITY_PATH}
 			title="Security"
+			version={VERSION}
 			first={FIRST}
 			lead="What a security review asks of Timesifier: where its data is kept, how it is protected, who can see it, how long it is kept, who else handles it, and what is not done yet. Each statement is something the application or its configuration does."
 			operator={operator}
