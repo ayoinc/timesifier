@@ -77,7 +77,14 @@ async function adaAndBob(page: Page, browser: Browser, baseURL: string | undefin
 	return { slug, bob, other };
 }
 
-/** Bob asks for two days of annual leave, a month ahead. */
+/**
+ * Bob asks for a week of annual leave, a month ahead. A new organisation works
+ * Monday to Friday and has no public holidays (they are added one at a time in
+ * Settings), so any seven days hold five working days, whatever day the test
+ * runs. Two days were enough on most days, but on a Thursday they were a
+ * Saturday and a Sunday, which hold no working day to take, and the sheet
+ * refused them.
+ */
 async function requestLeave(other: Page, slug: string) {
 	await openShell(other, destinationPath(slug, "time-off"));
 	await other.getByRole("button", { name: "Request time off" }).click();
@@ -88,12 +95,17 @@ async function requestLeave(other: Page, slug: string) {
 		.getByRole("option", { name: "Annual leave" })
 		.click();
 	await sheet.getByRole("textbox", { name: "First day" }).fill(dayFromToday(30));
-	await sheet.getByRole("textbox", { name: "Last day" }).fill(dayFromToday(31));
+	await sheet.getByRole("textbox", { name: "Last day" }).fill(dayFromToday(36));
 	await sheet.getByRole("button", { name: "Request" }).click();
 	await expect(sheet).toBeHidden();
 	await expect(other.getByRole("status")).toHaveText(
 		"Requested. It waits for a manager's approval.",
 	);
+	// The week took five working days: the organisation works Monday to Friday
+	// and no public holiday fell in it.
+	const mine = other.getByRole("list", { name: "Your requests" });
+	await expect(mine).toContainText("Annual leave · Waiting for approval");
+	await expect(mine).toContainText("5 days");
 }
 
 /** The band at the top of every page of an organisation. */

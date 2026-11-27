@@ -7,8 +7,24 @@ import { movement, watchForMovement } from "./motion";
 // by a fade or nothing. This drives every component through its changes while a
 // watcher looks, on every frame, for anything that animates position or size.
 
-/** Takes every component through each change it can make: open and close, toggle, select, type, press. */
-async function operateEveryComponent(page: Page) {
+/**
+ * How long React Aria keeps tooltips warm after one closes: within it, the next
+ * tooltip shows at once, with no entry. react-stately 3.51's
+ * `useTooltipTriggerState` (dist/private/tooltip/useTooltipTriggerState.mjs)
+ * sets the cooldown to `Math.max(TOOLTIP_COOLDOWN, closeDelay)`, where
+ * `TOOLTIP_COOLDOWN` is 500 and `closeDelay` defaults to it; our `Tooltip`
+ * passes no `closeDelay`, so the cooldown is 500 ms.
+ */
+const TOOLTIP_COOLDOWN_MS = 500;
+
+/** The tooltip's entry, as the watcher names it. */
+const TOOLTIP_SCALES = /^transition of scale on <div role=tooltip> "Add a time entry"/;
+
+/**
+ * Takes every component through each change it can make: open and close, toggle, select, type, press.
+ * `tooltipShown` runs while the tooltip shows, before Escape hides it.
+ */
+async function operateEveryComponent(page: Page, tooltipShown?: () => Promise<void>) {
 	const gallery = page.getByRole("region", { name: "Light scheme" });
 
 	// Button and IconButton: pressing changes the shape and the state layer.
@@ -77,11 +93,22 @@ async function operateEveryComponent(page: Page) {
 	await snackbar.getByRole("button", { name: "Dismiss" }).click();
 	await expect(snackbar).toBeHidden();
 
-	// Tooltip: in on focus, out on Escape.
+	// Tooltip: in on keyboard focus, out on Escape. focus() shows it and Shift+Tab
+	// hides it again at once, which warms tooltips up: Tab within the cooldown
+	// would show it with no entry, and leave only Escape's 100 ms exit, which a
+	// browser drawing a frame every 130 ms can miss (WebKit, run 45414239079). So
+	// the cooldown runs out first, on a page timer set after React Aria's, and
+	// Tab shows the tooltip with its 200 ms entry.
 	await gallery.getByRole("button", { name: "New entry" }).focus();
 	await page.keyboard.press("Shift+Tab");
+	await page.evaluate(async (cooldown) => {
+		const over = Promise.withResolvers<void>();
+		setTimeout(over.resolve, cooldown);
+		await over.promise;
+	}, TOOLTIP_COOLDOWN_MS);
 	await page.keyboard.press("Tab");
 	await expect(page.getByRole("tooltip")).toBeVisible();
+	await tooltipShown?.();
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("tooltip")).toBeHidden();
 }
@@ -110,7 +137,10 @@ test.describe("with motion allowed", () => {
 		await watchForMovement(page);
 		await openGallery(page);
 
-		await operateEveryComponent(page);
+		// The tooltip's entry is seen while it shows, before Escape's exit.
+		await operateEveryComponent(page, () =>
+			expect.poll(() => movement(page)).toContainEqual(expect.stringMatching(TOOLTIP_SCALES)),
+		);
 
 		const seen = await movement(page);
 		for (const moved of [
@@ -118,7 +148,7 @@ test.describe("with motion allowed", () => {
 			/^transition of scale on <div> "Delete this entry\?/, // the dialog grows
 			/^transition of scale on <div role=dialog> "AtlasBorealis/, // the select's list grows
 			/^transition of scale on <div role=dialog> "EditDuplicate/, // the menu grows
-			/^transition of scale on <div role=tooltip> "Add a time entry"/,
+			TOOLTIP_SCALES, // the tooltip grows
 			/^transition of translate on <div role=alertdialog> "Entry saved"/, // the snackbar rises
 			/^transition of translate on <div> in "(Day|Week|Month)"/, // the tab indicator slides
 			/^transition of translate on <span> in "Weekly summary"/, // the switch handle travels
