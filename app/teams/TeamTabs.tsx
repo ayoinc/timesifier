@@ -1,17 +1,25 @@
 import { LinkTabs } from "~/components/LinkTabs";
-import { destinationPath, invitationsPath, membersPath } from "~/shell/destinations";
+import {
+	allocationPath,
+	destinationPath,
+	invitationsPath,
+	membersPath,
+} from "~/shell/destinations";
 
-// The pages of Team as a row of tabs (TS-045): This week, Teams, Members and
-// Invitations. Each is an address of its own, so a tab is a link. The row sits
-// under the page's heading and the sentence under it, as every page's tabs do,
-// and is drawn as every row of tabs is (TS-091, W20).
+// The pages of Team as a row of tabs (TS-045): This week, Allocation (TS-116),
+// Teams, Members and Invitations. Each is an address of its own, so a tab is a
+// link. The row sits under the page's heading and the sentence under it, as
+// every page's tabs do, and is drawn as every row of tabs is (TS-091, W20).
 
-export type TeamTab = "week" | "teams" | "members" | "invitations";
+export type TeamTab = "week" | "allocation" | "teams" | "members" | "invitations";
 
+/** The address of Team's `tab`. */
 export function teamTabPath(slug: string, tab: TeamTab): string {
 	switch (tab) {
 		case "week":
 			return destinationPath(slug, "team");
+		case "allocation":
+			return allocationPath(slug);
 		case "teams":
 			return `${destinationPath(slug, "team")}?show=teams`;
 		case "members":
@@ -23,6 +31,7 @@ export function teamTabPath(slug: string, tab: TeamTab): string {
 
 const TABS: { id: TeamTab; label: string }[] = [
 	{ id: "week", label: "This week" },
+	{ id: "allocation", label: "Allocation" },
 	{ id: "teams", label: "Teams" },
 	{ id: "members", label: "Members" },
 	{ id: "invitations", label: "Invitations" },

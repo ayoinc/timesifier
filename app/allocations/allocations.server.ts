@@ -7,11 +7,15 @@ import { dayStatus } from "~/leave/days";
 import { calendarOf, leaveContext } from "~/leave/leave.server";
 import { type Access, isAdministrator } from "~/organisations/access";
 import type { Role } from "~/organisations/roles";
+import { periodContaining } from "~/periods/periods";
+import { namesOf } from "~/projects/project.server";
 import { ledProjectIds, mayManageTeam } from "~/projects/teams.server";
 import { addDays, type Day, daysFrom } from "~/time/calendar";
 
 import {
 	AllocationUnit,
+	amountField,
+	amountText,
 	overlap,
 	plannedOn,
 	type Share,
@@ -411,4 +415,80 @@ export async function shareSightOf(
 /** Whether `sight` sees `share`. */
 export function sees(sight: ShareSight, share: Pick<Share, "userId" | "projectId">): boolean {
 	return sight.everyone || sight.people.has(share.userId) || sight.projects.has(share.projectId);
+}
+
+/** One time share as a project's Team tab lists it. */
+export interface ListedShare {
+	id: string;
+	userId: string;
+	name: string;
+	workPackageId: string | null;
+	/** The work package's code and name, "WP2 · Discovery"; null for the whole project. */
+	workPackage: string | null;
+	startsOn: Day;
+	endsOn: Day | null;
+	unit: Share["unit"];
+	/** In words: "2.5 days a week". */
+	amount: string;
+	/** As its field shows it: "2.5". */
+	field: string;
+	/** What it plans in the week shown, in minutes. */
+	weekPlanned: number;
+}
+
+/**
+ * The time shares of `projectId`, of everyone or of `only` (a viewer who
+ * does not see the whole team sees their own), with what each plans in the
+ * week of `today`: those running or to come first, by name, then the ended.
+ */
+export async function projectShares(
+	scope: OrganisationScope,
+	projectId: string,
+	today: Day,
+	weekStartsOn: number,
+	only?: string,
+): Promise<ListedShare[]> {
+	const [rows, packages] = await Promise.all([
+		scope.allocations.select((a) =>
+			and(eq(a.projectId, projectId), only === undefined ? undefined : eq(a.userId, only)),
+		),
+		scope.workPackages.select((w) => eq(w.projectId, projectId)),
+	]);
+	if (rows.length === 0) return [];
+	const shares = rows.map(toShare);
+	const userIds = [...new Set(shares.map((s) => s.userId))];
+	const week = periodContaining(today, weekStartsOn);
+	const [names, plans] = await Promise.all([
+		namesOf(userIds),
+		plansOf(scope, userIds, week.startsOn, week.endsOn, weekStartsOn, shares),
+	]);
+	const packageNames = new Map(packages.map((w) => [w.id, `${w.code} · ${w.name}`]));
+	const ended = (s: Share) => s.endsOn !== null && s.endsOn < today;
+	return shares
+		.map((share) => ({
+			id: share.id,
+			userId: share.userId,
+			name: names.get(share.userId) ?? "Former member",
+			workPackageId: share.workPackageId,
+			workPackage: share.workPackageId ? (packageNames.get(share.workPackageId) ?? null) : null,
+			startsOn: share.startsOn,
+			endsOn: share.endsOn,
+			unit: share.unit,
+			amount: amountText(share),
+			field: amountField(share),
+			weekPlanned: total(
+				plans.get(share.userId)?.shares.find((s) => s.share.id === share.id)?.planned ?? [],
+			),
+			ended: ended(share),
+		}))
+		.sort((a, b) => {
+			if (a.ended !== b.ended) return a.ended ? 1 : -1;
+			if (a.ended) return (b.endsOn ?? "").localeCompare(a.endsOn ?? "");
+			return (
+				a.name.localeCompare(b.name, "en") ||
+				(a.workPackage ?? "").localeCompare(b.workPackage ?? "", "en") ||
+				a.startsOn.localeCompare(b.startsOn)
+			);
+		})
+		.map(({ ended: _, ...listed }) => listed);
 }

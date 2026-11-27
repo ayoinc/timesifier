@@ -10,7 +10,16 @@ import {
 	Popover,
 	Text,
 } from "react-aria-components";
+import { Link } from "react-router";
 
+import {
+	ALLOCATION_UNITS,
+	CHANGE_SHARE_INTENT,
+	REMOVE_SHARE_INTENT,
+	SHARE_INTENT,
+	UNIT_LABELS,
+} from "~/allocations/allocations";
+import type { ListedShare } from "~/allocations/allocations.server";
 import { Button } from "~/components/Button";
 import { cx } from "~/components/cx";
 import {
@@ -29,12 +38,22 @@ import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
 import { rangeLabel } from "~/reports/format";
 import { FormSheet } from "~/routes/app/FormSheet";
-import { useTerms } from "~/routes/app/useOrganisation";
+import { useOrganisation, useTerms } from "~/routes/app/useOrganisation";
+import { TEXT_LINK } from "~/shell/links";
+import { teamTabPath } from "~/teams/TeamTabs";
 import type { Day } from "~/time/calendar";
+import { formatDuration } from "~/time/format";
 import { inTerms } from "~/workspace/work-model";
 
 import { TEAM_ROLE_LABELS, TEAM_ROLES } from "./teams";
-import type { TeamTab as TabData, TeamStretch } from "./teams.server";
+import type { TeamTab as TeamData, TeamStretch } from "./teams.server";
+
+/** The Team tab's data: the team, and each person's time share (TS-116). */
+type TabData = TeamData & {
+	projectId: string;
+	shares: ListedShare[];
+	packages: { id: string; label: string }[];
+};
 
 /**
  * A project's team on its Team tab (TS-115c, decision 75): each stretch of a
@@ -149,6 +168,7 @@ export function TeamTab({
 					)}
 				</Ledger>
 			</div>
+			<Shares team={team} today={today} onSaid={onSaid} />
 
 			<FormSheet
 				title="Assign someone"
@@ -245,6 +265,229 @@ export function TeamTab({
 				</p>
 			</FormSheet>
 		</>
+	);
+}
+
+/**
+ * Each person's time share of the project (TS-116, decision 78): so many days
+ * or hours a week, or a part of their schedule, on the whole project or one of
+ * its work packages, with what it plans this week. Those who manage the team
+ * set a share, change it from a day, end it or remove it; anyone else who does
+ * not see the whole team sees their own.
+ */
+function Shares({
+	team,
+	today,
+	onSaid,
+}: {
+	team: TabData;
+	today: Day;
+	onSaid: (said: string) => void;
+}) {
+	const terms = useTerms();
+	const t = (text: string) => inTerms(text, terms);
+	const { slug } = useOrganisation();
+	const [setting, setSetting] = useState(false);
+	const [changing, setChanging] = useState<ListedShare | null>(null);
+	const [ending, setEnding] = useState<ListedShare | null>(null);
+	const [removing, setRemoving] = useState<ListedShare | null>(null);
+	const units = ALLOCATION_UNITS.map((unit) => ({ id: unit, label: UNIT_LABELS[unit] }));
+	const sentence = (share: ListedShare) =>
+		`${share.name}: ${share.workPackage ?? t("the whole project")}, ${share.amount}, ${daysText(share).toLowerCase()}.`;
+
+	return (
+		<div className="mt-10">
+			<p className="max-w-160 text-body-large">
+				{t(
+					"A time share plans part of a person's week on this project: days or hours a week, or a part of their schedule. Each week's plan follows their schedule, less leave and public holidays.",
+				)}
+			</p>
+			<div className="mt-4 flex flex-wrap items-center gap-4">
+				{team.manages && <Button onPress={() => setSetting(true)}>Set a time share</Button>}
+				{team.manages && (
+					<Link
+						to={`${teamTabPath(slug, "allocation")}?project=${encodeURIComponent(team.projectId)}`}
+						className={TEXT_LINK}
+					>
+						Allocation by week
+					</Link>
+				)}
+			</div>
+			<div className="mt-6">
+				<Ledger heading="Time share" note={team.shares.length}>
+					{team.shares.length === 0 ? (
+						<p className="border-t border-outline-variant px-4 py-6 text-body-large text-on-surface-variant @sm:px-5">
+							{team.seesAll
+								? t("Nobody has a time share of this project yet.")
+								: t("You have no time share of this project.")}
+						</p>
+					) : (
+						<LedgerRows label={t("Time shares of the project")}>
+							{team.shares.map((share) => {
+								const ended = share.endsOn !== null && share.endsOn < today;
+								const days = daysText(share);
+								return (
+									<LedgerRow
+										key={share.id}
+										title={
+											<span className="wrap-anywhere">
+												{share.name}
+												{ended ? " (ended)" : ""}
+											</span>
+										}
+										detail={[
+											share.workPackage ?? t("Whole project"),
+											share.amount,
+											days,
+											ended ? null : `This week ${formatDuration(share.weekPlanned * 60)} planned`,
+										]
+											.filter(Boolean)
+											.join(" · ")}
+										action={
+											team.manages ? (
+												<MenuTrigger>
+													<Button
+														variant="text"
+														aria-label={`Actions for ${share.name}'s time share, ${share.workPackage ?? t("whole project")}, ${days}`}
+													>
+														Actions
+													</Button>
+													<Menu
+														align="end"
+														onAction={(chosen) => {
+															if (chosen === "change") setChanging(share);
+															if (chosen === "end") setEnding(share);
+															if (chosen === "remove") setRemoving(share);
+														}}
+													>
+														<MenuItem id="change">Change from a day</MenuItem>
+														<MenuItem id="end">End</MenuItem>
+														<MenuItem id="remove">Remove</MenuItem>
+													</Menu>
+												</MenuTrigger>
+											) : undefined
+										}
+									/>
+								);
+							})}
+						</LedgerRows>
+					)}
+				</Ledger>
+			</div>
+
+			<FormSheet
+				title="Set a time share"
+				intent={SHARE_INTENT}
+				submitLabel="Set time share"
+				isOpen={setting}
+				onClose={() => setSetting(false)}
+				onDone={onSaid}
+			>
+				<p>
+					{t(
+						"From the first day to the last, this part of their week is planned on this project. A day is that day's length in their schedule.",
+					)}
+				</p>
+				<PersonPicker people={team.people} />
+				{team.packages.length > 0 && (
+					<Select
+						label="Work package"
+						name="workPackageId"
+						options={[{ id: "", label: t("Whole project") }, ...team.packages]}
+						defaultValue=""
+					/>
+				)}
+				<TextField
+					label="Amount"
+					name="amount"
+					inputMode="decimal"
+					description="Such as 2.5 days, 22:30 hours or 50%."
+					isRequired
+				/>
+				<Select label="Unit" name="unit" options={units} defaultValue="days" isRequired />
+				<TextField label="First day" name="startsOn" type="date" defaultValue={today} isRequired />
+				<TextField
+					label="Last day"
+					name="endsOn"
+					type="date"
+					description="Leave it empty while it runs on."
+				/>
+			</FormSheet>
+
+			<FormSheet
+				title={`Change ${changing?.name ?? "their"}'s time share`}
+				intent={CHANGE_SHARE_INTENT}
+				submitLabel="Change time share"
+				isOpen={changing !== null}
+				onClose={() => setChanging(null)}
+				onDone={onSaid}
+			>
+				<input type="hidden" name="shareId" value={changing?.id ?? ""} />
+				<p>
+					{changing ? sentence(changing) : null} The share ends the day before, and the new amount
+					runs from that day to its end, so the weeks before keep their plan.
+				</p>
+				<TextField
+					label="New amount"
+					name="amount"
+					inputMode="decimal"
+					defaultValue={changing?.field}
+					description="Such as 2.5 days, 22:30 hours or 50%."
+					isRequired
+				/>
+				<Select
+					label="Unit"
+					name="unit"
+					options={units}
+					defaultValue={changing?.unit ?? "days"}
+					isRequired
+				/>
+				<TextField
+					label="From"
+					name="from"
+					type="date"
+					defaultValue={changing && changing.startsOn > today ? changing.startsOn : today}
+					min={changing?.startsOn}
+					isRequired
+				/>
+			</FormSheet>
+
+			<FormSheet
+				title={`End ${ending?.name ?? "their"}'s time share`}
+				intent="share-end"
+				submitLabel="Save last day"
+				isOpen={ending !== null}
+				onClose={() => setEnding(null)}
+				onDone={onSaid}
+			>
+				<input type="hidden" name="shareId" value={ending?.id ?? ""} />
+				<p>{ending ? sentence(ending) : null}</p>
+				<TextField
+					label="Last day"
+					name="endsOn"
+					type="date"
+					defaultValue={ending?.endsOn ?? today}
+					min={ending?.startsOn}
+					description="Leave it empty and the share runs on."
+				/>
+			</FormSheet>
+
+			<FormSheet
+				title={`Remove ${removing?.name ?? "this"}'s time share?`}
+				intent={REMOVE_SHARE_INTENT}
+				submitLabel="Remove"
+				submitVariant="danger"
+				isOpen={removing !== null}
+				onClose={() => setRemoving(null)}
+				onDone={onSaid}
+			>
+				<input type="hidden" name="shareId" value={removing?.id ?? ""} />
+				<p>
+					{removing ? sentence(removing) : null} For a share set in error: every week it planned
+					goes. To stop planning from a day, end it instead.
+				</p>
+			</FormSheet>
+		</div>
 	);
 }
 

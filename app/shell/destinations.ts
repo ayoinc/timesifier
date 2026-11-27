@@ -282,6 +282,17 @@ export const MEMBERS_SEGMENT = `${destination("team").segment}/members`;
 export const INVITATIONS_SEGMENT = `${destination("team").segment}/invitations`;
 /** What follows the organisation in the address of the people import (TS-108): below Invitations, for owners and admins. */
 export const PEOPLE_IMPORT_SEGMENT = `${INVITATIONS_SEGMENT}/import`;
+/**
+ * What follows the organisation in the address of Team › Allocation (TS-116):
+ * a page of Team that a delivery manager or a client's account manager opens
+ * too, who is not shown Team; the page decides who sees what.
+ */
+export const ALLOCATION_SEGMENT = `${destination("team").segment}/allocation`;
+
+/** The address of Team › Allocation of the organisation with this slug. */
+export function allocationPath(slug: string): string {
+	return `${organisationPath(slug)}/${ALLOCATION_SEGMENT}`;
+}
 
 /** What follows the organisation in the address of its work schedules (TS-097): a page of Workspace settings, for owners and admins. */
 export const SCHEDULES_SEGMENT = `${destination("settings").segment}/schedules`;

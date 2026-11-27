@@ -5,6 +5,14 @@ import { useLocale } from "react-aria";
 import { Link, useNavigate } from "react-router";
 import * as z from "zod";
 
+import { AllocationUnit, amountText, parseAmount, SHARE_PROBLEMS } from "~/allocations/allocations";
+import {
+	changeShare,
+	projectShares,
+	removeShare,
+	type ShareChange,
+	setShare,
+} from "~/allocations/allocations.server";
 import { BillingType } from "~/billing/billable";
 import { BudgetBar, budgetFigure } from "~/budgets/BudgetBar";
 import { BudgetKind, isHoursBudget } from "~/budgets/budget";
@@ -85,6 +93,7 @@ import {
 	WORK_PACKAGE_PROBLEMS,
 	type WorkPackageInput,
 	workPackageOf,
+	workPackagesOf,
 	workPackagesTab,
 } from "~/projects/work-packages.server";
 import { resolveRate } from "~/rates/rates";
@@ -189,29 +198,48 @@ export async function loader({ request, params, context }: Route.LoaderArgs) {
 					})
 				: null,
 		/** The project's team (TS-115c), read only on the Team tab. */
-		team:
-			tab === "team"
-				? await teamTab(
-						scope,
-						{
-							userId: membership.user.id,
-							role: membership.role,
-							managesTeams: membership.managesTeams,
-							managed,
-							leads: led.has(projectId),
-							oversees: overseen.has(projectId),
-						},
-						{
-							id: projectId,
-							clientId: hasClients(organisation.workModel)
-								? (page.project.client?.id ?? null)
-								: null,
-						},
-						today,
-					)
-				: null,
+		team: tab === "team" ? await teamWithShares() : null,
 		today,
 	};
+
+	/** The Team tab with each person's time share (TS-116): all of them where the viewer sees the whole team, else their own. */
+	async function teamWithShares() {
+		const team = await teamTab(
+			scope,
+			{
+				userId: membership.user.id,
+				role: membership.role,
+				managesTeams: membership.managesTeams,
+				managed,
+				leads: led.has(projectId),
+				oversees: overseen.has(projectId),
+			},
+			{
+				id: projectId,
+				clientId: hasClients(organisation.workModel) ? (page?.project.client?.id ?? null) : null,
+			},
+			today,
+		);
+		const [shares, packages] = await Promise.all([
+			projectShares(
+				scope,
+				projectId,
+				today,
+				organisation.weekStartsOn,
+				team.seesAll ? undefined : membership.user.id,
+			),
+			team.manages ? workPackagesOf(scope, [projectId]) : undefined,
+		]);
+		return {
+			...team,
+			projectId,
+			shares,
+			/** The work packages a share may name: those still taking time. */
+			packages: (packages?.get(projectId) ?? [])
+				.filter((w) => w.state === "open" && w.archivedAt === null)
+				.map((w) => ({ id: w.id, label: `${w.code} · ${w.name}` })),
+		};
+	}
 }
 
 /** The project's Work packages tab as `membership` is shown it. */
@@ -320,6 +348,29 @@ const form = z.discriminatedUnion("intent", [
 	}),
 	z.object({ intent: z.literal("team-role"), stretchId: Id, role: TeamRole, from: Day }),
 	z.object({ intent: z.literal("team-remove"), stretchId: Id }),
+	// A person's time share (TS-116): set, changed from a day, ended, or removed.
+	z.object({
+		intent: z.literal("share-set"),
+		userId: Id,
+		workPackageId: z.union([Id, z.literal("")]).default(""),
+		amount: Typed,
+		unit: AllocationUnit,
+		startsOn: Day,
+		endsOn: z.union([Day, z.literal("")]).default(""),
+	}),
+	z.object({
+		intent: z.literal("share-change"),
+		shareId: Id,
+		amount: Typed,
+		unit: AllocationUnit,
+		from: Day,
+	}),
+	z.object({
+		intent: z.literal("share-end"),
+		shareId: Id,
+		endsOn: z.union([Day, z.literal("")]).default(""),
+	}),
+	z.object({ intent: z.literal("share-remove"), shareId: Id }),
 	z.object({
 		intent: z.literal("rate"),
 		level: z.enum(["project", "project-person", "project-task"]),
@@ -535,6 +586,21 @@ export async function action({ request, params, context }: Route.ActionArgs) {
 				role,
 			});
 
+		case "share-set":
+		case "share-change":
+		case "share-end":
+		case "share-remove": {
+			const { managed, clientId, leads } = await teamAuthority(
+				scope,
+				membership,
+				found.project,
+				today,
+			);
+			// Whoever manages the project's team sets its time shares (TS-116, decision 78).
+			if (!mayManageTeam(role, managed, clientId, leads)) return declined(NOT_ALLOWED, 403);
+			return shareAction(input, { scope, actor: user.id, projectId });
+		}
+
 		case "rate": {
 			if (!mayManageRates(role)) return declined(NOT_ALLOWED, 403);
 			const amountMinor = parseMoney(input.amount, currency);
@@ -678,6 +744,64 @@ async function teamAction(
 				await removeStretch(scope, who, projectId, input.stretchId),
 				"Taken off the team.",
 			);
+	}
+}
+
+/** Sets, changes, ends or removes a person's time share of the project (TS-116). */
+async function shareAction(
+	input: Extract<
+		z.infer<typeof form>,
+		{ intent: "share-set" | "share-change" | "share-end" | "share-remove" }
+	>,
+	{ scope, actor, projectId }: { scope: OrganisationScope; actor: string; projectId: string },
+) {
+	const who = { userId: actor };
+	const said = (change: ShareChange, sentence: string) => {
+		if (change === null) throw notFound();
+		return change.ok ? done(sentence) : declined(SHARE_PROBLEMS[change.problem]);
+	};
+	switch (input.intent) {
+		case "share-set": {
+			const amount = parseAmount(input.amount, input.unit);
+			if (amount === null) return declined(SHARE_PROBLEMS.amount);
+			const change = await setShare(scope, who, {
+				projectId,
+				workPackageId: input.workPackageId || null,
+				userId: input.userId,
+				startsOn: input.startsOn,
+				endsOn: input.endsOn || null,
+				amount,
+				unit: input.unit,
+			});
+			const [name] = (await namesOf([input.userId])).values();
+			return said(
+				change,
+				`${name ?? "They"}: ${amountText({ amount, unit: input.unit })} from ${dayLabel(input.startsOn)}${input.endsOn ? ` to ${dayLabel(input.endsOn)}` : ""}.`,
+			);
+		}
+		case "share-change": {
+			const amount = parseAmount(input.amount, input.unit);
+			if (amount === null) return declined(SHARE_PROBLEMS.amount);
+			return said(
+				await changeShare(
+					scope,
+					who,
+					input.shareId,
+					{ amount, unit: input.unit, from: input.from },
+					projectId,
+				),
+				`From ${dayLabel(input.from)}, ${amountText({ amount, unit: input.unit })}.`,
+			);
+		}
+		case "share-end":
+			return said(
+				await changeShare(scope, who, input.shareId, { endsOn: input.endsOn || null }, projectId),
+				input.endsOn
+					? `The time share's last day is ${dayLabel(input.endsOn)}.`
+					: "The time share runs on.",
+			);
+		case "share-remove":
+			return said(await removeShare(scope, who, input.shareId, projectId), "Time share removed.");
 	}
 }
 

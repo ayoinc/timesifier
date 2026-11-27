@@ -14,6 +14,7 @@ import {
 } from "~/organisations/membership.server";
 import { signedInContext } from "~/routes/auth/session.server";
 import {
+	ALLOCATION_SEGMENT,
 	CONTRACT_SEGMENT,
 	canSee,
 	destinationIndex,
@@ -83,7 +84,9 @@ const requireDestination: Route.MiddlewareFunction = ({ pattern, params, context
 	const financeReads =
 		path === `${organisationPath(PATTERN_SLUG)}/${CONTRACT_SEGMENT}` &&
 		maySeeRates(membership.role);
-	if (at && !financeReads && !canSee(viewerOf(membership), at.id)) throw notFound();
+	// Team › Allocation (TS-116) is opened by a project's delivery managers and its client's account managers too; the page decides.
+	const allocation = path === `${organisationPath(PATTERN_SLUG)}/${ALLOCATION_SEGMENT}`;
+	if (at && !financeReads && !allocation && !canSee(viewerOf(membership), at.id)) throw notFound();
 	// A page of a destination that shows money is refused the same way to anyone who does not see rates.
 	const rest = path.slice(organisationPath(PATTERN_SLUG).length);
 	if (RATES_ONLY.some((page) => rest.startsWith(page)) && !maySeeRates(membership.role)) {
