@@ -493,7 +493,24 @@ for (const viewport of [
 				const below = main.getByRole("list", { name: "Planned this week" });
 				await expect(below).toContainText("INT-001 · Intranet: 7:30 planned, 0:00 tracked");
 				await tabTo(page, main.getByRole("link", { name: /Next week/ }));
-				await expectNoProblems(page, "on the Timesheet's week", [EMPTY_INPUT]);
+				// Under 600px the week's grid scrolls across in its own frame, and the
+				// columns it cuts at its edge cannot be measured; from 600px it is whole.
+				// The plan's own text is measured here instead.
+				await expectNoProblems(
+					page,
+					"on the Timesheet's week",
+					viewport.width < 600 ? [EMPTY_INPUT, "elmPartiallyObscured"] : [EMPTY_INPUT],
+				);
+				for (const plan of [
+					main.getByText("WP2: 18:45 planned, 3:00 tracked"),
+					below.getByText("INT-001 · Intranet: 7:30 planned, 0:00 tracked"),
+				]) {
+					await plan.scrollIntoViewIfNeeded();
+					expect(
+						await contrast(plan),
+						`contrast of "${await plan.textContent()}" on the Timesheet's week`,
+					).toBeGreaterThanOrEqual(4.5);
+				}
 				await shoot(page, "timesheet-plan", below);
 
 				// 4. Reports › Planned, from Time's tabs.
