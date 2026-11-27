@@ -110,6 +110,26 @@ export function mayDecidePeriodOf(access: Access, personId: string): boolean {
 	return isAdministrator(access.role) || access.managed.has(personId);
 }
 
+/**
+ * Whether `access` may approve or return a part of `personId`'s week
+ * (TS-117, decision 79). The line part (`projectId` null) as a whole week:
+ * `mayDecidePeriodOf`. A project part: an owner or admin, or a delivery
+ * manager of that project in the week, `leads` holding the projects whose
+ * delivery manager `access` is then. Never the person themselves, whatever
+ * their role (D5, decision 47): a delivery manager's own time on their
+ * project goes to another delivery manager of it, or to an owner or admin.
+ */
+export function mayDecidePartOf(
+	access: Access,
+	personId: string,
+	projectId: string | null,
+	leads: ReadonlySet<string>,
+): boolean {
+	if (projectId === null) return mayDecidePeriodOf(access, personId);
+	if (personId === access.userId) return false;
+	return isAdministrator(access.role) || leads.has(projectId);
+}
+
 /** Whether `access` may reopen an approved period: an owner or admin alone (TS-047). */
 export function mayReopenPeriods(access: Access): boolean {
 	return isAdministrator(access.role);

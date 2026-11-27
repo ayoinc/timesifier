@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import {
@@ -39,6 +39,8 @@ export interface Caller {
 	user: { id: string; name: string; email: string; timeZone: string | null };
 	role: Role;
 	managesTeams: boolean;
+	/** Whether they are, or have been, a delivery manager of a project (TS-117). */
+	leadsProjects: boolean;
 	access: Access;
 }
 
@@ -51,10 +53,16 @@ export function zoneOfCaller({
 }
 
 /** What decides the destinations, and so the pages, the caller may reach. */
-export function viewerOfCaller({ role, managesTeams, organisation }: Caller): Viewer {
+export function viewerOfCaller({
+	role,
+	managesTeams,
+	leadsProjects,
+	organisation,
+}: Caller): Viewer {
 	return {
 		role,
 		managesTeams,
+		leadsProjects,
 		clientsEnabled: hasClients(organisation.workModel),
 		keepsBilling: organisation.keepsBilling,
 	};
@@ -64,7 +72,7 @@ export function viewerOfCaller({ role, managesTeams, organisation }: Caller): Vi
 export async function callerOf(organisationId: string, userId: string): Promise<Caller | null> {
 	const db = drizzle(env.DB);
 	const scope = organisationScope(env.DB, organisationId);
-	const [[organisation], [user], [membership], managing] = await Promise.all([
+	const [[organisation], [user], [membership], managing, leading] = await Promise.all([
 		db
 			.select({
 				id: organisations.id,
@@ -86,6 +94,9 @@ export async function callerOf(organisationId: string, userId: string): Promise<
 			.limit(1),
 		scope.memberships.select((m) => eq(m.userId, userId), { limit: 1 }),
 		scope.teamMembers.select((t) => eq(t.userId, userId)),
+		scope.projectMembers.select((m) => and(eq(m.userId, userId), eq(m.role, "delivery_manager")), {
+			limit: 1,
+		}),
 	]);
 	const role = Role.safeParse(membership?.role);
 	if (!organisation || !user || !role.success) return null;
@@ -102,6 +113,7 @@ export async function callerOf(organisationId: string, userId: string): Promise<
 		user,
 		role: role.data,
 		managesTeams: managed.length > 0,
+		leadsProjects: leading.length > 0,
 		access: { userId, role: role.data, managed: new Set(people.map((place) => place.userId)) },
 	};
 }

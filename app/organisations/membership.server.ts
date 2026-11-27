@@ -6,7 +6,7 @@
  * database every time (docs/decisions.md entry 20).
  */
 import { env } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { createContext, data } from "react-router";
 import type { SignedIn } from "~/auth/auth.server";
@@ -42,6 +42,11 @@ export type Membership = {
 	role: Role;
 	/** Whether the person manages at least one of the organisation's teams (TS-038). */
 	managesTeams: boolean;
+	/**
+	 * Whether the person has a stretch as delivery manager of a project, now
+	 * or before (TS-115c): they approve its time on Approvals (TS-117).
+	 */
+	leadsProjects: boolean;
 	user: SignedIn["user"];
 };
 
@@ -82,9 +87,12 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 	// No organisation has an empty id, so an unknown slug is looked up as a
 	// membership that cannot exist.
 	const scope = organisationScope(env.DB, organisation?.id ?? "");
-	const [[membership], managed] = await Promise.all([
+	const [[membership], managed, leading] = await Promise.all([
 		scope.memberships.select((m) => eq(m.userId, user.id)),
 		managedPlaces(scope, user.id),
+		scope.projectMembers.select((m) => and(eq(m.userId, user.id), eq(m.role, "delivery_manager")), {
+			limit: 1,
+		}),
 	]);
 
 	// A role this application does not know grants nothing.
@@ -101,15 +109,17 @@ async function membershipOf(user: SignedIn["user"], slug: string): Promise<Membe
 		},
 		role: role.data,
 		managesTeams: managed.length > 0,
+		leadsProjects: leading.length > 0,
 		user,
 	};
 }
 
 /** What decides the destinations a member is shown (`app/shell/destinations.ts`). */
-export function viewerOf({ role, managesTeams, organisation }: Membership): Viewer {
+export function viewerOf({ role, managesTeams, leadsProjects, organisation }: Membership): Viewer {
 	return {
 		role,
 		managesTeams,
+		leadsProjects,
 		clientsEnabled: hasClients(organisation.workModel),
 		keepsBilling: organisation.keepsBilling,
 	};

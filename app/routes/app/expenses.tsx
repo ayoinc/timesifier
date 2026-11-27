@@ -268,6 +268,7 @@ async function submissionOf(
 		state: periodState(status),
 		status,
 		comment: row?.status === "returned" ? row.comment : null,
+		parts: row?.parts ?? null,
 		runsInWeek: running.some(
 			({ spentOn }) => period.startsOn <= spentOn && spentOn <= period.endsOn,
 		),

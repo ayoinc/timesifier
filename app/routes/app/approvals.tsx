@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { useEffect, useState } from "react";
 import { data, Link, redirect, useNavigate } from "react-router";
 import * as z from "zod";
@@ -7,11 +8,15 @@ import {
 	type ApprovedAll,
 	approvalsFor,
 	approveAll,
+	approveAllParts,
 	type DecisionOutcome,
 	decidablePeople,
 	decide,
 	managersAwayOf,
+	type PartSummary,
 	pendingPeriods,
+	pendingProjectWeeks,
+	projectApprovals,
 } from "~/approvals/approvals.server";
 import {
 	APPROVAL_GROUP_LABELS,
@@ -23,6 +28,13 @@ import {
 	STATUSES,
 	withoutTab,
 } from "~/approvals/choices";
+import {
+	APPROVAL_VIEWS,
+	type ApprovalView,
+	PART_STATUS_LABELS,
+	projectsApprovalsPath,
+	VIEW_PARAM,
+} from "~/approvals/parts";
 import { namesOf, refusersNamed, refusersOfAll } from "~/approvals/refusals.server";
 import {
 	managersAwaySentence,
@@ -32,10 +44,11 @@ import {
 import { Button } from "~/components/Button";
 import { FilterBar, useApplyFilters } from "~/components/FilterBar";
 import { Ledger, LedgerRow, LedgerRows, LedgerTotal } from "~/components/Ledger";
+import { LinkTabs } from "~/components/LinkTabs";
 import { PeriodStepper } from "~/components/PeriodStepper";
 import { Select } from "~/components/Select";
 import { TextField } from "~/components/TextField";
-import { organisationScope } from "~/db";
+import { type OrganisationScope, organisationScope } from "~/db";
 import { expenseTotalsOf } from "~/expenses/expenses.server";
 import { nothingExpected } from "~/leave/days";
 import { halfDaysLabel, LEAVE_TEXT_MAX_LENGTH } from "~/leave/kinds";
@@ -98,6 +111,15 @@ import { useOrganisation } from "./useOrganisation";
 // Time off waiting lists the requests for leave the viewer decides, each with
 // the notice it gave, and beside them the requests for overtime and weekend
 // work, decided the same way (TS-090; app/leave/work.server.ts).
+//
+// Approval by project (TS-117, decision 79): a week with time on a client
+// project that has a delivery manager is held in parts. The page has two
+// tabs, `?view=`: People, for line managers, owners and admins, the weeks as
+// above, each held in parts decided on its line part and showing its project
+// parts as decided or waiting; and Projects, for delivery managers, owners
+// and admins, each project's people and their days on it, decided a part at
+// a time. A person shown one tab alone sees no tabs; an organisation with no
+// delivery manager sees the page as it was.
 
 const { label } = destination("approvals");
 
@@ -130,6 +152,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 	const access = await accessOf(membership);
 	const scope = organisationScope(env.DB, organisation.id);
+	const views = await viewsOf(scope, membership, access);
+	const askedView = APPROVAL_VIEWS.find((each) => each === url.searchParams.get(VIEW_PARAM));
+	const view = askedView && views.includes(askedView) ? askedView : (views[0] ?? "people");
+	if (view === "projects") return projectsView(membership, access, url, views);
 	const people = await decidablePeople(scope, organisation, access);
 	const waiting = await pendingPeriods(scope, people);
 
@@ -234,6 +260,10 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		overLimit: string | null;
 		/** Why it waits for an owner or admin, when its managers are on leave (D6). */
 		waits: string | null;
+		/** Of a week held in parts (TS-117), each project part and where it stands; null for one decided whole. */
+		parts: string[] | null;
+		/** Whether the whole week is approved, so an owner or admin may reopen it. */
+		reopenable: boolean;
 	};
 	const moneyWords = (totals: readonly Money[]) =>
 		totals.map((m) => formatMoney(m.amountMinor, m.currency, "en-GB")).join(" + ");
@@ -249,6 +279,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		periodId: string | null = null,
 		comment: string | null = null,
 		overLimit: string | null = null,
+		projects: PartSummary[] | null = null,
+		reopenable = false,
 	): Row => ({
 		id: periodId ?? person.id,
 		// The name, or the start of the address with the whole of it under (harvest-taste item 9).
@@ -268,6 +300,16 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 		expenses: expensesOf(person.id),
 		overLimit,
 		waits: periodId !== null && query.status === "pending" ? awayNote(person.id) : null,
+		parts:
+			projects?.map(
+				(part) =>
+					`Time on ${part.project}: ${
+						part.status === "submitted"
+							? "waiting for its delivery manager"
+							: `${PART_STATUS_LABELS[part.status].toLowerCase()} by ${part.decidedBy}`
+					}`,
+			) ?? null,
+		reopenable,
 	});
 	const decided = (p: (typeof approvals.decided)[number]) =>
 		row(
@@ -275,6 +317,9 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 			`${p.status === "approved" ? "Approved" : "Returned"} by ${p.decidedBy || "the system"}, ${date.format(p.decidedAt)}`,
 			p.id,
 			p.comment,
+			null,
+			p.projects,
+			p.reopenable,
 		);
 	let rows: Row[] | null;
 	switch (query.status) {
@@ -286,6 +331,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 					p.id,
 					null,
 					p.overLimit,
+					p.projects,
 				),
 			);
 			break;
@@ -303,6 +349,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 	const totalSeconds = rows?.reduce((sum, r) => sum + r.seconds, 0) ?? 0;
 
 	return {
+		view: "people" as const,
+		views,
 		query,
 		opensAt,
 		week: { label: periodLabel(viewed.period), ...viewed },
@@ -402,6 +450,105 @@ function stillToSubmit(
 }
 
 /**
+ * The tabs `membership` is shown (TS-117): People to an owner, an admin or a
+ * manager of a team, who decide whole weeks and line parts; Projects to a
+ * delivery manager, and to an owner or admin once the organisation has a
+ * delivery manager, as they decide any part.
+ */
+async function viewsOf(
+	scope: OrganisationScope,
+	membership: Membership,
+	access: Access,
+): Promise<ApprovalView[]> {
+	const administrator = isAdministrator(access.role);
+	const projects =
+		membership.leadsProjects ||
+		(administrator &&
+			(
+				await scope.projectMembers.select((m) => eq(m.role, "delivery_manager"), {
+					limit: 1,
+				})
+			).length > 0);
+	return APPROVAL_VIEWS.filter((view) =>
+		view === "people" ? administrator || membership.managesTeams : projects,
+	);
+}
+
+/**
+ * The Projects tab (TS-117): the week's project parts the viewer sees, each
+ * project's people and their days, and the other weeks with parts waiting for
+ * them. With no week asked for, the latest week with a part waiting.
+ */
+async function projectsView(
+	membership: Membership,
+	access: Access,
+	url: URL,
+	views: ApprovalView[],
+) {
+	const { organisation } = membership;
+	const scope = organisationScope(env.DB, organisation.id);
+	const now = Date.now();
+	const waiting = await pendingProjectWeeks(scope, access);
+	const opened = new URL(url);
+	const latest = waiting[0];
+	if (!url.searchParams.has(WEEK_PARAM) && latest)
+		opened.searchParams.set(WEEK_PARAM, latest.startsOn);
+	const viewed = await viewedPeriod(membership, opened, 0, now);
+	const groups = await projectApprovals(scope, organisation, access, viewed.period, now);
+	const date = (instant: number) => formatDayAndTime(instant, viewed.zone);
+	const projects = groups.map((group) => ({
+		id: group.id,
+		name: group.name,
+		total: hours(group.parts.reduce((sum, part) => sum + part.seconds, 0)),
+		parts: group.parts.map((part) => ({
+			periodId: part.periodId,
+			person: {
+				id: part.person.id,
+				name: part.person.address ? shownName({ email: part.person.address }) : part.person.name,
+				address: part.person.address,
+			},
+			status: part.status,
+			/** Each day with time on the project, "Mon 9 7:30". */
+			days: part.days.flatMap((d) =>
+				d.seconds > 0 ? [`${formatDay(d.day, "short")} ${hours(d.seconds)}`] : [],
+			),
+			total: hours(part.seconds),
+			split: regularAndOvertime(part.seconds, part.overtimeSeconds),
+			detail:
+				part.status === "submitted"
+					? `Submitted ${date(part.submittedAt)}`
+					: `${PART_STATUS_LABELS[part.status]} by ${part.decidedBy || "the system"}${part.decidedAt ? `, ${date(part.decidedAt)}` : ""}`,
+			comment: part.comment,
+			mayDecide: part.mayDecide && part.status === "submitted",
+			/** Their own time, waiting: nobody approves their own (D5, decision 47). */
+			own: part.person.id === access.userId && part.status === "submitted",
+			waits: part.waits,
+		})),
+	}));
+	return {
+		view: "projects" as const,
+		views,
+		opensAt: url.searchParams.has(WEEK_PARAM)
+			? null
+			: projectsApprovalsPath(organisation.slug, viewed.period.startsOn),
+		week: { label: periodLabel(viewed.period), ...viewed },
+		elsewhere: waiting
+			.filter((w) => w.startsOn !== viewed.period.startsOn)
+			.map((w) => ({
+				startsOn: w.startsOn,
+				count: w.count,
+				label: periodLabel(periodContaining(w.startsOn, organisation.weekStartsOn)),
+			})),
+		/** How many parts of the week wait for this viewer's decision. */
+		pending: projects.reduce(
+			(sum, project) => sum + project.parts.filter((part) => part.mayDecide).length,
+			0,
+		),
+		projects,
+	};
+}
+
+/**
  * Asks `personId`, or everyone Not submitted lists, to submit the week that
  * starts on `startsOn` (TS-049): those the asker decides for, as the list
  * shows them, once a day for each week (`submitAsked`).
@@ -459,6 +606,9 @@ const Comment = z.string().trim().min(1).max(PERIOD_COMMENT_MAX_LENGTH);
 const form = z.discriminatedUnion("intent", [
 	z.object({ intent: z.literal("approve"), periodId: Id, overLimit: z.literal("on").optional() }),
 	z.object({ intent: z.literal("approve-all"), startsOn: z.string() }),
+	z.object({ intent: z.literal("approve-part"), periodId: Id, projectId: Id }),
+	z.object({ intent: z.literal("return-part"), periodId: Id, projectId: Id, comment: z.string() }),
+	z.object({ intent: z.literal("approve-all-parts"), startsOn: z.string() }),
 	z.object({ intent: z.literal("return"), periodId: Id, comment: z.string() }),
 	z.object({ intent: z.literal("reopen"), periodId: Id, comment: z.string() }),
 	z.object({
@@ -503,13 +653,14 @@ function outcome({ result, overLimit, lockedThrough }: DecisionOutcome, said: st
 	}
 }
 
-/** What Approve all says it did, and what it left and why (TR-01, TR-02). */
-function approvedAllSaid({ approved, over, running }: ApprovedAll): string {
+/** What Approve all says it did, and what it left and why (TR-01, TR-02); of parts on the Projects tab (TS-117). */
+function approvedAllSaid(
+	{ approved, over, running }: ApprovedAll,
+	[one, many]: [string, string] = ["timesheet", "timesheets"],
+): string {
 	if (approved + over + running === 0) return "Nothing was waiting.";
 	const said = [
-		approved === 0
-			? "No timesheet approved."
-			: `${approved} ${approved === 1 ? "timesheet" : "timesheets"} approved.`,
+		approved === 0 ? `No ${one} approved.` : `${approved} ${approved === 1 ? one : many} approved.`,
 	];
 	if (over > 0) {
 		said.push(
@@ -598,6 +749,42 @@ export async function action({ request, context }: Route.ActionArgs) {
 			const people = await decidablePeople(scope, membership.organisation, access);
 			return done(approvedAllSaid(await approveAll(scope, access, people, startsOn.data)));
 		}
+		case "approve-part":
+			return outcome(
+				await decide(
+					scope,
+					access,
+					input.periodId,
+					{ action: "approved" },
+					{ projectId: input.projectId },
+				),
+				"Their time on the project approved.",
+			);
+		case "return-part": {
+			const comment = Comment.safeParse(input.comment);
+			if (!comment.success) return declined(COMMENT_PROBLEM);
+			return outcome(
+				await decide(
+					scope,
+					access,
+					input.periodId,
+					{ action: "returned", comment: comment.data },
+					{ projectId: input.projectId },
+				),
+				"Their time on the project returned. They can change it and submit it again.",
+			);
+		}
+		case "approve-all-parts": {
+			const startsOn = Day.safeParse(input.startsOn);
+			if (!startsOn.success) return declined("That week is not one this page knows.");
+			const period = periodContaining(startsOn.data, membership.organisation.weekStartsOn);
+			return done(
+				approvedAllSaid(await approveAllParts(scope, membership.organisation, access, period), [
+					"person's time",
+					"people's time",
+				]),
+			);
+		}
 		case "return":
 		case "reopen": {
 			const comment = Comment.safeParse(input.comment);
@@ -622,7 +809,10 @@ export async function action({ request, context }: Route.ActionArgs) {
 }
 
 type Loaded = Route.ComponentProps["loaderData"];
-type Target = { id: string; name: string; overLimit?: string | null };
+type PeopleLoaded = Extract<Loaded, { view: "people" }>;
+type ProjectsLoaded = Extract<Loaded, { view: "projects" }>;
+/** What a sheet acts on; `held`: a week held in parts, of which the People tab decides the rest (TS-117). */
+type Target = { id: string; name: string; overLimit?: string | null; held?: boolean };
 
 /** What Not submitted says when nobody's weeks come to the viewer at all. */
 const NOBODY = "Nobody's weeks come to you to approve.";
@@ -636,6 +826,240 @@ const NOTHING: Record<(typeof STATUSES)[number], string> = {
 };
 
 export default function Approvals({ loaderData }: Route.ComponentProps) {
+	return loaderData.view === "projects" ? (
+		<ProjectsApprovals loaderData={loaderData} />
+	) : (
+		<PeopleApprovals loaderData={loaderData} />
+	);
+}
+
+/** The tabs People and Projects (TS-117), to a person shown both; nothing to one shown one. */
+function ViewTabs({ views, view, week }: { views: ApprovalView[]; view: ApprovalView; week: Day }) {
+	const organisation = useOrganisation();
+	if (views.length < 2) return null;
+	return (
+		<div className="mt-6 max-w-200">
+			<LinkTabs
+				label="Approve by"
+				current={view}
+				tabs={[
+					{
+						id: "people",
+						to: `${destinationPath(organisation.slug, "approvals")}?${WEEK_PARAM}=${week}`,
+						label: "People",
+					},
+					{ id: "projects", to: projectsApprovalsPath(organisation.slug, week), label: "Projects" },
+				]}
+			/>
+		</div>
+	);
+}
+
+/**
+ * The Projects tab (TS-117): the week's time on each project the viewer
+ * approves, by person and day, each person's time approved or returned on
+ * its own, and all of it at once.
+ */
+function ProjectsApprovals({ loaderData }: { loaderData: ProjectsLoaded }) {
+	const organisation = useOrganisation();
+	const { opensAt, week, elsewhere, projects, pending, views } = loaderData;
+	const navigate = useNavigate();
+	// The week it opened on goes into the address (W13).
+	useEffect(() => {
+		if (opensAt) navigate(opensAt, { replace: true, preventScrollReset: true });
+	}, [opensAt, navigate]);
+	const [task, setTask] = useState<"approve" | "return" | "all" | null>(null);
+	const [target, setTarget] = useState<{
+		periodId: string;
+		projectId: string;
+		name: string;
+	} | null>(null);
+	const [said, setSaid] = useState<string | null>(null);
+	const close = () => setTask(null);
+	const open = (next: NonNullable<typeof task>, on: typeof target) => {
+		setTarget(on);
+		setTask(next);
+	};
+	const at = (startsOn: Day) => projectsApprovalsPath(organisation.slug, startsOn);
+
+	return (
+		<>
+			<PageHeading>{label}</PageHeading>
+			<PageLead>The timesheets people submit, a week at a time.</PageLead>
+			<ViewTabs views={views} view="projects" week={week.period.startsOn} />
+			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
+				{said}
+			</p>
+			<div className="mt-6 max-w-200">
+				<PeriodStepper
+					label="Weeks"
+					period={week.label}
+					previous={{ to: at(week.previous), label: "Previous week" }}
+					next={week.next ? { to: at(week.next), label: "Next week" } : null}
+					current={week.next ? { to: at(week.current.startsOn), label: "This week" } : undefined}
+				/>
+			</div>
+			{elsewhere.length > 0 && (
+				<p className="mt-4 max-w-200 text-body-medium text-on-surface-variant">
+					Also waiting:{" "}
+					{elsewhere.map((w, index) => (
+						<span key={w.startsOn}>
+							{index > 0 && ", "}
+							<Link to={at(w.startsOn)} className={TEXT_LINK}>
+								{w.label}
+							</Link>{" "}
+							({w.count})
+						</span>
+					))}
+					.
+				</p>
+			)}
+			<div className="mt-8 max-w-200">
+				{pending > 1 && (
+					<div className="mb-4">
+						<Button onPress={() => open("all", null)}>Approve all {pending}</Button>
+					</div>
+				)}
+				{projects.length === 0 ? (
+					<EmptySheet heading="Projects">
+						No time on the projects you approve was submitted for this week.
+					</EmptySheet>
+				) : (
+					projects.map((project) => (
+						<div key={project.id} className="mt-6 first:mt-0">
+							<Ledger
+								heading={<span className="wrap-anywhere">{project.name}</span>}
+								note={project.total}
+							>
+								<LedgerRows label={`${project.name}, by person`}>
+									{project.parts.map((part) => {
+										const on = {
+											periodId: part.periodId,
+											projectId: project.id,
+											name: `${part.person.name}'s time on ${project.name}`,
+										};
+										return (
+											<LedgerRow
+												key={part.periodId}
+												title={<span className="wrap-anywhere">{part.person.name}</span>}
+												detail={
+													<>
+														{part.person.address && (
+															<span className="block wrap-anywhere">{part.person.address}</span>
+														)}
+														<span className="block">
+															{part.days.length > 0 ? part.days.join(" · ") : "No time on it"}
+														</span>
+														{part.detail}
+														{part.own && (
+															<span className="block">
+																Your own time: another delivery manager, an owner or an admin
+																approves it.
+															</span>
+														)}
+														{part.waits && <span className="block">{part.waits}</span>}
+														{part.comment && (
+															<span className="block wrap-anywhere">“{part.comment}”</span>
+														)}
+													</>
+												}
+												value={
+													<>
+														{part.total}
+														{part.split && (
+															<span className="block text-body-medium text-on-surface-variant">
+																{part.split}
+															</span>
+														)}
+													</>
+												}
+												action={
+													part.mayDecide && (
+														<span className="flex gap-1">
+															<Button
+																variant="text"
+																aria-label={`Approve ${on.name}`}
+																onPress={() => open("approve", on)}
+															>
+																Approve
+															</Button>
+															<Button
+																variant="text"
+																aria-label={`Return ${on.name}`}
+																onPress={() => open("return", on)}
+															>
+																Return
+															</Button>
+														</span>
+													)
+												}
+											/>
+										);
+									})}
+								</LedgerRows>
+							</Ledger>
+						</div>
+					))
+				)}
+			</div>
+
+			<FormSheet
+				title={`Approve ${target?.name ?? "this time"}?`}
+				intent="approve-part"
+				submitLabel="Approve"
+				isOpen={task === "approve"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="periodId" value={target?.periodId ?? ""} />
+				<input type="hidden" name="projectId" value={target?.projectId ?? ""} />
+				<p>
+					Its entries stay locked. The rest of their week is approved by their line manager, and the
+					week is approved once every part of it is.
+				</p>
+			</FormSheet>
+
+			<FormSheet
+				title={`Return ${target?.name ?? "this time"}`}
+				intent="return-part"
+				submitLabel="Return"
+				isOpen={task === "return"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="periodId" value={target?.periodId ?? ""} />
+				<input type="hidden" name="projectId" value={target?.projectId ?? ""} />
+				<TextField
+					label="What needs changing"
+					name="comment"
+					autoFocus
+					isRequired
+					maxLength={PERIOD_COMMENT_MAX_LENGTH}
+					description="They read this with their timesheet, and correct this time alone."
+				/>
+			</FormSheet>
+
+			<FormSheet
+				title={`Approve all ${pending} waiting?`}
+				intent="approve-all-parts"
+				submitLabel="Approve all"
+				isOpen={task === "all"}
+				onClose={close}
+				onDone={setSaid}
+			>
+				<input type="hidden" name="startsOn" value={week.period.startsOn} />
+				<p>
+					Everyone's time on your projects waiting for the week of {week.label} is approved at once,
+					but for anyone whose timer is still running in it: theirs is left for you to approve
+					later.
+				</p>
+			</FormSheet>
+		</>
+	);
+}
+
+/** The People tab: the weeks of the people the viewer decides for, as Approvals was before TS-117. */
+function PeopleApprovals({ loaderData }: { loaderData: PeopleLoaded }) {
 	const organisation = useOrganisation();
 	const {
 		query,
@@ -683,6 +1107,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 		<>
 			<PageHeading>{label}</PageHeading>
 			<PageLead>The timesheets people submit, a week at a time.</PageLead>
+			<ViewTabs views={loaderData.views} view="people" week={week.period.startsOn} />
 			<p role="status" className="mt-4 text-body-medium text-on-surface-variant empty:hidden">
 				{said}
 			</p>
@@ -777,6 +1202,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 										id: p.periodId ?? "",
 										name: `${p.person.name}'s`,
 										overLimit: p.overLimit,
+										held: p.parts !== null,
 									};
 									return (
 										<LedgerRow
@@ -798,6 +1224,11 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 													{p.overLimit && <span className="block text-error">{p.overLimit}</span>}
 													{p.waits && <span className="block">{p.waits}</span>}
 													{p.comment && <span className="block wrap-anywhere">“{p.comment}”</span>}
+													{p.parts?.map((part) => (
+														<span key={part} className="block wrap-anywhere">
+															{part}
+														</span>
+													))}
 													{p.expenses && (
 														<span className="block">
 															<Link
@@ -848,7 +1279,8 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 													</Button>
 												) : (
 													canReopen &&
-													query.status === "approved" && (
+													query.status === "approved" &&
+													p.reopenable && (
 														<Button
 															variant="text"
 															aria-label={`Reopen ${p.person.name}'s timesheet`}
@@ -1057,8 +1489,8 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 			<FormSheet
 				title={
 					target?.overLimit
-						? `Approve ${target.name} timesheet over its limit?`
-						: `Approve ${target?.name ?? "this"} timesheet?`
+						? `Approve ${target.held ? "the rest of " : ""}${target.name} timesheet over its limit?`
+						: `Approve ${target?.held ? "the rest of " : ""}${target?.name ?? "this"} timesheet?`
 				}
 				intent="approve"
 				submitLabel={target?.overLimit ? "Approve over its limit" : "Approve"}
@@ -1076,7 +1508,11 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 						</p>
 					</>
 				)}
-				<p>Its entries stay locked. An owner or admin can reopen it if it needs changing.</p>
+				<p>
+					{target?.held
+						? "Its entries stay locked. Their time on projects with a delivery manager is approved by each project's delivery managers, and the week is approved once every part of it is."
+						: "Its entries stay locked. An owner or admin can reopen it if it needs changing."}
+				</p>
 			</FormSheet>
 
 			<FormSheet
@@ -1127,7 +1563,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 			</FormSheet>
 
 			<FormSheet
-				title={`Return ${target?.name ?? "this"} timesheet`}
+				title={`Return ${target?.held ? "the rest of " : ""}${target?.name ?? "this"} timesheet`}
 				intent="return"
 				submitLabel="Return"
 				isOpen={task === "return"}
@@ -1168,7 +1604,7 @@ export default function Approvals({ loaderData }: Route.ComponentProps) {
 }
 
 /** The status and the grouping, applied as each is chosen (W28); the week shown stays. */
-function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "week">) {
+function ViewChoice({ query, counts, week }: Pick<PeopleLoaded, "query" | "counts" | "week">) {
 	return (
 		<div className="mt-8 max-w-200">
 			<FilterBar name="Choose timesheets" keep={{ [WEEK_PARAM]: week.period.startsOn }}>
@@ -1178,7 +1614,7 @@ function ViewChoice({ query, counts, week }: Pick<Loaded, "query" | "counts" | "
 	);
 }
 
-function ViewFields({ query, counts }: Pick<Loaded, "query" | "counts">) {
+function ViewFields({ query, counts }: Pick<PeopleLoaded, "query" | "counts">) {
 	const apply = useApplyFilters();
 	// The hidden selects hold the new value once React has drawn it.
 	const applySoon = () => setTimeout(apply, 0);

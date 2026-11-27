@@ -164,7 +164,10 @@ export async function editEntry(
 	// An entry keeps its day unless its start moves (TS-111).
 	const spentOn =
 		span.startedAt === entry.startedAt.getTime() ? entry.spentOn : dayOf(span.startedAt, zone);
-	if ((await lockedDays(scope, userId, [entry.spentOn, spentOn])).size > 0) {
+	if (
+		(await lockedDays(scope, userId, [entry.spentOn, spentOn], [entry.projectId, span.projectId]))
+			.size > 0
+	) {
 		return refuse("locked");
 	}
 	const invoiced = await invoicedRefusal(scope, id);
@@ -261,7 +264,9 @@ export async function deleteEntry(
 	const entry = await ownEntry(scope, userId, id);
 	if (!entry) return refuse("not-found");
 	if (entry.endedAt === null) return refuse("running");
-	if ((await lockedDays(scope, userId, [entry.spentOn])).size > 0) return refuse("locked");
+	if ((await lockedDays(scope, userId, [entry.spentOn], [entry.projectId])).size > 0) {
+		return refuse("locked");
+	}
 	const invoiced = await invoicedRefusal(scope, id);
 	if (invoiced) return invoiced;
 	const tagIds = (await tagsOfEntries(scope, [id])).get(id) ?? [];
@@ -307,7 +312,9 @@ export async function restoreEntry(
 ) {
 	if (await ownEntry(scope, userId, entry.id)) return { ok: true as const };
 	if (!(await findActiveProject(scope, entry.projectId))) return refuse("no-project");
-	if ((await lockedDays(scope, userId, [entry.spentOn])).size > 0) return refuse("locked");
+	if ((await lockedDays(scope, userId, [entry.spentOn], [entry.projectId])).size > 0) {
+		return refuse("locked");
+	}
 	const over = await refusalOf(scope, userId, now, {
 		day: entry.spentOn,
 		replaces: null,
@@ -397,7 +404,7 @@ export async function addHours(
 ) {
 	const { projectId, description, day, minutes, zone, now } = hours;
 	if (!(await findActiveProject(scope, projectId))) return refuse("no-project");
-	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
+	if ((await lockedDays(scope, userId, [day], [projectId])).size > 0) return refuse("locked");
 	const overtime = hours.overtime ?? false;
 	const over = await refusalOf(scope, userId, now, {
 		day,
@@ -476,7 +483,7 @@ export async function setCellHours(scope: OrganisationScope, userId: string, cel
 	const { projectId, day, minutes, zone, now } = cell;
 	const overtime = cell.overtime ?? false;
 	const workPackageId = cell.workPackageId ?? null;
-	if ((await lockedDays(scope, userId, [day])).size > 0) return refuse("locked");
+	if ((await lockedDays(scope, userId, [day], [projectId])).size > 0) return refuse("locked");
 
 	const ofDay = await entriesOfDay(scope, userId, day);
 	const inCell = ofDay.filter(

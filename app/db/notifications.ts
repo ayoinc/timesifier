@@ -6,6 +6,7 @@ import {
 	notificationChoices,
 	notifications,
 	organisations,
+	periodParts,
 	periods,
 	reminderPass,
 	timeEntries,
@@ -15,14 +16,15 @@ import {
 /**
  * The organisations the hourly reminders have work in (TS-049, decision 69):
  * those with a timer running, read from the partial index of running timers,
- * and those with a week waiting, from the partial index of submitted weeks.
- * Neither reads more than the rows it returns.
+ * and those with a week waiting, from the partial index of submitted weeks,
+ * or a part of one (TS-117), from that of the parts waiting. None reads more
+ * than the rows it returns.
  */
 export async function remindableOrganisations(
 	database: D1Database,
 ): Promise<{ timing: Set<string>; waiting: Set<string> }> {
 	const db = drizzle(database);
-	const [timing, waiting] = await Promise.all([
+	const [timing, waiting, parts] = await Promise.all([
 		db
 			.selectDistinct({ id: timeEntries.organisationId })
 			.from(timeEntries)
@@ -31,10 +33,14 @@ export async function remindableOrganisations(
 			.selectDistinct({ id: periods.organisationId })
 			.from(periods)
 			.where(eq(periods.status, "submitted")),
+		db
+			.selectDistinct({ id: periodParts.organisationId })
+			.from(periodParts)
+			.where(eq(periodParts.status, "submitted")),
 	]);
 	return {
 		timing: new Set(timing.map(({ id }) => id)),
-		waiting: new Set(waiting.map(({ id }) => id)),
+		waiting: new Set([...waiting, ...parts].map(({ id }) => id)),
 	};
 }
 

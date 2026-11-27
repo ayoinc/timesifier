@@ -100,7 +100,8 @@ export async function startTimer(scope: OrganisationScope, start: StartTimer) {
 	}
 	const running = await runningEntry(scope, userId);
 	const days = [dayOf(now, zone), ...(running ? [running.spentOn] : [])];
-	if ((await lockedDays(scope, userId, days)).size > 0) {
+	const touched = [projectId, ...(running ? [running.projectId] : [])];
+	if ((await lockedDays(scope, userId, days, touched)).size > 0) {
 		return { ok: false as const, reason: "locked" as const };
 	}
 	const verdict = await timerStartOf(scope, userId, zone, now);

@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
+import { PART_STATUS_LABELS } from "~/approvals/parts";
 import { Button } from "~/components/Button";
 import { Dialog } from "~/components/Dialog";
 import { MORE_THAN_A_DAY, overLabel } from "~/leave/rules";
@@ -75,8 +76,16 @@ export function PeriodHeader({
 		notes.push(`Correct ${days} before you submit.`);
 		if (over.some((d) => d.moreThanADay)) notes.push(MORE_THAN_A_DAY);
 	}
-	if (status === "submitted") notes.push("Submitted. Its entries are locked until it is decided.");
-	else if (status === "approved") notes.push("Approved. Its entries are locked.");
+	const parts = submission?.parts ?? null;
+	// A week held in parts (TS-117) is withdrawn only while no part of it is approved.
+	const withdrawable = status === "submitted" && !parts?.some((p) => p.status === "approved");
+	if (status === "submitted") {
+		notes.push(
+			parts
+				? "Submitted in parts, each approved by its own approver. Each part's entries are locked until it is decided."
+				: "Submitted. Its entries are locked until it is decided.",
+		);
+	} else if (status === "approved") notes.push("Approved. Its entries are locked.");
 
 	return (
 		<div>
@@ -91,7 +100,7 @@ export function PeriodHeader({
 					)}
 					{aside}
 				</div>
-				{(tools || offered || status === "submitted") && (
+				{(tools || offered || withdrawable) && (
 					<div className="flex flex-wrap items-center gap-4">
 						{tools}
 						{offered && (
@@ -105,7 +114,7 @@ export function PeriodHeader({
 								Submit week
 							</Button>
 						)}
-						{status === "submitted" && (
+						{withdrawable && (
 							<Button
 								variant="outlined"
 								isPending={sending === "withdraw"}
@@ -119,11 +128,26 @@ export function PeriodHeader({
 			</div>
 			{submission?.state === "returned" && (
 				<p className="mt-2 max-w-160 text-body-large">
-					Returned{submission.comment ? `: ${submission.comment}` : "."}{" "}
+					{parts
+						? "Part of it was returned."
+						: `Returned${submission.comment ? `: ${submission.comment}` : "."}`}{" "}
 					{held
 						? "The lock date holds this week, so it cannot be changed or submitted until an owner or admin moves the date back."
-						: "Correct the week and submit it again."}
+						: parts
+							? "Correct what was returned and submit the week again. The parts approved or still waiting stay locked."
+							: "Correct the week and submit it again."}
 				</p>
+			)}
+			{parts && (
+				<ul aria-label="Parts of this week" className="mt-2 max-w-160 text-body-medium">
+					{parts.map((part) => (
+						<li key={part.project ?? ""} className="wrap-anywhere">
+							{part.project === null ? "The rest of the week" : `Time on ${part.project}`}:{" "}
+							{PART_STATUS_LABELS[part.status]}
+							{part.comment ? `, “${part.comment}”` : ""}
+						</li>
+					))}
+				</ul>
 			)}
 			{notes.length > 0 && (
 				<p id={noteId} className="mt-2 max-w-160 text-body-medium text-on-surface-variant">

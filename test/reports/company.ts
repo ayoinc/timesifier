@@ -339,6 +339,7 @@ export function membershipOf(company: Company, who: Who, managesTeams = false): 
 		},
 		role: PEOPLE[who].role,
 		managesTeams,
+		leadsProjects: false,
 		user: {
 			id: company.people[who],
 			name: PEOPLE[who].name,

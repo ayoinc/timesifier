@@ -1,8 +1,9 @@
 import { env, withEnv } from "cloudflare:workers";
-import { and, asc, eq, gt, gte, isNull, lte, ne, or } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, lte, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 
 import { onLeaveToday } from "~/approvals/approvals.server";
+import { partsOf } from "~/approvals/parts.server";
 import {
 	among,
 	countedDatabase,
@@ -27,7 +28,7 @@ import { zoneOf } from "~/time/zones";
 import { dayPath, weekPath } from "~/timesheet/views";
 
 import { REMINDER_HOUR } from "./kinds";
-import { decidersOf } from "./notify.server";
+import { decidersOf, projectDecidersOf } from "./notify.server";
 import { type NewNotification, notificationStatements, pathBelow } from "./words";
 
 /**
@@ -446,23 +447,77 @@ async function deadlineReminders(
 }
 
 /**
- * To each approver with weeks waiting for them since before their today,
- * once that day: due from `REMINDER_HOUR` o'clock where they are, so one a
- * run did not reach goes later that day.
+ * To each approver with weeks, or parts of weeks (TS-117), waiting for them
+ * since before their today, once that day: due from `REMINDER_HOUR` o'clock
+ * where they are, so one a run did not reach goes later that day. A week
+ * decided whole, and the line part of one held in parts, wait for its
+ * person's deciders (`decidersOf`); a project part for its project's
+ * (`projectDecidersOf`).
  */
 async function approvalsReminders(
 	scope: OrganisationScope,
 	organisation: Organisation,
 	now: number,
 ): Promise<NewNotification[]> {
-	const waiting = await scope.periods.select((p) => eq(p.status, "submitted"));
-	if (waiting.length === 0) return [];
-	const deciders = await decidersOf(
+	const periods = await scope.periods.select((p) => inArray(p.status, ["submitted", "returned"]));
+	if (periods.length === 0) return [];
+	const parts = await partsOf(
 		scope,
-		waiting.map((p) => p.userId),
-		now,
+		periods.map((p) => p.id),
 	);
-	const approvers = [...new Set([...deciders.values()].flat())];
+	// Each thing waiting: a week decided whole, or a part of one; `projectId` null for the rest of a week.
+	const waiting = periods.flatMap((period) => {
+		const list = parts.get(period.id);
+		if (!list) return period.status === "submitted" ? [{ period, projectId: null }] : [];
+		return list
+			.filter((part) => part.status === "submitted")
+			.map((part) => ({ period, projectId: part.projectId }));
+	});
+	if (waiting.length === 0) return [];
+	const ofProjects = waiting.flatMap((w) =>
+		w.projectId === null ? [] : [{ ...w, projectId: w.projectId }],
+	);
+	const stretches =
+		ofProjects.length === 0
+			? []
+			: await scope.projectMembers.select((m) =>
+					and(
+						among(
+							m.projectId,
+							ofProjects.map((w) => w.projectId),
+						),
+						eq(m.role, "delivery_manager"),
+					),
+				);
+	const [deciders, partDeciders] = await Promise.all([
+		decidersOf(
+			scope,
+			waiting.filter((w) => w.projectId === null).map((w) => w.period.userId),
+			now,
+		),
+		projectDecidersOf(
+			scope,
+			ofProjects.map(({ period, projectId }) => ({
+				personId: period.userId,
+				deliveryManagers: stretches
+					.filter(
+						(s) =>
+							s.projectId === projectId &&
+							s.startsOn <= period.endsOn &&
+							(s.endsOn === null || s.endsOn >= period.startsOn),
+					)
+					.map((s) => s.userId),
+			})),
+			now,
+		),
+	]);
+	const decidersFor = (w: (typeof waiting)[number]) =>
+		w.projectId === null
+			? (deciders.get(w.period.userId) ?? [])
+			: (partDeciders[
+					ofProjects.findIndex((p) => p.period === w.period && p.projectId === w.projectId)
+				] ?? []);
+	const approvers = [...new Set(waiting.flatMap(decidersFor))];
 	const [zones, present] = await Promise.all([
 		zonesOf(approvers, organisation),
 		presentOf(scope, approvers, organisation, now),
@@ -474,10 +529,10 @@ async function approvalsReminders(
 		if (now < instantAt(today, REMINDER_HOUR * 60, zone)) continue;
 		const since = instantAt(today, 0, zone);
 		const theirs = waiting.filter(
-			(p) =>
-				deciders.get(p.userId)?.includes(approver) &&
-				p.submittedAt !== null &&
-				p.submittedAt.getTime() < since,
+			(w) =>
+				decidersFor(w).includes(approver) &&
+				w.period.submittedAt !== null &&
+				w.period.submittedAt.getTime() < since,
 		);
 		if (theirs.length === 0) continue;
 		made.push({
