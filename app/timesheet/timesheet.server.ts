@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 
+import { type PersonPlan, plansOf, total } from "~/allocations/allocations.server";
 import { type Filter, type OrganisationScope, organisationScope, type ScopedAccessor } from "~/db";
 import { type DayKind, dayLabel } from "~/leave/days";
 import { daysOf } from "~/leave/leave.server";
@@ -45,8 +46,8 @@ import type { ChosenView } from "./views.server";
 
 /**
  * What the views of Timesheet read (TS-012a, TS-013, TS-046, TS-052, TS-056). Every
- * query is the person's own entries and periods: these pages show nobody
- * else's time, whatever the role (TS-013, "Who may").
+ * query is the person's own entries, periods and time shares: these pages show
+ * nobody else's time, whatever the role (TS-013, "Who may"; TS-116).
  */
 
 type TimeEntries = OrganisationScope["timeEntries"] extends ScopedAccessor<infer T> ? T : never;
@@ -267,6 +268,23 @@ export interface WeekData extends TimesheetBase, PeriodSubmission {
 	away: WeekAway;
 	/** Each day of the week with its limit, what is left and what is over (TS-090). */
 	rules: DayRule[];
+	/**
+	 * The person's time shares over the week, one per line, each beside the
+	 * time tracked on it (TS-116, decision 78). Empty when they have none.
+	 */
+	plans: LinePlan[];
+}
+
+/** One line of a person's time shares over a week, beside the time tracked on it (TS-116). */
+export interface LinePlan {
+	/** The share's line (`lineKey`): its project and work package, or the project alone for a whole-project share. */
+	line: string;
+	projectId: string;
+	workPackageId: string | null;
+	/** The whole minutes the line's shares plan over the week: a share changed during the week is two shares of one line. */
+	plannedMinutes: number;
+	/** The time on the line that week: on its work package, or on every line of the project for a whole-project share. */
+	trackedSeconds: number;
 }
 
 export interface HistoryData extends TimesheetBase {
@@ -346,7 +364,10 @@ export async function timesheetData(
 		}
 		case "week": {
 			const period = periodContaining(chosen.start ?? today, organisation.weekStartsOn);
-			return { ...base, ...(await weekData(scope, user.id, period, zone, now, projects)) };
+			return {
+				...base,
+				...(await weekData(scope, user.id, period, zone, now, projects, organisation.weekStartsOn)),
+			};
 		}
 		case "calendar": {
 			const date = chosen.date ?? today;
@@ -492,21 +513,26 @@ async function weekData(
 	zone: string,
 	now: number,
 	projects: readonly ProjectName[],
+	weekStartsOn: number,
 ): Promise<Omit<WeekData, keyof TimesheetBase>> {
 	const days = daysFrom(period.startsOn, period.endsOn);
 	const before = periodAfter(period, -1);
-	const [{ entries, rules, submission }, previous, reasons, lockDate, away] = await Promise.all([
-		periodWithEntries(scope, userId, period, zone, now),
-		entriesOn(scope, userId, before.startsOn, before.endsOn),
-		lockReasonsOn(scope, userId, days),
-		lockNoticeOf(scope.organisationId),
-		weekAway(scope, userId, period),
-	]);
+	const [{ entries, rules, submission }, previous, reasons, lockDate, away, plans] =
+		await Promise.all([
+			periodWithEntries(scope, userId, period, zone, now),
+			entriesOn(scope, userId, before.startsOn, before.endsOn),
+			lockReasonsOn(scope, userId, days),
+			lockNoticeOf(scope.organisationId),
+			weekAway(scope, userId, period),
+			plansOf(scope, [userId], period.startsOn, period.endsOn, weekStartsOn),
+		]);
 	const active = new Set(projects.filter((p) => !p.archived).map((p) => p.id));
 	const packages = await packageRules(scope, [...new Set(previous.map((e) => e.projectId))]);
 	const today = dayOf(now, zone);
 	const open = days.some((day) => !reasons.has(day) && day <= today);
 	const source = open ? await copySourceWeek(scope, userId, period) : null;
+	const projectOrder = projects.map((p) => p.id);
+	const sheet = weekSheet(entries, days, now, { projectOrder });
 	return {
 		view: "week" as const,
 		copyWeekRefusal:
@@ -519,7 +545,7 @@ async function weekData(
 						: null,
 		...submission,
 		days,
-		sheet: weekSheet(entries, days, now, { projectOrder: projects.map((p) => p.id) }),
+		sheet,
 		// Each project and work package of the week before that still takes time (TS-115b).
 		lastWeekLines: [
 			...new Set(
@@ -539,7 +565,51 @@ async function weekData(
 		lockDate,
 		away,
 		rules,
+		plans: linePlans(plans.get(userId), sheet, projectOrder),
 	};
+}
+
+/**
+ * The person's shares over the week, one per line, in the grid's order of
+ * projects (TS-116, decision 78). What each tracked is read from the week's
+ * grid, so it is the same time its rows add up: a work package's rows, or every
+ * row of the project for a whole-project share, overtime included.
+ */
+function linePlans(
+	plan: PersonPlan | undefined,
+	sheet: WeekSheet,
+	projectOrder: readonly string[],
+): LinePlan[] {
+	const byLine = new Map<string, LinePlan>();
+	for (const { share, planned } of plan?.shares ?? []) {
+		const line = lineKey(share.projectId, share.workPackageId);
+		const known = byLine.get(line);
+		if (known) {
+			known.plannedMinutes += total(planned);
+			continue;
+		}
+		const tracked = sheet.rows
+			.filter(
+				(row) =>
+					row.projectId === share.projectId &&
+					(share.workPackageId === null || row.workPackageId === share.workPackageId),
+			)
+			.reduce((sum, row) => sum + row.total, 0);
+		byLine.set(line, {
+			line,
+			projectId: share.projectId,
+			workPackageId: share.workPackageId,
+			plannedMinutes: total(planned),
+			trackedSeconds: Math.floor(tracked / 1000),
+		});
+	}
+	const rank = (projectId: string) => {
+		const at = projectOrder.indexOf(projectId);
+		return at === -1 ? projectOrder.length : at;
+	};
+	return [...byLine.values()].sort(
+		(a, b) => rank(a.projectId) - rank(b.projectId) || a.line.localeCompare(b.line),
+	);
 }
 
 async function historyData(
