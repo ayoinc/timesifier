@@ -117,9 +117,13 @@ export function LedgerTotal({ label, value, className }: LedgerTotalProps) {
 				className,
 			)}
 		>
-			{/* The label wraps, as a row's title does; the figure stays whole at the end. */}
-			<span className="min-w-0 text-label-large">{label}</span>
-			<span className="shrink-0 text-title-large tabular-nums">{value}</span>
+			{/*
+			 * The label takes the room the figure leaves, and wraps, as a row's title does:
+			 * a short figure stays whole at the end. A figure wider than the line, such as
+			 * Leave's "0 days taken · 0 days booked · 0 days pending", wraps against the end.
+			 */}
+			<span className="flex-1 text-label-large">{label}</span>
+			<span className="text-right text-title-large tabular-nums">{value}</span>
 		</p>
 	);
 }
